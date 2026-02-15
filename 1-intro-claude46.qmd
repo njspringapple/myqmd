@@ -950,21 +950,21 @@ $$
 # 对每个旋钮，拧一点点，看损失变化多少
 # 需要算 2p 次损失函数
 
-朴素方法计算梯度 <- function(X, y, theta, epsilon = 1e-5) {
-  梯度 <- numeric(length(theta))
+朴素方法计算梯度 <- function(X, y, w, epsilon = 1e-5) {
+  梯度 <- numeric(length(w))
   计算次数 <- 0
   
-  for (j in 1:length(theta)) {
+  for (j in 1:length(w)) {
     # 把第 j 个旋钮往右拧一点
-    theta_plus <- theta
-    theta_plus[j] <- theta_plus[j] + epsilon
-    L_plus <- 损失函数(X, y, theta_plus)
+    w_plus <- w
+    w_plus[j] <- w_plus[j] + epsilon
+    L_plus <- 损失函数(X, y, w_plus)
     计算次数 <- 计算次数 + 1
     
     # 把第 j 个旋钮往左拧一点
-    theta_minus <- theta
-    theta_minus[j] <- theta_minus[j] - epsilon
-    L_minus <- 损失函数(X, y, theta_minus)
+    w_minus <- w
+    w_minus[j] <- w_minus[j] - epsilon
+    L_minus <- 损失函数(X, y, w_minus)
     计算次数 <- 计算次数 + 1
     
     # 数值微分：(L_plus - L_minus) / (2 * epsilon)
@@ -1003,8 +1003,8 @@ $$
 # grad_L = (2/N) * X^T * (X*w - y)
 # 一次矩阵运算就搞定
 
-解析方法计算梯度 <- function(X, y, theta) {
-  预测值 <- 预测(X, theta)
+解析方法计算梯度 <- function(X, y, w) {
+  预测值 <- 预测(X, w)
   误差 <- 预测值 - y
   梯度 <- (2 / nrow(X)) * t(X) %*% 误差
   return(as.vector(梯度))
@@ -1018,27 +1018,26 @@ $$
 ```{r}
 #| label: gradient-comparison-detailed
 #| code-fold: false
-
 cat("========== 方案对比 ==========\n")
 cat("========== Vergleich der Ansätze ==========\n\n")
 
-theta_test <- c(50, 3000, -1000)  # 随便设个初始值
+w_test <- c(50, 3000, -1000)  # 随便设个初始值
 
 # --- 朴素方法 ---
 t1 <- Sys.time()
-梯度_朴素 <- 朴素方法计算梯度(X, y, theta_test)
+梯度_朴素 <- 朴素方法计算梯度(X, y, w_test)
 t2 <- Sys.time()
 time_naive <- as.numeric(t2 - t1) * 1000
 
 cat("朴素方法 (Naive Methode / Numerical Differentiation):\n")
 cat("  梯度 / Gradient:", round(梯度_朴素, 2), "\n")
-cat("  计算损失函数次数 / Verlustfunktionsauswertungen:", 
+cat("  计算损失函数次数 / Verlustfunktionsauswertungen:",
     attr(梯度_朴素, "计算次数"), "次 / Mal\n")
 cat("  耗时 / Zeit:", round(time_naive, 3), "毫秒 / ms\n\n")
 
 # --- 解析方法 ---
 t1 <- Sys.time()
-梯度_解析结果 <- 解析方法计算梯度(X, y, theta_test)
+梯度_解析结果 <- 解析方法计算梯度(X, y, w_test)
 t2 <- Sys.time()
 time_analytical <- as.numeric(t2 - t1) * 1000
 
@@ -1050,7 +1049,7 @@ cat("  耗时 / Zeit:", round(time_analytical, 3), "毫秒 / ms\n\n")
 
 # --- 验证 ---
 cat("========== 验证 / Überprüfung ==========\n")
-cat("最大绝对差 / Max. absolute Differenz:", 
+cat("最大绝对差 / Max. absolute Differenz:",
     format(max(abs(梯度_朴素 - 梯度_解析结果)), scientific = TRUE), "\n")
 cat("两种方法结果一致！ / Ergebnisse stimmen überein!\n\n")
 
