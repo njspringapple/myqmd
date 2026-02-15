@@ -441,7 +441,7 @@ L2_sq <- function(r) sum(r^2)
 loss_sae <- function(w) L1_norm(w * Area - Price) # 绝对误差和
 loss_sse <- function(w) L2_sq(w * Area - Price)   # 平方误差和
 loss_mse <- function(w) L2_sq(w * Area - Price) / length(Area)  # 均方误差
-loss_rmse <- function(w) sqrt(L2_sq(w * Area - Price)) / length(Area) # 均方根误差
+loss_rmse <- function(w) L2_norm(w * Area - Price) / sqrt(length(Area)) # 均方根误差
 ```
 
 ### 实践中的选择 \| Auswahl in der Praxis
@@ -555,10 +555,23 @@ $$
 \hat{\mathbf{y}} = X\mathbf{w}
 $$
 
-损失函数变为：
+MSE损失函数变为：
 
 $$
-L(\mathbf{w}) = \frac{1}{N} \|X\mathbf{w} - \mathbf{y}\|_2^2
+L(\mathbf{w})
+= \frac{1}{N}\left\|X\mathbf{w}-\mathbf{y}\right\|_2^2
+= \frac{1}{N}\sum_{i=1}^{N}\Big((X\mathbf{w})_i - y_i\Big)^2
+$$
+
+其中
+$$
+(X\mathbf{w})_i = \sum_{j=1}^{p} x_{ij} w_j
+$$
+
+因此可写成
+$$
+L(\mathbf{w})
+= \frac{1}{N}\sum_{i=1}^{N}\left(\sum_{j=1}^{p} x_{ij}w_j - y_i\right)^2.
 $$
 
 ## 符号速查表
@@ -570,20 +583,25 @@ $$
 | $N$ | 样本数 / Stichprobenanzahl | 标量 / Skalar |
 | $p$ | 特征数 / Merkmalsanzahl | 标量 / Skalar |
 | $\mathbf{x}_i$ | 第 $i$ 个样本的特征 / Merkmale der $i$-ten Stichprobe | $\mathbb{R}^p$ |
+| $x_{ij}$ | 第 $i$ 个样本的第 $j$ 个特征（设计矩阵 $X$ 的第 $i$ 行第 $j$ 列） / $j$-tes Merkmal der $i$-ten Stichprobe (Eintrag von $X$) | $\mathbb{R}$ |
 | $y_i$ | 第 $i$ 个样本的标签 / Label der $i$-ten Stichprobe | $\mathbb{R}$ |
 | $X$ | 设计矩阵 / Designmatrix | $\mathbb{R}^{N \times p}$ |
 | $\mathbf{y}$ | 响应向量 / Antwortvektor | $\mathbb{R}^N$ |
 | $\mathbf{w}$ | 权重向量 / Gewichtsvektor | $\mathbb{R}^p$ |
+| $w_j$ | 第 $j$ 个特征的权重（权重向量 $\mathbf{w}$ 的第 $j$ 个分量） / Gewicht des $j$-ten Merkmals (Komponente von $\mathbf{w}$) | $\mathbb{R}$ |
+| $\hat{\mathbf{y}}$ | 预测向量（$\hat{\mathbf{y}} = X\hat{\mathbf{w}}$）/ Vorhersagevektor | $\mathbb{R}^N$ |
+| $\mathbf{r}$ | 残差向量（$\mathbf{r}=\mathbf{y}-X\hat{\mathbf{w}}$）/ Residuenvektor | $\mathbb{R}^N$ |
+| $r_i$ | 第 $i$ 个样本的残差（$r_i=y_i-\hat{y}_i$）/ Residuum der $i$-ten Stichprobe | $\mathbb{R}$ |
 
 ## 几何直觉：投影视角
 
 > **Geometrische Intuition: Die Projektionsperspektive**
 
-**问题**：找 $\mathbf{w}$ 使得 $X\mathbf{w}$ 尽可能接近 $\mathbf{y}$。
+问题：找 $\mathbf{w}$ 使得 $X\mathbf{w}$ 尽可能接近 $\mathbf{y}$。
 
-当 $\mathbf{w}$ 遍历所有可能取值时，$X\mathbf{w}$ 扫过一个"平面"——这就是矩阵 $X$ 的 **列空间** $\text{Col}(X)$。
+当 $\mathbf{w}$ 遍历所有可能取值时，$X\mathbf{w}$ 可以写成各个特征列的线性组合：$X\mathbf{w}=w_1\mathbf{x}{(1)}+\cdots+w_p\mathbf{x}{(p)}$（其中 $\mathbf{x}{(j)}$ 是 $X$ 的第 $j$ 列）。因此，所有可能的预测向量 $X\mathbf{w}$ 都落在由这些特征列张成的空间里——这就是矩阵 $X$ 的 列空间 $\text{Col}(X)=\text{span}{\mathbf{x}{(1)},\ldots,\mathbf{x}_{(p)}}$。
 
-**几何答案**：$\mathbf{y}$ 在这个平面上的 **正交投影** 就是最近的点！
+几何答案：$\mathbf{y}$ 在这个“由特征列张成的空间” $\text{Col}(X)$ 上的 正交投影，就是所有可达预测 $X\mathbf{w}$ 中与 $\mathbf{y}$ 距离最近的那个点（也就是最优预测 $\hat{\mathbf{y}}$）。
 
 ```{r}
 #| label: fig-projection
@@ -660,7 +678,11 @@ $X^T$ wandelt jede Spalte von $X$ in eine Zeile um und bildet dann jeweils das S
 
 # 用正规方程求解 | Mit Normalengleichung lösen
 w_analytical <- as.vector(solve(t(X) %*% X) %*% t(X) %*% y)
-
+# solve() 可用于求逆或解线性方程。
+# 这里 solve(t(X) %*% X) 得到 (X^T X)^{-1}（p×p），
+# 再与 t(X) %*% y（p×1）相乘，最终
+# solve(t(X) %*% X) %*% t(X) %*% y 的结果是 p×1 的矩阵；
+# as.vector() 将该 p×1 矩阵转换为长度为 p 的数值向量。
 cat("正规方程解 | Lösung der Normalengleichung:\n")
 cat("  w1 (面积/Fläche) =", round(w_analytical[1], 1), " (真实值:", beta_true[1], ")\n")
 cat("  w2 (楼层/Stockwerk) =", round(w_analytical[2], 1), " (真实值:", beta_true[2], ")\n")
