@@ -768,11 +768,16 @@ $$
 }
 
 # MSE 损失函数 | MSE-Verlustfunktion
+# 损失函数在这里的作用是：衡量当前 w 好不好
 损失函数 <- function(X, y, w) {
   残差 <- 预测(X, w) - y
   return(mean(残差^2))
 }
 
+# 因为损失函数 L(w) 虽然是一个标量，但它是由 p 个权重共同决定的：
+# w = (w1, …, wp)。你想让损失变小，就必须回答“每一个权重该往上调还是往下调、
+# 调多少才最能让损失下降”。
+# 用得到的下降的梯度向量来更新初始权重向量 w
 # MSE 梯度（解析公式）| MSE-Gradient (analytische Formel)
 梯度_解析 <- function(X, y, w) {
   N <- nrow(X)
@@ -795,6 +800,28 @@ $$
 | **什么时候？** | 训练过程中        | 训练之前                  |
 |    **例子**    | 权重 $\mathbf{w}$ | 学习率 $\eta$、batch size |
 :::
+
+学习率（learning rate）$\eta$ 是梯度下降里的一个**超参数**：它控制每一步沿着“负梯度方向”更新权重的步长。
+
+对 MSE 损失函数
+$$
+L(\mathbf{w})=\frac{1}{N}\lVert X\mathbf{w}-\mathbf{y}\rVert_2^2,
+$$
+其梯度为
+$$
+\nabla_{\mathbf{w}}L(\mathbf{w})=\frac{2}{N}X^\top(X\mathbf{w}-\mathbf{y}).
+$$
+
+**梯度下降的更新公式**是：
+$$
+\mathbf{w}^{(t+1)}=\mathbf{w}^{(t)}-\eta\,\nabla_{\mathbf{w}}L\!\left(\mathbf{w}^{(t)}\right).
+$$
+
+也就是说在每一次迭代 $t$：
+- 先计算当前梯度 $\nabla_{\mathbf{w}}L(\mathbf{w}^{(t)})$
+- 再用学习率 $\eta$ 决定更新步长，沿负梯度方向移动
+
+学习率 $\eta$ 太小会收敛很慢；太大可能震荡甚至发散。下面我们用代码记录每一步的损失变化，直观看到这个现象。
 
 学习率 $\eta$ 太小、太大都会出问题。让我们亲眼看看：
 
