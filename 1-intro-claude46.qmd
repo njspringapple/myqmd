@@ -1,0 +1,1704 @@
+---
+title: "第一章：机器学习的数学基础"
+subtitle: "从房价预测理解训练的本质 | Das Wesen des Trainings durch Immobilienpreisvorhersage verstehen"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+# 全局配色方案 | Globales Farbschema
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+想象你刚入职一家房产公司，老板说：*"给我做一个根据面积预测房价的模型。"* 你会怎么做？
+
+*Stellen Sie sich vor, Sie haben gerade bei einer Immobilienfirma angefangen, und Ihr Chef sagt: „Bauen Sie mir ein Modell, das den Hauspreis anhand der Fläche vorhersagt." Was würden Sie tun?*
+
+本章将带你走完 **从最简单的情况到工业级训练方法** 的全部旅程。下面这张「路线图」标注了每一站——你现在可以先跳过公式，等学完再回来，每个符号都会变得清晰。
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图：从完美世界走向真实世界 | Lernroadmap: Von der perfekten zur realen Welt"
+#| dev: "ragg_png"
+#| code-fold: true
+#| fig-show: "asis"
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 10), ylim = c(0, 7), axes = FALSE, 
+     xlab = "", ylab = "", main = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# Draw path / 画路径
+steps_x <- c(1, 3, 5, 7, 9)
+steps_y <- c(5.5, 5.5, 5.5, 5.5, 5.5)
+arrows(steps_x[-5] + 0.7, steps_y[-5], steps_x[-1] - 0.7, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+# Step boxes / 步骤方块
+labels_cn <- c("完美世界\n直接解方程", "引入噪声\n最小二乘", 
+               "损失函数\n解析解", "梯度下降\n迭代优化", 
+               "SGD &\n特征缩放")
+labels_de <- c("Perfekte Welt", "Rauschen\nKleinste Quadrate", 
+               "Verlustfunktion\nNormalgleichung", "Gradientenabstieg", 
+               "SGD &\nStandardisierung")
+colors <- c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#E0E7FF", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DC2626", "#6366F1", "#16A34A")
+
+for (i in 1:5) {
+  rect(steps_x[i] - 0.7, steps_y[i] - 0.9, steps_x[i] + 0.7, steps_y[i] + 0.9,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.2, labels_cn[i], cex = 0.72, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.52, col = "#64748B", font = 3)
+}
+
+# Difficulty arrow / 难度箭头
+arrows(0.5, 1.5, 9.5, 1.5, col = "#DC2626", lwd = 2, length = 0.15)
+text(5, 1.9, "难度递增 | Zunehmende Komplexität  >>>", cex = 0.85, col = "#DC2626")
+
+# Trigger labels / 触发标签
+triggers <- c("", "噪声!", "优化?", "规模!", "尺度!")
+for (i in 2:5) {
+  text(steps_x[i] - 1, steps_y[i] + 1.3, triggers[i],
+       cex = 0.7, col = "#EA580C", font = 2)
+}
+
+# Numbering / 编号
+for (i in 1:5) {
+  text(steps_x[i] - 0.5, steps_y[i] + 0.75, paste0("§", i), 
+       cex = 0.6, col = borders[i], font = 2)
+}
+```
+
+**最终目标 \| Endziel**：理解下面这个核心公式的 **每一个符号**——
+
+$$
+\hat{\mathbf{w}} = \arg\min_{\mathbf{w} \in \mathbb{R}^p} L(\mathbf{w}) = \arg\min_{\mathbf{w} \in \mathbb{R}^p} \frac{1}{N} \sum_{i=1}^{N} \ell\!\bigl(f(\mathbf{x}_i;\, \mathbf{w}),\; y_i\bigr)
+$$
+
+现在看不懂？**完全没关系**——读完本章，你将亲手"发明"出这个公式。
+
+{{< pagebreak >}}
+
+# 完美世界：直接解方程 {#sec-perfect}
+
+> **Perfekte Welt: Gleichungen direkt lösen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie in diesem Abschnitt lernen
+
+-   什么是"模型"——用一个数学公式描述数据关系
+-   在数据完美时，**解方程** 就能得到答案
+-   *Was ist ein „Modell"? Wie löst man Gleichungen bei perfekten Daten?*
+:::
+
+## 问题设定：5 套房子的故事 {#sec-problem}
+
+> **Problemstellung: Die Geschichte von 5 Häusern**
+
+假设你是一名新入职的房产分析师。老板递给你一张纸条，上面记录了 5 套已成交房屋的数据：
+
+```{r}
+#| label: tbl-perfect-data
+#| code-fold: false
+
+# 5 houses: perfect linear relationship / 5 Häuser: perfekte lineare Beziehung
+house_data <- data.frame(
+  ID = paste0("House ", 1:5),
+  `Area (m2)` = c(50, 80, 100, 120, 150),
+  `Price (万元)` = c(150, 240, 300, 360, 450),
+  check.names = FALSE
+)
+knitr::kable(house_data, align = "ccc",
+             caption = "5 套房屋的面积与价格 | Fläche und Preis von 5 Häusern")
+```
+
+```{r}
+#| label: fig-perfect-scatter
+#| fig-cap: "5 套房子的面积-价格散点图——它们完美地排成一条直线！ | Die 5 Punkte liegen perfekt auf einer Geraden!"
+
+Area_perfect <- c(50, 80, 100, 120, 150)
+Price_perfect <- c(150, 240, 300, 360, 450)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(Area_perfect, Price_perfect, 
+     pch = 21, bg = "#2563EB", col = "white", cex = 3.2, lwd = 1.5,
+     xlab = "面积 (m2) | Fläche (m2)", 
+     ylab = "价格 (万元) | Preis (10k Yuan)",
+     main = "完美世界中的数据 | Daten in einer perfekten Welt",
+     xlim = c(30, 170), ylim = c(100, 500),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+# 因为价格为3，所以直线斜率为3，即 b = 3，又 y = 3x + 截距
+# 理想情况下，面积为0，价格为0，所以截距为0，所以 a = 9
+abline(a = 0, b = 3, col = "#DC2626", lwd = 2.5, lty = 2)
+
+# Annotate each point / 标注每个点
+for (i in 1:5) {
+  text(Area_perfect[i], Price_perfect[i] + 18,
+       paste0(Area_perfect[i], " m2 -> ", Price_perfect[i], " 万"),
+       cex = 0.75, col = "#475569")
+}
+legend("topleft", legend = "Price = 3 x Area", col = "#DC2626", 
+       lty = 2, lwd = 2.5, bty = "n", cex = 1.1, text.col = "#DC2626")
+```
+
+你一眼就能看出规律：**价格 = 3 × 面积**。
+
+## 建立模型：一个简单的猜测
+
+> **Modellaufbau: Eine einfache Vermutung**
+
+我们把这个规律写成公式：
+
+$$
+\text{Price} = w \times \text{Area}
+$$
+
+这里的 $w$ 是一个待定的数字，叫做 **权重**（Gewicht / weight）。我们的任务就是找出 $w$ 的值。
+
+## 直接求解：小学数学就够了
+
+> **Direkte Lösung: Grundschulmathematik genügt**
+
+把 5 套房子的数据代入，得到 5 个方程：
+
+$$
+50w = 150,\quad 80w = 240,\quad 100w = 300,\quad 120w = 360,\quad 150w = 450
+$$
+
+每个方程都给出 $w = 3$。搞定！
+
+```{r}
+#| label: perfect-verify
+#| code-fold: false
+
+# Verify: every equation gives w = 3
+# 验证：每个方程都给出 w = 3
+w_values <- Price_perfect / Area_perfect
+cat("每个方程求出的 w：", w_values, "\n")
+cat("完美一致，w =", unique(w_values))
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 \| Schlüsselerkenntnis
+
+在 **完美世界** 中，数据没有噪声，解方程就够了——**不需要任何高级数学**。
+
+*In einer perfekten Welt gibt es kein Rauschen — Gleichungen lösen genügt.*
+
+但真实世界没有这么美好……
+:::
+
+{{< pagebreak >}}
+
+# 引入噪声：为什么需要"最小二乘" {#sec-noise}
+
+> **Einführung von Rauschen: Warum wir „kleinste Quadrate" brauchen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   真实数据为什么"不完美"
+-   当方程组 **无解** 时，如何找"最不坏"的答案
+-   **范数** 的直觉含义：向量"有多大"
+-   为什么选择 **平方和** 作为误差度量
+:::
+
+## 真实数据：乱糟糟的现实
+
+> **Echte Daten: Die unordentliche Realität**
+
+现实中，价格还会受到装修风格、楼层朝向、学区、市场情绪等无数因素影响。让我们模拟一份更真实的数据：
+
+```{r}
+#| label: fig-noisy-scatter
+#| fig-cap: "真实世界的数据：价格围绕真实关系上下波动 | Reale Daten: Preise schwanken um die wahre Beziehung"
+
+# 第一个随机种子决定“点云”的随机性
+set.seed(42)
+N <- 200
+Area <- runif(N, 50, 150)
+Price_true <- 3 * Area                    # 真实关系 | Wahre Beziehung
+noise <- rnorm(N, mean = 0, sd = 30)     # 噪声 | Rauschen
+Price <- Price_true + noise               # 观测价格 | Beobachteter Preis
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(Area, Price, pch = 16, col = adjustcolor("#2563EB", 0.4), cex = 1.2,
+     xlab = "面积 (m2) | Fläche (m2)", 
+     ylab = "价格 (万元) | Preis (10k Yuan)",
+     main = "真实世界中的数据 | Daten in der realen Welt",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# True line / 真实直线
+abline(a = 0, b = 3, col = "#DC2626", lwd = 3, lty = 1)
+
+# Show some residuals / 展示部分残差
+# 第二个随机种子决定“抽样”
+set.seed(7)
+idx_show <- sample(N, 8)
+for (i in idx_show) {
+  segments(Area[i], Price[i], Area[i], 3 * Area[i], 
+           col = adjustcolor("#EA580C", 0.6), lwd = 1.5, lty = 3)
+}
+
+legend("topleft", 
+       legend = c("观测数据 | Beobachtungen", 
+                  "真实关系: y = 3x | Wahre Beziehung",
+                  "残差 | Residuen"),
+       col = c("#2563EB", "#DC2626", "#EA580C"),
+       pch = c(16, NA, NA), lty = c(NA, 1, 3), lwd = c(NA, 3, 1.5),
+       bty = "n", cex = 0.9)
+```
+
+## 方程组"打架"了
+
+> **Die Gleichungen „streiten sich"**
+
+现在每套房子给出的 $w$ 值各不相同：
+
+```{r}
+#| label: fig-inconsistent-w
+#| fig-cap: "每个样本给出不同的 w——该听谁的？| Jede Stichprobe ergibt ein anderes w — auf wen hören?"
+
+w_each <- Price / Area
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+hist(w_each, breaks = 30, col = adjustcolor("#2563EB", 0.5), border = "white",
+     main = "每个样本估计出的 w 值分布 | Verteilung der geschätzten w-Werte",
+     xlab = "w 的估计值 | Geschätzter w-Wert", ylab = "频数 | Häufigkeit",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+abline(v = 3, col = "#DC2626", lwd = 3, lty = 2)
+text(3, par("usr")[4] * 0.9, "  真实值 w = 3", col = "#DC2626", cex = 1, pos = 4, font = 2)
+```
+
+::: {.callout-tip icon="false"}
+## 🤔 想一想 \| Denken Sie nach
+
+如果 200 个人给你 200 个不同的建议，你会怎么做？
+
+最自然的做法是：**找一个让所有人"整体上最满意"的折中方案**。
+
+这正是机器学习"训练"的本质！
+
+*Wenn 200 Leute Ihnen 200 verschiedene Ratschläge geben — was tun Sie? Sie suchen einen Kompromiss, der insgesamt am wenigsten schlecht ist.*
+:::
+
+## 如何度量"整体误差"——范数的直觉
+
+> **Wie misst man den „Gesamtfehler"? — Intuition der Norm**
+
+每个样本的 **残差**（预测值 - 真实值）为：
+
+$$
+\epsilon_i = w \cdot \text{Area}_i - \text{Price}_i
+$$
+
+所有残差组成一个向量 $\boldsymbol{\epsilon} = (\epsilon_1, \epsilon_2, \ldots, \epsilon_N)^\top$。我们需要一个 **单一数字** 来描述"这个向量整体有多大"。
+
+这个数字就叫 **范数（Norm）**——可以理解为向量"长度"的推广。
+
+```{r}
+#| label: fig-norm-intuition
+#| code-fold: true
+#| fig-cap: "范数的直觉：用一个数字概括向量的'大小' | Intuition der Norm: Eine Zahl fasst die 'Größe' eines Vektors zusammen"
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(-3, 14), ylim = c(-1, 5.5), axes = FALSE, 
+     xlab = "", ylab = "")
+title("三种常用范数 | Drei häufig verwendete Normen", 
+      cex.main = 1.3, col.main = "#1E293B")
+
+# L1 norm illustration
+rect(0, 3.2, 4, 5.2, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(2, 4.7, expression(L^1 ~ "范数 | Norm"), cex = 0.9, font = 2, col = "#2563EB")
+text(2, 4.1, expression(paste("||", epsilon, "||"[1], " = ", Sigma, " |", epsilon[i], "|")), 
+     cex = 0.85, col = "#1E293B")
+text(2, 3.5, "\"曼哈顿距离\"", cex = 0.7, col = "#64748B", font = 3)
+
+# L2 norm illustration
+rect(5, 3.2, 9, 5.2, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(7, 4.7, expression(L^2 ~ "范数 | Norm"), cex = 0.9, font = 2, col = "#D97706")
+text(7, 4.1, expression(paste("||", epsilon, "||"[2], " = ", sqrt(Sigma ~ epsilon[i]^2))), 
+     cex = 0.85, col = "#1E293B")
+text(7, 3.5, "\"欧几里得距离\"", cex = 0.7, col = "#64748B", font = 3)
+
+# L2 squared illustration
+rect(10, 3.2, 14, 5.2, col = "#FEE2E2", border = "#DC2626", lwd = 2)
+text(12, 4.7, expression(L^2 ~ "² 常用!"), cex = 0.9, font = 2, col = "#DC2626")
+text(12, 4.1, expression(paste("||", epsilon, "||"[2]^2, " = ", Sigma ~ epsilon[i]^2)), 
+     cex = 0.85, col = "#1E293B")
+text(12, 3.5, "\"平方和\"", cex = 0.7, col = "#64748B", font = 3)
+
+# Arrow highlighting preference
+arrows(10.5, 2.8, 11.5, 3.1, col = "#DC2626", lwd = 2, length = 0.1)
+text(11, 2.4, "机器学习最常用！", cex = 0.85, col = "#DC2626", font = 2)
+text(11, 1.8, "ML am häufigsten!", cex = 0.7, col = "#DC2626", font = 3)
+
+# Reasons below
+text(7, 0.8, "为什么选平方和？  (1) 可微，导数简单   (2) 凸函数，只有一个最低点   (3) 对应高斯噪声假设", 
+     cex = 0.72, col = "#475569")
+text(7, 0.2, "Warum Quadratsumme? (1) Differenzierbar  (2) Konvex, nur ein Minimum  (3) Gauss-Rauschen", 
+     cex = 0.62, col = "#94A3B8", font = 3)
+```
+
+```{r}
+#| label: norm-demo
+
+# 用一个具体例子感受三种范数 | Konkretes Beispiel für drei Normen
+w_test <- 2.8
+residuals_demo <- w_test * Area - Price
+
+L1_norm <- sum(abs(residuals_demo))
+L2_norm <- sqrt(sum(residuals_demo^2))
+L2_sq   <- sum(residuals_demo^2)
+
+cat("当 w = ", w_test, " 时的残差范数：\n")
+cat("  L1 范数 (绝对值之和):  ", round(L1_norm, 2), "\n")
+cat("  L2 范数 (欧几里得距离):", round(L2_norm, 2), "\n")
+cat("  L2 范数的平方 (平方和): ", round(L2_sq, 2), "\n")
+```
+
+这就是 **最小二乘法（Methode der kleinsten Quadrate / Least Squares）** 名称的由来——最小化 **平方** 之 **和**。
+
+{{< pagebreak >}}
+
+# 损失函数：给"好坏"打分 {#sec-loss}
+
+> **Verlustfunktion: Dem „Gut oder Schlecht" eine Note geben**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   **损失函数** 的概念：把"模型有多差"变成一个数字
+-   SSE 与 MSE 的区别和联系
+-   损失函数的 **形状**——它看起来像一个碗！
+:::
+
+## 损失函数：机器学习的"评分标准"
+
+> **Verlustfunktion: Das „Bewertungssystem" des maschinellen Lernens**
+
+给定权重 $w$，我们可以计算一个分数来衡量模型的好坏。这个分数就叫 **损失函数（Verlustfunktion / Loss Function）**。
+
+### SSE——平方误差之和
+
+$$
+L_{\text{SSE}}(w) = \sum_{i=1}^{N} (w \cdot \text{Area}_i - \text{Price}_i)^2
+$$
+
+### MSE——平均平方误差（更常用）
+
+$$
+L_{\text{MSE}}(w) = \frac{1}{N} \sum_{i=1}^{N} (w \cdot \text{Area}_i - \text{Price}_i)^2
+$$
+
+两者关系：$L_{\text{MSE}} = \frac{1}{N} L_{\text{SSE}}$。由于 $\frac{1}{N}$ 是常数，**两者最小值点相同**——但 MSE 不受样本量影响，更适合比较不同数据集。
+
+```{r}
+#| label: loss-functions
+#| code-fold: false
+
+# 定义损失函数 | Verlustfunktionen definieren
+loss_sse <- function(w) sum((w * Area - Price)^2)
+loss_mse <- function(w) mean((w * Area - Price)^2)
+```
+
+### 实践中的选择 \| Auswahl in der Praxis
+
+| 场景 / Szenario | 推荐 / Empfohlen | 原因 / Grund |
+|:------------------------:|:------------------------:|:--------------------|
+| 理论推导 | SSE | 公式更简洁 |
+| 模型比较 | MSE | 与样本量无关，可比较不同数据集 |
+| 报告结果 | $\text{RMSE} = \sqrt{\text{MSE}}$ | 与原始数据单位相同，易解释 |
+
+## 损失函数的形状：一个"碗"
+
+> **Die Form der Verlustfunktion: Eine „Schüssel"**
+
+让我们画出 $L(w)$ 随 $w$ 变化的曲线——你会发现它是一个完美的 **碗形**（抛物线）！
+
+```{r}
+#| label: fig-loss-bowl
+#| fig-cap: "损失函数的碗形曲线——碗底就是最优解！| Die schüsselförmige Verlustfunktion — der Boden ist die optimale Lösung!"
+
+w_range <- seq(2.0, 4.0, by = 0.005)
+mse_vals <- sapply(w_range, loss_mse)
+w_opt <- w_range[which.min(mse_vals)]
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(w_range, mse_vals, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "权重 w | Gewicht w", ylab = "MSE 损失 | MSE-Verlust",
+     main = "损失函数的形状：一个'碗' | Form der Verlustfunktion: Eine 'Schüssel'",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# Highlight minimum / 标注最低点
+points(w_opt, min(mse_vals), pch = 23, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+text(w_opt + 0.1, min(mse_vals) + diff(range(mse_vals)) * 0.08,
+     paste0("碗底! w* = ", round(w_opt, 3)), 
+     col = "#DC2626", font = 2, cex = 1.05, pos = 4)
+
+# Show two bad choices / 展示两个"坏选择"
+for (w_bad in c(2.3, 3.7)) {
+  loss_bad <- loss_mse(w_bad)
+  points(w_bad, loss_bad, pch = 4, col = "#EA580C", cex = 2, lwd = 2.5)
+  segments(w_bad, min(mse_vals), w_bad, loss_bad, 
+           col = adjustcolor("#EA580C", 0.4), lty = 3)
+  text(w_bad, loss_bad + diff(range(mse_vals)) * 0.04, 
+       paste0("w = ", w_bad), col = "#EA580C", cex = 0.8)
+}
+
+legend("top", 
+       legend = c("MSE(w) 曲线", "最优解 | Optimum", "次优选择 | Suboptimal"),
+       col = c("#2563EB", "#DC2626", "#EA580C"),
+       lwd = c(3, NA, NA), pch = c(NA, 23, 4),
+       pt.bg = c(NA, "#DC2626", NA), pt.cex = c(NA, 1.5, 1.5),
+       bty = "n", cex = 0.9, horiz = TRUE)
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 \| Schlüsselerkenntnis
+
+**损失函数 = 一个"碗"**。机器学习的"训练"过程，就是在这个碗里找到最低点。
+
+-   碗底的位置 = 最优权重 $\hat{w}$
+-   碗底的高度 = 最小损失（由噪声决定，无法消除）
+
+*Verlustfunktion = eine „Schüssel". Training = den tiefsten Punkt finden.*
+:::
+
+{{< pagebreak >}}
+
+# 解析解：正规方程 {#sec-analytical}
+
+> **Analytische Lösung: Die Normalengleichung**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   从 1 个特征扩展到 **多个特征**——需要矩阵
+-   **正规方程**：一步直达碗底的公式
+-   正交投影的 **几何直觉**
+-   解析解的 **局限性**
+:::
+
+## 从 1 个特征到多个特征
+
+> **Von einem Merkmal zu mehreren Merkmalen**
+
+老板不满足了：*"只用面积预测太粗糙了，把楼层和房龄也加上！"*
+
+```{r}
+#| label: multi-feature-setup
+#| code-fold: false
+
+set.seed(42)
+N <- 10000;  p <- 3
+
+Area  <- runif(N, 50, 150)
+Floor <- sample(1:30, N, replace = TRUE)
+Age   <- runif(N, 3, 50)
+
+X <- cbind(Area, Floor, Age)            # 设计矩阵 | Designmatrix: N x p
+beta_true <- c(1000, 5000, -2000)       # 真实系数（未知）| Wahre Koeffizienten (unbekannt)
+noise <- rnorm(N, 0, 50000)
+y <- 500000 + X %*% beta_true + noise   # 观测价格 | Beobachteter Preis
+
+cat("设计矩阵 X 的维度:", nrow(X), "x", ncol(X), "\n")
+cat("响应向量 y 的长度:", length(y))
+```
+
+现在模型变为：
+
+$$
+\hat{\mathbf{y}} = X\mathbf{w}
+$$
+
+损失函数变为：
+
+$$
+L(\mathbf{w}) = \frac{1}{N} \|X\mathbf{w} - \mathbf{y}\|_2^2
+$$
+
+## 符号速查表
+
+> **Symbolübersicht**
+
+| 符号 / Symbol | 含义 / Bedeutung | 维度 / Dimension |
+|:------------------------:|:--------------------|:------------------------:|
+| $N$ | 样本数 / Stichprobenanzahl | 标量 / Skalar |
+| $p$ | 特征数 / Merkmalsanzahl | 标量 / Skalar |
+| $\mathbf{x}_i$ | 第 $i$ 个样本的特征 / Merkmale der $i$-ten Stichprobe | $\mathbb{R}^p$ |
+| $y_i$ | 第 $i$ 个样本的标签 / Label der $i$-ten Stichprobe | $\mathbb{R}$ |
+| $X$ | 设计矩阵 / Designmatrix | $\mathbb{R}^{N \times p}$ |
+| $\mathbf{y}$ | 响应向量 / Antwortvektor | $\mathbb{R}^N$ |
+| $\mathbf{w}$ | 权重向量 / Gewichtsvektor | $\mathbb{R}^p$ |
+
+## 几何直觉：投影视角
+
+> **Geometrische Intuition: Die Projektionsperspektive**
+
+**问题**：找 $\mathbf{w}$ 使得 $X\mathbf{w}$ 尽可能接近 $\mathbf{y}$。
+
+当 $\mathbf{w}$ 遍历所有可能取值时，$X\mathbf{w}$ 扫过一个"平面"——这就是矩阵 $X$ 的 **列空间** $\text{Col}(X)$。
+
+**几何答案**：$\mathbf{y}$ 在这个平面上的 **正交投影** 就是最近的点！
+
+```{r}
+#| label: fig-projection
+#| code-fold: true
+#| fig-cap: "正交投影示意图：残差垂直于列空间时距离最短 | Orthogonale Projektion: Das Residuum steht senkrecht auf dem Spaltenraum"
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("正交投影直觉 | Intuition der orthogonalen Projektion",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# Draw the "column space" plane (as a parallelogram)
+polygon(c(1, 4, 9, 6), c(1, 0.5, 2.5, 3), 
+        col = adjustcolor("#2563EB", 0.12), border = "#2563EB", lwd = 2)
+text(5, 0.8, expression("列空间 Col(X) | Spaltenraum"), 
+     col = "#2563EB", cex = 0.9, font = 2)
+
+# y vector (outside the plane)
+arrows(5, 1.8, 6, 7, col = "#16A34A", lwd = 3, length = 0.15)
+text(6.2, 7.2, expression(bold(y)), col = "#16A34A", cex = 1.4, font = 2)
+
+# Projection point (Xw_hat)
+points(6, 2.3, pch = 16, col = "#DC2626", cex = 2)
+text(6.8, 2.0, expression(X * hat(bold(w))), col = "#DC2626", cex = 1.1, font = 2)
+
+# Residual vector (perpendicular)
+arrows(6, 2.3, 6, 7, col = "#EA580C", lwd = 2.5, lty = 2, length = 0.12)
+text(7.2, 4.5, expression(bold(y) - X * hat(bold(w))), col = "#EA580C", cex = 0.95, font = 2)
+
+# Right angle symbol
+lines(c(5.6, 5.6, 6), c(2.3, 2.7, 2.7), col = "#EA580C", lwd = 1.5)
+
+# Arrow from origin to Xw_hat
+arrows(5, 1.8, 6, 2.3, col = "#DC2626", lwd = 2.5, length = 0.12)
+
+# Annotation
+text(2, 6.5, "残差垂直于列空间时\n距离最短！", 
+     col = "#1E293B", cex = 1, font = 2)
+text(2, 5.3, "Residuum senkrecht zum\nSpaltenraum = kürzester Abstand!", 
+     col = "#64748B", cex = 0.8, font = 3)
+```
+
+正交条件 $X^T(\mathbf{y} - X\hat{\mathbf{w}}) = \mathbf{0}$ 整理后得到 **正规方程**：
+
+$$
+X^T X \hat{\mathbf{w}} = X^T \mathbf{y}
+$$
+
+当 $X^T X$ 可逆时，**一步到位**：
+
+$$
+\boxed{\hat{\mathbf{w}} = (X^T X)^{-1} X^T \mathbf{y}}
+$$
+
+::: {.callout-tip collapse="true"}
+## 🔍 为什么正交条件里有 $X^T$？（点击展开）
+
+列空间 $\text{Col}(X)$ 由 $X$ 的所有列张成。残差 $\mathbf{r}$ 必须与 **每一列** 都垂直：
+
+$$
+\mathbf{x}_1^T \mathbf{r} = 0,\quad \mathbf{x}_2^T \mathbf{r} = 0,\quad \ldots,\quad \mathbf{x}_p^T \mathbf{r} = 0
+$$
+
+把这 $p$ 个内积条件紧凑地写在一起，就是 $X^T \mathbf{r} = \mathbf{0}$。
+
+这里 $X^T$ 的作用是把 $X$ 的每一列"竖起来"变成行，然后分别与 $\mathbf{r}$ 做点积，检验是否都为零。
+
+$X^T$ wandelt jede Spalte von $X$ in eine Zeile um und bildet dann jeweils das Skalarprodukt mit $\mathbf{r}$, um zu prüfen, ob alle null sind.
+:::
+
+```{r}
+#| label: normal-eq-solve
+#| code-fold: false
+
+# 用正规方程求解 | Mit Normalengleichung lösen
+w_analytical <- as.vector(solve(t(X) %*% X) %*% t(X) %*% y)
+
+cat("正规方程解 | Lösung der Normalengleichung:\n")
+cat("  w1 (面积/Fläche) =", round(w_analytical[1], 1), " (真实值:", beta_true[1], ")\n")
+cat("  w2 (楼层/Stockwerk) =", round(w_analytical[2], 1), " (真实值:", beta_true[2], ")\n")
+cat("  w3 (房龄/Alter)  =", round(w_analytical[3], 1), " (真实值:", beta_true[3], ")\n")
+```
+
+## 解析解的局限：为什么不能一招鲜吃遍天？
+
+> **Grenzen der analytischen Lösung**
+
+::: {.callout-warning icon="false"}
+## ⚠️ 三个致命限制 \| Drei fatale Einschränkungen
+
+1.  **计算代价高**：$(X^TX)^{-1}$ 的计算量为 $O(p^3)$，当特征数 $p$ 达到百万级时根本不可行
+2.  **数值不稳定**：当 $X^TX$ 接近奇异（某些特征高度相关），求逆会产生巨大误差
+3.  **只适用于线性模型**：神经网络等非线性模型没有闭式解
+
+**结论**：我们需要一种 **通用的迭代方法**——梯度下降。
+
+*Fazit: Wir brauchen eine allgemeine iterative Methode — den Gradientenabstieg.*
+:::
+
+{{< pagebreak >}}
+
+# 梯度下降：一步一步走向碗底 {#sec-gd}
+
+> **Gradientenabstieg: Schritt für Schritt zum Schüsselboden**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   梯度下降的 **直觉**：蒙眼下山
+-   **梯度** 的含义和计算
+-   **学习率** 的致命影响
+-   超参数 vs 参数 的区别
+:::
+
+## 核心直觉：蒙眼下山
+
+> **Kernintuition: Blindes Bergabgehen**
+
+想象你被蒙上眼睛，放在一个山谷里，只能用脚感知地面的坡度。你的策略是什么？
+
+**"感受坡度最陡的方向，朝那个方向迈一步。重复。"**
+
+这就是梯度下降！
+
+-   **梯度** $\nabla L(\mathbf{w})$ = 告诉你"地面往哪个方向最陡地上升"
+-   **负梯度** $-\nabla L(\mathbf{w})$ = "下降最快的方向"
+-   **学习率** $\eta$ = 每一步迈多大
+
+更新公式：
+
+$$
+\boxed{\mathbf{w}^{(t+1)} = \mathbf{w}^{(t)} - \eta \,\nabla L(\mathbf{w}^{(t)})}
+$$
+
+## 梯度的计算
+
+> **Berechnung des Gradienten**
+
+对于 MSE 损失函数 $L(\mathbf{w}) = \frac{1}{N}\|X\mathbf{w} - \mathbf{y}\|_2^2$，梯度为：
+
+$$
+\nabla L(\mathbf{w}) = \frac{2}{N} X^T(X\mathbf{w} - \mathbf{y})
+$$
+
+对于 SSE 损失函数 $L(\mathbf{w}) = \|X\mathbf{w} - \mathbf{y}\|_2^2$，梯度为：
+
+$$
+\nabla L(\mathbf{w}) = 2 X^T(X\mathbf{w} - \mathbf{y})
+$$
+
+```{r}
+#| label: gd-functions
+#| code-fold: false
+
+# 核心函数 | Kernfunktionen
+
+# 预测函数 | Vorhersagefunktion
+预测 <- function(X, w) {
+  return(X %*% w)
+}
+
+# MSE 损失函数 | MSE-Verlustfunktion
+损失函数 <- function(X, y, w) {
+  残差 <- 预测(X, w) - y
+  return(mean(残差^2))
+}
+
+# MSE 梯度（解析公式）| MSE-Gradient (analytische Formel)
+梯度_解析 <- function(X, y, w) {
+  N <- nrow(X)
+  残差 <- 预测(X, w) - y
+  梯度 <- (2 / N) * t(X) %*% 残差
+  return(as.vector(梯度))
+}
+```
+
+## 学习率：最关键的超参数
+
+> **Lernrate: Der kritischste Hyperparameter**
+
+::: {.callout-tip icon="false"}
+## 📌 超参数 vs 参数 \| Hyperparameter vs. Parameter
+
+|                | 参数 (Parameter)  | 超参数 (Hyperparameter)   |
+|:--------------:|:------------------|:--------------------------|
+|   **谁定？**   | 模型自己学        | 人来定                    |
+| **什么时候？** | 训练过程中        | 训练之前                  |
+|    **例子**    | 权重 $\mathbf{w}$ | 学习率 $\eta$、batch size |
+:::
+
+学习率 $\eta$ 太小、太大都会出问题。让我们亲眼看看：
+
+```{r}
+#| label: gd-with-history
+#| code-fold: true
+
+# 梯度下降（记录完整历史）| Gradientenabstieg mit vollständiger Aufzeichnung
+gd_run <- function(X, y, w_init, lr, max_iter) {
+  w <- w_init
+  loss_hist <- numeric(max_iter + 1)
+  loss_hist[1] <- 损失函数(X, y, w)
+  
+  for (i in 1:max_iter) {
+    grad <- 梯度_解析(X, y, w)
+    w <- w - lr * grad
+    loss_hist[i + 1] <- 损失函数(X, y, w)
+  }
+  list(w = w, loss = loss_hist)
+}
+```
+
+```{r}
+#| label: fig-lr-comparison
+#| fig-cap: "学习率过小 → 蜗牛爬行；合适 → 稳定收敛；过大 → 爆炸发散 | Zu klein → Schneckentempo; Passend → Stabile Konvergenz; Zu groß → Explosion"
+#| fig-height: 6
+
+max_iter <- 60
+
+res_small <- gd_run(X, y, c(0,0,0), lr = 1e-7,  max_iter)
+res_good  <- gd_run(X, y, c(0,0,0), lr = 1e-5,  max_iter)
+res_large <- gd_run(X, y, c(0,0,0), lr = 1e-4,  max_iter)
+
+iters <- 0:max_iter
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(iters, res_large$loss, type = "l", col = "#DC2626", lwd = 2.5,
+     xlab = "迭代次数 | Iteration", ylab = "MSE (对数尺度 | log)",
+     main = "学习率对比实验 | Lernratenvergleich",
+     log = "y", ylim = c(min(res_good$loss), max(res_large$loss) * 2),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+lines(iters, res_good$loss,  col = "#16A34A", lwd = 2.5)
+lines(iters, res_small$loss, col = "#2563EB", lwd = 2.5)
+
+# Optimal reference line
+abline(h = 损失函数(X, y, w_analytical), col = "#9333EA", lty = 2, lwd = 2)
+
+legend("right", 
+       legend = c(
+         expression(paste(eta, " = ", 10^{-4}, " 发散!")),
+         expression(paste(eta, " = ", 10^{-5}, " 合适")),
+         expression(paste(eta, " = ", 10^{-7}, " 太慢")),
+         "最优解 | Optimum"
+       ),
+       col = c("#DC2626", "#16A34A", "#2563EB", "#9333EA"),
+       lwd = c(2.5, 2.5, 2.5, 2), lty = c(1, 1, 1, 2),
+       bty = "n", cex = 0.95)
+```
+
+```{r}
+#| label: lr-summary-print
+
+init_loss <- res_small$loss[1]
+cat("初始 MSE:", format(init_loss, scientific = TRUE), "\n\n")
+
+cat("经过", max_iter, "次迭代后：\n")
+cat("  lr = 1e-7 (太慢): MSE =", format(tail(res_small$loss, 1), scientific = TRUE),
+    "  下降", round((1 - tail(res_small$loss,1)/init_loss)*100, 1), "%\n")
+cat("  lr = 1e-5 (合适): MSE =", format(tail(res_good$loss, 1), scientific = TRUE),
+    "  下降", round((1 - tail(res_good$loss,1)/init_loss)*100, 1), "%\n")
+cat("  lr = 1e-4 (太大): MSE =", format(tail(res_large$loss, 1), scientific = TRUE), "  发散!\n")
+cat("  解析解最优 MSE:  ", format(损失函数(X, y, w_analytical), scientific = TRUE), "\n")
+```
+
+**学习率选择总结 \| Zusammenfassung der Lernratenauswahl**
+
+| 学习率 / Lernrate | 现象 / Phänomen      | 结果 / Ergebnis |
+|:-----------------:|:---------------------|:----------------|
+|  太小 / Zu klein  | 收敛极慢，像蜗牛爬行 | 浪费计算资源    |
+|  合适 / Passend   | 稳定下降，最终收敛   | 找到最优解      |
+|  太大 / Zu groß   | 来回震荡甚至发散     | 完全失败        |
+
+------------------------------------------------------------------------
+
+# 梯度验证：如何确保你没算错 {#sec-grad-check}
+
+> **Gradientenüberprüfung: Sicherstellen, dass Sie richtig gerechnet haben**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   **朴素方法（数值微分）**：一种"笨但可靠"的梯度计算方法
+-   **解析梯度 vs 数值梯度** 的精度和速度对比
+-   随参数规模增大，两种方法的 **扩展性差异**
+-   实践中的 **梯度检查** 流程
+-   预告：**自动微分** 如何兼顾两者优势
+:::
+
+## 为什么需要验证？
+
+> **Warum ist eine Überprüfung notwendig?**
+
+在复杂模型中，手推梯度公式容易出错。我们需要一种方法来验证梯度计算是否正确。
+
+*Bei komplexen Modellen ist es leicht, Fehler bei der manuellen Herleitung der Gradientenformel zu machen.*
+
+## 方案 1：朴素方法——数值微分
+
+> **Ansatz 1: Naive Methode — Numerische Differentiation**
+
+**直觉**：就像调收音机——对每个旋钮，往右拧一点看效果，往左拧一点看效果，从而估计这个旋钮对信号的影响。
+
+$$
+\frac{\partial L}{\partial w_j} \approx \frac{L(\mathbf{w} + \epsilon \, \mathbf{e}_j) - L(\mathbf{w} - \epsilon \, \mathbf{e}_j)}{2\epsilon}
+$$
+
+其中 $\mathbf{e}_j$ 是第 $j$ 个方向的单位向量，$\epsilon$ 是微小扰动（如 $10^{-5}$）。
+
+```{r}
+#| label: naive-gradient
+#| code-fold: false
+
+# --- 朴素方法（数值微分）---
+# 对每个旋钮，拧一点点，看损失变化多少
+# 需要算 2p 次损失函数
+
+朴素方法计算梯度 <- function(X, y, theta, epsilon = 1e-5) {
+  梯度 <- numeric(length(theta))
+  计算次数 <- 0
+  
+  for (j in 1:length(theta)) {
+    # 把第 j 个旋钮往右拧一点
+    theta_plus <- theta
+    theta_plus[j] <- theta_plus[j] + epsilon
+    L_plus <- 损失函数(X, y, theta_plus)
+    计算次数 <- 计算次数 + 1
+    
+    # 把第 j 个旋钮往左拧一点
+    theta_minus <- theta
+    theta_minus[j] <- theta_minus[j] - epsilon
+    L_minus <- 损失函数(X, y, theta_minus)
+    计算次数 <- 计算次数 + 1
+    
+    # 数值微分：(L_plus - L_minus) / (2 * epsilon)
+    梯度[j] <- (L_plus - L_minus) / (2 * epsilon)
+  }
+  
+  attr(梯度, "计算次数") <- 计算次数
+  return(梯度)
+}
+```
+
+**问题**：需要计算 $2p$ 次损失函数（$p$ 是参数数量）。当模型有百万参数时，这太慢了！
+
+*Problem:* $2p$ Verlustfunktionsauswertungen nötig — bei Millionen Parametern viel zu langsam!
+
+## 方案 2：解析梯度——数学公式直接算
+
+> **Ansatz 2: Analytischer Gradient — Direkte mathematische Formel**
+
+**直觉**：利用数学推导，直接写出梯度的闭式表达式。
+
+对于 MSE 损失函数，梯度有闭式解：
+
+$$
+\nabla L(\mathbf{w}) = \frac{2}{N} X^T (X\mathbf{w} - \mathbf{y})
+$$
+
+**一次矩阵运算就搞定，不管有多少参数！**
+
+```{r}
+#| label: analytical-gradient
+#| code-fold: false
+
+# --- 解析梯度（直接用数学公式）---
+# 对于均方误差损失，梯度有闭式解：
+# grad_L = (2/N) * X^T * (X*w - y)
+# 一次矩阵运算就搞定
+
+解析方法计算梯度 <- function(X, y, theta) {
+  预测值 <- 预测(X, theta)
+  误差 <- 预测值 - y
+  梯度 <- (2 / nrow(X)) * t(X) %*% 误差
+  return(as.vector(梯度))
+}
+```
+
+## 方案对比实验
+
+> **Experimenteller Vergleich der beiden Ansätze**
+
+```{r}
+#| label: gradient-comparison-detailed
+#| code-fold: false
+
+cat("========== 方案对比 ==========\n")
+cat("========== Vergleich der Ansätze ==========\n\n")
+
+theta_test <- c(50, 3000, -1000)  # 随便设个初始值
+
+# --- 朴素方法 ---
+t1 <- Sys.time()
+梯度_朴素 <- 朴素方法计算梯度(X, y, theta_test)
+t2 <- Sys.time()
+time_naive <- as.numeric(t2 - t1) * 1000
+
+cat("朴素方法 (Naive Methode / Numerical Differentiation):\n")
+cat("  梯度 / Gradient:", round(梯度_朴素, 2), "\n")
+cat("  计算损失函数次数 / Verlustfunktionsauswertungen:", 
+    attr(梯度_朴素, "计算次数"), "次 / Mal\n")
+cat("  耗时 / Zeit:", round(time_naive, 3), "毫秒 / ms\n\n")
+
+# --- 解析方法 ---
+t1 <- Sys.time()
+梯度_解析结果 <- 解析方法计算梯度(X, y, theta_test)
+t2 <- Sys.time()
+time_analytical <- as.numeric(t2 - t1) * 1000
+
+cat("解析方法 (Analytische Methode / Analytical Gradient):\n")
+cat("  梯度 / Gradient:", round(梯度_解析结果, 2), "\n")
+cat("  计算损失函数次数 / Verlustfunktionsauswertungen: 1 次",
+    "（内含在矩阵运算中 / in Matrixoperation eingebettet）\n")
+cat("  耗时 / Zeit:", round(time_analytical, 3), "毫秒 / ms\n\n")
+
+# --- 验证 ---
+cat("========== 验证 / Überprüfung ==========\n")
+cat("最大绝对差 / Max. absolute Differenz:", 
+    format(max(abs(梯度_朴素 - 梯度_解析结果)), scientific = TRUE), "\n")
+cat("两种方法结果一致！ / Ergebnisse stimmen überein!\n\n")
+
+cat("========== 结论 / Fazit ==========\n")
+cat("两种方法给出相同结果，但解析方法快得多！\n")
+cat("Beide Methoden geben das gleiche Ergebnis, aber die analytische ist viel schneller!\n")
+if (time_analytical > 0) {
+  cat("加速比 / Beschleunigung:", round(time_naive / time_analytical, 1), "x\n")
+}
+```
+
+## 为什么解析方法快这么多？
+
+> **Warum ist die analytische Methode so viel schneller?**
+
+|  方面 / Aspekt   | 朴素方法（数值微分）            | 解析方法（数学公式）   |
+|:----------------:|:------------------------------|:----------------------|
+| 损失函数计算次数 | $2p$ 次                         | 1 次（内含于矩阵运算） |
+|    时间复杂度    | $O(p \cdot Np) = O(Np^2)$       | $O(Np)$                |
+|       精度       | 有数值误差（取决于 $\epsilon$） | 精确（仅浮点误差）     |
+|     实现难度     | 简单（不需要推导）              | 需要数学推导           |
+
+## 扩展性实验：参数越多差距越大
+
+> **Skalierungsexperiment: Mehr Parameter → größerer Unterschied**
+
+```{r}
+#| label: fig-scaling-comparison
+#| fig-cap: "参数数量增加时，朴素方法的计算时间急剧增长，解析方法几乎不变 | Bei steigender Parameterzahl steigt die Rechenzeit der naiven Methode drastisch"
+
+p_values <- c(3, 10, 30, 100, 300)
+times_naive_vec <- numeric(length(p_values))
+times_analytical_vec <- numeric(length(p_values))
+
+for (i in seq_along(p_values)) {
+  pp <- p_values[i]
+  # 创建合成数据 | Synthetische Daten erstellen
+  X_test <- matrix(rnorm(1000 * pp), nrow = 1000, ncol = pp)
+  y_test <- rnorm(1000)
+  w_test_p <- rnorm(pp)
+  
+  # 朴素方法计时 | Zeit für naive Methode
+  t1 <- Sys.time()
+  grad_num <- 朴素方法计算梯度(X_test, y_test, w_test_p)
+  t2 <- Sys.time()
+  times_naive_vec[i] <- as.numeric(t2 - t1) * 1000
+  
+  # 解析方法计时 | Zeit für analytische Methode
+  t1 <- Sys.time()
+  grad_ana <- 解析方法计算梯度(X_test, y_test, w_test_p)
+  t2 <- Sys.time()
+  times_analytical_vec[i] <- as.numeric(t2 - t1) * 1000
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(p_values, times_naive_vec, type = "b", pch = 16, col = "#DC2626", lwd = 2.5, cex = 1.5,
+     xlab = "参数数量 p | Anzahl der Parameter p",
+     ylab = "计算时间 (ms) | Rechenzeit (ms)",
+     main = "扩展性对比：朴素 vs 解析 | Skalierung: Naiv vs. Analytisch",
+     ylim = c(0, max(times_naive_vec) * 1.15),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(p_values, times_analytical_vec, type = "b", pch = 17, col = "#2563EB", lwd = 2.5, cex = 1.5)
+
+legend("topleft", 
+       legend = c("朴素方法 (2p 次计算) | Naive Methode", 
+                  "解析方法 (1 次矩阵运算) | Analytische Methode"),
+       col = c("#DC2626", "#2563EB"), pch = c(16, 17), lwd = 2.5, bty = "n", cex = 0.95)
+
+# 打印详细表格 | Detaillierte Tabelle ausgeben
+cat("\n时间对比表 | Zeitvergleichstabelle:\n")
+comparison_df <- data.frame(
+  `参数数 p` = p_values,
+  `朴素方法 (ms)` = round(times_naive_vec, 2),
+  `解析方法 (ms)` = round(times_analytical_vec, 2),
+  `加速比` = round(times_naive_vec / pmax(times_analytical_vec, 0.001), 1),
+  check.names = FALSE
+)
+print(comparison_df)
+```
+
+## 实践建议：何时用哪种方法
+
+> **Praktische Empfehlungen: Wann welche Methode verwenden**
+
+::: {.callout-tip icon="false"}
+## 📌 梯度验证流程 \| Workflow zur Gradientenüberprüfung
+
+**朴素方法用于：调试和验证** — 当你推导了一个新的梯度公式时，用朴素方法（数值微分）检验它是否正确。就像考试时用另一种方法验算答案。
+
+*Naive Methode für: Debugging und Verifizierung — Wenn Sie eine neue Gradientenformel hergeleitet haben, überprüfen Sie mit der numerischen Methode, ob sie korrekt ist.*
+
+**解析方法用于：实际训练** — 一旦确认公式正确，训练时永远使用解析梯度。
+
+*Analytische Methode für: Tatsächliches Training — Sobald die Formel als korrekt bestätigt ist, verwenden Sie beim Training immer den analytischen Gradienten.*
+
+```         
+验证流程 | Verifizierungsworkflow:
+  1. 推导解析梯度公式
+  2. 实现解析梯度函数
+  3. 用朴素方法（数值微分）计算同一点的梯度
+  4. 比较两者差异（应 < 1e-5）
+  5. 确认无误后，正式训练只用解析方法
+```
+:::
+
+## 预告：深度学习中的自动微分
+
+> **Vorschau: Automatische Differentiation im Deep Learning**
+
+在神经网络中，手动推导梯度公式非常复杂。现代深度学习框架使用 **自动微分（Automatic Differentiation / Automatische Differentiation）**，它同时具备两种方法的优点：
+
+| 特性 | 朴素方法 | 解析方法 | **自动微分** |
+|:----:|:--------:|:--------:|:------------:|
+| 精确 |   近似   |   精确   |   **精确**   |
+| 自动 |   自动   |  需手推  |   **自动**   |
+| 高效 |    慢    |    快    |    **快**    |
+
+这是深度学习能够训练数十亿参数模型的关键技术之一。我们将在后续章节详细介绍。
+
+*Dies ist eine der Schlüsseltechnologien, die es dem Deep Learning ermöglicht, Modelle mit Milliarden von Parametern zu trainieren.*
+
+{{< pagebreak >}}
+
+# 大规模数据：随机梯度下降 {#sec-sgd}
+
+> **Große Datenmengen: Stochastischer Gradientenabstieg (SGD)**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   全批量梯度下降在大数据上的 **瓶颈**
+-   **核心洞察**：梯度是一个期望值，可以用采样估计
+-   SGD → Mini-batch GD → Full-batch GD 的 **统一视角**
+:::
+
+## 发现瓶颈
+
+> **Den Engpass entdecken**
+
+回顾梯度公式：
+
+$$
+\nabla L(\mathbf{w}) = \frac{2}{N}\sum_{i=1}^{N} \mathbf{x}_i (\mathbf{x}_i^T \mathbf{w} - y_i)
+$$
+
+每次迭代都要遍历 **全部** $N$ 个样本。当 $N = 10^8$ 时——
+
+```{r}
+#| label: fig-batch-bottleneck
+#| fig-cap: "每次迭代的计算时间随 N 线性增长 | Rechenzeit pro Iteration wächst linear mit N"
+
+N_vals <- c(1000, 5000, 10000, 50000, 100000)
+batch_times <- numeric(length(N_vals))
+
+for (i in seq_along(N_vals)) {
+  nn <- N_vals[i]
+  Xb <- matrix(runif(nn * 3), nn, 3); yb <- runif(nn); wb <- c(1,1,1)
+  batch_times[i] <- system.time({
+    for (j in 1:20) { 
+      grad <- (2/nn) * t(Xb) %*% (Xb %*% wb - yb)
+      wb <- wb - 1e-5 * as.vector(grad) 
+    }
+  })[3] / 20 * 1000
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(N_vals / 1000, batch_times, type = "b", pch = 16, col = "#DC2626", lwd = 2.5, cex = 1.5,
+     xlab = "样本数 N (千) | Stichprobenzahl N (Tsd.)",
+     ylab = "每次迭代耗时 (ms) | Zeit pro Iteration (ms)",
+     main = "Full-Batch GD 的扩展性瓶颈 | Skalierbarkeitsengpass",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# Extrapolation for large N
+if (batch_times[5] > 0 && N_vals[5] > 0) {
+  text(N_vals[5]/1000, batch_times[5] * 1.2, 
+       paste0("如果 N = 1亿?\n约 ", 
+              round(batch_times[5] / N_vals[5] * 1e8 / 1000, 0), " 秒/次!"),
+       col = "#DC2626", cex = 0.9, font = 2, pos = 2)
+}
+```
+
+## 核心洞察：梯度 = 期望
+
+> **Schlüsselerkenntnis: Gradient = Erwartungswert**
+
+全批量梯度实际上是所有样本梯度的 **平均**（即期望）：
+
+$$
+\nabla L(\mathbf{w}) = \frac{1}{N}\sum_{i=1}^{N} \nabla\ell_i(\mathbf{w}) = \mathbb{E}_{i \sim \text{Uniform}}\!\big[\nabla\ell_i(\mathbf{w})\big]
+$$
+
+其中 $\ell_i(\mathbf{w}) = (\mathbf{x}_i^T \mathbf{w} - y_i)^2$ 是第 $i$ 个样本的损失。
+
+**既然是平均，我们就可以用随机采样来估计它！** 就像做民意调查不需要问全国所有人一样。
+
+*Da es ein Durchschnitt ist, können wir ihn durch Zufallsstichproben schätzen! Wie bei einer Meinungsumfrage.*
+
+## 三种梯度下降策略
+
+> **Drei Gradientenabstiegsstrategien**
+
+### SGD：每次只用 1 个样本
+
+$$
+\mathbf{w}^{(t+1)} = \mathbf{w}^{(t)} - \eta \,\nabla \ell_{i_t}(\mathbf{w}^{(t)})
+$$
+
+### Mini-batch GD：每次用 $B$ 个样本（折中方案）
+
+$$
+\mathbf{w}^{(t+1)} = \mathbf{w}^{(t)} - \eta \cdot \frac{1}{B} \sum_{i \in \mathcal{B}_t} \nabla \ell_i(\mathbf{w}^{(t)})
+$$
+
+```{r}
+#| label: minibatch-impl
+#| code-fold: true
+
+# 通用 Mini-batch GD（batch_size = 1 即 SGD，= N 即 Full-batch）
+# Allgemeiner Mini-Batch-GD (batch_size = 1 → SGD, = N → Full-Batch)
+minibatch_gd <- function(X, y, w_init, lr, batch_size, max_iter) {
+  w <- w_init; N <- nrow(X)
+  loss_hist <- numeric(max_iter)
+  for (i in 1:max_iter) {
+    idx <- sample(N, batch_size)
+    Xb <- X[idx, , drop = FALSE]; yb <- y[idx]
+    grad <- (2 / batch_size) * as.vector(t(Xb) %*% (Xb %*% w - yb))
+    w <- w - lr * grad
+    loss_hist[i] <- 损失函数(X, y, w)
+  }
+  list(w = w, loss = loss_hist)
+}
+```
+
+```{r}
+#| label: fig-three-methods
+#| fig-cap: "三种策略对比：Full-Batch 平滑但慢，SGD 快但抖动大，Mini-Batch 兼顾两者 | Drei Strategien im Vergleich"
+#| fig-height: 6
+
+set.seed(2024)
+iters <- 800
+
+r_full <- gd_run(X, y, c(0,0,0), lr = 1e-9, iters)
+r_mini <- minibatch_gd(X, y, c(0,0,0), lr = 1e-7, batch_size = 64, iters)
+r_sgd  <- minibatch_gd(X, y, c(0,0,0), lr = 1e-8, batch_size = 1,  iters)
+opt_loss <- 损失函数(X, y, w_analytical)
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(1:iters, r_sgd$loss, type = "l", col = adjustcolor("#EA580C", 0.5), lwd = 1,
+     xlab = "迭代次数 | Iteration", ylab = "MSE (对数尺度 | log)",
+     main = "Full-Batch vs Mini-Batch vs SGD",
+     log = "y", ylim = c(opt_loss * 0.8, max(r_sgd$loss)),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(1:iters, r_mini$loss, col = adjustcolor("#16A34A", 0.7), lwd = 1.5)
+lines(0:iters, r_full$loss, col = "#2563EB", lwd = 2.5)
+abline(h = opt_loss, col = "#9333EA", lty = 2, lwd = 2)
+
+legend("topright", 
+       legend = c("Full-Batch (N = 10000)", "Mini-Batch (B = 64)", 
+                  "SGD (B = 1)", "最优解 | Optimum"),
+       col = c("#2563EB", "#16A34A", "#EA580C", "#9333EA"),
+       lwd = c(2.5, 1.5, 1, 2), lty = c(1, 1, 1, 2), bty = "n", cex = 0.9)
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键对比 \| Schlüsselvergleich
+
+|                   |  每次用的样本   |   梯度质量   | 曲线特征 |  适用场景  |
+|:-----------------:|:---------------:|:------------:|:--------:|:----------:|
+|  **Full-Batch**   |    全部 $N$     |     精确     |   平滑   |   小数据   |
+| **Mini-Batch** ⭐ | $B$ 个 (32-128) | 有噪声但合理 | 轻微波动 | **最常用** |
+|      **SGD**      |      1 个       |   噪声很大   | 剧烈抖动 |  在线学习  |
+
+**实践共识**：Mini-batch GD 是工业界和学术界的标准选择。
+
+*Praktischer Konsens: Mini-Batch-GD ist die Standardwahl in Industrie und Forschung.*
+:::
+
+{{< pagebreak >}}
+
+# 特征缩放：让梯度下降飞起来 {#sec-scaling}
+
+> **Merkmalsskalierung: Den Gradientenabstieg beschleunigen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   不同尺度的特征为什么会让梯度下降 **走弯路**
+-   **标准化** 的原理和实现
+-   标准化前后的 **等高线对比**
+:::
+
+## 问题发现：尺度差异
+
+> **Problem entdecken: Skalenunterschiede**
+
+```{r}
+#| label: scale-problem
+
+cat("特征取值范围 | Wertebereiche der Merkmale:\n")
+cat("  面积 Area  :", round(min(Area), 1), "-", round(max(Area), 1), 
+    " --> 范围", round(diff(range(Area)), 1), "\n")
+cat("  楼层 Floor :", min(Floor), "-", max(Floor), 
+    "      --> 范围", diff(range(Floor)), "\n")
+cat("  房龄 Age   :", round(min(Age), 1), "-", round(max(Age), 1), 
+    "  --> 范围", round(diff(range(Age)), 1), "\n")
+```
+
+面积的数字比楼层大几倍——但这不代表面积对价格的影响更大！
+
+*Der Zahlenbereich der Fläche ist viel größer als der des Stockwerks — aber das bedeutet nicht, dass die Fläche einen größeren Einfluss auf den Preis hat!*
+
+## 可视化：椭圆 vs 圆
+
+> **Visualisierung: Ellipse vs. Kreis**
+
+当特征尺度不同时，损失函数的等高线是 **拉长的椭圆**——梯度下降会走"之字形"弯路。标准化后等高线接近 **圆形**，梯度直接指向碗底。
+
+```{r}
+#| label: fig-contour-comparison
+#| fig-cap: "左：未标准化（椭圆形等高线 → 走弯路）；右：标准化后（接近圆形 → 直奔碗底）| Links: Ohne Standardisierung (Zickzack); Rechts: Mit Standardisierung (direkt zum Minimum)"
+#| fig-height: 5
+
+set.seed(42)
+n_vis <- 500
+x1 <- runif(n_vis, 1, 100)
+x2 <- runif(n_vis, 0.01, 0.1)
+y_vis <- 2 * x1 + 1000 * x2 + rnorm(n_vis, 0, 10)
+
+loss_2d <- function(w1, w2, xx1, xx2, yy) mean((w1*xx1 + w2*xx2 - yy)^2)
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+
+# Before standardization / 标准化前
+w1r <- seq(0.5, 3.5, length.out = 80)
+w2r <- seq(400, 1600, length.out = 80)
+z1 <- outer(w1r, w2r, Vectorize(function(a, b) loss_2d(a, b, x1, x2, y_vis)))
+contour(w1r, w2r, z1, nlevels = 25, col = "#2563EB",
+        xlab = expression(w[1]), ylab = expression(w[2]),
+        main = "未标准化 | Ohne Std.", cex.main = 1.1, col.main = "#DC2626")
+
+# Simulate zigzag path / 模拟之字形路径
+w_path <- matrix(c(0.8, 1400), ncol = 2)
+lr_demo <- 5e-6
+for (k in 1:15) {
+  ww <- tail(w_path, 1)
+  g1 <- mean(2 * x1 * (ww[1]*x1 + ww[2]*x2 - y_vis))
+  g2 <- mean(2 * x2 * (ww[1]*x1 + ww[2]*x2 - y_vis))
+  w_path <- rbind(w_path, c(ww[1] - lr_demo*g1, ww[2] - lr_demo*g2))
+}
+lines(w_path[,1], w_path[,2], col = "#DC2626", lwd = 2, type = "b", pch = 16, cex = 0.6)
+
+# After standardization / 标准化后
+x1s <- (x1 - mean(x1)) / sd(x1)
+x2s <- (x2 - mean(x2)) / sd(x2)
+w1rs <- seq(-5, 200, length.out = 80)
+w2rs <- seq(-5, 35, length.out = 80)
+z2 <- outer(w1rs, w2rs, Vectorize(function(a, b) loss_2d(a, b, x1s, x2s, y_vis)))
+contour(w1rs, w2rs, z2, nlevels = 25, col = "#16A34A",
+        xlab = expression(w[1]^std), ylab = expression(w[2]^std),
+        main = "标准化后 | Mit Std.", cex.main = 1.1, col.main = "#16A34A")
+
+par(mfrow = c(1, 1))
+```
+
+## 标准化公式
+
+> **Standardisierungsformel**
+
+将每个特征转换为均值为 0、标准差为 1 的分布：
+
+$$
+x_j^{\text{std}} = \frac{x_j - \mu_j}{\sigma_j}
+$$
+
+其中 $\mu_j = \frac{1}{N}\sum_{i=1}^N x_{ij}$ 是均值，$\sigma_j = \sqrt{\frac{1}{N}\sum_{i=1}^N (x_{ij} - \mu_j)^2}$ 是标准差。
+
+```{r}
+#| label: standardize-demo
+#| code-fold: false
+
+# 标准化函数 | Standardisierungsfunktion
+standardize <- function(X) {
+  mu <- colMeans(X)
+  sigma <- apply(X, 2, sd)
+  X_std <- sweep(sweep(X, 2, mu), 2, sigma, "/")
+  list(X_std = X_std, mu = mu, sigma = sigma)
+}
+
+# 应用标准化 | Standardisierung anwenden
+std_res <- standardize(X)
+X_std <- std_res$X_std
+
+cat("标准化后 | Nach Standardisierung:\n")
+cat("  均值 / Mittelwert:          ", round(colMeans(X_std), 6), "\n")
+cat("  标准差 / Standardabweichung:", round(apply(X_std, 2, sd), 6), "\n")
+```
+
+## 标准化前后训练对比
+
+> **Trainingsvergleich: Vor und nach Standardisierung**
+
+```{r}
+#| label: fig-std-comparison
+#| fig-cap: "标准化后收敛速度大幅提升，且可以使用更大的学习率 | Nach Standardisierung: viel schnellere Konvergenz mit größerer Lernrate"
+
+y_c <- y - mean(y)  # 中心化 y
+
+res_nostd  <- gd_run(X,     y,   c(0,0,0), lr = 1e-9,  500)
+res_std    <- gd_run(X_std, y_c, c(0,0,0), lr = 0.1,   500)
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(0:500, res_nostd$loss, type = "l", col = "#DC2626", lwd = 2.5,
+     xlab = "迭代次数 | Iteration", ylab = "MSE (对数尺度 | log)", log = "y",
+     main = "标准化的威力 | Die Macht der Standardisierung",
+     ylim = c(min(res_std$loss), max(res_nostd$loss)),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(0:500, res_std$loss, col = "#16A34A", lwd = 2.5)
+
+legend("right",
+       legend = c(expression(paste("未标准化 (", eta, " = ", 10^{-9}, ")")),
+                  expression(paste("标准化后 (", eta, " = 0.1)"))),
+       col = c("#DC2626", "#16A34A"), lwd = 2.5, bty = "n", cex = 1)
+
+cat("\n收敛对比 | Konvergenzvergleich:\n")
+cat("  未标准化, 最终 MSE:", 
+    format(tail(res_nostd$loss, 1), scientific = TRUE), "\n")
+cat("  标准化后, 最终 MSE:", 
+    format(tail(res_std$loss, 1), scientific = TRUE), "\n")
+```
+
+::: {.callout-warning icon="false"}
+## ⚠️ 重要提醒 \| Wichtiger Hinweis
+
+标准化参数 ($\mu$, $\sigma$) 必须从 **训练集** 算出，再用同样的值处理测试集。否则会造成 **数据泄露（Data Leakage）**。
+
+*Die Parameter (*$\mu$, $\sigma$) müssen auf dem Trainingsdatensatz berechnet und dann auf den Testdatensatz angewendet werden. Andernfalls kommt es zu Datenleckage.
+:::
+
+{{< pagebreak >}}
+
+# 完整训练演示 {#sec-full-training}
+
+> **Vollständige Trainingsdemonstration**
+
+::: {.callout-note icon="false"}
+## 🎯 本节目标 \| Ziel
+
+把所有组件串联成一个完整的训练流程，亲眼见证模型"学会"的过程。
+
+*Alle Komponenten zu einem vollständigen Trainingsprozess zusammenfügen.*
+:::
+
+```{r}
+#| label: full-training-run
+
+# 完整训练（带收敛检测和进度报告）
+# Vollständiges Training mit Konvergenzprüfung und Fortschrittsbericht
+gd_full <- function(X, y, w_init, lr, max_iter, tol = 1e-8) {
+  w <- w_init
+  loss_h <- numeric(max_iter)
+  
+  for (i in 1:max_iter) {
+    grad <- 梯度_解析(X, y, w)
+    w_new <- w - lr * grad
+    loss_h[i] <- 损失函数(X, y, w_new)
+    
+    # 检查收敛 | Konvergenz prüfen
+    if (sqrt(sum((w_new - w)^2)) < tol) {
+      cat("  在第", i, "次迭代收敛 | Konvergiert bei Iteration", i, "\n")
+      loss_h <- loss_h[1:i]; w <- w_new; break
+    }
+    
+    # 进度报告 | Fortschrittsbericht
+    if (i %% 500 == 0) {
+      cat("  迭代", i, "- MSE:", format(loss_h[i], scientific = TRUE), "\n")
+    }
+    w <- w_new
+  }
+  list(w = w, loss = loss_h, iters = length(loss_h))
+}
+
+cat("========================================\n")
+cat("    开始训练 | Training startet\n")
+cat("========================================\n\n")
+
+result <- gd_full(X, y, c(0,0,0), lr = 1e-9, max_iter = 3000)
+
+cat("\n========================================\n")
+cat("    最终结果 | Endergebnisse\n")
+cat("========================================\n")
+cat("迭代次数 / Iterationen:", result$iters, "\n")
+cat("最终 MSE / Endgültiger MSE:", format(tail(result$loss, 1), scientific = TRUE), "\n\n")
+
+cat("             学到的权重    真实值      解析解\n")
+cat(sprintf("  面积 Area:  %10.1f  %7d  %10.1f\n", result$w[1], beta_true[1], w_analytical[1]))
+cat(sprintf("  楼层 Floor: %10.1f  %7d  %10.1f\n", result$w[2], beta_true[2], w_analytical[2]))
+cat(sprintf("  房龄 Age:   %10.1f  %7d  %10.1f\n", result$w[3], beta_true[3], w_analytical[3]))
+```
+
+```{r}
+#| label: fig-training-curve
+#| fig-cap: "完整训练曲线：损失不断下降，逐渐逼近最优解 | Vollständige Trainingskurve: Verlust sinkt stetig"
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(result$loss, type = "l", col = "#2563EB", lwd = 2.5,
+     xlab = "迭代次数 | Iteration", ylab = "MSE",
+     main = "训练曲线 | Trainingskurve",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+abline(h = 损失函数(X, y, w_analytical), col = "#DC2626", lty = 2, lwd = 2)
+legend("topright",
+       legend = c("梯度下降轨迹 | GD-Verlauf", "解析最优解 | Analytisches Optimum"),
+       col = c("#2563EB", "#DC2626"), lwd = c(2.5, 2), lty = c(1, 2), bty = "n", cex = 1)
+```
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心公式完全解读
+
+现在让我们重新审视开篇那个"吓人"的公式——每个符号你都认识了：
+
+$$
+\hat{\mathbf{w}} = \underbrace{\arg\min_{\mathbf{w} \in \mathbb{R}^p}}_{\text{找最优参数}} \underbrace{\frac{1}{N} \sum_{i=1}^{N}}_{\text{N个样本取平均}} \underbrace{\bigl(f(\mathbf{x}_i;\, \mathbf{w}) - y_i\bigr)^2}_{\text{每个样本的预测误差的平方}}
+$$
+
+| 符号 / Symbol | 本章含义 / Bedeutung | 第一次遇到 / Wo eingeführt |
+|:--:|:---|:---|
+| $\mathbf{w} \in \mathbb{R}^p$ | 权重向量 (3维) | §1 完美世界 |
+| $N$ | 10000 个样本 | §2 引入噪声 |
+| $f(\cdot;\mathbf{w})$ | $X\mathbf{w}$ 线性模型 | §4 多特征 |
+| $(\cdot - y_i)^2$ | 平方损失 | §3 损失函数 |
+| $\frac{1}{N}\sum$ | MSE 取平均 | §3 SSE vs MSE |
+| $\arg\min$ | 梯度下降 / 正规方程 | §4 & §5 |
+
+## 概念引入的逻辑链
+
+```{r}
+#| label: fig-concept-chain
+#| fig-cap: "知识逻辑链"
+#| fig-width: 14
+#| fig-height: 9
+
+library(ggplot2)
+library(showtext)
+font_add_google("Noto Sans SC", "noto")
+showtext_auto()
+
+nodes <- data.frame(
+  x = c(1, 1, 2, 2, 2, 3, 3),
+  y = c(3, 2, 3, 2, 1, 2, 1),
+  label = c("完美世界\n解方程", "噪声!\n方程无解", 
+            "范数->L2\n最小二乘", "损失函数\nSSE/MSE",
+            "正规方程\n解析解", "梯度下降\n迭代优化",
+            "SGD+标准化\n工业级方案"),
+  fill = c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#FEE2E2", "#E0E7FF", "#D1FAE5", "#F0FDF4"),
+  color = c("#2563EB", "#D97706", "#DB2777", "#DC2626", "#6366F1", "#16A34A", "#15803D")
+)
+
+# 箭头数据
+arrows_df <- data.frame(
+  x = c(1, 1.4, 2, 2, 2.4, 3),
+  y = c(2.7, 2.15, 2.7, 1.7, 1.15, 1.7),
+  xend = c(1, 1.6, 2, 2, 2.6, 3),
+  yend = c(2.3, 2.85, 2.3, 1.3, 1.85, 1.3)
+)
+
+# 箭头标签
+arrow_labels <- data.frame(
+  x = c(1.15, 1.5, 2.15, 2.15, 2.5, 3.15),
+  y = c(2.5, 2.5, 2.5, 1.5, 1.5, 1.5),
+  label = c("噪声出现!", "如何度量误差?", "变成优化问题", 
+            "如何最小化?", "规模太大!", "还能更快?")
+)
+
+ggplot() +
+  # 箭头
+  geom_segment(data = arrows_df, 
+               aes(x = x, y = y, xend = xend, yend = yend),
+               arrow = arrow(length = unit(0.3, "cm")),
+               color = "#64748B", linewidth = 1.2) +
+  # 框
+  geom_tile(data = nodes, aes(x, y, fill = I(fill), color = I(color)), 
+            width = 0.7, height = 0.5, linewidth = 2) +
+  # 框内文字
+  geom_text(data = nodes, aes(x, y, label = label), 
+            family = "noto", size = 7, color = "#1E293B", lineheight = 0.9) +
+  # 箭头标签
+  geom_text(data = arrow_labels, aes(x, y, label = label),
+            family = "noto", size = 4.5, color = "#EA580C", fontface = "italic") +
+  # 底部注释
+  annotate("text", x = 2, y = 0.3, 
+           label = "每一步都是被'现实问题'逼出来的！",
+           family = "noto", size = 7, color = "#DC2626", fontface = "bold") +
+  annotate("text", x = 2, y = 0.05,
+           label = "Jeder Schritt wird durch ein reales Problem motiviert!",
+           family = "noto", size = 5.5, color = "#64748B", fontface = "italic") +
+  theme_void() +
+  theme(text = element_text(family = "noto"),
+        plot.title = element_text(hjust = 0.5, size = 20, face = "bold")) +
+  labs(title = "概念逻辑链 | Logikkette der Konzepte") +
+  coord_fixed(ratio = 0.8, xlim = c(0.4, 3.6), ylim = c(-0.1, 3.5))
+```
+
+## 方法总结
+
+|  方法 / Methode  | 复杂度 / Komplexität | 一句话总结 / Zusammenfassung   |
+|:----------------:|:--------------------:|:-------------------------------|
+|     正规方程     |       $O(p^3)$       | 小问题一步到位，大问题算不动   |
+|  Full-Batch GD   |     $O(Np)$/iter     | 梯度精确但大数据太慢           |
+| Mini-Batch GD ⭐ |     $O(Bp)$/iter     | **工业标准**，效率与稳定性兼顾 |
+|       SGD        |     $O(p)$/iter      | 最快但噪声最大                 |
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 核心概念
+
+| Deutsch                         | 中文     | English          |
+|:--------------------------------|:---------|:-----------------|
+| das maschinelle Lernen          | 机器学习 | machine learning |
+| das Training                    | 训练     | training         |
+| die Vorhersage                  | 预测     | prediction       |
+| das Modell                      | 模型     | model            |
+| die Verlustfunktion             | 损失函数 | loss function    |
+| der Fehler                      | 误差     | error            |
+| das Residuum (Pl: die Residuen) | 残差     | residual         |
+
+## 优化相关
+
+| Deutsch                         | 中文       | English          |
+|:--------------------------------|:-----------|:-----------------|
+| die Optimierung                 | 优化       | optimization     |
+| das Minimum (Pl: die Minima)    | 最小值     | minimum          |
+| der Gradient                    | 梯度       | gradient         |
+| das Gradientenabstiegsverfahren | 梯度下降法 | gradient descent |
+| die Lernrate                    | 学习率     | learning rate    |
+| die Konvergenz                  | 收敛       | convergence      |
+| der Hyperparameter              | 超参数     | hyperparameter   |
+| die Stapelgröße / Batch-Größe   | 批量大小   | batch size       |
+
+## 回归分析
+
+| Deutsch                            | 中文       | English              |
+|:-----------------------------------|:-----------|:---------------------|
+| die lineare Regression             | 线性回归   | linear regression    |
+| die Methode der kleinsten Quadrate | 最小二乘法 | least squares method |
+| die Normalgleichung                | 正规方程   | normal equation      |
+| der Achsenabschnitt                | 截距       | intercept            |
+| die Steigung                       | 斜率       | slope                |
+
+## 线性代数
+
+| Deutsch                       | 中文     | English               |
+|:------------------------------|:---------|:----------------------|
+| der Vektor                    | 向量     | vector                |
+| die Matrix (Pl: die Matrizen) | 矩阵     | matrix                |
+| die Norm                      | 范数     | norm                  |
+| die Transponierte             | 转置     | transpose             |
+| die Inverse                   | 逆矩阵   | inverse               |
+| der Spaltenraum               | 列空间   | column space          |
+| die orthogonale Projektion    | 正交投影 | orthogonal projection |
+
+## 统计学 & 特征工程
+
+| Deutsch                | 中文     | English            |
+|:-----------------------|:---------|:-------------------|
+| die Stichprobe         | 样本     | sample             |
+| der Mittelwert         | 均值     | mean               |
+| die Varianz            | 方差     | variance           |
+| die Standardabweichung | 标准差   | standard deviation |
+| der Erwartungswert     | 期望值   | expected value     |
+| das Merkmal            | 特征     | feature            |
+| die Merkmalsskalierung | 特征缩放 | feature scaling    |
+| die Standardisierung   | 标准化   | standardization    |
+| die Normalisierung     | 归一化   | normalization      |
+:::
+
+dev.new()
