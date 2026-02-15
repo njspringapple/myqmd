@@ -453,6 +453,22 @@ loss_sse <- function(w) sum((w * Area - Price)^2)
 loss_mse <- function(w) mean((w * Area - Price)^2)
 ```
 
+结合以上范数和损失函数定义，不难看出：
+
+```{r}
+#| label: loss-functions
+#| code-fold: false
+L1_norm <- function(r) sum(abs(r))
+L2_norm <- function(r) sqrt(sum(r^2))
+L2_sq <- function(r) sum(r^2)
+
+loss_sae <- function(w) L1_norm(w * Area - Price) # 绝对误差和
+loss_sse <- function(w) L2_sq(w * Area - Price)   # 平方误差和
+loss_mse <- function(w) L2_sq(w * Area - Price) / length(Area)  # 均方误差
+loss_rmse <- function(w) sqrt(L2_sq(w * Area - Price)) / length(Area) # 均方根误差
+```
+
+
 ### 实践中的选择 \| Auswahl in der Praxis
 
 | 场景 / Szenario | 推荐 / Empfohlen | 原因 / Grund |
