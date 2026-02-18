@@ -1,727 +1,1251 @@
-```markdown
 ---
-title: "矩阵范数与迹 - 从理论到实践"
+title: "矩阵范数与迹 — 边学数学边写 R"
 author: "统计学基础"
-format: 
+format:
   html:
     toc: true
     toc-depth: 3
     number-sections: true
     code-fold: false
     theme: cosmo
+    code-overflow: wrap
 execute:
   warning: false
   message: false
 ---
 
-# 引言：为什么要学习矩阵范数？
-
-在统计学和机器学习中，我们经常需要回答这些问题：
-
-- 这个矩阵有多"大"？
-- 两个矩阵有多"接近"？
-- 计算结果的误差会被放大多少倍？
-- 这个优化问题好不好解？
-
-**矩阵范数**就是回答这些问题的工具。它把矩阵的"大小"量化成一个数字，让我们可以比较、估计、优化。
-
-本文将从最简单的概念——矩阵的迹开始，逐步建立起完整的矩阵范数体系。每个概念都配有R代码，让你通过动手操作来理解，而不是死记公式。
-
 ```{r}
 #| label: setup
-# 清空环境，准备开始
 rm(list = ls())
 ```
+
+# 预备知识速览
+
+在开始之前，确认你对以下概念有基本了解：
+
+- **线性代数**：矩阵加法、乘法、转置、逆
+- **特征值与特征向量**：$\mathbf{A}\mathbf{v} = \lambda \mathbf{v}$
+- **向量范数**：欧几里得范数 $\|\mathbf{x}\|_2$、$p$-范数
+- **正交性**与内积
+
+如果记不清，没关系——后面用到时会用 R 帮你回忆。
 
 # 矩阵的迹（Trace）
 
 ## 定义
 
-矩阵的迹是最简单的矩阵标量：**对角元素之和**。
+$n \times n$ 方阵 $\mathbf{A}$ 的**迹**就是对角线元素之和：
 
-对于 $n \times n$ 方阵 $\mathbf{A}$：
+$$
+\text{tr}(\mathbf{A}) = \sum_{i=1}^{n} a_{ii}
+$$
 
-$$\text{tr}(\mathbf{A}) = \sum_{i=1}^{n} a_{ii}$$
-
-注意：**迹只对方阵有定义**，因为只有方阵才有"对角线"的概念。
+只对**方阵**有定义，结果是一个**标量**。
 
 ```{r}
-#| label: trace-basic
-# 创建一个简单的矩阵
-A <- matrix(c(1, 2, 
-              3, 4), nrow = 2, byrow = TRUE)
-cat("矩阵 A:\n")
-print(A)
+#| label: trace-def
+A <- matrix(c(1, 2,
+              3, 4), nrow = 2, byrow = TRUE)       # byrow 参数指定按行生成矩阵
+A
 
-# 手动计算迹：对角元素之和
-trace_manual <- A[1,1] + A[2,2]
-cat("\n手动计算迹 (a11 + a22):", trace_manual, "\n")
+# 根据迹的定义，计算迹
+sum(diag(A))  # 1 + 4 = 5
 
-# 用R函数计算
-trace_builtin <- sum(diag(A))
-cat("用 sum(diag(A)) 计算:", trace_builtin, "\n")
+# R 没有内置 tr()，但可以自己写一个方便的辅助函数，计算矩阵的迹
+tr <- function(A) {
+    sum(diag(A))
+}
+tr(A)
 ```
 
-## 迹的基本性质
-
-迹有几个非常好用的性质：
-
-| 性质 | 公式 | 说明 |
-|------|------|------|
-| 线性 | $\text{tr}(\mathbf{A} + \mathbf{B}) = \text{tr}(\mathbf{A}) + \text{tr}(\mathbf{B})$ | 可以拆开算 |
-| 齐次性 | $\text{tr}(c\mathbf{A}) = c \cdot \text{tr}(\mathbf{A})$ | 常数可以提出来 |
-| 循环性 | $\text{tr}(\mathbf{AB}) = \text{tr}(\mathbf{BA})$ | 可以交换顺序 |
-| 转置不变 | $\text{tr}(\mathbf{A}^\top) = \text{tr}(\mathbf{A})$ | 转置不改变迹 |
-
-**最重要的是循环性质**：你可以在迹里面"循环轮换"矩阵的顺序。
+再来一个 $3 \times 3$ 的例子：
 
 ```{r}
-#| label: trace-cyclic
-# 验证循环性质 tr(AB) = tr(BA)
-B <- matrix(c(5, 6, 
+B3 <- matrix(c(2, -1, 0,
+               0,  3, 5,
+               1,  0, -2), nrow = 3, byrow = TRUE)
+B3
+tr(B3)  # 2 + 3 + (-2) = 3
+```
+
+**练习**：$\text{tr}(\mathbf{I}_n)$ 等于多少？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看"
+
+# diag 函数也可以构造 n - 维 单位矩阵
+tr(diag(5))  # 单位矩阵对角线全是 1，所以 tr(I_n) = n
+```
+
+## 基本性质
+
+对 $\mathbf{A}, \mathbf{B} \in \mathbb{R}^{n \times n}$，$c \in \mathbb{R}$：
+
+| # | 性质 | 公式 |
+|---|------|------|
+| 1 | 线性 | $\text{tr}(\mathbf{A}+\mathbf{B}) = \text{tr}(\mathbf{A})+\text{tr}(\mathbf{B})$ |
+| 2 | 齐次 | $\text{tr}(c\mathbf{A}) = c\,\text{tr}(\mathbf{A})$ |
+| 3 | **循环** | $\text{tr}(\mathbf{AB}) = \text{tr}(\mathbf{BA})$ |
+| 4 | 相似不变 | $\text{tr}(\mathbf{PAP}^{-1}) = \text{tr}(\mathbf{A})$ |
+| 5 | 转置不变 | $\text{tr}(\mathbf{A}^\top) = \text{tr}(\mathbf{A})$ |
+
+**最关键的是循环性**——三个矩阵也行：$\text{tr}(\mathbf{ABC}) = \text{tr}(\mathbf{BCA}) = \text{tr}(\mathbf{CAB})$。
+
+但 **$\text{tr}(\mathbf{AB}) \neq \text{tr}(\mathbf{A})\cdot\text{tr}(\mathbf{B})$**，这是个常见误区。
+
+```{r}
+#| label: trace-props
+B <- matrix(c(5, 6,
               7, 8), nrow = 2, byrow = TRUE)
-cat("矩阵 B:\n")
-print(B)
 
-cat("\ntr(AB) =", sum(diag(A %*% B)), "\n")
-cat("tr(BA) =", sum(diag(B %*% A)), "\n")
-cat("相等？", sum(diag(A %*% B)) == sum(diag(B %*% A)), "\n")
+# 性质 1：线性
+tr(A + B)
+tr(A) + tr(B)
+cat("线性 : tr(A+B) = tr(A) + tr(B)",(tr(A+B) == tr(A) + tr(B)))
 
-# 注意：tr(AB) ≠ tr(A) × tr(B)
-cat("\n⚠️ 注意：tr(AB) ≠ tr(A) × tr(B)\n")
-cat("tr(AB) =", sum(diag(A %*% B)), "\n")
-cat("tr(A) × tr(B) =", sum(diag(A)) * sum(diag(B)), "\n")
+# 性质 2：齐次
+tr(3 * A)
+3 * tr(A)
+cat("齐次 : tr(3 * A) = 3 * tr(A)",(tr(3 * A) == 3 * tr(A)))
+
+# 性质 3：循环 —— tr(AB) = tr(BA), 注意，不限于两个矩阵，三个，四个都可以
+tr(A %*% B)
+tr(B %*% A)
+C <- matrix(c(9,10,11,12), nrow=2, byrow = TRUE)
+tr(A %*% B %*% C)
+tr(B %*% C %*% A)
+tr(C %*% A %*% B)
+tr(C %*% B %*% A)
+tr(A %*% C %*% B)
+cat("循环 : tr(AB) = tr(BA)",(tr(A %*% B) == tr(B %*% A)))
+
+# 性质 4：相似不变性
+P <- matrix(c(2,3,4,5), nrow=2, byrow=TRUE)
+tr(A)
+tr(P %*% A %*% solve(P))
+
+# 性质 5：转置不变性
+tr(A)
+tr(t(A))
+cat("转置 : tr(A) = tr(A^T)",(tr(A) == tr(t(A))))
+
+# ⚠️ 常见误区
+c(tr_AB = tr(A %*% B), tr_A_times_tr_B = tr(A) * tr(B))
+cat("误区 : tr(AB) = tr(A) * tr(B)",(tr(A %*% B) == tr(A) * tr(B)))
+
 ```
 
-## 迹与特征值的联系
-
-这是一个深刻的结果：**迹等于所有特征值之和**。
-
-$$\text{tr}(\mathbf{A}) = \sum_{i=1}^{n} \lambda_i$$
-
-这说明迹不只是对角元素的简单相加，它蕴含着矩阵的内在结构信息。
+**练习**：用三个随机 $3 \times 3$ 矩阵验证循环性 $\text{tr}(\mathbf{ABC})=\text{tr}(\mathbf{CAB})$。
 
 ```{r}
-#| label: trace-eigenvalue
-# 验证：迹 = 特征值之和
-eigenvalues <- eigen(A)$values
-cat("矩阵 A 的特征值:", eigenvalues, "\n")
-cat("特征值之和:", sum(eigenvalues), "\n")
-cat("迹:", sum(diag(A)), "\n")
-cat("两者相等？", abs(sum(eigenvalues) - sum(diag(A))) < 1e-10, "\n")
+##| code-fold: true
+#| code-summary: "点击查看"
+set.seed(42)
+X <- matrix(rnorm(9), 3)
+Y <- matrix(rnorm(9), 3)
+Z <- matrix(rnorm(9), 3)
+
+c(tr_XYZ = tr(X %*% Y %*% Z),
+  tr_YZX = tr(Y %*% Z %*% X),
+  tr_ZXY = tr(Z %*% X %*% Y))
+# 三者相等（浮点误差内）
 ```
 
-# Frobenius范数：最直观的矩阵范数
+## 迹 = 特征值之和
 
-## 从向量范数说起
+这是一个深刻的结论：计算特征值需要求解特征多项式，算法复杂度 $O(n^3)$，但是 迹 可以 $O(n)$ 的复杂度下直接读取
 
-你已经熟悉向量的欧几里得长度：$|\mathbf{x}|_2 = \sqrt{x_1^2 + x_2^2 + \cdots + x_n^2}$
+若 $\mathbf{B} = \mathbf{P}^{-1}\mathbf{A}\mathbf{P}$，则：$\text{tr}(\mathbf{B}) = \text{tr}(\mathbf{A})$
 
-把矩阵看成一个"摊平"的长向量，对所有元素做同样的事情，就得到了**Frobenius范数**：
+- 快速计算特征值之和
+- 验证特征值计算的正确性
 
-$$\|\mathbf{A}\|_F = \sqrt{\sum_{i=1}^{m} \sum_{j=1}^{n} a_{ij}^2}$$
+$$
+\text{tr}(\mathbf{A}) = \sum_{i=1}^{n} \lambda_i
+$$
 
-这是最直观、最容易计算的矩阵范数。
+- 不是所有方阵都可以对角化，但是实对称矩阵，例如 $A^TA$ 可以快速构建实对称矩阵，一定可以对角化
+- 对角化后，有 n 个不同的特征值
+- 但是，只要是方阵，都有特征值，但未必可以对角化。对角化的充要条件是有 $n$ 个线性无关的特征向量；充分条件是有 $n$ 个不同的特征值（能对角化不一定有 n 个不同特征值）
+
+**证明思路**：如果 $\mathbf{A} = \mathbf{P}\mathbf{D}\mathbf{P}^{-1}$（对角化），那么由相似不变性 $\text{tr}(\mathbf{A}) = \text{tr}(\mathbf{D}) = \sum \lambda_i$。
+
+**用特征多项式证明**：
+
+$\det(\mathbf{A} - \lambda\mathbf{I}) = (-1)^n(\lambda - \lambda_1)(\lambda - \lambda_2)\cdots(\lambda - \lambda_n)$
+
+展开后：
+
+$= (-1)^n\left[\lambda^n - (\lambda_1 + \cdots + \lambda_n)\lambda^{n-1} + \cdots\right]$
+
+另一方面，直接展开 $\det(\mathbf{A} - \lambda\mathbf{I})$，$\lambda^{n-1}$ 项的系数是 $(-1)^{n-1}(a_{11} + a_{22} + \cdots + a_{nn})$
+
+比较系数得：
+
+$\lambda_1 + \lambda_2 + \cdots + \lambda_n = a_{11} + a_{22} + \cdots + a_{nn} = \text{tr}(\mathbf{A})$
+
 
 ```{r}
-#| label: frobenius-basic
-# 创建测试矩阵
-M <- matrix(c(2, 1, 
-              0, 3), nrow = 2, byrow = TRUE)
-cat("测试矩阵 M:\n")
-print(M)
-
-# 手动计算Frobenius范数
-frob_manual <- sqrt(sum(M^2))
-cat("\n手动计算: sqrt(", paste(M^2, collapse = " + "), ") =", frob_manual, "\n")
-
-# 用R内置函数
-cat("用 norm(M, 'F'):", norm(M, "F"), "\n")
+#| label: trace-eigen
+eig <- eigen(A)      # 特征分解
+eig$values           # 特征值（可以是复数）
+sum(eig$values)      # 特征值之和
+tr(A)                # 迹
+# 两者相等
 ```
 
-## Frobenius范数与迹的联系
-
-一个漂亮的结果：**Frobenius范数的平方等于 $\mathbf{A}^\top\mathbf{A}$ 的迹**。
-
-$$\|\mathbf{A}\|_F^2 = \text{tr}(\mathbf{A}^\top \mathbf{A})$$
-
-这意味着Frobenius范数不仅是"傻傻地"把元素平方求和，它背后藏着矩阵的结构信息。
+**练习**：对称矩阵的特征值一定是实数。造一个 $3\times3$ 对称矩阵，验证迹 = 特征值之和。
 
 ```{r}
-#| label: frobenius-trace
-# 验证：||A||_F² = tr(A'A)
-cat("||M||_F² =", norm(M, "F")^2, "\n")
-cat("tr(M'M) =", sum(diag(t(M) %*% M)), "\n")
-cat("两者相等？", abs(norm(M, "F")^2 - sum(diag(t(M) %*% M))) < 1e-10, "\n")
+#| code-fold: true
+#| code-summary: "点击查看"
+S <- matrix(c(4, 2, 1,
+              2, 5, 3,
+              1, 3, 6), nrow = 3, byrow = TRUE)
+# 验证对称
+all(S == t(S))
+
+eig_S <- eigen(S)
+eig_S$values                    # 全是实数
+c(sum_eigenvalues = sum(eig_S$values), trace = tr(S))
 ```
 
-## Frobenius范数的问题
+# Frobenius 范数：最直观的开始
 
-Frobenius范数有一个缺点：**它忽略了矩阵作为线性变换的含义**。
+## 定义
 
-看这个例子：三个完全不同的变换，Frobenius范数却相同。
+把矩阵所有元素平方加起来再开根号——就像把矩阵当成一个长向量，算欧几里得长度：
+
+$$
+\|\mathbf{A}\|_F = \sqrt{\sum_{i=1}^{m}\sum_{j=1}^{n} a_{ij}^2}
+$$
 
 ```{r}
-#| label: frobenius-problem
-# 三个Frobenius范数相同但变换完全不同的矩阵
-A1 <- matrix(c(1, 0, 0, 1), nrow = 2)  # 单位矩阵
-A2 <- matrix(c(0, 1, 1, 0), nrow = 2)  # 交换矩阵
-A3 <- matrix(c(sqrt(2), 0, 0, 0), nrow = 2)  # 投影拉伸
+#| label: frob-def
+M <- matrix(c(2, -1, 0,
+              0,  3, 5,
+              1,  0, -2), nrow = 3, byrow = TRUE)
+M
 
-cat("A1 (单位矩阵):\n"); print(A1)
-cat("\nA2 (交换矩阵):\n"); print(A2)
-cat("\nA3 (投影拉伸):\n"); print(A3)
+# 手动
+sqrt(sum(M^2))
 
-cat("\n三者的Frobenius范数：\n")
-cat("||A1||_F =", norm(A1, "F"), "\n")
-cat("||A2||_F =", norm(A2, "F"), "\n")
-cat("||A3||_F =", norm(A3, "F"), "\n")
+# 内置 Frobenius 范数
+norm(M, "F")
+```
 
-# 但它们对同一个向量的作用完全不同
+## 与迹/特征值的联系
+
+一个漂亮的等式：**把 F 范数和迹连接起来**
+
+$$
+\|\mathbf{A}\|_F^2 = \text{tr}(\mathbf{A}^\top \mathbf{A})
+$$
+
+```{r}
+norm(M, "F")^2       # 带 F 参数意思是 F 范数，否则默认是谱范数（后面会讲到）
+tr(t(M) %*% M)
+```
+
+另一个漂亮的等式：**把 F 范数和特征值连接起来**
+
+```{r}
+norm(M, "F")^2
+
+# 也等于 A'A 的特征值之和
+sum(eigen(t(M) %*% M)$values)
+sum(eigen(M %*% t(M))$values)
+```
+
+## Frobenius 范数的问题/局限性
+
+它把矩阵当成长向量来处理，**忽略了矩阵作为线性变换的含义**。下面的三个矩阵有相同的 Frobenius 范数，但做的变换完全不同：
+
+```{r}
+#| label: frob-problem
+#| fig-width: 9
+#| fig-height: 4
+A1 <- diag(2)                         # 恒等变换
+A2 <- matrix(c(0,1,1,0), 2)          # 交换坐标
+A3 <- matrix(c(sqrt(2),0,0,0), 2)    # 把第一分量拉伸，第二分量压到 0
+
+cat("Frobenius 范数都是", norm(A1, "F"), "\n")
+
+# 但对 x = (1, 0) 的作用完全不同
 x <- c(1, 0)
-cat("\n对向量 x = (1, 0) 的作用：\n")
-cat("A1 × x =", A1 %*% x, " (不变)\n")
-cat("A2 × x =", A2 %*% x, " (交换分量)\n")
-cat("A3 × x =", A3 %*% x, " (拉伸", sqrt(2), "倍)\n")
+cat("A1·x =", A1 %*% x, " （不变）\n")
+cat("A2·x =", A2 %*% x, " （交换）\n")
+cat("A3·x =", A3 %*% x, " （拉伸+投影）\n")
+
+# 可视化
+theta <- seq(0, 2 * pi, length.out = 300)
+circle <- rbind(cos(theta), sin(theta))
+
+par(mfrow = c(1, 3), mar = c(4, 4, 3, 1))
+for (info in list(list(A1, "A1：恒等"), list(A2, "A2：交换"), list(A3, "A3：投影拉伸"))) {
+  img <- info[[1]] %*% circle
+  plot(img[1, ], img[2, ], type = "l", asp = 1,
+       xlim = c(-2, 2), ylim = c(-2, 2), lwd = 2, col = "steelblue",
+       xlab = "x", ylab = "y", main = info[[2]])
+  lines(cos(theta), sin(theta), lty = 2, col = "grey60")
+  abline(h = 0, v = 0, col = "grey80", lty = 3)
+}
 ```
 
-**问题**：我们能否定义一种范数，直接衡量矩阵作为变换的"强度"？
+**结论**：Frobenius 范数无法区分这三种截然不同的变换。我们需要一种能"看到"变换本质的范数——**算子范数**。
 
-答案是**算子范数**。
+# 矩阵范数的一般定义
+
+在介绍算子范数之前，先明确"矩阵范数"这个概念的公理。
+
+函数 $\|\cdot\| : \mathbb{R}^{m \times n} \to [0,\infty)$ 是**矩阵范数**，当且仅当对所有 $\mathbf{A},\mathbf{B}$ 和标量 $c$：
+
+1. **正定性**：$\|\mathbf{A}\| = 0 \iff \mathbf{A} = \mathbf{0}$
+2. **绝对齐次性**：$\|c\mathbf{A}\| = |c|\cdot\|\mathbf{A}\|$
+3. **三角不等式**：$\|\mathbf{A}+\mathbf{B}\| \le \|\mathbf{A}\|+\|\mathbf{B}\|$
+
+这和向量范数的公理一模一样——事实上，向量范数就是 $\mathbb{R}^{n \times 1}$ 上的矩阵范数。
+
+## 逐元素范数家族
+
+把矩阵铺平成长向量 $\text{vec}(\mathbf{A}) \in \mathbb{R}^{mn}$，然后套用向量范数：
+
+| 名称 | 定义 | R |
+|------|------|---|
+| Frobenius | $\|\text{vec}(\mathbf{A})\|_2 = \sqrt{\sum a_{ij}^2}$ | `norm(A,"F")` |
+| 和范数 | $\|\text{vec}(\mathbf{A})\|_1 = \sum |a_{ij}|$ | `sum(abs(A))` |
+| 最大范数 | $\|\text{vec}(\mathbf{A})\|_\infty = \max |a_{ij}|$ | `max(abs(A))` |
+
+```{r}
+#| label: elem-norms
+cat("Frobenius:", norm(M, "F"), "\n")
+cat("和范数:   ", sum(abs(M)), "\n")
+cat("最大范数: ", max(abs(M)), "\n")
+```
+
+**问题**：单位矩阵什么都不做，但 $\|\mathbf{I}_n\|_F = \sqrt{n}$ 随维度增长！
+
+```{r}
+sapply(c(2, 5, 10, 100), function(n) norm(diag(n), "F"))
+```
 
 # 算子范数：衡量矩阵的拉伸能力
 
-## 核心思想
+## 定义
 
-矩阵乘上向量，会把向量变长或变短。**算子范数问的是：最多能拉伸多少倍？**
+给定一种向量范数 $\|\cdot\|_V$，矩阵 $\mathbf{A}$ 的**算子范数**为：
 
-$$\|\mathbf{A}\|_V = \max_{\mathbf{x} \neq 0} \frac{\|\mathbf{Ax}\|_V}{\|\mathbf{x}\|_V} = \max_{\|\mathbf{x}\|_V = 1} \|\mathbf{Ax}\|_V$$
+$$
+\|\mathbf{A}\|_V = \max_{\mathbf{x}\neq\mathbf{0}} \frac{\|\mathbf{A}\mathbf{x}\|_V}{\|\mathbf{x}\|_V}
+= \max_{\|\mathbf{x}\|_V=1} \|\mathbf{A}\mathbf{x}\|_V
+$$
 
-直观理解：拿所有长度为1的向量，用矩阵 $\mathbf{A}$ 去乘，看变换后最长能变成多少。这个最大长度就是算子范数。
+两个写法等价，因为比值对 $\mathbf{x}$ 的缩放不变——类比标量：$\frac{|cx|}{|x|} = |c|$ 对所有非零 $x$ 相同。
 
-## 可视化：单位圆的变形
+**直观理解**：拿所有长度为 1 的向量去乘 $\mathbf{A}$，看变换后最长能变成多少。这个最大长度就是算子范数。
 
-最好的理解方式是看图。矩阵把单位圆变成椭圆，**椭圆的长轴长度就是谱范数**。
+## 可视化：单位圆变椭圆
 
 ```{r}
-#| label: operator-visual
+#| label: operator-vis
 #| fig-width: 10
 #| fig-height: 5
-# 创建单位圆上的点
-theta <- seq(0, 2*pi, length.out = 200)
-unit_circle <- rbind(cos(theta), sin(theta))
 
-# 用矩阵M变换
-transformed <- M %*% unit_circle
+# 变换矩阵，x 方向拉升两倍，y 方向不变， 水平剪切（y分量叠加到x上，产生水平倾斜）
+A_demo <- matrix(c(2, 1,
+                    0, 1), nrow = 2, byrow = TRUE)
 
-# 计算每个变换后向量的长度
-lengths_after <- sqrt(colSums(transformed^2))
+theta <- seq(0, 2 * pi, length.out = 500)
+circle <- rbind(cos(theta), sin(theta))     # 圆周的坐标矩阵
+ellipse <- A_demo %*% circle                # 通过A_demo变换圆坐标矩阵，得到一个椭圆
 
-# 绘图
+# 每个变换后向量的长度
+len_after <- sqrt(colSums(ellipse^2))
+idx_max <- which.max(len_after)
+idx_min <- which.min(len_after)
+
 par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
 
-# 原始单位圆
-plot(unit_circle[1,], unit_circle[2,], type = "l", 
-     asp = 1, xlim = c(-4, 4), ylim = c(-4, 4),
-     main = "原始：单位圆", xlab = "x", ylab = "y",
-     col = "blue", lwd = 2)
-abline(h = 0, v = 0, col = "gray", lty = 2)
+# 左图：单位圆上标出"最大拉伸方向"
+plot(circle[1, ], circle[2, ], type = "l", asp = 1,
+     xlim = c(-3, 3), ylim = c(-3, 3),
+     col = "steelblue", lwd = 2,
+     main = "单位圆（输入）", xlab = "x₁", ylab = "x₂")
+arrows(0, 0, circle[1, idx_max], circle[2, idx_max],
+       col = "red", lwd = 2, length = .1)
+arrows(0, 0, circle[1, idx_min], circle[2, idx_min],
+       col = "forestgreen", lwd = 2, length = .1)
+abline(h = 0, v = 0, col = "grey80", lty = 3)
+legend("topright", c("最大拉伸方向", "最小拉伸方向"),
+       col = c("red", "forestgreen"), lwd = 2, cex = .8)
 
-# 变换后的椭圆
-plot(transformed[1,], transformed[2,], type = "l",
-     asp = 1, xlim = c(-4, 4), ylim = c(-4, 4),
-     main = "变换后：椭圆", xlab = "x", ylab = "y",
-     col = "red", lwd = 2)
-abline(h = 0, v = 0, col = "gray", lty = 2)
-
-# 标注最长的向量
-max_idx <- which.max(lengths_after)
-arrows(0, 0, transformed[1, max_idx], transformed[2, max_idx],
-       col = "darkred", lwd = 3, length = 0.1)
-text(transformed[1, max_idx]/2 + 0.5, transformed[2, max_idx]/2,
-     paste("长度 =", round(max(lengths_after), 2)), col = "darkred", cex = 1.2)
-
-par(mfrow = c(1, 1))
-
-cat("变换后向量长度的最大值:", round(max(lengths_after), 3), "\n")
-cat("谱范数 ||M||_2:", round(norm(M, "2"), 3), "\n")
+# 右图：椭圆
+plot(ellipse[1, ], ellipse[2, ], type = "l", asp = 1,
+     xlim = c(-3, 3), ylim = c(-3, 3),
+     col = "steelblue", lwd = 2,
+     main = "变换后（输出）", xlab = "y₁", ylab = "y₂")
+arrows(0, 0, ellipse[1, idx_max], ellipse[2, idx_max],
+       col = "red", lwd = 3, length = .1)
+text(ellipse[1, idx_max] * .6 + .3, ellipse[2, idx_max] * .6,
+     paste0("σ₁ = ", round(max(len_after), 3)),
+     col = "red", cex = 1.1, font = 2)
+arrows(0, 0, ellipse[1, idx_min], ellipse[2, idx_min],
+       col = "forestgreen", lwd = 3, length = .1)
+text(ellipse[1, idx_min] * .6 - .5, ellipse[2, idx_min] * .6,
+     paste0("σ₂ = ", round(min(len_after), 3)),
+     col = "forestgreen", cex = 1.1, font = 2)
+abline(h = 0, v = 0, col = "grey80", lty = 3)
 ```
 
-## 三种常用的算子范数
+椭圆的**长半轴** = 最大奇异值 $\sigma_1$ = 谱范数 $\|\mathbf{A}\|_2$，**短半轴** = 最小奇异值 $\sigma_2$。
 
-根据你用什么方式衡量向量的"长度"，会得到不同的算子范数：
+## 几何与变换意义对比
 
-| 范数 | 向量范数 | 计算方式 | R代码 |
-|------|----------|----------|-------|
-| 谱范数 | $L_2$ (欧几里得) | $\sqrt{\lambda_{\max}(\mathbf{A}^\top\mathbf{A})}$ | `norm(A, "2")` |
-| 列和范数 | $L_1$ | 每列绝对值之和的最大值 | `norm(A, "1")` |
-| 行和范数 | $L_\infty$ | 每行绝对值之和的最大值 | `norm(A, "I")` |
+| | 特征值 $\lambda$ | 奇异值 $\sigma$ |
+|---|-----------------|-----------------|
+| **适用** | 方阵 | 任意矩阵 |
+| **问的问题** | 哪些方向变换后**方向不变**？ | 哪些方向变换后**拉伸最大**？ |
+| **几何意义** | 沿特征向量方向的伸缩倍数 | 沿主轴方向的伸缩倍数 |
+| **取值** | 可负、可复数 | 一定 $\geq 0$ |
+
+- 特征值找的是：变换后方向不变的那些特殊方向，然后看这些方向伸缩了多少, 不是所有方向都有特征值，只有特征向量方向才有
+- 奇异值找的是：不管方向变不变，就问哪个方向伸缩最大， 看最大能拉多长。
 
 ```{r}
-#| label: operator-examples
-cat("测试矩阵 M:\n")
-print(M)
-
-cat("\n--- 列和范数 (p=1) ---\n")
-cat("定义：每列绝对值之和的最大值\n")
-col_sums <- colSums(abs(M))
-cat("各列绝对值之和:", col_sums, "\n")
-cat("列和范数:", max(col_sums), "\n")
-cat("验证 norm(M, '1'):", norm(M, "1"), "\n")
-
-cat("\n--- 行和范数 (p=∞) ---\n")
-cat("定义：每行绝对值之和的最大值\n")
-row_sums <- rowSums(abs(M))
-cat("各行绝对值之和:", row_sums, "\n")
-cat("行和范数:", max(row_sums), "\n")
-cat("验证 norm(M, 'I'):", norm(M, "I"), "\n")
-
-cat("\n--- 谱范数 (p=2) ---\n")
-cat("定义：最大奇异值 = sqrt(A'A的最大特征值)\n")
-AtA <- t(M) %*% M
-eigenvalues_AtA <- eigen(AtA)$values
-cat("M'M 的特征值:", eigenvalues_AtA, "\n")
-cat("最大特征值的平方根:", sqrt(max(eigenvalues_AtA)), "\n")
-cat("验证 norm(M, '2'):", norm(M, "2"), "\n")
+svd(A_demo)$d
+norm(A_demo, "2")   # 等于最大奇异值
 ```
 
-## 单位矩阵的范数：一个检验标准
+## 三种常用算子范数
 
-单位矩阵不改变任何向量，所以它的算子范数应该是1。这是检验范数定义是否合理的标准。
+"长度"的定义不同，得到的算子范数也不同：
+
+| 名称 | 向量范数 | 计算公式 | R |
+|------|----------|----------|---|
+| **谱范数** | $L_2$ | $\sqrt{\lambda_{\max}(\mathbf{A}^\top\mathbf{A})}$ | `norm(A,"2")` |
+| **列和范数** | $L_1$ | $\max_j \sum_i |a_{ij}|$ | `norm(A,"1")` |
+| **行和范数** | $L_\infty$ | $\max_i \sum_j |a_{ij}|$ | `norm(A,"I")` |
 
 ```{r}
-#| label: identity-norm
-I3 <- diag(3)
-cat("3×3 单位矩阵的各种范数：\n")
-cat("谱范数 ||I||_2 =", norm(I3, "2"), " ✓\n")
-cat("列和范数 ||I||_1 =", norm(I3, "1"), " ✓\n")
-cat("行和范数 ||I||_∞ =", norm(I3, "I"), " ✓\n")
-cat("Frobenius ||I||_F =", norm(I3, "F"), " (= √3, 随维度增长!)\n")
+#| label: three-op-norms
+A_ex <- matrix(c(2, 1,
+                 0, 3), nrow = 2, byrow = TRUE)
+A_ex
+
+# 列和范数：每列绝对值之和，取最大
+col_sums <- colSums(abs(A_ex)); col_sums
+norm(A_ex, "1")   # max(2, 4) = 4
+
+# 行和范数：每行绝对值之和，取最大
+row_sums <- rowSums(abs(A_ex)); row_sums
+norm(A_ex, "I")   # max(3, 3) = 3
+
+# 谱范数
+AtA <- crossprod(A_ex)          # 高效的 t(A) %*% A
+eigen(AtA)$values |> sqrt()     # 奇异值定义：   A^TA 的特征值开根号就是 A 的奇异值
+norm(A_ex, "2")                 # 谱范数定义：最大奇异值 ≈ 3.26
 ```
 
-注意：Frobenius范数没有通过这个检验——这就是为什么我们需要算子范数。
-
-# 奇异值与特征值
-
-在继续之前，我们需要澄清两个经常混淆的概念。
-
-## 特征值
-
-针对**方阵**。满足 $\mathbf{A}\mathbf{v} = \lambda \mathbf{v}$ 的 $\lambda$ 就是特征值。
-
-直观理解：特征向量是那些被矩阵作用后**方向不变**的向量，特征值是被拉伸的倍数。
-
-特征值**可以是负数，可以是复数**。
-
-## 奇异值
-
-针对**任何矩阵**（包括非方阵）。奇异值是 $\mathbf{A}^\top\mathbf{A}$ 的特征值的**平方根**。
-
-奇异值**永远是非负实数**，直接表示各个方向的拉伸倍数。
+**练习**：验证 $\|\mathbf{I}_n\|_1 = \|\mathbf{I}_n\|_2 = \|\mathbf{I}_n\|_\infty = 1$——单位矩阵不拉伸任何向量，三种算子范数都是 1。
 
 ```{r}
-#| label: singular-vs-eigen
-# 对于对称正定矩阵，奇异值 = 特征值
-S <- matrix(c(3, 1, 1, 2), nrow = 2)  # 对称矩阵
-cat("对称矩阵 S:\n")
-print(S)
-
-eigen_S <- eigen(S)$values
-svd_S <- svd(S)$d
-
-cat("\n特征值:", eigen_S, "\n")
-cat("奇异值:", svd_S, "\n")
-cat("对于对称正定矩阵，两者相等！\n")
-
-# 对于一般矩阵，两者不同
-cat("\n对于一般矩阵 M:\n")
-print(M)
-cat("特征值:", eigen(M)$values, "\n")
-cat("奇异值:", svd(M)$d, "\n")
-cat("√(M'M的特征值):", sqrt(eigen(t(M) %*% M)$values), "\n")
+#| code-fold: true
+#| code-summary: "点击查看"
+I5 <- diag(5)
+c(col_sum = norm(I5, "1"),
+  spectral = norm(I5, "2"),
+  row_sum  = norm(I5, "I"),
+  frobenius = norm(I5, "F"))   # Frobenius 不是 1！
 ```
 
-**要点**：谱范数 = 最大奇异值 = $\sqrt{\lambda_{\max}(\mathbf{A}^\top\mathbf{A})}$
+# 谱范数与谱分解
+
+## 核心定理
+
+对于 $\mathbf{A} \in \mathbb{R}^{m \times n}$，秩为 $r$，谱分解 $\mathbf{A}^\top\mathbf{A} = \mathbf{P}\boldsymbol{\Lambda}\mathbf{P}^\top$，其中特征值 $\lambda_1 \ge \lambda_2 \ge \cdots \ge \lambda_r > 0$：
+
+$$
+\|\mathbf{A}\|_2 = \sqrt{\lambda_1} = \sqrt{\lambda_{\max}(\mathbf{A}^\top\mathbf{A})}
+$$
+
+**你不需要一个一个向量去试**——直接算 $\mathbf{A}^\top\mathbf{A}$ 的最大特征值然后开根号就行。
+
+### 证明思路
+
+$$
+\|\mathbf{Ax}\|_2^2 = \mathbf{x}^\top\mathbf{A}^\top\mathbf{A}\mathbf{x}
+= \mathbf{x}^\top\mathbf{P}\boldsymbol{\Lambda}\mathbf{P}^\top\mathbf{x}
+$$
+
+令 $\mathbf{y} = \mathbf{P}^\top\mathbf{x}$。因为 $\mathbf{P}$ 是正交矩阵，$\|\mathbf{x}\|_2 = 1$ 时 $\|\mathbf{y}\|_2 = 1$。所以：
+
+$$
+\max_{\|\mathbf{x}\|=1}\|\mathbf{Ax}\|_2^2
+= \max_{\|\mathbf{y}\|=1} \mathbf{y}^\top\boldsymbol{\Lambda}\mathbf{y}
+= \max_{\|\mathbf{y}\|=1} \sum_i \lambda_i y_i^2
+\le \lambda_1 \sum_i y_i^2 = \lambda_1
+$$
+
+当 $\mathbf{y} = \mathbf{e}_1$（第一个标准基向量）时取等号。
+
+```{r}
+#| label: spectral-proof
+# 用具体例子走一遍证明
+A_demo
+
+AtA <- crossprod(A_demo)
+eig <- eigen(AtA)
+cat("A'A 的特征值:", eig$values, "\n")
+cat("sqrt(λ_max) =", sqrt(eig$values[1]), "\n")
+cat("norm(A, '2') =", norm(A_demo, "2"), "\n")
+
+# 达到最大拉伸的方向：A'A 最大特征值对应的特征向量
+v_max <- eig$vectors[, 1]
+cat("\n最大拉伸方向 v =", round(v_max, 4), "\n")
+cat("||Av||_2 =", sqrt(sum((A_demo %*% v_max)^2)), "\n")
+```
+
+## 谱分解能干什么？
+
+谱分解把矩阵拆开，让你看清**每个方向上分别拉伸多少**。拆开之后你能：
+
+- **算条件数**：知道问题有多病态
+- **算范数**：知道最大拉伸能力
+- **算矩阵的逆**：对角矩阵求逆很简单
+- **算矩阵的幂**：$\mathbf{A}^{100}$ 轻松搞定
+- **降维**：扔掉不重要的方向
+
+**谱分解、特征值分解、特征分解，都是同一个东西的不同叫法**
+
+- A的**F范数的平方**就是$A^TA$的**迹**
+- A的**F范数的平方**就是$A^TA$的特征值之和
+- A的**奇异值**就是 $A^TA$ 的特征值开根号
+- A的**谱范数** 就是 最大的奇异值
+- A的**谱分解**就是实对称矩阵的**对角化**，且特征向量正交
+- 如果A是实对称矩阵，`eigen()` 求的是**特征值**和**特征向量**，这就是谱分解的全部材料
+- 条件数就是最大奇异值除以最小奇异值
+
+1. 矩阵 $\mathbf{A}$
+2. → 计算实对称矩阵 $\mathbf{A}^\top\mathbf{A}$
+3. → 谱分解得到特征值 $\lambda_i$ 和正交特征向量矩阵 $\mathbf{Q}$
+4. → 特征值构成对角矩阵 $\mathbf{D} = \text{diag}(\lambda_1, \ldots, \lambda_n)$（对角化）
+5. → 特征值开根号得到奇异值 $\sigma_i = \sqrt{\lambda_i}$
+6. → 最大奇异值就是谱范数 $\|\mathbf{A}\|_2 = \sigma_{\max}$
+
+```{r}
+any_Array <- matrix(rnorm(60), nrow=6, byrow=TRUE)
+# 得到实对称矩阵
+s_Array <- crossprod(any_Array)   # s_Array <- t(any_Array) %*% any_Array
+# 谱分解/特征值分解
+eig_Array <- eigen(s_Array)
+# 得到特征值和特征矩阵
+values_Array <- eig_Array$values 
+matrix_Array <- eig_Array$vectors
+diag_Array <- diag(values_Array)
+# 验证
+duplicated_Array <- matrix_Array %*% diag_Array %*% t(matrix_Array)
+all.equal(s_Array, duplicated_Array)
+# 奇异值, 理论上特征值应该大于0，但是计算机的浮点误差可能产生很小的负数
+svd_values <- sqrt(pmax(values_Array,0))
+svd_values_direct <- svd(any_Array)$d
+# svd() 只返回 min(m, n) 个奇异值, 只取前 6 个（非零的奇异值）
+all.equal(svd_values[1:6],svd_values_direct)
+# 谱范数
+spectral_norm <- max(svd_values)
+# 验证谱范数
+all.equal(spectral_norm, norm(any_Array,"2"))
+```
+
+```{r}
+#| label: spectral-uses
+S <- matrix(c(4, 2,
+              2, 3), nrow = 2, byrow = TRUE)
+eig_S <- eigen(S)
+
+cat("对称矩阵 S 的谱分解\n")
+cat("特征值:", eig_S$values, "\n")
+cat("特征向量矩阵 P:\n")
+print(round(eig_S$vectors, 4))
+
+# 重建：S = P Λ P'
+P <- eig_S$vectors
+Lambda <- diag(eig_S$values)
+S_rebuilt <- P %*% Lambda %*% t(P)
+cat("\n重建误差:", max(abs(S - S_rebuilt)), "\n")
+
+# 用谱分解算 S 的 10 次方
+Lambda_10 <- diag(eig_S$values^10)
+S_10 <- P %*% Lambda_10 %*% t(P)
+cat("\nS^10 (通过谱分解):\n")
+print(round(S_10))
+
+# 直接算验证
+S_10_direct <- Reduce(`%*%`, replicate(10, S, simplify = FALSE))
+cat("直接连乘 S^10:\n")
+print(round(S_10_direct))
+```
 
 # 正交矩阵：完美的变换
 
-## 定义与性质
+## 定义
 
-正交矩阵满足 $\mathbf{Q}^\top\mathbf{Q} = \mathbf{I}$，几何上表示**旋转或反射**。
+$\mathbf{Q} \in \mathbb{R}^{n \times n}$ 是**正交矩阵**，当且仅当列向量标准正交，即 $\mathbf{Q}^\top\mathbf{Q} = \mathbf{I}$。
 
-正交矩阵有几个非常好的性质：
+几何上它表示**旋转**和/或**反射**——形状和大小完全不变。
 
-| 性质 | 意义 |
-|------|------|
-| 保长度 | $\|\mathbf{Qx}\|_2 = \|\mathbf{x}\|_2$ |
-| 逆=转置 | $\mathbf{Q}^{-1} = \mathbf{Q}^\top$ |
-| 条件数=1 | 数值计算最稳定 |
-| 谱范数=1 | 不拉伸任何向量 |
+## 关键性质
+
+| 性质 | 公式 | 含义 |
+|------|------|------|
+| 保长度 | $\|\mathbf{Qx}\|_2 = \|\mathbf{x}\|_2$ | 不拉伸、不压缩 |
+| 逆 = 转置 | $\mathbf{Q}^{-1} = \mathbf{Q}^\top$ | 求逆零成本 |
+| 条件数 = 1 | $\kappa_2(\mathbf{Q}) = 1$ | 数值最稳定 |
+| 乘积仍正交 | $\mathbf{Q}_1\mathbf{Q}_2$ 正交 | 旋转叠旋转还是旋转 |
 
 ```{r}
-#| label: orthogonal
-# 创建一个45度旋转矩阵
-angle <- pi/4
-Q <- matrix(c(cos(angle), -sin(angle), 
-              sin(angle), cos(angle)), nrow = 2, byrow = TRUE)
+#| label: ortho-props
+# 构造 30° 旋转矩阵
+angle <- pi / 6
+Q <- matrix(c(cos(angle), -sin(angle),
+              sin(angle),  cos(angle)), nrow = 2, byrow = TRUE)
+cat("30° 旋转矩阵 Q:\n")
+print(round(Q, 4))
 
-cat("45度旋转矩阵 Q:\n")
-print(round(Q, 3))
+# 性质 1：Q'Q = I
+cat("\nQ'Q:\n")
+print(round(crossprod(Q), 10))
 
-cat("\n验证正交性 Q'Q = I:\n")
-print(round(t(Q) %*% Q, 10))
-
-cat("\n正交矩阵的性质：\n")
-cat("条件数 =", round(kappa(Q), 3), "(完美！)\n")
-cat("谱范数 =", round(norm(Q, "2"), 3), "(不拉伸)\n")
-cat("所有奇异值:", round(svd(Q)$d, 3), "(都是1)\n")
-
-# 验证保长度
+# 性质 2：保长度
 x <- c(3, 4)
-Qx <- Q %*% x
-cat("\n验证保长度：\n")
-cat("原向量长度:", sqrt(sum(x^2)), "\n")
-cat("变换后长度:", sqrt(sum(Qx^2)), "\n")
+c(before = sqrt(sum(x^2)), after = sqrt(sum((Q %*% x)^2)))
+
+# 性质 3：条件数
+kappa(Q)
+
+# 性质 4：谱范数 = 1
+norm(Q, "2")
+
+# 性质 5：乘积仍正交
+Q2 <- matrix(c(cos(pi/4), -sin(pi/4),
+               sin(pi/4),  cos(pi/4)), nrow = 2, byrow = TRUE)
+QQ2 <- Q %*% Q2
+cat("\nQ·Q2 的 Q'Q:\n")
+print(round(crossprod(QQ2), 10))
 ```
 
-## 可视化：旋转但不变形
+## 可视化：旋转不变形
 
 ```{r}
-#| label: orthogonal-visual
-#| fig-width: 6
-#| fig-height: 6
-theta <- seq(0, 2*pi, length.out = 100)
-unit_circle <- rbind(cos(theta), sin(theta))
-rotated <- Q %*% unit_circle
+#| label: ortho-vs-general
+#| fig-width: 10
+#| fig-height: 5
+theta <- seq(0, 2 * pi, length.out = 300)
+circle <- rbind(cos(theta), sin(theta))
 
-plot(unit_circle[1,], unit_circle[2,], type = "l",
-     asp = 1, xlim = c(-1.5, 1.5), ylim = c(-1.5, 1.5),
-     main = "正交矩阵：旋转但不变形",
-     xlab = "x", ylab = "y", col = "blue", lwd = 2)
-lines(rotated[1,], rotated[2,], col = "red", lwd = 2, lty = 2)
-legend("topright", c("原始圆", "旋转后"), col = c("blue", "red"), lty = c(1, 2), lwd = 2)
-abline(h = 0, v = 0, col = "gray", lty = 2)
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+# 正交矩阵：圆还是圆
+img_Q <- Q %*% circle
+plot(circle[1,], circle[2,], type = "l", asp = 1,
+     xlim = c(-1.5, 1.5), ylim = c(-1.5, 1.5),
+     col = "grey60", lwd = 2, lty = 2,
+     main = "正交矩阵（旋转）", xlab = "x₁", ylab = "x₂")
+lines(img_Q[1,], img_Q[2,], col = "steelblue", lwd = 2)
+legend("topright", c("原圆", "旋转后"), col = c("grey60", "steelblue"), lwd = 2, cex = .8)
+abline(h = 0, v = 0, col = "grey90", lty = 3)
+
+# 一般矩阵：圆变椭圆
+G <- matrix(c(2, 1, 0.5, 1.5), 2, byrow = TRUE)
+img_G <- G %*% circle
+plot(circle[1,], circle[2,], type = "l", asp = 1,
+     xlim = c(-3, 3), ylim = c(-3, 3),
+     col = "grey60", lwd = 2, lty = 2,
+     main = "一般矩阵（拉伸+旋转）", xlab = "x₁", ylab = "x₂")
+lines(img_G[1,], img_G[2,], col = "tomato", lwd = 2)
+legend("topright", c("原圆", "变换后"), col = c("grey60", "tomato"), lwd = 2, cex = .8)
+abline(h = 0, v = 0, col = "grey90", lty = 3)
 ```
-
-正交矩阵把圆变成圆，不会变成椭圆！这就是为什么它的条件数是1。
 
 # 条件数：问题有多"病态"？
 
 ## 定义
 
-条件数衡量的是矩阵对误差的敏感程度：
+$$
+\kappa(\mathbf{A}) = \|\mathbf{A}\| \cdot \|\mathbf{A}^{-1}\|
+$$
 
-$$\kappa(\mathbf{A}) = \|\mathbf{A}\| \cdot \|\mathbf{A}^{-1}\| = \frac{\sigma_{\max}}{\sigma_{\min}}$$
+用谱范数来算：$\|\mathbf{A}\|_2 = \sigma_{\max}$，$\|\mathbf{A}^{-1}\|_2 = 1/\sigma_{\min}$，所以
 
-直观理解：**最大拉伸倍数除以最小拉伸倍数**。
+$$
+\kappa_2(\mathbf{A}) = \frac{\sigma_{\max}}{\sigma_{\min}}
+$$
 
-## 三种情况
+| 条件数 | 含义 | 比喻 |
+|--------|------|------|
+| $\kappa \approx 1$ | 良态 | 圆碗——看错1cm，偏1cm |
+| $\kappa \gg 1$ | 病态 | 窄峡谷——看错1cm，偏50cm |
+| $\kappa = \infty$ | 奇异 | 矩阵不可逆 |
 
-| 条件数 | 含义 | 椭圆形状 |
-|--------|------|----------|
-| $\kappa \approx 1$ | 良态 | 接近圆形 |
-| $\kappa \gg 1$ | 病态 | 非常扁的椭圆 |
-| $\kappa = \infty$ | 奇异 | 退化成线/点 |
+## 直观感受：圆碗 vs 峡谷
 
 ```{r}
-#| label: condition-number
+#| label: condition-vis
 #| fig-width: 10
 #| fig-height: 5
-# 良态矩阵
-good_matrix <- matrix(c(2, 0, 0, 1.8), nrow = 2)
-# 病态矩阵
-bad_matrix <- matrix(c(2, 0, 0, 0.02), nrow = 2)
+theta <- seq(0, 2 * pi, length.out = 300)
+circle <- rbind(cos(theta), sin(theta))
 
-cat("良态矩阵:\n")
-print(good_matrix)
-cat("奇异值:", svd(good_matrix)$d, "\n")
-cat("条件数:", round(kappa(good_matrix), 1), "\n\n")
+good <- diag(c(2, 1.8))   # 条件数 ≈ 1.1
+bad  <- diag(c(2, 0.02))  # 条件数 = 100
 
-cat("病态矩阵:\n")
-print(bad_matrix)
-cat("奇异值:", svd(bad_matrix)$d, "\n")
-cat("条件数:", round(kappa(bad_matrix), 0), "\n")
-
-# 可视化
 par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
 
-theta <- seq(0, 2*pi, length.out = 200)
-unit_circle <- rbind(cos(theta), sin(theta))
+img_good <- good %*% circle
+plot(img_good[1,], img_good[2,], type = "l", asp = 1,
+     xlim = c(-2.5, 2.5), ylim = c(-2.5, 2.5),
+     col = "forestgreen", lwd = 2,
+     main = paste0("良态  κ = ", round(kappa(good), 1)),
+     xlab = "x₁", ylab = "x₂")
+abline(h = 0, v = 0, col = "grey80", lty = 3)
 
-# 良态情况
-good_transformed <- good_matrix %*% unit_circle
-plot(good_transformed[1,], good_transformed[2,], type = "l",
-     asp = 1, xlim = c(-3, 3), ylim = c(-3, 3),
-     main = paste("良态 (κ ≈", round(kappa(good_matrix), 1), ")"),
-     xlab = "x", ylab = "y", col = "green", lwd = 2)
-abline(h = 0, v = 0, col = "gray", lty = 2)
-
-# 病态情况
-bad_transformed <- bad_matrix %*% unit_circle
-plot(bad_transformed[1,], bad_transformed[2,], type = "l",
-     asp = 1, xlim = c(-3, 3), ylim = c(-0.1, 0.1),
-     main = paste("病态 (κ =", round(kappa(bad_matrix), 0), ")"),
-     xlab = "x", ylab = "y", col = "red", lwd = 2)
-abline(h = 0, v = 0, col = "gray", lty = 2)
-
-par(mfrow = c(1, 1))
+img_bad <- bad %*% circle
+plot(img_bad[1,], img_bad[2,], type = "l", asp = 1,
+     xlim = c(-2.5, 2.5), ylim = c(-0.1, 0.1),
+     col = "red", lwd = 2,
+     main = paste0("病态  κ = ", round(kappa(bad))),
+     xlab = "x₁", ylab = "x₂")
+abline(h = 0, v = 0, col = "grey80", lty = 3)
 ```
 
-## 为什么条件数重要？
-
-**峡谷比喻**：想象你在山谷里找最低点。
-
-- **圆碗**（条件数≈1）：你看错一点位置，走错的距离也就一点点。
-- **窄峡谷**（条件数很大）：悬崖方向特别陡，你稍微看错，就会沿着悬崖滑很远。
-
-在统计学中：
-
-- 做回归时，如果 $\mathbf{X}^\top\mathbf{X}$ 条件数很大，说明变量高度相关（多重共线性），回归系数估计不稳定。
-- 岭回归加的 $\lambda\mathbf{I}$ 就是把最小特征值往上抬，让条件数变小。
-
-# Schatten范数：统一的框架
-
-## 从算子范数到Schatten范数
-
-算子范数只看最极端的那个方向——矩阵最多能把向量拉伸多少倍。
-
-但有时候你想知道的是**整体情况**：矩阵在所有方向上的拉伸加起来有多厉害？
-
-**Schatten范数**把每个方向的拉伸倍数（奇异值）收集起来，用p范数统一度量：
-
-$$\|\mathbf{A}\|_{S,p} = \left(\sum_{i=1}^{r} \sigma_i^p\right)^{1/p}$$
-
-## 三个重要的特例
-
-| p值 | 名称 | 定义 | 用途 |
-|-----|------|------|------|
-| $p = \infty$ | 谱范数 | 最大奇异值 | 衡量最大拉伸 |
-| $p = 2$ | Frobenius范数 | 奇异值平方和的根 | 衡量整体大小 |
-| $p = 1$ | 核范数 | 奇异值之和 | 逼迫矩阵低秩 |
-
-**惊喜**：Frobenius范数看起来是"傻傻地"把元素平方求和，其实它正好是Schatten-2范数！
+## 条件数对求解 Ax = b 的影响
 
 ```{r}
-#| label: schatten
-# 计算Schatten范数的函数
-schatten_norm <- function(A, p) {
-  sigma <- svd(A)$d
-  if (p == Inf) {
-    return(max(sigma))
-  } else {
-    return(sum(sigma^p)^(1/p))
+#| label: condition-demo
+set.seed(1)
+
+# 构造一个病态矩阵
+n <- 5
+U <- qr.Q(qr(matrix(rnorm(n^2), n)))   # 随机正交矩阵
+sigma_good <- c(5, 4, 3, 2, 1)         # 良态奇异值
+sigma_bad  <- c(5, 4, 3, 2, 0.001)     # 病态奇异值
+
+A_good <- U %*% diag(sigma_good) %*% t(U)
+A_bad  <- U %*% diag(sigma_bad)  %*% t(U)
+
+cat("良态矩阵条件数:", kappa(A_good), "\n")
+cat("病态矩阵条件数:", kappa(A_bad), "\n")
+
+# 给 b 加一点微小扰动
+x_true <- rep(1, n)
+b_good <- A_good %*% x_true
+b_bad  <- A_bad  %*% x_true
+
+perturbation <- rnorm(n, sd = 1e-6)
+
+x_good_perturbed <- solve(A_good, b_good + perturbation)
+x_bad_perturbed  <- solve(A_bad,  b_bad  + perturbation)
+
+cat("\n输入扰动大小:", sqrt(sum(perturbation^2)), "\n")
+cat("良态：解的偏差 =", sqrt(sum((x_good_perturbed - x_true)^2)), "\n")
+cat("病态：解的偏差 =", sqrt(sum((x_bad_perturbed  - x_true)^2)), "\n")
+cat("误差放大倍数差异约:", 
+    round(sqrt(sum((x_bad_perturbed - x_true)^2)) /
+          sqrt(sum((x_good_perturbed - x_true)^2))), "倍\n")
+```
+
+## 条件数与 AI 训练
+
+这不是抽象概念——它直接影响你训练神经网络的速度。
+
+梯度下降在条件数大的"峡谷"里会来回弹跳，训练变慢甚至不收敛。实际中的应对策略：
+
+- **调学习率**：步子迈小，弹跳减少，但太小就走得太慢
+- **Adam 优化器**：记住每个方向的历史，自动调整步长
+- **Batch Normalization**：让每一层的输入分布更均匀，减小条件数
+- **数据归一化**：让输入特征量级一致，一开始就把峡谷压圆
+
+```{r}
+#| label: condition-gradient
+#| fig-width: 8
+#| fig-height: 5
+# 模拟二维梯度下降：良态 vs 病态
+gradient_descent <- function(A, b, lr, n_steps) {
+  x <- c(0, 0)
+  path <- matrix(NA, n_steps + 1, 2)
+  path[1, ] <- x
+  for (i in seq_len(n_steps)) {
+    grad <- crossprod(A, A %*% x - b)  # A'(Ax - b)
+    x <- x - lr * grad
+    path[i + 1, ] <- x
   }
+  path
 }
 
-cat("测试矩阵 M:\n")
-print(M)
+b_target <- c(1, 1)
+steps <- 30
 
-sigma <- svd(M)$d
-cat("\n奇异值:", round(sigma, 3), "\n")
+# 良态
+A_gd_good <- matrix(c(2, 0, 0, 1.8), 2)
+path_good <- gradient_descent(A_gd_good, b_target, lr = 0.15, steps)
 
-cat("\n--- Schatten范数家族 ---\n")
+# 病态
+A_gd_bad <- matrix(c(2, 0, 0, 0.1), 2)
+path_bad <- gradient_descent(A_gd_bad, b_target, lr = 0.15, steps)
 
-cat("\np = ∞ (谱范数):\n")
-cat("  max(σ) =", round(schatten_norm(M, Inf), 3), "\n")
-cat("  验证 norm(M, '2') =", round(norm(M, "2"), 3), "\n")
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
 
-cat("\np = 2 (Frobenius范数):\n")
-cat("  sqrt(Σσ²) =", round(schatten_norm(M, 2), 3), "\n")
-cat("  验证 norm(M, 'F') =", round(norm(M, "F"), 3), "\n")
+# 良态
+x_sol <- solve(A_gd_good, b_target)
+plot(path_good[, 1], path_good[, 2], type = "b", pch = 16, cex = .5,
+     col = "steelblue",
+     main = paste0("良态 κ=", round(kappa(A_gd_good), 1)),
+     xlab = "x₁", ylab = "x₂",
+     xlim = range(path_good[, 1], x_sol[1]),
+     ylim = range(path_good[, 2], x_sol[2]))
+points(x_sol[1], x_sol[2], pch = 4, cex = 2, col = "red", lwd = 2)
 
-cat("\np = 1 (核范数):\n")
-cat("  Σσ =", round(schatten_norm(M, 1), 3), "\n")
-cat("  用途：在优化问题中逼迫矩阵低秩\n")
+# 病态
+x_sol2 <- solve(A_gd_bad, b_target)
+plot(path_bad[, 1], path_bad[, 2], type = "b", pch = 16, cex = .5,
+     col = "tomato",
+     main = paste0("病态 κ=", round(kappa(A_gd_bad))),
+     xlab = "x₁", ylab = "x₂",
+     xlim = range(path_bad[, 1], x_sol2[1]),
+     ylim = range(path_bad[, 2], x_sol2[2]))
+points(x_sol2[1], x_sol2[2], pch = 4, cex = 2, col = "red", lwd = 2)
+```
+
+良态问题直接收敛，病态问题来回弹跳——这就是条件数在实际中的影响。
+
+# 特征值 vs 奇异值
+
+这两个概念容易混淆，用表格理清：
+
+| | 特征值 $\lambda$ | 奇异值 $\sigma$ |
+|---|---|---|
+| 适用范围 | **方阵** | **任何矩阵** |
+| 定义 | $\mathbf{Av} = \lambda\mathbf{v}$ | $\sigma_i = \sqrt{\lambda_i(\mathbf{A}^\top\mathbf{A})}$ |
+| 取值范围 | 实数或复数，可为负 | **非负实数** |
+| 几何含义 | 特征方向上的拉伸倍数（含方向） | 各方向的拉伸倍数（绝对值） |
+
+对于**对称正定矩阵**，两者相等。
+
+```{r}
+#| label: eig-vs-svd
+# 对称正定矩阵
+S <- matrix(c(4, 2, 2, 3), 2, byrow = TRUE)
+cat("对称正定矩阵 S:\n"); print(S)
+cat("特征值:", eigen(S)$values, "\n")
+cat("奇异值:", svd(S)$d, "\n")
+cat("→ 相等！\n\n")
+
+# 一般矩阵
+G <- matrix(c(2, 1, 0, 3), 2, byrow = TRUE)
+cat("一般矩阵 G:\n"); print(G)
+cat("特征值:", eigen(G)$values, "\n")
+cat("奇异值:", svd(G)$d, "\n")
+cat("→ 不一定相等\n\n")
+
+# 谱范数 = 最大奇异值
+cat("谱范数 ||G||_2 =", norm(G, "2"), "\n")
+cat("最大奇异值   =", max(svd(G)$d), "\n")
+```
+
+# Schatten 范数：统一的框架
+
+## 动机
+
+算子范数只看**最极端**的那个方向。有时候你想知道**整体**情况：矩阵在所有方向上的拉伸加起来有多厉害？
+
+Schatten 范数把每个方向的拉伸倍数（奇异值 $\sigma_i$）收集起来，用 $p$-范数统一度量：
+
+$$
+\|\mathbf{A}\|_{S,p} = \left(\sum_{i=1}^{r} \sigma_i^p\right)^{1/p}
+$$
+
+## 三个重要特例
+
+| $p$ | 名称 | 公式 | 用途 |
+|-----|------|------|------|
+| $\infty$ | **谱范数** | $\sigma_{\max}$ | 最大拉伸 |
+| $2$ | **Frobenius 范数** | $\sqrt{\sum \sigma_i^2}$ | 整体大小 |
+| $1$ | **核范数** | $\sum \sigma_i$ | 逼迫低秩 |
+
+**惊喜**：Frobenius 范数一开始像是把矩阵当成长向量的粗暴算法，结果恰好等于 Schatten-2 范数——看似无脑的定义，背后藏着深刻的结构。
+
+```{r}
+#| label: schatten-norms
+schatten <- function(A, p) {
+  s <- svd(A)$d
+  if (p == Inf) max(s) else sum(s^p)^(1/p)
+}
+
+cat("矩阵 G:\n"); print(G)
+cat("奇异值:", round(svd(G)$d, 4), "\n\n")
+
+cat("Schatten-∞ (谱范数):", schatten(G, Inf), "  =  norm(G,'2'):", norm(G, "2"), "\n")
+cat("Schatten-2 (Frobenius):", schatten(G, 2), "  =  norm(G,'F'):", norm(G, "F"), "\n")
+cat("Schatten-1 (核范数):", schatten(G, 1), "\n")
+```
+
+## 酉不变性
+
+Schatten 范数在正交变换下不变：对正交矩阵 $\mathbf{U},\mathbf{V}$，有 $\|\mathbf{UAV}\|_{S,p} = \|\mathbf{A}\|_{S,p}$。
+
+这是因为 $(\mathbf{UAV})^\top(\mathbf{UAV}) = \mathbf{V}^\top\mathbf{A}^\top\mathbf{A}\mathbf{V}$，相似变换不改变特征值。
+
+```{r}
+#| label: schatten-unitary
+U_rand <- qr.Q(qr(matrix(rnorm(4), 2)))
+V_rand <- qr.Q(qr(matrix(rnorm(4), 2)))
+
+cat("||G||_F =", norm(G, "F"), "\n")
+cat("||UGV||_F =", norm(U_rand %*% G %*% V_rand, "F"), "\n")
 ```
 
 # 范数的重要性质
 
 ## 次可乘性
 
-两个矩阵乘起来，范数不会超过各自范数的乘积：
+$$\|\mathbf{AB}\| \le \|\mathbf{A}\|\cdot\|\mathbf{B}\|$$
 
-$$\|\mathbf{AB}\| \leq \|\mathbf{A}\| \cdot \|\mathbf{B}\|$$
+**直觉**：A 最多拉伸 3 倍，B 最多拉伸 5 倍，AB 最多拉伸 15 倍（通常更小，因为拉伸方向不一定对齐）。
 
-**直觉**：A最多拉伸3倍，B最多拉伸5倍，AB最多拉伸15倍（通常更小）。
-
-**为什么重要**：分析迭代算法收敛性。如果 $\|\mathbf{A}\| < 1$，则 $\|\mathbf{A}^n\| \leq \|\mathbf{A}\|^n \to 0$。
+**为什么重要**：分析迭代算法。如果 $\|\mathbf{A}\| < 1$，那 $\|\mathbf{A}^n\| \le \|\mathbf{A}\|^n \to 0$——算法收敛。
 
 ```{r}
-#| label: submultiplicative
-A <- matrix(c(1, 2, 3, 4), nrow = 2)
-B <- matrix(c(5, 6, 7, 8), nrow = 2)
+#| label: submult
+A_sm <- matrix(c(1, 2, 3, 4), 2, byrow = TRUE)
+B_sm <- matrix(c(5, 6, 7, 8), 2, byrow = TRUE)
 
-cat("验证次可乘性（谱范数）：\n")
-norm_A <- norm(A, "2")
-norm_B <- norm(B, "2")
-norm_AB <- norm(A %*% B, "2")
+# 各种范数都满足次可乘性
+for (type in c("1", "2", "I", "F")) {
+  lhs <- norm(A_sm %*% B_sm, type)
+  rhs <- norm(A_sm, type) * norm(B_sm, type)
+  cat(sprintf("||AB||_%s = %.2f  ≤  ||A||·||B|| = %.2f  ✓\n", type, lhs, rhs))
+}
+```
 
-cat("||A||_2 =", round(norm_A, 3), "\n")
-cat("||B||_2 =", round(norm_B, 3), "\n")
-cat("||AB||_2 =", round(norm_AB, 3), "\n")
-cat("||A||_2 × ||B||_2 =", round(norm_A * norm_B, 3), "\n")
-cat("||AB||_2 ≤ ||A||_2 × ||B||_2 ?", norm_AB <= norm_A * norm_B + 1e-10, "\n")
+**练习**：最大范数 $\|\mathbf{A}\|_M = \max_{ij}|a_{ij}|$ 不满足次可乘性。找一个反例。
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看"
+X <- matrix(c(1, 1, 1, 1), 2)
+max_norm <- function(A) max(abs(A))
+
+cat("||X||_M =", max_norm(X), "\n")
+cat("||X²||_M =", max_norm(X %*% X), "\n")
+cat("||X||_M² =", max_norm(X)^2, "\n")
+cat("2 > 1 → 次可乘性不成立！\n")
 ```
 
 ## 相容性
 
-矩阵范数和向量范数能配合使用：
+矩阵范数与向量范数"配合得上"：
 
-$$\|\mathbf{Ax}\|_V \leq \|\mathbf{A}\| \cdot \|\mathbf{x}\|_V$$
+$$\|\mathbf{Ax}\|_V \le \|\mathbf{A}\|\cdot\|\mathbf{x}\|_V$$
 
-**用途**：误差分析。如果输入误差是 $\|\mathbf{e}\|$，输出误差最多是 $\|\mathbf{A}\| \cdot \|\mathbf{e}\|$。
+**用途**：输入误差 $\|\mathbf{e}\|$ 经过矩阵变换后，输出误差最多是 $\|\mathbf{A}\|\cdot\|\mathbf{e}\|$。
+
+```{r}
+x_test <- c(1, -2)
+cat("||Ax||_2 =", sqrt(sum((G %*% x_test)^2)), "\n")
+cat("||A||_2 · ||x||_2 =", norm(G, "2") * sqrt(sum(x_test^2)), "\n")
+cat("前者 ≤ 后者 ✓\n")
+```
 
 ## 等价性
 
-所有矩阵范数都是等价的，相差不超过一个常数倍：
+所有矩阵范数都是**等价**的——相差不超过一个常数倍：
 
-$$c\|\mathbf{A}\|_a \leq \|\mathbf{A}\|_b \leq C\|\mathbf{A}\|_a$$
+$$c\|\mathbf{A}\|_a \le \|\mathbf{A}\|_b \le C\|\mathbf{A}\|_a$$
 
-**意义**：如果一个矩阵序列在某种范数下收敛，在其他范数下也收敛。
+几个常用的界：
+
+- $\|\mathbf{A}\|_2 \le \|\mathbf{A}\|_F \le \sqrt{\min(m,n)}\,\|\mathbf{A}\|_2$
+- $\frac{1}{\sqrt{n}}\|\mathbf{A}\|_\infty \le \|\mathbf{A}\|_2 \le \sqrt{m}\,\|\mathbf{A}\|_\infty$
+
+**意义**：如果矩阵序列在某种范数下收敛，在所有范数下都收敛。但 **等价 ≠ 相等**——不同范数对矩阵的"排序"可以不同。
 
 ```{r}
 #| label: equivalence
-cat("范数等价性示例：\n")
-cat("||M||_2 =", round(norm(M, "2"), 3), "\n")
-cat("||M||_F =", round(norm(M, "F"), 3), "\n")
-cat("||M||_1 =", round(norm(M, "1"), 3), "\n")
-cat("||M||_∞ =", round(norm(M, "I"), 3), "\n")
-cat("\n不同的数值，但都在衡量矩阵的'大小'\n")
+# 验证 ||A||_2 ≤ ||A||_F ≤ sqrt(min(m,n)) ||A||_2
+cat("||G||_2 =", norm(G, "2"), "\n")
+cat("||G||_F =", norm(G, "F"), "\n")
+cat("√2 · ||G||_2 =", sqrt(2) * norm(G, "2"), "\n\n")
+
+cat("验证: ||G||_2 ≤ ||G||_F ≤ √min(m,n)·||G||_2\n")
+cat(norm(G, "2"), "≤", norm(G, "F"), "≤", sqrt(2) * norm(G, "2"), "\n")
+```
+
+# 误差分析中的范数
+
+## 后向误差分析
+
+**场景**：你想求解 $\mathbf{Ax} = \mathbf{b}$，但计算机给出的是近似解 $\tilde{\mathbf{x}}$。
+
+**问题**：这个 $\tilde{\mathbf{x}}$ 到底是"哪个问题"的精确解？
+
+**答案**：它精确地解决了扰动问题 $(\mathbf{A}+\Delta\mathbf{A})\tilde{\mathbf{x}} = \mathbf{b}$，其中
+
+$$
+\Delta\mathbf{A} = -\frac{\mathbf{r}\tilde{\mathbf{x}}^\top}{\|\tilde{\mathbf{x}}\|^2}, \qquad \mathbf{r} = \mathbf{A}\tilde{\mathbf{x}} - \mathbf{b}
+$$
+
+**相对扰动**：$\dfrac{\|\Delta\mathbf{A}\|_2}{\|\mathbf{A}\|_2} = \dfrac{\|\mathbf{r}\|_2}{\|\mathbf{A}\|_2\cdot\|\tilde{\mathbf{x}}\|_2}$
+
+```{r}
+#| label: backward-error
+A_be <- matrix(c(1, 2, 3, 4), 2, byrow = TRUE)
+b_be <- c(5, 6)
+x_true <- solve(A_be, b_be)
+
+# 模拟近似解
+x_approx <- x_true + c(0.01, -0.01)
+
+# 残差
+r <- as.vector(A_be %*% x_approx - b_be)
+cat("残差 r:", r, "\n")
+
+# 扰动矩阵
+Delta_A <- -outer(r, x_approx) / sum(x_approx^2)
+
+# 验证 (A + ΔA) x_approx = b
+cat("验证:", as.vector((A_be + Delta_A) %*% x_approx), "≈ b =", b_be, "\n")
+
+# 相对扰动
+cat("相对扰动 ||ΔA||/||A|| =", norm(Delta_A, "2") / norm(A_be, "2"), "\n")
 ```
 
 # 机器学习中的应用
 
-## 岭回归（L2正则化）
+不同的范数导致不同的解的特性。这里用小例子实际跑一跑。
 
-$$\min_{\mathbf{x}} \|\mathbf{Ax} - \mathbf{b}\|_2^2 + \lambda\|\mathbf{x}\|_2^2$$
+## 岭回归（L2 正则化）
 
-**场景**：数据有噪声，变量之间高度相关。
+$$\min_{\mathbf{x}} \|\mathbf{Ax}-\mathbf{b}\|_2^2 + \lambda\|\mathbf{x}\|_2^2$$
 
-**作用**：惩罚系数太大，让模型更稳健，不被噪声带偏。
+数据有噪声、变量高度相关时，直接拟合系数会很极端。岭回归惩罚系数大小，让模型更稳健。**所有系数变小，但不会变成零**。
 
-**效果**：所有系数都变小，但不会变成零。
+```{r}
+#| label: ridge
+set.seed(42)
+n <- 50; p <- 5
+X <- matrix(rnorm(n * p), n)
+X[, 5] <- X[, 1] + rnorm(n, sd = 0.1)  # 第 5 列几乎等于第 1 列（共线性）
 
-## LASSO（L1正则化）
+beta_true <- c(1, -2, 0.5, 0, 3)
+y <- X %*% beta_true + rnorm(n, sd = 0.5)
 
-$$\min_{\mathbf{x}} \|\mathbf{Ax} - \mathbf{b}\|_2^2 + \lambda\|\mathbf{x}\|_1$$
+# OLS
+beta_ols <- solve(crossprod(X), crossprod(X, y))
 
-**场景**：怀疑大部分变量没用。
+# 岭回归：闭式解 (X'X + λI)^{-1} X'y
+lambda <- 1
+beta_ridge <- solve(crossprod(X) + lambda * diag(p), crossprod(X, y))
 
-**作用**：惩罚系数绝对值之和，逼迫系数稀疏。
+cat("真实系数:   ", round(beta_true, 3), "\n")
+cat("OLS 估计:   ", round(as.vector(beta_ols), 3), "\n")
+cat("Ridge 估计: ", round(as.vector(beta_ridge), 3), "\n")
 
-**效果**：自动把没用的变量系数压成零，做特征选择。
+cat("\nX'X 条件数:", round(kappa(crossprod(X))), "\n")
+cat("(X'X + λI) 条件数:", round(kappa(crossprod(X) + lambda * diag(p))), "\n")
+cat("→ 岭回归大幅降低了条件数！\n")
+```
+
+## LASSO（L1 正则化）
+
+$$\min_{\mathbf{x}} \|\mathbf{Ax}-\mathbf{b}\|_2^2 + \lambda\|\mathbf{x}\|_1$$
+
+LASSO 会把没用的变量系数**直接压成零**，自动做特征选择。
+
+```{r}
+#| label: lasso
+# 用坐标下降实现简单的 LASSO
+soft_threshold <- function(z, gamma) sign(z) * pmax(abs(z) - gamma, 0)
+
+lasso_cd <- function(X, y, lambda, n_iter = 200) {
+  n <- nrow(X); p <- ncol(X)
+  beta <- rep(0, p)
+  for (iter in seq_len(n_iter)) {
+    for (j in seq_len(p)) {
+      r_j <- y - X[, -j, drop = FALSE] %*% beta[-j]
+      z_j <- crossprod(X[, j], r_j) / n
+      beta[j] <- soft_threshold(z_j, lambda / 2) / (crossprod(X[, j]) / n)
+    }
+  }
+  beta
+}
+
+beta_lasso <- lasso_cd(X, y, lambda = 0.3)
+
+cat("真实系数:   ", round(beta_true, 3), "\n")
+cat("LASSO 估计: ", round(beta_lasso, 3), "\n")
+cat("→ 注意第 4 个系数（真实值=0）被压到接近零\n")
+```
 
 ## 核范数正则化（矩阵补全）
 
 $$\min_{\mathbf{X}} \|\mathbf{P}_\Omega(\mathbf{X}) - \mathbf{P}_\Omega(\mathbf{M})\|_F^2 + \lambda\|\mathbf{X}\|_*$$
 
-**场景**：矩阵有很多缺失值（比如用户-电影评分表）。
+用于推荐系统——大部分评分缺失，用核范数逼迫补全矩阵低秩。
 
-**作用**：惩罚核范数（奇异值之和），逼迫补全的矩阵低秩。
+```{r}
+#| label: nuclear
+# 构造一个低秩矩阵（模拟用户-电影评分）
+set.seed(7)
+n_users <- 20; n_movies <- 15; true_rank <- 3
 
-**效果**：找到结构简单的补全方案，不过度复杂。
+U_true <- matrix(rnorm(n_users * true_rank), n_users)
+V_true <- matrix(rnorm(n_movies * true_rank), n_movies)
+M_true <- U_true %*% t(V_true)
 
-**要点**：不同的范数导致不同性质的解。选什么范数，就是在告诉优化器你想要什么样的答案。
+# 只观测 30% 的元素
+mask <- matrix(rbinom(n_users * n_movies, 1, 0.3), n_users, n_movies)
+M_observed <- M_true * mask
+M_observed[mask == 0] <- NA
 
-# 计算复杂度
+cat("真实矩阵秩:", qr(M_true)$rank, "\n")
+cat("观测比例:", mean(mask), "\n")
+cat("真实矩阵的核范数:", sum(svd(M_true)$d), "\n")
+cat("真实矩阵的奇异值:", round(svd(M_true)$d[1:5], 2), "...\n")
+cat("→ 只有前", true_rank, "个奇异值较大，其余接近零\n")
+```
+
+# 计算复杂度速查
 
 | 范数 | 复杂度 | 算法 |
 |------|--------|------|
-| 列和范数 $\|\cdot\|_1$ | $O(mn)$ | 计算列和 |
-| 行和范数 $\|\cdot\|_\infty$ | $O(mn)$ | 计算行和 |
-| Frobenius范数 | $O(mn)$ | 元素平方和 |
-| 谱范数 | $O(\min(m^2n, mn^2))$ | 需要SVD |
-| 核范数 | $O(\min(m^2n, mn^2))$ | 需要完整SVD |
-
-**实践提示**：列和范数和行和范数计算便宜，谱范数和核范数需要分解，对大矩阵考虑近似算法。
-
-# 综合练习
+| $\|\mathbf{A}\|_1$ | $O(mn)$ | 列绝对值求和 |
+| $\|\mathbf{A}\|_\infty$ | $O(mn)$ | 行绝对值求和 |
+| $\|\mathbf{A}\|_F$ | $O(mn)$ | 元素平方和 |
+| $\|\mathbf{A}\|_2$ | $O(\min(m^2n,mn^2))$ | 需要部分 SVD |
+| $\|\mathbf{A}\|_*$ | $O(\min(m^2n,mn^2))$ | 需要完整 SVD |
 
 ```{r}
-#| label: exercise
-cat("=" |> rep(50) |> paste(collapse = ""), "\n")
-cat("综合练习\n")
-cat("=" |> rep(50) |> paste(collapse = ""), "\n\n")
+#| label: bench
+# 对比不同范数的计算时间
+big <- matrix(rnorm(1000 * 1000), 1000)
+system.time(norm(big, "1"))
+system.time(norm(big, "F"))
+system.time(norm(big, "2"))   # 明显慢——需要 SVD
+```
 
-# 练习矩阵
-P <- matrix(c(1, 2, 3, 
-              4, 5, 6), nrow = 2, byrow = TRUE)
-cat("给定矩阵 P (2×3):\n")
-print(P)
+# 小测验
 
-cat("\n问题1：P的Frobenius范数是多少？\n")
-cat("计算：sqrt(1² + 2² + 3² + 4² + 5² + 6²) =", 
-    sqrt(sum(1:6)^2), "? 不对!\n")
-cat("正确：sqrt(1 + 4 + 9 + 16 + 25 + 36) =", norm(P, "F"), "\n")
+## 测验 1：迹的性质
 
-cat("\n问题2：P的列和范数是多少？\n")
-cat("各列之和：", colSums(abs(P)), "\n")
-cat("答案：", norm(P, "1"), "\n")
+下面哪些是正确的？
 
-cat("\n问题3：P的行和范数是多少？\n")
-cat("各行之和：", rowSums(abs(P)), "\n")
-cat("答案：", norm(P, "I"), "\n")
+1. $\text{tr}(\mathbf{AB}) = \text{tr}(\mathbf{A})\cdot\text{tr}(\mathbf{B})$
+2. $\text{tr}(\mathbf{AB}) = \text{tr}(\mathbf{BA})$
+3. $\text{tr}(\mathbf{A}^\top) = -\text{tr}(\mathbf{A})$
+4. $\text{tr}(\mathbf{I}_n) = n$
+5. $\text{tr}(\mathbf{A}^{-1}) = 1/\text{tr}(\mathbf{A})$
 
-cat("\n问题4：tr(P'P) = ||P||_F² ?\n")
-cat("tr(P'P) =", sum(diag(t(P) %*% P)), "\n")
-cat("||P||_F² =", norm(P, "F")^2, "\n")
-cat("相等？", abs(sum(diag(t(P) %*% P)) - norm(P, "F")^2) < 1e-10, "\n")
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+I2 <- diag(2)
+A_test <- 2 * diag(2)
+
+cat("❌ 1. 错误\n")
+cat("   反例 A=B=I₂: tr(AB)=", tr(I2 %*% I2), " ≠ tr(A)·tr(B)=", tr(I2) * tr(I2), "\n\n")
+cat("✅ 2. 正确（循环性质）\n\n")
+cat("❌ 3. 错误：tr(A')=tr(A)，不是 -tr(A)\n\n")
+cat("✅ 4. 正确\n\n")
+cat("❌ 5. 错误\n")
+cat("   反例 A=2I₂: tr(A)=", tr(A_test), ", tr(A⁻¹)=", tr(solve(A_test)),
+    ", 1/tr(A)=", 1/tr(A_test), "\n")
+```
+
+## 测验 2：计算范数
+
+给定 $\mathbf{A} = \begin{pmatrix} 1 & 2 \\ 3 & 0 \end{pmatrix}$，计算 $\|\mathbf{A}\|_1$、$\|\mathbf{A}\|_\infty$、$\|\mathbf{A}\|_F$。
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+A_q <- matrix(c(1, 2, 3, 0), 2, byrow = TRUE)
+cat("列和范数 ||A||_1 = max{|1|+|3|, |2|+|0|} = max{4, 2} =", norm(A_q, "1"), "\n")
+cat("行和范数 ||A||_∞ = max{|1|+|2|, |3|+|0|} = max{3, 3} =", norm(A_q, "I"), "\n")
+cat("Frobenius ||A||_F = √(1+4+9+0) = √14 ≈", round(norm(A_q, "F"), 3), "\n")
+```
+
+## 测验 3：判断
+
+下面的矩阵是正交矩阵吗？
+
+$$\mathbf{Q} = \frac{1}{\sqrt{2}}\begin{pmatrix} 1 & 1 \\ 1 & -1 \end{pmatrix}$$
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+Q_test <- (1/sqrt(2)) * matrix(c(1, 1, 1, -1), 2, byrow = TRUE)
+cat("Q'Q:\n")
+print(round(crossprod(Q_test), 10))
+cat("→ 是单位矩阵，所以 Q 是正交矩阵 ✓\n")
+cat("条件数:", kappa(Q_test), "\n")
+cat("det(Q) =", det(Q_test), "（-1 表示反射）\n")
 ```
 
 # 总结
 
-## 关键概念速查
+## 知识地图
 
-**迹**
+```
+矩阵范数
+├── 逐元素范数（把矩阵当向量）
+│   ├── Frobenius 范数 ─── 也是 Schatten-2 ！
+│   ├── 和范数
+│   └── 最大范数（⚠️ 不次可乘）
+├── 算子范数（衡量拉伸能力）
+│   ├── 谱范数 (L₂) ─── = 最大奇异值 ─── 也是 Schatten-∞
+│   ├── 列和范数 (L₁)
+│   └── 行和范数 (L∞)
+└── Schatten 范数（基于奇异值）
+    ├── p=∞ → 谱范数
+    ├── p=2  → Frobenius
+    └── p=1  → 核范数（逼迫低秩）
+```
 
-- 定义：$\text{tr}(\mathbf{A}) = \sum_i a_{ii}$
-- 性质：$\text{tr}(\mathbf{A}) = \sum_i \lambda_i$，$\text{tr}(\mathbf{AB}) = \text{tr}(\mathbf{BA})$
-- 联系：$\|\mathbf{A}\|_F^2 = \text{tr}(\mathbf{A}^\top\mathbf{A})$
+## 核心公式卡
 
-**常用范数**
+| 概念 | 公式 |
+|------|------|
+| 迹 | $\text{tr}(\mathbf{A}) = \sum a_{ii} = \sum \lambda_i$ |
+| 循环性 | $\text{tr}(\mathbf{AB}) = \text{tr}(\mathbf{BA})$ |
+| Frobenius 与迹 | $\|\mathbf{A}\|_F^2 = \text{tr}(\mathbf{A}^\top\mathbf{A})$ |
+| 谱范数 | $\|\mathbf{A}\|_2 = \sigma_{\max} = \sqrt{\lambda_{\max}(\mathbf{A}^\top\mathbf{A})}$ |
+| 条件数 | $\kappa_2(\mathbf{A}) = \sigma_{\max}/\sigma_{\min}$ |
+| 次可乘性 | $\|\mathbf{AB}\| \le \|\mathbf{A}\|\cdot\|\mathbf{B}\|$ |
+| 相容性 | $\|\mathbf{Ax}\| \le \|\mathbf{A}\|\cdot\|\mathbf{x}\|$ |
 
-- Frobenius：$\|\mathbf{A}\|_F = \sqrt{\sum_{ij} a_{ij}^2}$ — 整体大小
-- 谱范数：$\|\mathbf{A}\|_2 = \sigma_{\max}$ — 最大拉伸
-- 核范数：$\|\mathbf{A}\|_* = \sum_i \sigma_i$ — 逼迫低秩
-- 列和/行和：便宜的近似
+## 什么时候用哪个范数？
 
-**条件数**
-
-- 定义：$\kappa(\mathbf{A}) = \sigma_{\max} / \sigma_{\min}$
-- $\kappa \approx 1$：良态，误差不放大
-- $\kappa \gg 1$：病态，误差被放大
-
-**应用**
-
-- 岭回归：L2惩罚，系数变小但不为零
-- LASSO：L1惩罚，产生稀疏解
-- 矩阵补全：核范数惩罚，逼迫低秩
-
-## 学习建议
-
-1. **不用背公式**，理解几何含义更重要
-2. **记住什么时候用什么范数**，而不是怎么推导
-3. **条件数是最实用的概念**，直接决定算法稳不稳定
-4. **跑代码加深理解**，改改参数看看结果怎么变
+| 你想做什么 | 用什么范数 |
+|------------|------------|
+| 衡量矩阵整体大小 | Frobenius |
+| 衡量最大拉伸能力 | 谱范数 |
+| 逼迫矩阵低秩 | 核范数 |
+| 快速粗算 | 列和 / 行和范数 |
+| 分析误差放大 | 条件数（= 谱范数的比） |
 
 ```{r}
-#| label: final
-cat("\n🎉 恭喜完成学习！\n")
-cat("现在你应该能回答：\n")
-cat("- 范数是什么？衡量矩阵大小的方式\n")
-cat("- 条件数为什么重要？决定误差是否被放大\n")
-cat("- 不同范数有什么区别？不同的应用场景\n")
+cat("🎉 学习完成！下一站：SVD（奇异值分解）\n")
 ```
 ```
 
----
+主要优化点说明：
 
-这个QMD文档的设计思路：
+笔记中大量直觉性的解释（峡谷比喻、AI训练联系等）被融入了对应的数学章节，而不是孤立存放。条件数一节新增了梯度下降的可视化对比——良态问题直奔目标，病态问题来回弹跳，一图胜千言。
 
-**结构上**：从最简单的迹开始，逐步引入Frobenius范数、算子范数、条件数、Schatten范数，最后到应用。每个概念都先讲直觉，再给公式，最后用代码验证。
+新增了多处"**练习**"块（带折叠答案），鼓励你先想再看。比如验证循环性、构造次可乘性反例、判断正交矩阵等，都是小而精的动手题。
 
-**代码上**：每段代码都有明确的目的，输出结果直接印证前面讲的理论。学生可以修改矩阵看结果怎么变。
+机器学习部分从纯文字描述变成了可运行的代码：岭回归有闭式解对比 OLS，LASSO 用坐标下降实际跑特征选择，核范数部分构造了低秩矩阵来直观展示奇异值分布。
 
-**可视化上**：单位圆变椭圆是理解谱范数和条件数的关键图像，出现了多次以加深印象。
+特征值 vs 奇异值单独拎出来做了一节对比表，避免后续学 SVD 时混淆。谱分解的实际用途（算幂、求逆、降维）也用 R 跑了一遍。
 
-**语言上**：避免纯数学术语，用"拉伸"、"圆变椭圆"、"峡谷"这些直观的比喻。
+最后的总结用 ASCII 树状图画出了范数的层次关系，以及"什么场景用什么范数"的速查表，方便复习时一眼定位。
