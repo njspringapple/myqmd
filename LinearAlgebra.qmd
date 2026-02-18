@@ -1,0 +1,1542 @@
+---
+title: "线性代数 R 语言实验教程"
+subtitle: "从变换思维到几何直觉"
+author: "线性代数实验课"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    theme: cosmo
+    code-fold: false
+    self-contained: true
+execute:
+  warning: false
+  message: false
+---
+
+# 引言 {.unnumbered}
+
+本教程通过 R 语言实验，将线性代数中的核心概念——线性变换、特征值、正交投影、二次型、奇异值分解、迹与范数——转化为可运行、可观察、可交互的计算实验。每个实验都配有可视化，帮助你建立**变换思维**和**图形直觉**。
+
+> **使用方法**：用 Quarto 渲染此文档（`quarto render`），或在 RStudio 中逐块运行代码。建议你修改参数、观察变化，形成自己的理解。
+
+# 准备工作
+
+```{r}
+#| label: setup
+
+# ---- 辅助函数 ----
+
+# 画二维向量（箭头）
+draw_vector <- function(v, origin = c(0, 0), col = "blue", lwd = 2, label = NULL) {
+  arrows(origin[1], origin[2],
+         origin[1] + v[1], origin[2] + v[2],
+         col = col, lwd = lwd, length = 0.10)
+  if (!is.null(label)) {
+    text(origin[1] + v[1] * 1.08,
+         origin[2] + v[2] * 1.08,
+         label, col = col, cex = 0.85, font = 2)
+  }
+}
+
+# 向量范数
+vnorm <- function(x) sqrt(sum(x^2))
+
+# 单位圆点集
+unit_circle <- function(n = 300) {
+  theta <- seq(0, 2 * pi, length.out = n)
+  rbind(cos(theta), sin(theta))
+}
+
+# 网格点集（用于可视化变换）
+grid_points <- function(from = -1, to = 1, by = 0.25) {
+  s <- seq(from, to, by = by)
+  pts <- list()
+  # 横线
+  for (yi in s) {
+    xi <- seq(from, to, length.out = 80)
+    pts[[length(pts) + 1]] <- rbind(xi, rep(yi, length(xi)))
+  }
+  # 竖线
+  for (xi in s) {
+    yi <- seq(from, to, length.out = 80)
+    pts[[length(pts) + 1]] <- rbind(rep(xi, length(yi)), yi)
+  }
+  pts
+}
+
+# 画网格
+draw_grid <- function(grid_list, col = "steelblue", lwd = 0.6, ...) {
+  for (g in grid_list) {
+    lines(g[1, ], g[2, ], col = col, lwd = lwd, ...)
+  }
+}
+```
+
+# 第一章：线性变换
+
+## 实验 1.1 —— 矩阵乘法是列向量的线性组合
+
+矩阵 $A$ 乘以向量 $x$ 的本质是：取 $A$ 的列向量，以 $x$ 的分量为权重进行线性组合。即 $Ax = x_1 a_1 + x_2 a_2 + \cdots + x_n a_n$。
+
+```{r}
+#| label: exp-1-1
+#| fig-width: 5
+#| fig-height: 5
+
+A <- matrix(c(2, 1,
+              1, 3), nrow = 2, byrow = TRUE)
+x <- c(1.5, 0.8)
+
+a1 <- A[, 1]   # 第一列
+a2 <- A[, 2]   # 第二列
+b  <- A %*% x  # 矩阵乘法
+
+cat("A 的第1列 a1 =", a1, "\n")
+cat("A 的第2列 a2 =", a2, "\n")
+cat("x =", x, "\n")
+cat("Ax =", b, "\n")
+cat("x1*a1 + x2*a2 =", x[1] * a1 + x[2] * a2, "\n")
+
+# 可视化
+plot(NULL, xlim = c(-1, 5), ylim = c(-1, 5), asp = 1,
+     xlab = expression(x[1]), ylab = expression(x[2]),
+     main = "Ax = x1·a1 + x2·a2")
+abline(h = 0, v = 0, col = "gray80", lty = 2)
+
+draw_vector(a1, col = "steelblue", lwd = 2, label = "a1")
+draw_vector(a2, col = "darkorange", lwd = 2, label = "a2")
+draw_vector(x[1] * a1, col = "steelblue", lwd = 1.5, label = "x1·a1")
+draw_vector(x[2] * a2, origin = x[1] * a1, col = "darkorange", lwd = 1.5, label = "x2·a2")
+draw_vector(as.numeric(b), col = "red", lwd = 3, label = "Ax")
+```
+
+**观察**：红色向量 $Ax$ 恰好等于蓝色部分 $x_1 a_1$ 与橙色部分 $x_2 a_2$ 的首尾相接。矩阵乘法就是列向量的加权求和。
+
+## 实验 1.2 —— 可视化二维线性变换
+
+矩阵 $A \in \mathbb{R}^{2 \times 2}$ 定义了平面到平面的线性映射。我们把一组网格线通过 $A$ 变换，观察空间是如何被"揉搓"的。
+
+```{r}
+#| label: exp-1-2
+#| fig-width: 10
+#| fig-height: 5
+
+A <- matrix(c(2, 0.5,
+              0.5, 1), nrow = 2, byrow = TRUE)
+
+grd <- grid_points(from = -1.5, to = 1.5, by = 0.5)
+grd_transformed <- lapply(grd, function(g) A %*% g)
+
+par(mfrow = c(1, 2), pty = "s", mar = c(4, 4, 3, 1))
+
+# 变换前
+plot(NULL, xlim = c(-3, 3), ylim = c(-3, 3), asp = 1,
+     xlab = expression(x[1]), ylab = expression(x[2]),
+     main = "变换前")
+abline(h = 0, v = 0, col = "gray70")
+draw_grid(grd, col = "steelblue", lwd = 1)
+
+# 变换后
+plot(NULL, xlim = c(-5, 5), ylim = c(-5, 5), asp = 1,
+     xlab = expression(x[1]), ylab = expression(x[2]),
+     main = paste0("A 变换后  (det = ", round(det(A), 2), ")"))
+abline(h = 0, v = 0, col = "gray70")
+draw_grid(grd_transformed, col = "tomato", lwd = 1)
+```
+
+**动手练习**：把 $A$ 改为 `matrix(c(0,-1,1,0), 2, 2)`（旋转90°），或 `matrix(c(1,0,0,-1), 2, 2)`（关于 $x_1$ 轴的反射），观察网格如何变化。
+
+## 实验 1.3 —— 列空间：$Ax$ 能到达哪里？
+
+对于 $A \in \mathbb{R}^{m \times n}$，所有可能的 $Ax$ 构成了列空间 $\text{Col}(A)$。
+
+```{r}
+#| label: exp-1-3
+#| fig-width: 6
+#| fig-height: 6
+
+# A 是 3x2 矩阵：从 R^2 映射到 R^3
+# 列空间是 R^3 中的一个 2 维平面
+A <- matrix(c(1, 0, 1,
+              0, 1, 1), nrow = 3, ncol = 2)
+cat("A =\n"); print(A)
+cat("A 的秩 =", qr(A)$rank, "\n")
+
+# 随机采样 500 个 x ∈ R^2，计算 Ax
+set.seed(42)
+X <- matrix(rnorm(2 * 500), nrow = 2)
+AX <- A %*% X  # 3 x 500
+
+# 投影到 2D 来可视化 R^3 中的平面
+# 使用简单的等轴测投影
+proj_x <- AX[1, ] - 0.4 * AX[3, ]
+proj_y <- AX[2, ] + 0.3 * AX[3, ]
+
+plot(proj_x, proj_y, pch = 16, cex = 0.4, col = adjustcolor("tomato", 0.5),
+     xlab = "投影 x", ylab = "投影 y",
+     main = "3×2 矩阵的列空间（R³中的二维平面）")
+# 画列向量
+a1 <- A[, 1]; a2 <- A[, 2]
+arrows(0, 0, a1[1] - 0.4*a1[3], a1[2] + 0.3*a1[3],
+       col = "blue", lwd = 3, length = 0.1)
+arrows(0, 0, a2[1] - 0.4*a2[3], a2[2] + 0.3*a2[3],
+       col = "darkgreen", lwd = 3, length = 0.1)
+legend("topleft", c("a1", "a2", "Col(A) 中的点"),
+       col = c("blue", "darkgreen", "tomato"), lwd = c(3, 3, NA),
+       pch = c(NA, NA, 16), cex = 0.8)
+```
+
+**观察**：所有 $Ax$ 都落在由 $a_1$ 和 $a_2$ 张成的二维平面上。$x$ 在 $\mathbb{R}^2$ 中取遍所有值，$Ax$ 也只能在这个平面内移动——这就是列空间。
+
+## 实验 1.4 —— 行列式：面积的缩放因子
+
+$|det(A)|$ 等于变换后面积（体积）相对于变换前的缩放倍数。$\det(A) < 0$ 表示变换翻转了方向（定向反转）。
+
+```{r}
+#| label: exp-1-4
+#| fig-width: 10
+#| fig-height: 5
+
+matrices <- list(
+  "缩放" = matrix(c(2, 0, 0, 3), 2, byrow = TRUE),
+  "剪切" = matrix(c(1, 1.5, 0, 1), 2, byrow = TRUE),
+  "反射+缩放" = matrix(c(-1, 0, 0, 2), 2, byrow = TRUE)
+)
+
+# 单位正方形
+sq <- matrix(c(0,0, 1,0, 1,1, 0,1, 0,0), nrow = 2)
+
+par(mfrow = c(1, 3), pty = "s", mar = c(4, 4, 4, 1))
+for (nm in names(matrices)) {
+  A <- matrices[[nm]]
+  d <- det(A)
+  sq_t <- A %*% sq
+  
+  plot(NULL, xlim = c(-4, 4), ylim = c(-1, 7), asp = 1,
+       xlab = expression(x[1]), ylab = expression(x[2]),
+       main = paste0(nm, "\ndet(A) = ", round(d, 2)))
+  abline(h = 0, v = 0, col = "gray80")
+  polygon(sq[1, ], sq[2, ], col = adjustcolor("steelblue", 0.3), border = "steelblue", lwd = 2)
+  polygon(sq_t[1, ], sq_t[2, ], col = adjustcolor("tomato", 0.3), border = "tomato", lwd = 2)
+  legend("topleft", c("原始 (面积=1)", paste0("变换后 (面积=", abs(round(d, 2)), ")")),
+         fill = c(adjustcolor("steelblue", 0.3), adjustcolor("tomato", 0.3)),
+         cex = 0.7)
+}
+```
+
+**观察**：变换后平行四边形的面积恰好等于 $|\det(A)|$ 乘以原面积。反射变换（$\det < 0$）时，图形的"手性"发生了翻转。
+
+## 实验 1.5 —— 主动视角与被动视角
+
+同一个矩阵 $A$ 可以有两种解读：**主动视角**认为 $A$ 把向量 $x$ 变成了新向量 $Ax$；**被动视角**认为向量不变，是坐标系变了，$A^{-1}x$ 是同一个向量在新基下的坐标。
+
+```{r}
+#| label: exp-1-5
+#| fig-width: 10
+#| fig-height: 5
+
+A <- matrix(c(2, 1,
+              0, 1.5), nrow = 2, byrow = TRUE)
+x <- c(1, 1)
+Ax <- A %*% x
+A_inv <- solve(A)
+x_new_basis <- A_inv %*% x
+
+par(mfrow = c(1, 2), pty = "s", mar = c(4, 4, 4, 1))
+
+# 主动视角
+plot(NULL, xlim = c(-1, 4), ylim = c(-1, 4), asp = 1,
+     xlab = expression(x[1]), ylab = expression(x[2]),
+     main = "主动视角：A 变换了向量")
+abline(h = 0, v = 0, col = "gray80")
+draw_vector(x, col = "steelblue", lwd = 3, label = "x")
+draw_vector(as.numeric(Ax), col = "tomato", lwd = 3, label = "Ax")
+arrows(x[1], x[2], Ax[1], Ax[2], col = "gray50", lwd = 1, lty = 2, length = 0.08)
+
+# 被动视角
+plot(NULL, xlim = c(-1, 4), ylim = c(-1, 4), asp = 1,
+     xlab = expression(x[1]), ylab = expression(x[2]),
+     main = "被动视角：基变了，向量不变")
+# 画新基向量
+draw_vector(A[, 1], col = "darkorange", lwd = 2, label = "新基 e1'")
+draw_vector(A[, 2], col = "purple", lwd = 2, label = "新基 e2'")
+draw_vector(x, col = "steelblue", lwd = 3, label = "x")
+abline(h = 0, v = 0, col = "gray80")
+cat("x 在标准基下的坐标：", x, "\n")
+cat("x 在新基 A 下的坐标：", round(as.numeric(x_new_basis), 4), "\n")
+```
+
+**理解**：左图中，$x$ 被 $A$ "搬到了"新位置；右图中，同一个向量 $x$ 在新基（$A$ 的列向量）下的坐标变为 $A^{-1}x$。两种视角数学上等价，但直觉不同。
+
+# 第二章：特征值与特征向量
+
+## 实验 2.1 —— R 中计算特征值和特征向量
+
+$Ax = \lambda x$：矩阵 $A$ 作用于特征向量 $x$ 时，$x$ 的方向不变，只被缩放 $\lambda$ 倍。
+
+```{r}
+#| label: exp-2-1
+
+A <- matrix(c(4, 1,
+              2, 3), nrow = 2, byrow = TRUE)
+
+eig <- eigen(A)
+cat("特征值：", eig$values, "\n")
+cat("特征向量（列向量）：\n"); print(round(eig$vectors, 4))
+
+# 验证 Ax = λx
+for (i in 1:2) {
+  v <- eig$vectors[, i]
+  lam <- eig$values[i]
+  Av <- A %*% v
+  lam_v <- lam * v
+  cat(sprintf("特征值 λ%d = %.4f | Av = (%.4f, %.4f) | λv = (%.4f, %.4f) | 匹配：%s\n",
+              i, lam, Av[1], Av[2], lam_v[1], lam_v[2],
+              all.equal(as.numeric(Av), lam_v)))
+}
+```
+
+## 实验 2.2 —— 可视化：特征向量在变换下只被拉伸
+
+对单位圆上的所有方向施加矩阵 $A$，观察哪些方向在变换后仍保持方向不变。
+
+```{r}
+#| label: exp-2-2
+#| fig-width: 7
+#| fig-height: 7
+
+A <- matrix(c(3, 1,
+              0, 2), nrow = 2, byrow = TRUE)
+eig <- eigen(A)
+
+theta <- seq(0, 2 * pi, length.out = 200)
+circle <- rbind(cos(theta), sin(theta))
+ellipse <- A %*% circle
+
+plot(NULL, xlim = c(-4, 4), ylim = c(-4, 4), asp = 1,
+     xlab = expression(x[1]), ylab = expression(x[2]),
+     main = "单位圆经 A 变换 → 椭圆\n特征向量方向只被拉伸")
+abline(h = 0, v = 0, col = "gray80")
+
+lines(circle[1, ], circle[2, ], col = "steelblue", lwd = 2)
+lines(ellipse[1, ], ellipse[2, ], col = "tomato", lwd = 2)
+
+# 画特征向量和变换后的特征向量
+cols_eig <- c("darkgreen", "purple")
+for (i in 1:2) {
+  v <- eig$vectors[, i]
+  lam <- eig$values[i]
+  # 原特征方向（单位向量在圆上）
+  draw_vector(v, col = cols_eig[i], lwd = 3,
+              label = paste0("v", i))
+  # 变换后 = λ * v（在椭圆上）
+  draw_vector(lam * v, col = cols_eig[i], lwd = 3,
+              label = paste0("λ", i, "·v", i, " (λ=", round(lam, 2), ")"))
+}
+
+legend("bottomright",
+       c("单位圆", "变换后椭圆", "特征向量 v1", "特征向量 v2"),
+       col = c("steelblue", "tomato", cols_eig),
+       lwd = 2, cex = 0.75)
+```
+
+**观察**：绿色和紫色箭头从圆到椭圆，方向没有改变，只是长度按 $\lambda$ 倍缩放——这正是特征向量的定义。
+
+## 实验 2.3 —— 特征空间
+
+特征空间 $E_\lambda = \{x : Ax = \lambda x\}$ 是对应特征值 $\lambda$ 的所有特征向量（加上零向量）构成的子空间。
+
+```{r}
+#| label: exp-2-3
+#| fig-width: 6
+#| fig-height: 6
+
+# 一个有重复特征值的矩阵
+A <- matrix(c(2, 1,
+              0, 2), nrow = 2, byrow = TRUE)
+eig <- eigen(A)
+cat("特征值：", eig$values, "\n")
+cat("特征向量：\n"); print(eig$vectors)
+
+cat("\n这个矩阵的特征值 λ=2 是重根（代数重数=2），但几何重数=1\n")
+cat("特征空间 E_2 只是一条直线，不能张成整个 R^2\n")
+cat("因此该矩阵不可对角化\n\n")
+
+# 可对角化的例子
+B <- matrix(c(3, 0,
+              0, 3), nrow = 2, byrow = TRUE)
+eig_B <- eigen(B)
+cat("B 的特征值：", eig_B$values, "\n")
+cat("B 的特征向量：\n"); print(eig_B$vectors)
+cat("B = 3I，每个方向都是特征向量，E_3 = R^2，维数 = 2\n")
+cat("B 可以对角化（本身就是对角矩阵）\n")
+```
+
+## 实验 2.4 —— 矩阵对角化：$A = P \Lambda P^{-1}$
+
+如果 $A$ 有 $n$ 个线性无关的特征向量，就可以对角化。
+
+```{r}
+#| label: exp-2-4
+
+A <- matrix(c(4, 1,
+              2, 3), nrow = 2, byrow = TRUE)
+
+eig <- eigen(A)
+P <- eig$vectors
+Lambda <- diag(eig$values)
+P_inv <- solve(P)
+
+cat("P（特征向量矩阵）：\n"); print(round(P, 4))
+cat("\nΛ（特征值对角矩阵）：\n"); print(round(Lambda, 4))
+
+# 验证 A = P Λ P^{-1}
+A_reconstructed <- P %*% Lambda %*% P_inv
+cat("\nP Λ P^{-1} =\n"); print(round(A_reconstructed, 10))
+cat("\n原始 A =\n"); print(A)
+cat("\n重构误差：", max(abs(A - A_reconstructed)), "\n")
+
+# 验证 det(A) = det(Λ) = λ1 * λ2
+cat("\ndet(A) =", det(A), "\n")
+cat("λ1 × λ2 =", prod(eig$values), "\n")
+```
+
+## 实验 2.5 —— 矩阵幂：$A^k = P \Lambda^k P^{-1}$
+
+对角化的强大之处在于矩阵幂的计算变得极其简单。
+
+```{r}
+#| label: exp-2-5
+
+A <- matrix(c(1.2, 0.3,
+              0.1, 0.9), nrow = 2, byrow = TRUE)
+eig <- eigen(A)
+P <- eig$vectors
+P_inv <- solve(P)
+
+k <- 10
+
+# 方法 1：直接连乘
+A_power_direct <- diag(2)
+for (i in 1:k) A_power_direct <- A_power_direct %*% A
+
+# 方法 2：P Λ^k P^{-1}
+Lambda_k <- diag(eig$values^k)
+A_power_eig <- P %*% Lambda_k %*% P_inv
+
+cat("直接计算 A^10 =\n"); print(round(A_power_direct, 6))
+cat("\nP Λ^10 P^{-1} =\n"); print(round(A_power_eig, 6))
+cat("\n误差：", max(abs(A_power_direct - A_power_eig)), "\n")
+
+# 可视化 A^k 的效果
+cat("\n随着 k 增大，A^k 的行为取决于特征值的绝对值：\n")
+cat("  λ1 =", round(eig$values[1], 4), " |λ1| =", round(abs(eig$values[1]), 4), "\n")
+cat("  λ2 =", round(eig$values[2], 4), " |λ2| =", round(abs(eig$values[2]), 4), "\n")
+cat("如果 |λ| < 1，该方向收缩；|λ| > 1，该方向膨胀；|λ| = 1，不变。\n")
+```
+
+## 实验 2.6 —— 特征基下的坐标变换
+
+把向量 $x$ 变换到特征基下后，矩阵 $A$ 的作用变成了简单的对角缩放。
+
+```{r}
+#| label: exp-2-6
+#| fig-width: 10
+#| fig-height: 5
+
+A <- matrix(c(3, 1,
+              1, 3), nrow = 2, byrow = TRUE)
+eig <- eigen(A)
+B <- eig$vectors     # 特征基矩阵
+B_inv <- solve(B)
+
+x <- c(2, 1)
+
+# 标准基下的坐标和变换
+Ax <- A %*% x
+
+# 特征基下的坐标
+x_B <- B_inv %*% x
+Ax_B <- B_inv %*% Ax
+
+# A 在特征基下的矩阵表示
+A_B <- B_inv %*% A %*% B   # 应为对角矩阵
+
+cat("x 在标准基下 =", x, "\n")
+cat("x 在特征基下 =", round(as.numeric(x_B), 4), "\n")
+cat("\nA 在特征基下的矩阵 [A]_B =\n"); print(round(A_B, 4))
+cat("（是对角矩阵！在特征基下 A 只是简单的缩放）\n")
+
+cat("\nAx 在标准基下 =", as.numeric(Ax), "\n")
+cat("Ax 在特征基下 =", round(as.numeric(Ax_B), 4), "\n")
+cat("[A]_B · [x]_B  =", round(as.numeric(A_B %*% x_B), 4), "\n")
+
+par(mfrow = c(1, 2), pty = "s", mar = c(4, 4, 4, 1))
+
+# 标准基视角
+plot(NULL, xlim = c(-1, 5), ylim = c(-1, 5), asp = 1,
+     main = "标准基", xlab = expression(e[1]), ylab = expression(e[2]))
+abline(h = 0, v = 0, col = "gray80")
+draw_vector(x, col = "steelblue", lwd = 3, label = "x")
+draw_vector(as.numeric(Ax), col = "tomato", lwd = 3, label = "Ax")
+for (i in 1:2) {
+  draw_vector(eig$vectors[, i] * 2, col = "gray50", lwd = 1)
+}
+
+# 特征基视角
+plot(NULL, xlim = c(-1, 5), ylim = c(-3, 3), asp = 1,
+     main = "特征基", xlab = expression(v[1]), ylab = expression(v[2]))
+abline(h = 0, v = 0, col = "gray80")
+draw_vector(as.numeric(x_B), col = "steelblue", lwd = 3, label = "[x]_B")
+draw_vector(as.numeric(Ax_B), col = "tomato", lwd = 3, label = "[Ax]_B")
+```
+
+**理解**：在特征基下，$A$ 变成了对角矩阵，变换不再"混合"不同方向，每个坐标轴独立地被对应的特征值缩放。
+
+# 第三章：正交与投影
+
+## 实验 3.1 —— 内积、范数与夹角
+
+内积 $\langle v, w \rangle = v^T w$ 连接了长度、角度和正交性这三个核心概念。
+
+```{r}
+#| label: exp-3-1
+
+v <- c(3, 1)
+w <- c(1, 2)
+
+# 内积
+inner <- sum(v * w)   # 等价于 t(v) %*% w
+cat("v =", v, "\n")
+cat("w =", w, "\n")
+cat("<v, w> =", inner, "\n")
+
+# 范数
+norm_v <- vnorm(v)
+norm_w <- vnorm(w)
+cat("||v|| =", round(norm_v, 4), "\n")
+cat("||w|| =", round(norm_w, 4), "\n")
+
+# 夹角
+cos_theta <- inner / (norm_v * norm_w)
+theta <- acos(cos_theta) * 180 / pi
+cat("cos(θ) =", round(cos_theta, 4), "\n")
+cat("θ =", round(theta, 2), "°\n")
+
+# 柯西-施瓦茨不等式
+cat("\n柯西-施瓦茨不等式验证：\n")
+cat("|<v,w>| =", abs(inner), " ≤ ||v||·||w|| =", round(norm_v * norm_w, 4), "\n")
+
+# 勾股定理（只有正交向量才成立）
+u1 <- c(1, 0)
+u2 <- c(0, 2)
+cat("\n正交向量 u1 =", u1, ", u2 =", u2, "\n")
+cat("||u1+u2||² =", vnorm(u1 + u2)^2, "\n")
+cat("||u1||² + ||u2||² =", vnorm(u1)^2 + vnorm(u2)^2, "\n")
+```
+
+## 实验 3.2 —— 正交矩阵：旋转变换
+
+正交矩阵 $U$ 满足 $U^T U = I$，变换后向量长度不变。几何上它是旋转（或旋转+反射）。
+
+```{r}
+#| label: exp-3-2
+#| fig-width: 6
+#| fig-height: 6
+
+# 旋转矩阵（旋转 45°）
+angle <- pi / 4
+U <- matrix(c(cos(angle), sin(angle),
+             -sin(angle), cos(angle)), nrow = 2, byrow = TRUE)
+
+cat("U =\n"); print(round(U, 4))
+cat("\nU^T U =\n"); print(round(t(U) %*% U, 10))
+cat("det(U) =", round(det(U), 4), "\n")
+
+# 验证长度不变
+x <- c(3, 1)
+Ux <- U %*% x
+cat("\n||x|| =", round(vnorm(x), 4), "\n")
+cat("||Ux|| =", round(vnorm(as.numeric(Ux)), 4), "\n")
+
+# 可视化旋转
+circ <- unit_circle()
+circ_rot <- U %*% circ
+
+plot(NULL, xlim = c(-2.5, 2.5), ylim = c(-2.5, 2.5), asp = 1,
+     main = paste0("正交变换（旋转 ", round(angle * 180 / pi), "°）"),
+     xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray80")
+lines(circ[1, ], circ[2, ], col = "gray70", lwd = 1)
+
+# 随机生成一些方向向量
+set.seed(7)
+test_vecs <- matrix(rnorm(2 * 8), nrow = 2)
+for (j in 1:ncol(test_vecs)) {
+  test_vecs[, j] <- test_vecs[, j] / vnorm(test_vecs[, j]) * 1.5
+}
+
+for (j in 1:ncol(test_vecs)) {
+  v <- test_vecs[, j]
+  Uv <- as.numeric(U %*% v)
+  draw_vector(v, col = "steelblue", lwd = 1.5)
+  draw_vector(Uv, col = "tomato", lwd = 1.5)
+}
+legend("topleft", c("原始向量", "旋转后"),
+       col = c("steelblue", "tomato"), lwd = 2, cex = 0.8)
+```
+
+**观察**：所有向量旋转了相同的角度，长度完全不变。正交矩阵保持了内积结构：长度不变，夹角不变。
+
+## 实验 3.3 —— 向量投影
+
+向量 $v$ 在方向 $u$ 上的投影为 $\hat{v} = \frac{\langle v, u \rangle}{\langle u, u \rangle} u$，残差 $z = v - \hat{v}$ 与 $u$ 正交。
+
+```{r}
+#| label: exp-3-3
+#| fig-width: 6
+#| fig-height: 6
+
+v <- c(3, 2)
+u <- c(4, 1)
+
+# 投影
+c_proj <- sum(v * u) / sum(u * u)
+v_hat <- c_proj * u
+z <- v - v_hat
+
+cat("v =", v, "\n")
+cat("u =", u, "\n")
+cat("投影系数 c =", round(c_proj, 4), "\n")
+cat("投影 v̂ =", round(v_hat, 4), "\n")
+cat("残差 z =", round(z, 4), "\n")
+cat("验证正交：<z, u> =", round(sum(z * u), 10), "\n")
+
+plot(NULL, xlim = c(-1, 5), ylim = c(-1, 3.5), asp = 1,
+     main = "向量投影", xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray85")
+# 投影方向线
+abline(0, u[2]/u[1], col = "gray70", lty = 2)
+draw_vector(u, col = "darkorange", lwd = 2, label = "u")
+draw_vector(v, col = "steelblue", lwd = 3, label = "v")
+draw_vector(v_hat, col = "red", lwd = 3, label = expression(hat(v)))
+# 残差
+arrows(v_hat[1], v_hat[2], v[1], v[2], col = "darkgreen", lwd = 2,
+       length = 0.08, lty = 2)
+text((v[1] + v_hat[1])/2 + 0.2, (v[2] + v_hat[2])/2, "z", col = "darkgreen", font = 2)
+# 直角标记
+sq_size <- 0.15
+sq_dir <- z / vnorm(z) * sq_size
+sq_perp <- v_hat / vnorm(v_hat) * sq_size
+lines(v_hat[1] + c(sq_dir[1], sq_dir[1] + sq_perp[1], sq_perp[1]),
+      v_hat[2] + c(sq_dir[2], sq_dir[2] + sq_perp[2], sq_perp[2]),
+      col = "darkgreen")
+```
+
+## 实验 3.4 —— Gram-Schmidt 正交化
+
+从任意线性无关的向量组出发，Gram-Schmidt 过程逐步构造出正交（规范正交）基。
+
+```{r}
+#| label: exp-3-4
+#| fig-width: 10
+#| fig-height: 5
+
+# 原始基（非正交）
+v1 <- c(3, 1)
+v2 <- c(2, 2)
+
+# Gram-Schmidt 第一步：u1 = v1
+u1 <- v1
+
+# 第二步：u2 = v2 - proj_{u1}(v2)
+proj_coeff <- sum(v2 * u1) / sum(u1 * u1)
+u2 <- v2 - proj_coeff * u1
+
+# 归一化
+w1 <- u1 / vnorm(u1)
+w2 <- u2 / vnorm(u2)
+
+cat("原始基：v1 =", v1, ", v2 =", v2, "\n")
+cat("正交基：u1 =", round(u1, 4), ", u2 =", round(u2, 4), "\n")
+cat("验证正交：<u1, u2> =", round(sum(u1 * u2), 10), "\n")
+cat("规范正交基：w1 =", round(w1, 4), ", w2 =", round(w2, 4), "\n")
+cat("验证：<w1,w1>=", round(sum(w1*w1), 4),
+    ", <w2,w2>=", round(sum(w2*w2), 4),
+    ", <w1,w2>=", round(sum(w1*w2), 10), "\n")
+
+par(mfrow = c(1, 2), pty = "s", mar = c(4, 4, 4, 1))
+
+# 原始基
+plot(NULL, xlim = c(-1, 4), ylim = c(-1, 3), asp = 1,
+     main = "原始基（非正交）", xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray80")
+draw_vector(v1, col = "steelblue", lwd = 3, label = "v1")
+draw_vector(v2, col = "tomato", lwd = 3, label = "v2")
+
+# 正交化后
+plot(NULL, xlim = c(-1, 4), ylim = c(-1, 3), asp = 1,
+     main = "Gram-Schmidt 正交化后", xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray80")
+draw_vector(u1, col = "steelblue", lwd = 3, label = "u1")
+draw_vector(u2, col = "tomato", lwd = 3, label = "u2")
+# 显示投影过程
+draw_vector(v2, col = "gray60", lwd = 1, label = "v2(原)")
+arrows(proj_coeff * u1[1], proj_coeff * u1[2], v2[1], v2[2],
+       col = "darkgreen", lwd = 1.5, lty = 2, length = 0.08)
+```
+
+## 实验 3.5 —— 最小二乘法
+
+当方程组 $Ax = b$ 无精确解时，最小二乘找到使 $\|Ax - b\|$ 最小的 $\hat{x} = (A^T A)^{-1} A^T b$。
+
+```{r}
+#| label: exp-3-5
+#| fig-width: 7
+#| fig-height: 6
+
+# 生成带噪声的数据：y ≈ 2 + 3x
+set.seed(42)
+n <- 30
+x_data <- runif(n, 0, 5)
+y_data <- 2 + 3 * x_data + rnorm(n, sd = 2)
+
+# 构造设计矩阵（含截距列）
+A <- cbind(1, x_data)
+
+# 最小二乘公式
+beta_hat <- solve(t(A) %*% A) %*% t(A) %*% y_data
+cat("最小二乘估计：β̂ =", round(beta_hat, 4), "\n")
+cat("（截距 ≈", round(beta_hat[1], 2), "，斜率 ≈", round(beta_hat[2], 2), "）\n")
+
+# 拟合值和残差
+y_hat <- A %*% beta_hat
+residuals <- y_data - y_hat
+cat("残差平方和 ||Ax̂ - b||² =", round(sum(residuals^2), 4), "\n")
+
+# 验证：残差与列空间正交
+cat("验证残差正交于 A 的列：\n")
+cat("  A^T · 残差 =", round(as.numeric(t(A) %*% residuals), 10), "\n")
+
+# 与 R 内置函数对比
+fit <- lm(y_data ~ x_data)
+cat("\nlm() 结果：截距 =", round(coef(fit)[1], 4),
+    "，斜率 =", round(coef(fit)[2], 4), "\n")
+
+# 可视化
+plot(x_data, y_data, pch = 16, col = "steelblue",
+     xlab = "x", ylab = "y", main = "最小二乘拟合")
+abline(beta_hat[1], beta_hat[2], col = "tomato", lwd = 3)
+segments(x_data, y_data, x_data, y_hat, col = adjustcolor("gray50", 0.5), lty = 2)
+legend("topleft",
+       c("数据点", paste0("拟合线: y = ", round(beta_hat[1],1), " + ",
+                         round(beta_hat[2],1), "x"), "残差"),
+       pch = c(16, NA, NA), lty = c(NA, 1, 2),
+       col = c("steelblue", "tomato", "gray50"), lwd = c(NA, 3, 1), cex = 0.8)
+```
+
+**理解**：最小二乘的几何本质是将 $b$ 投影到 $\text{Col}(A)$ 上，投影 $\hat{b} = A\hat{x}$ 是列空间中距离 $b$ 最近的点，残差 $b - \hat{b}$ 与列空间正交。
+
+## 实验 3.6 —— 正交对角化与谱分解
+
+对称矩阵 $A = P \Lambda P^T$ 可以展开为 $A = \sum_{i=1}^n \lambda_i p_i p_i^T$，每一项是一个在特征方向上的加权投影。
+
+```{r}
+#| label: exp-3-6
+#| fig-width: 10
+#| fig-height: 5
+
+A <- matrix(c(5, 2,
+              2, 2), nrow = 2, byrow = TRUE)
+cat("A =\n"); print(A)
+cat("A 是对称的：", all(A == t(A)), "\n\n")
+
+eig <- eigen(A)
+P <- eig$vectors
+Lambda <- diag(eig$values)
+
+# 验证正交对角化 A = P Λ P^T
+A_recon <- P %*% Lambda %*% t(P)
+cat("P Λ P^T =\n"); print(round(A_recon, 10))
+cat("\n验证 P 正交：P^T P =\n"); print(round(t(P) %*% P, 10))
+
+# 谱分解：A = λ1 p1 p1^T + λ2 p2 p2^T
+p1 <- P[, 1, drop = FALSE]
+p2 <- P[, 2, drop = FALSE]
+term1 <- eig$values[1] * (p1 %*% t(p1))
+term2 <- eig$values[2] * (p2 %*% t(p2))
+cat("\n谱分解：\n")
+cat("λ1·p1·p1^T =\n"); print(round(term1, 4))
+cat("λ2·p2·p2^T =\n"); print(round(term2, 4))
+cat("和 =\n"); print(round(term1 + term2, 10))
+
+# 可视化谱分解对向量的作用
+par(mfrow = c(1, 3), pty = "s", mar = c(4, 4, 4, 1))
+x <- c(1.5, 1)
+Ax <- A %*% x
+
+plot(NULL, xlim = c(-1, 8), ylim = c(-2, 6), asp = 1,
+     main = expression("A 的完整作用"), xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray80")
+draw_vector(x, col = "steelblue", lwd = 3, label = "x")
+draw_vector(as.numeric(Ax), col = "tomato", lwd = 3, label = "Ax")
+
+# 分解为两个分量
+comp1 <- as.numeric(term1 %*% x)
+comp2 <- as.numeric(term2 %*% x)
+
+plot(NULL, xlim = c(-1, 8), ylim = c(-2, 6), asp = 1,
+     main = expression(lambda[1] * p[1] * p[1]^T * x), xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray80")
+draw_vector(comp1, col = "darkgreen", lwd = 3, label = "分量1")
+draw_vector(as.numeric(P[, 1]) * 2, col = "gray50", lwd = 1)
+
+plot(NULL, xlim = c(-1, 8), ylim = c(-2, 6), asp = 1,
+     main = expression(lambda[2] * p[2] * p[2]^T * x), xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray80")
+draw_vector(comp2, col = "purple", lwd = 3, label = "分量2")
+draw_vector(as.numeric(P[, 2]) * 2, col = "gray50", lwd = 1)
+```
+
+**理解**：$Ax$ 等于先把 $x$ 投影到每个特征方向上，再按对应的特征值缩放，最后叠加——这就是谱分解的几何含义。
+
+# 第四章：二次型
+
+## 实验 4.1 —— 二次型的矩阵表示
+
+二次型 $Q(x) = x^T A x$ 将向量映射为标量。它衡量了向量 $x$ 与变换后向量 $Ax$ 的"同向程度"。
+
+```{r}
+#| label: exp-4-1
+
+# f(x,y) = 5x^2 + 4xy + 2y^2
+# 对称矩阵形式：交叉项 4xy 拆为 2·2·xy
+A <- matrix(c(5, 2,
+              2, 2), nrow = 2, byrow = TRUE)
+
+x <- c(1, 2)
+
+# 方法 1：直接计算
+Q_direct <- 5 * x[1]^2 + 4 * x[1] * x[2] + 2 * x[2]^2
+
+# 方法 2：矩阵形式 x^T A x
+Q_matrix <- t(x) %*% A %*% x
+
+cat("f(1, 2) = 5(1)² + 4(1)(2) + 2(2)² =", Q_direct, "\n")
+cat("x^T A x =", as.numeric(Q_matrix), "\n")
+cat("A 是对称的：", all(A == t(A)), "\n")
+
+# 二次型的符号与夹角
+Ax <- A %*% x
+cos_angle <- sum(x * Ax) / (vnorm(x) * vnorm(as.numeric(Ax)))
+angle_deg <- acos(cos_angle) * 180 / pi
+cat("\n几何解读：\n")
+cat("x 与 Ax 的夹角 =", round(angle_deg, 2), "°\n")
+cat("Q(x) > 0，说明 x 和 Ax 夹角是锐角（同向趋势）\n")
+```
+
+## 实验 4.2 —— 二次型曲面可视化
+
+不同类型的对称矩阵产生不同形状的二次曲面。特征值的正负决定了曲面的类型。
+
+```{r}
+#| label: exp-4-2
+#| fig-width: 10
+#| fig-height: 10
+
+# 定义四种典型二次型
+cases <- list(
+  list(A = matrix(c(3, 0, 0, 7), 2), title = "正定：椭圆抛物面\nλ=3,7 (均>0)"),
+  list(A = matrix(c(-3, 0, 0, -7), 2), title = "负定：倒椭圆抛物面\nλ=-3,-7 (均<0)"),
+  list(A = matrix(c(3, 0, 0, 0), 2), title = "半正定：圆柱抛物面\nλ=3,0"),
+  list(A = matrix(c(3, 0, 0, -7), 2), title = "不定：双曲抛物面(鞍面)\nλ=3,-7")
+)
+
+x_seq <- seq(-2, 2, length.out = 60)
+y_seq <- seq(-2, 2, length.out = 60)
+
+par(mfrow = c(2, 2), mar = c(1, 1, 3, 1))
+for (cs in cases) {
+  A <- cs$A
+  z <- outer(x_seq, y_seq, function(x, y) {
+    A[1,1]*x^2 + (A[1,2]+A[2,1])*x*y + A[2,2]*y^2
+  })
+  
+  col_palette <- hcl.colors(50, "YlOrRd", rev = TRUE)
+  z_facet <- z[-1, -1] + z[-1, -ncol(z)] + z[-nrow(z), -1] + z[-nrow(z), -ncol(z)]
+  facet_col <- col_palette[cut(z_facet, 50, labels = FALSE)]
+  
+  persp(x_seq, y_seq, z, theta = 30, phi = 25, col = facet_col,
+        border = NA, shade = 0.4,
+        xlab = "x1", ylab = "x2", zlab = "Q(x)",
+        main = cs$title, cex.main = 0.9)
+}
+```
+
+**观察**：正定矩阵产生碗形（有全局最小值）；负定产生倒碗（全局最大值）；不定产生鞍面（既无最小也无最大）。特征值的符号决定了曲面沿各主轴的弯曲方向。
+
+## 实验 4.3 —— 正定性判定
+
+判定二次型正定性的关键准则：所有特征值为正 $\Rightarrow$ 正定。
+
+```{r}
+#| label: exp-4-3
+
+test_matrices <- list(
+  "矩阵1" = matrix(c(4, 1, 1, 3), 2, byrow = TRUE),
+  "矩阵2" = matrix(c(-2, 0, 0, -5), 2, byrow = TRUE),
+  "矩阵3" = matrix(c(1, 2, 2, 1), 2, byrow = TRUE),
+  "矩阵4" = matrix(c(3, 0, 0, 0), 2, byrow = TRUE)
+)
+
+for (nm in names(test_matrices)) {
+  A <- test_matrices[[nm]]
+  eigs <- eigen(A)$values
+  
+  if (all(eigs > 0)) {
+    type <- "正定"
+  } else if (all(eigs >= 0)) {
+    type <- "半正定"
+  } else if (all(eigs < 0)) {
+    type <- "负定"
+  } else if (all(eigs <= 0)) {
+    type <- "半负定"
+  } else {
+    type <- "不定"
+  }
+  
+  cat(sprintf("%s: 特征值 = (%.2f, %.2f) → %s\n", nm, eigs[1], eigs[2], type))
+}
+```
+
+## 实验 4.4 —— 主轴定理：消除交叉项
+
+通过正交变换 $y = P^T x$，二次型中的交叉项消失：$x^T A x = y^T \Lambda y = \sum \lambda_i y_i^2$。
+
+```{r}
+#| label: exp-4-4
+#| fig-width: 10
+#| fig-height: 5
+
+# 笔记中的例子
+A <- matrix(c(5, 2,
+              2, 2), nrow = 2, byrow = TRUE)
+
+eig <- eigen(A)
+P <- eig$vectors
+lambda <- eig$values
+
+cat("A =\n"); print(A)
+cat("\n特征值：λ1 =", round(lambda[1], 4), ", λ2 =", round(lambda[2], 4), "\n")
+cat("特征向量矩阵 P =\n"); print(round(P, 4))
+
+# 验证：取 x = (1, 2)
+x <- c(1, 2)
+y <- t(P) %*% x   # 新坐标
+
+Q_original <- as.numeric(t(x) %*% A %*% x)
+Q_new <- as.numeric(lambda[1] * y[1]^2 + lambda[2] * y[2]^2)
+
+cat("\nx = (", x[1], ",", x[2], ")\n")
+cat("y = P^T x = (", round(y[1], 4), ",", round(y[2], 4), ")\n")
+cat("原始二次型：5x1² + 4x1x2 + 2x2² =", Q_original, "\n")
+cat("变换后二次型：", round(lambda[1], 2), "y1² +", round(lambda[2], 2), "y2² =",
+    round(Q_new, 4), "\n")
+cat("值相等：", all.equal(Q_original, Q_new), "\n")
+
+# 可视化等高线
+par(mfrow = c(1, 2), pty = "s", mar = c(4, 4, 4, 1))
+
+x1_seq <- seq(-3, 3, length.out = 100)
+x2_seq <- seq(-3, 3, length.out = 100)
+
+# 原始坐标下的等高线（有交叉项，椭圆倾斜）
+z_orig <- outer(x1_seq, x2_seq, function(x1, x2) 5*x1^2 + 4*x1*x2 + 2*x2^2)
+contour(x1_seq, x2_seq, z_orig, nlevels = 15, col = "steelblue",
+        main = expression("原始：5x"[1]^2*" + 4x"[1]*"x"[2]*" + 2x"[2]^2),
+        xlab = expression(x[1]), ylab = expression(x[2]), asp = 1)
+# 画特征方向
+for (i in 1:2) {
+  v <- P[, i]
+  segments(-3*v[1], -3*v[2], 3*v[1], 3*v[2], col = "red", lwd = 2, lty = 2)
+}
+legend("topright", paste0("λ", 1:2, "=", round(lambda, 1)),
+       col = "red", lty = 2, lwd = 2, cex = 0.7)
+
+# 新坐标下的等高线（无交叉项，椭圆对齐坐标轴）
+z_new <- outer(x1_seq, x2_seq, function(y1, y2) lambda[1]*y1^2 + lambda[2]*y2^2)
+contour(x1_seq, x2_seq, z_new, nlevels = 15, col = "tomato",
+        main = bquote("变换后："~.(round(lambda[1],1))*y[1]^2 + .(round(lambda[2],1))*y[2]^2),
+        xlab = expression(y[1]), ylab = expression(y[2]), asp = 1)
+abline(h = 0, v = 0, col = "red", lwd = 1, lty = 2)
+```
+
+**核心理解**：正交变换 $y = P^T x$ 将坐标轴旋转到特征向量方向。在新坐标下，椭圆的轴与坐标轴对齐，交叉项消失。函数值不变（$Q(x) = Q(y)$），变化的只是观察视角。
+
+# 第五章：奇异值分解
+
+## 实验 5.1 —— R 中的 SVD 计算
+
+任意矩阵 $A = U \Sigma V^T$，$U$ 和 $V$ 正交，$\Sigma$ 对角。
+
+```{r}
+#| label: exp-5-1
+
+# 笔记中的例子
+A <- matrix(c(1, 0, 1,
+              0, 1, 1), nrow = 2, byrow = TRUE)
+
+cat("A =\n"); print(A)
+cat("A 的维度:", nrow(A), "×", ncol(A), "\n")
+cat("A 的秩:", qr(A)$rank, "\n\n")
+
+s <- svd(A)
+cat("奇异值 σ:", round(s$d, 4), "\n\n")
+
+# R 的 svd() 返回简化形式：
+#   U: m × min(m,n)    即 2×2
+#   d: min(m,n) 个奇异值 即 长度 2
+#   V: n × min(m,n)    即 3×2
+cat("U (", nrow(s$u), "×", ncol(s$u), ") =\n"); print(round(s$u, 4))
+cat("\nV (", nrow(s$v), "×", ncol(s$v), ") =\n"); print(round(s$v, 4))
+
+# 用简化形式重构：A = U diag(d) V^T
+#   (2×2) %*% (2×2) %*% (2×3) = (2×3) ✓
+A_recon <- s$u %*% diag(s$d) %*% t(s$v)
+cat("\nU diag(σ) V^T =\n"); print(round(A_recon, 10))
+cat("重构误差:", max(abs(A - A_recon)), "\n")
+
+# 如果想看完整的 Σ 矩阵（m×n = 2×3）的样子：
+Sigma_full <- matrix(0, nrow(A), ncol(A))
+diag(Sigma_full) <- s$d
+cat("\n完整 Σ (2×3) =\n"); print(round(Sigma_full, 4))
+
+# 验证 U、V 的列正交
+cat("\nU^T U =\n"); print(round(t(s$u) %*% s$u, 10))
+cat("V^T V =\n"); print(round(t(s$v) %*% s$v, 10))
+```
+
+## 实验 5.2 —— 单位圆到椭圆：SVD 的几何
+
+矩阵 $A$ 将单位球变为椭球。奇异值是椭球半轴的长度，右奇异向量指向原空间中被拉伸最大/最小的方向，左奇异向量指向变换后椭球的主轴方向。
+
+```{r}
+#| label: exp-5-2
+#| fig-width: 10
+#| fig-height: 5
+
+A <- matrix(c(3, 1,
+              1, 2), nrow = 2, byrow = TRUE)
+s <- svd(A)
+
+circ <- unit_circle()
+ellip <- A %*% circ
+
+par(mfrow = c(1, 2), pty = "s", mar = c(4, 4, 4, 1))
+
+# 原空间：单位圆 + 右奇异向量
+plot(NULL, xlim = c(-4, 4), ylim = c(-4, 4), asp = 1,
+     main = "原空间：单位圆 + 右奇异向量 v",
+     xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray80")
+lines(circ[1, ], circ[2, ], col = "steelblue", lwd = 2)
+draw_vector(s$v[, 1], col = "darkgreen", lwd = 3, label = expression(v[1]))
+draw_vector(s$v[, 2], col = "purple", lwd = 3, label = expression(v[2]))
+
+# 变换后：椭圆 + 左奇异向量（乘以奇异值）
+plot(NULL, xlim = c(-5, 5), ylim = c(-5, 5), asp = 1,
+     main = "变换后：椭圆 + 左奇异向量 σ·u",
+     xlab = expression(y[1]), ylab = expression(y[2]))
+abline(h = 0, v = 0, col = "gray80")
+lines(ellip[1, ], ellip[2, ], col = "tomato", lwd = 2)
+draw_vector(s$d[1] * s$u[, 1], col = "darkgreen", lwd = 3,
+            label = bquote(sigma[1]*u[1]~"="~.(round(s$d[1], 2))))
+draw_vector(s$d[2] * s$u[, 2], col = "purple", lwd = 3,
+            label = bquote(sigma[2]*u[2]~"="~.(round(s$d[2], 2))))
+
+cat("奇异值：σ1 =", round(s$d[1], 4), ", σ2 =", round(s$d[2], 4), "\n")
+cat("σ1 是椭圆长轴长度，σ2 是短轴长度\n")
+cat("σ_max = max||Ax|| (||x||=1) =", round(s$d[1], 4), "\n")
+```
+
+**观察**：右奇异向量 $v_1$ 指向被 $A$ 拉伸最多的输入方向，变换后它变成了长轴 $\sigma_1 u_1$。
+
+## 实验 5.3 —— $A^T A$ 与奇异值的关系
+
+$\|Ax\|^2 = x^T(A^T A)x$ 是关于对称矩阵 $A^T A$ 的二次型。$A^T A$ 的特征值就是 $A$ 的奇异值的平方。
+
+```{r}
+#| label: exp-5-3
+
+A <- matrix(c(1, 0, 1,
+              0, 1, 1), nrow = 2, byrow = TRUE)
+
+# 计算 A^T A
+B <- t(A) %*% A
+cat("A^T A =\n"); print(B)
+cat("A^T A 是", nrow(B), "×", ncol(B), "的对称方阵\n")
+cat("对称性验证：", all(B == t(B)), "\n\n")
+
+# A^T A 的特征值
+eig_B <- eigen(B)
+cat("A^T A 的特征值：", round(eig_B$values, 4), "\n")
+cat("奇异值 = sqrt(特征值)：", round(sqrt(pmax(eig_B$values, 0)), 4), "\n")
+
+# 对比 SVD
+s <- svd(A)
+cat("SVD 得到的奇异值：", round(s$d, 4), "\n\n")
+
+# 验证右奇异向量 = A^T A 的特征向量
+cat("A^T A 的特征向量（可能差一个符号）：\n")
+print(round(eig_B$vectors, 4))
+cat("\nSVD 的 V 矩阵：\n")
+print(round(s$v, 4))
+
+# 可视化 ||Ax||^2 随方向变化
+theta <- seq(0, 2 * pi, length.out = 500)
+# 在 R^3 单位球面上取大圆上的点（用前两个坐标参数化）
+# 简化：在 v1-v2 平面内取单位向量
+V <- s$v
+norms_sq <- numeric(length(theta))
+for (k in seq_along(theta)) {
+  # 在 v1-v2 张成的平面上取方向
+  x_dir <- cos(theta[k]) * V[, 1] + sin(theta[k]) * V[, 2]
+  x_dir <- x_dir / vnorm(x_dir)
+  norms_sq[k] <- vnorm(A %*% x_dir)^2
+}
+
+plot(theta * 180 / pi, norms_sq, type = "l", lwd = 2, col = "tomato",
+     xlab = "方向角（度）", ylab = expression("||Ax||"^2),
+     main = expression("||Ax||² 随方向的变化"))
+abline(h = s$d[1]^2, col = "darkgreen", lty = 2)
+abline(h = s$d[2]^2, col = "purple", lty = 2)
+legend("topright", c(paste0("σ1² = ", round(s$d[1]^2, 2)),
+                     paste0("σ2² = ", round(s$d[2]^2, 2))),
+       col = c("darkgreen", "purple"), lty = 2, cex = 0.8)
+```
+
+## 实验 5.4 —— SVD 分解三步走：旋转-拉伸-旋转
+
+SVD 的几何含义是：$A = U \Sigma V^T$ 表示先旋转（$V^T$），再拉伸（$\Sigma$），最后再旋转（$U$）。
+
+```{r}
+#| label: exp-5-4
+#| fig-width: 10
+#| fig-height: 8
+
+A <- matrix(c(3, 1,
+              1, 2), nrow = 2, byrow = TRUE)
+s <- svd(A)
+
+circ <- unit_circle()
+
+# 三步变换
+step1 <- t(s$v) %*% circ     # V^T: 旋转
+step2 <- diag(s$d) %*% step1  # Σ: 拉伸
+step3 <- s$u %*% step2        # U: 旋转
+
+par(mfrow = c(2, 2), pty = "s", mar = c(4, 4, 4, 1))
+lim <- 5
+
+# 原始
+plot(circ[1,], circ[2,], type = "l", col = "steelblue", lwd = 2, asp = 1,
+     xlim = c(-lim, lim), ylim = c(-lim, lim),
+     main = "① 原始：单位圆", xlab = "", ylab = "")
+abline(h = 0, v = 0, col = "gray80")
+
+# V^T 旋转
+plot(step1[1,], step1[2,], type = "l", col = "darkorange", lwd = 2, asp = 1,
+     xlim = c(-lim, lim), ylim = c(-lim, lim),
+     main = expression("② V"^T*"旋转（仍是圆）"), xlab = "", ylab = "")
+abline(h = 0, v = 0, col = "gray80")
+
+# Σ 拉伸
+plot(step2[1,], step2[2,], type = "l", col = "darkgreen", lwd = 2, asp = 1,
+     xlim = c(-lim, lim), ylim = c(-lim, lim),
+     main = expression("③ Σ 拉伸（变成椭圆）"), xlab = "", ylab = "")
+abline(h = 0, v = 0, col = "gray80")
+# 标注轴长
+text(s$d[1] + 0.3, 0, bquote(sigma[1]==.(round(s$d[1], 2))), col = "darkgreen", cex = 0.8)
+text(0, s$d[2] + 0.3, bquote(sigma[2]==.(round(s$d[2], 2))), col = "darkgreen", cex = 0.8)
+
+# U 旋转
+plot(step3[1,], step3[2,], type = "l", col = "tomato", lwd = 2, asp = 1,
+     xlim = c(-lim, lim), ylim = c(-lim, lim),
+     main = expression("④ U 旋转（最终结果 = Ax）"), xlab = "", ylab = "")
+abline(h = 0, v = 0, col = "gray80")
+```
+
+**理解**：任何线性变换都可以分解为"旋转→拉伸→旋转"三步。$V^T$ 先把输入对齐到特征方向上，$\Sigma$ 沿各方向独立拉伸，$U$ 把结果旋转到输出空间的正确方向。
+
+## 实验 5.5 —— 降维矩阵与维度变换
+
+非方阵实现维度间的映射：$\mathbb{R}^n \to \mathbb{R}^m$。
+
+```{r}
+#| label: exp-5-5
+
+# 维度消除矩阵：R^3 -> R^2
+D_reduce <- matrix(c(1, 0, 0,
+                     0, 1, 0), nrow = 2, byrow = TRUE)
+x3 <- c(1, 2, 7)
+cat("维度消除：\n")
+cat("D =\n"); print(D_reduce)
+cat("x =", x3, "\n")
+cat("Dx =", D_reduce %*% x3, " (丢弃第三维)\n\n")
+
+# 维度增加矩阵：R^2 -> R^3
+D_expand <- matrix(c(1, 0,
+                     0, 1,
+                     0, 0), nrow = 3, byrow = TRUE)
+x2 <- c(3, 5)
+cat("维度增加：\n")
+cat("D =\n"); print(D_expand)
+cat("x =", x2, "\n")
+cat("Dx =", D_expand %*% x2, " (第三维补零)\n\n")
+
+# SVD 中非方阵的意义
+A <- matrix(c(1, 0, 1,
+              0, 1, 1), nrow = 2, byrow = TRUE)  # 2×3：R^3 -> R^2
+s <- svd(A)
+cat("2×3 矩阵的 SVD 维度：\n")
+cat("  U:", nrow(s$u), "×", ncol(s$u), "\n")
+cat("  Σ 对角元:", round(s$d, 4), " (在", nrow(A), "×", ncol(A), "矩阵中)\n")
+cat("  V:", nrow(s$v), "×", ncol(s$v), "\n")
+cat("  秩 r =", sum(s$d > 1e-10), "\n")
+```
+
+# 第六章：迹与范数
+
+## 实验 6.1 —— 迹的计算与性质
+
+迹 $\text{tr}(A) = \sum_{i} a_{ii}$ 是对角元素之和。迹有许多优美的性质，尤其是循环交换性 $\text{tr}(AB) = \text{tr}(BA)$。
+
+```{r}
+#| label: exp-6-1
+
+A <- matrix(c(1, 2, 3, 4, 5, 6, 7, 8, 9), 3, byrow = TRUE)
+B <- matrix(c(9, 8, 7, 6, 5, 4, 3, 2, 1), 3, byrow = TRUE)
+
+# 定义迹函数
+tr <- function(M) sum(diag(M))
+
+cat("A =\n"); print(A)
+cat("B =\n"); print(B)
+
+# 性质 1：tr(A) = tr(A^T)
+cat("\ntr(A) =", tr(A), "\n")
+cat("tr(A^T) =", tr(t(A)), "\n")
+
+# 性质 2：线性性
+c1 <- 2; c2 <- 3
+cat("\ntr(", c1, "A +", c2, "B) =", tr(c1 * A + c2 * B), "\n")
+cat(c1, "tr(A) +", c2, "tr(B) =", c1 * tr(A) + c2 * tr(B), "\n")
+
+# 性质 3：tr(AB) = tr(BA)
+cat("\ntr(AB) =", tr(A %*% B), "\n")
+cat("tr(BA) =", tr(B %*% A), "\n")
+
+# 迹与特征值的关系
+eig_A <- eigen(A)$values
+cat("\nA 的特征值之和 =", round(sum(eig_A), 4), "\n")
+cat("tr(A) =", tr(A), "\n")
+cat("（迹等于特征值之和）\n")
+```
+
+## 实验 6.2 —— 常见矩阵范数
+
+不同范数衡量矩阵"大小"的不同方面：总能量（Frobenius）、最大拉伸（谱范数）、列/行极端程度。
+
+```{r}
+#| label: exp-6-2
+
+A <- matrix(c(1, -2, 3,
+              4,  5, -6), nrow = 2, byrow = TRUE)
+cat("A =\n"); print(A)
+
+# Frobenius 范数：所有元素平方和的平方根
+frob <- sqrt(sum(A^2))
+frob_trace <- sqrt(tr(t(A) %*% A))  # 也等于 sqrt(tr(A^T A))
+cat("\nFrobenius 范数：||A||_F =", round(frob, 4), "\n")
+cat("sqrt(tr(A^T A)) =", round(frob_trace, 4), "\n")
+
+# 谱范数：最大奇异值
+sigma_max <- max(svd(A)$d)
+cat("\n谱范数：||A||_2 = σ_max =", round(sigma_max, 4), "\n")
+
+# 列和范数：每列绝对值之和的最大值
+col_sums <- apply(abs(A), 2, sum)
+cat("\n列和范数：||A||_1 =", max(col_sums), "\n")
+cat("  各列绝对值之和：", col_sums, "\n")
+
+# 行和范数：每行绝对值之和的最大值
+row_sums <- apply(abs(A), 1, sum)
+cat("\n行和范数：||A||_∞ =", max(row_sums), "\n")
+cat("  各行绝对值之和：", row_sums, "\n")
+
+# 验证谱范数与 A^T A 的关系
+ATA <- t(A) %*% A
+lambda_max <- max(eigen(ATA)$values)
+cat("\n验证：sqrt(λ_max(A^T A)) =", round(sqrt(lambda_max), 4), "\n")
+```
+
+## 实验 6.3 —— 算子范数与瑞丽商
+
+算子范数 $\|A\| = \max_{\|x\|=1} \|Ax\|$ 衡量矩阵最大能把向量"放大"多少倍。瑞丽商 $R_A(x) = \|Ax\|/\|x\|$ 是这个放大倍数的方向依赖版本。
+
+```{r}
+#| label: exp-6-3
+#| fig-width: 7
+#| fig-height: 6
+
+A <- matrix(c(3, 1,
+              2, 2), nrow = 2, byrow = TRUE)
+
+# 对所有单位向量方向计算瑞丽商
+theta <- seq(0, 2 * pi, length.out = 1000)
+rayleigh <- numeric(length(theta))
+for (k in seq_along(theta)) {
+  x <- c(cos(theta[k]), sin(theta[k]))
+  rayleigh[k] <- vnorm(A %*% x)  # ||x|| = 1，所以瑞丽商就是 ||Ax||
+}
+
+# 算子范数 = 瑞丽商的最大值
+op_norm <- max(rayleigh)
+max_idx <- which.max(rayleigh)
+max_dir <- c(cos(theta[max_idx]), sin(theta[max_idx]))
+
+cat("算子范数 ||A||_2 =", round(op_norm, 4), "\n")
+cat("最大拉伸方向：(", round(max_dir, 4), ")\n")
+cat("最大奇异值 σ_max =", round(max(svd(A)$d), 4), "\n")
+
+# 笔记中的例子
+x_example <- c(1, 0)
+Ax_example <- A %*% x_example
+R_example <- vnorm(as.numeric(Ax_example)) / vnorm(x_example)
+cat("\n例：x = (1,0)^T, Ax = (", Ax_example, ")\n")
+cat("R_A(x) = ||Ax||/||x|| =", round(R_example, 4), "\n")
+
+# 可视化
+plot(theta * 180 / pi, rayleigh, type = "l", lwd = 2, col = "steelblue",
+     xlab = "方向角（度）", ylab = expression("||Ax|| / ||x||"),
+     main = "瑞丽商随方向的变化")
+abline(h = op_norm, col = "tomato", lwd = 2, lty = 2)
+abline(h = min(rayleigh), col = "darkgreen", lwd = 2, lty = 2)
+legend("topright",
+       c(paste0("算子范数 = σ_max = ", round(op_norm, 2)),
+         paste0("σ_min = ", round(min(rayleigh), 2))),
+       col = c("tomato", "darkgreen"), lty = 2, lwd = 2, cex = 0.8)
+```
+
+**观察**：瑞丽商的最大值恰好等于最大奇异值，最小值等于最小奇异值。算子范数告诉我们矩阵 $A$ 在"最危险方向"上的放大能力。
+
+# 第七章：综合实验
+
+## 实验 7.1 —— 从特征分解到 SVD 的桥梁
+
+将前面学到的所有概念串联起来：对称矩阵的特征分解就是它的 SVD。
+
+```{r}
+#| label: exp-7-1
+
+# 对称矩阵
+A_sym <- matrix(c(5, 2,
+                  2, 2), nrow = 2, byrow = TRUE)
+
+# 特征分解
+eig <- eigen(A_sym)
+
+# SVD
+s <- svd(A_sym)
+
+cat("=== 对称矩阵 ===\n")
+cat("A =\n"); print(A_sym)
+cat("\n--- 特征分解 ---\n")
+cat("特征值：", round(eig$values, 4), "\n")
+cat("特征向量 P：\n"); print(round(eig$vectors, 4))
+
+cat("\n--- SVD ---\n")
+cat("奇异值：", round(s$d, 4), "\n")
+cat("U：\n"); print(round(s$u, 4))
+cat("V：\n"); print(round(s$v, 4))
+
+cat("\n对称矩阵的特征值 = 奇异值（取绝对值后排序）\n")
+cat("对称矩阵的 U ≈ V ≈ P（可能差一个符号）\n")
+
+# 非对称矩阵则不同
+cat("\n=== 非对称矩阵 ===\n")
+A_nonsym <- matrix(c(1, 3, 0, 2), 2, byrow = TRUE)
+eig2 <- eigen(A_nonsym)
+s2 <- svd(A_nonsym)
+cat("特征值：", round(eig2$values, 4), "\n")
+cat("奇异值：", round(s2$d, 4), "\n")
+cat("非对称时，特征值 ≠ 奇异值\n")
+```
+
+## 实验 7.2 —— 综合可视化：一个矩阵的全面画像
+
+给定一个矩阵，综合展示它的变换效果、特征结构和 SVD 结构。
+
+```{r}
+#| label: exp-7-2
+#| fig-width: 10
+#| fig-height: 10
+
+A <- matrix(c(2, 1,
+              1, 3), nrow = 2, byrow = TRUE)
+
+eig <- eigen(A)
+s <- svd(A)
+circ <- unit_circle()
+ellip <- A %*% circ
+
+par(mfrow = c(2, 2), pty = "s", mar = c(4, 4, 4, 1))
+
+# (1) 变换效果
+plot(NULL, xlim = c(-4, 4), ylim = c(-4, 4), asp = 1,
+     main = "① 变换效果", xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray85")
+lines(circ[1,], circ[2,], col = "steelblue", lwd = 2)
+lines(ellip[1,], ellip[2,], col = "tomato", lwd = 2)
+legend("topleft", c("单位圆", "Ax"), col = c("steelblue", "tomato"), lwd = 2, cex = 0.7)
+
+# (2) 特征向量
+plot(NULL, xlim = c(-4, 4), ylim = c(-4, 4), asp = 1,
+     main = paste0("② 特征值: λ = ", paste(round(eig$values, 2), collapse = ", ")),
+     xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray85")
+lines(circ[1,], circ[2,], col = "gray70", lwd = 1)
+lines(ellip[1,], ellip[2,], col = "gray70", lwd = 1)
+for (i in 1:2) {
+  v <- eig$vectors[, i]
+  draw_vector(v, col = "darkgreen", lwd = 3)
+  draw_vector(eig$values[i] * v, col = "red", lwd = 3)
+}
+legend("topleft", c("特征向量 v", "λv"), col = c("darkgreen", "red"), lwd = 3, cex = 0.7)
+
+# (3) SVD 右奇异向量
+plot(NULL, xlim = c(-4, 4), ylim = c(-4, 4), asp = 1,
+     main = paste0("③ 奇异值: σ = ", paste(round(s$d, 2), collapse = ", ")),
+     xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray85")
+lines(circ[1,], circ[2,], col = "steelblue", lwd = 2)
+draw_vector(s$v[, 1], col = "darkgreen", lwd = 3, label = "v1")
+draw_vector(s$v[, 2], col = "purple", lwd = 3, label = "v2")
+
+# (4) SVD 左奇异向量（乘以奇异值）
+plot(NULL, xlim = c(-4, 4), ylim = c(-4, 4), asp = 1,
+     main = "④ 椭圆主轴 = σ·u",
+     xlab = expression(x[1]), ylab = expression(x[2]))
+abline(h = 0, v = 0, col = "gray85")
+lines(ellip[1,], ellip[2,], col = "tomato", lwd = 2)
+draw_vector(s$d[1] * s$u[, 1], col = "darkgreen", lwd = 3,
+            label = bquote(sigma[1]*u[1]))
+draw_vector(s$d[2] * s$u[, 2], col = "purple", lwd = 3,
+            label = bquote(sigma[2]*u[2]))
+```
+
+## 实验 7.3 —— 常用性质速查与验证
+
+用 R 快速验证线性代数中常用的恒等式和性质。
+
+```{r}
+#| label: exp-7-3
+
+A <- matrix(c(3, 1, 1, 4), 2, byrow = TRUE)  # 对称矩阵
+
+cat("===== 常用性质验证 =====\n\n")
+
+# 1. 对称矩阵
+cat("1. A 是对称的：", all(A == t(A)), "\n")
+
+# 2. 正交矩阵的逆
+U <- eigen(A)$vectors
+cat("2. 特征向量矩阵 U 正交：max|U^TU - I| =",
+    max(abs(t(U) %*% U - diag(2))), "\n")
+cat("   U^{-1} = U^T：", all.equal(solve(U), t(U)), "\n")
+
+# 3. 对称矩阵特征值是实数
+cat("3. 对称矩阵特征值都是实数：", all(Im(eigen(A)$values) == 0), "\n")
+
+# 4. 不同特征值的特征向量正交
+v1 <- eigen(A)$vectors[, 1]
+v2 <- eigen(A)$vectors[, 2]
+cat("4. 不同特征值的特征向量正交：<v1,v2> =", round(sum(v1 * v2), 10), "\n")
+
+# 5. det(A) = 特征值之积
+cat("5. det(A) =", det(A), ", 特征值之积 =", round(prod(eigen(A)$values), 4), "\n")
+
+# 6. tr(A) = 特征值之和
+cat("6. tr(A) =", sum(diag(A)), ", 特征值之和 =", round(sum(eigen(A)$values), 4), "\n")
+
+# 7. ||A||_2 = σ_max = sqrt(λ_max(A^TA))
+cat("7. 谱范数 = σ_max =", round(max(svd(A)$d), 4), "\n")
+cat("   sqrt(λ_max(A^TA)) =", round(sqrt(max(eigen(t(A)%*%A)$values)), 4), "\n")
+
+# 8. Frobenius 范数 = sqrt(Σ σ_i²)
+cat("8. ||A||_F =", round(sqrt(sum(A^2)), 4), "\n")
+cat("   sqrt(Σ σ²) =", round(sqrt(sum(svd(A)$d^2)), 4), "\n")
+```
+
+# 附录：R 线性代数速查表 {.unnumbered}
+
+```{r}
+#| label: cheatsheet
+#| eval: false
+
+# ===== R 线性代数核心函数 =====
+
+# 矩阵创建
+A <- matrix(c(1,2,3,4), nrow = 2, byrow = TRUE)  # 按行填充
+I <- diag(3)                                        # 3×3 单位矩阵
+D <- diag(c(1, 2, 3))                              # 对角矩阵
+
+# 基本运算
+A %*% B          # 矩阵乘法
+t(A)             # 转置
+solve(A)         # 求逆
+solve(A, b)      # 解方程 Ax = b
+det(A)           # 行列式
+sum(diag(A))     # 迹
+
+# 特征分解
+eig <- eigen(A)
+eig$values       # 特征值
+eig$vectors      # 特征向量（列向量）
+
+# 奇异值分解
+s <- svd(A)
+s$d              # 奇异值
+s$u              # 左奇异向量
+s$v              # 右奇异向量
+
+# QR 分解（与 Gram-Schmidt 相关）
+qr_result <- qr(A)
+Q <- qr.Q(qr_result)  # 正交矩阵
+R <- qr.R(qr_result)  # 上三角矩阵
+
+# 秩
+qr(A)$rank
+
+# 范数
+sqrt(sum(x^2))          # 向量 2-范数
+sqrt(sum(A^2))          # Frobenius 范数
+max(svd(A)$d)           # 谱范数
+max(colSums(abs(A)))    # 列和范数
+max(rowSums(abs(A)))    # 行和范数
+```
+````
+
+这个 QMD 文档包含了 **27 个 R 实验**，覆盖了你笔记中的所有核心概念，按照以下脉络循序渐进：
+
+1. **线性变换**（5 个实验）：从矩阵乘法的列组合本质出发，到网格变换的可视化、列空间、行列式面积缩放、主动/被动视角
+2. **特征值与特征向量**（6 个实验）：计算、可视化特征方向的"不变性"、特征空间、对角化、矩阵幂、特征基坐标
+3. **正交与投影**（6 个实验）：内积/范数/夹角、正交矩阵的旋转本质、向量投影、Gram-Schmidt、最小二乘法、谱分解
+4. **二次型**（4 个实验）：矩阵表示、3D 曲面可视化、正定性判定、主轴定理消除交叉项
+5. **奇异值分解**（5 个实验）：SVD 计算、圆→椭圆、$A^TA$ 与奇异值关系、旋转-拉伸-旋转三步分解、降维矩阵
+6. **迹与范数**（3 个实验）：迹的性质验证、四种范数计算对比、瑞丽商可视化
+7. **综合实验**（3 个实验）：特征分解与 SVD 的桥梁、矩阵全面画像、常用性质速查验证
+
