@@ -12,6 +12,7 @@ format:
   pdf:
     toc: true
     pdf-engine: xelatex
+    CJKmainfont: "SimSun"
     documentclass: ctexart
     geometry:
       - top=2cm

@@ -1,0 +1,1215 @@
+---
+title: "数值误差分析"
+subtitle: "从误差度量到条件数与稳定性"
+author: "数值分析笔记"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    theme: cosmo
+    number-sections: true
+---
+
+# 前置知识回顾
+
+在开始之前，确认你对以下概念有基本了解：
+
+- **向量范数**：$\|\mathbf{x}\|_1、\|\mathbf{x}\|_2、\|\mathbf{x}\|_\infty$
+- **矩阵范数**：Frobenius 范数、算子范数（谱范数、列和范数、行和范数）
+- **条件数的几何直觉**：圆碗 vs 峡谷
+- **泰勒展开**的基本思想
+
+如果对矩阵范数和条件数还不熟悉，建议先回顾上一章。本章将从"误差"这个最基本的概念出发，系统建立数值分析的理论框架。
+
+```{r}
+#| label: setup
+# 辅助函数：迹
+tr <- function(A) sum(diag(A))
+```
+
+# 误差度量：一切分析的起点
+
+计算机不是精确的——它用有限的位数存储数字，每一步运算都可能引入微小的偏差。要分析这些偏差的影响，我们首先需要一种**度量误差大小**的方法。
+
+## 标量的误差
+
+对于标量，误差的定义很直观。设真实值为 $v$，近似值为 $\tilde{v}$：
+
+**绝对误差**衡量"偏了多少"：
+
+$$
+\Delta_v = \tilde{v} - v
+$$
+
+**相对误差**衡量"偏了百分之几"：
+
+$$
+\delta_v = \frac{|\tilde{v} - v|}{|v|}
+$$
+
+相对误差的优点是无量纲，可以用百分比表示；缺点是真实值 $v$ 不能为零。
+
+两者之间有一个简洁的关系：
+
+$$
+\tilde{v} = v \cdot (1 + \delta_v')
+$$
+
+其中 $\delta_v' = (\tilde{v} - v)/v$ 是带符号的相对误差。
+
+```{r}
+#| label: scalar-error
+# 标量误差的例子
+v_true <- pi
+v_approx <- 3.14
+
+# 注意：用近似值 减去 真实值，不要反了
+abs_err <- v_approx - v_true
+# 注意：相对误差需要用范数，对于标量类型，用绝对值
+rel_err <- abs(abs_err) / abs(v_true)
+
+cat("真实值:    ", v_true, "\n")
+cat("近似值:    ", v_approx, "\n")
+cat("绝对误差:  ", abs_err, "\n")
+cat("相对误差:  ", rel_err, "=", round(rel_err * 100, 2), "%\n")
+```
+
+**练习**：用 $\tilde{\pi} = 22/7$ 作为 $\pi$ 的近似，计算绝对误差和相对误差。哪个近似更好，$3.14$ 还是 $22/7$？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+v_approx2 <- 22 / 7
+abs_err2 <- v_approx2 - pi
+rel_err2 <- abs(abs_err2) / pi
+
+cat("22/7 的绝对误差:", abs_err2, "\n")
+cat("22/7 的相对误差:", rel_err2, "=", round(rel_err2 * 100, 4), "%\n")
+cat("3.14 的相对误差:", rel_err, "=", round(rel_err * 100, 4), "%\n")
+cat("\n结论: 22/7 的相对误差更小，是更好的近似\n")
+```
+
+## 向量和矩阵的误差
+
+标量的概念自然推广到向量和矩阵——只需把绝对值替换成范数。
+
+设 $V$ 是带有范数 $\|\cdot\|$ 的向量空间，$\tilde{\mathbf{v}}$ 是 $\mathbf{v}$ 的近似，则：
+
+**绝对误差**（是一个向量/矩阵）：
+
+$$
+\Delta_{\mathbf{v}} = \tilde{\mathbf{v}} - \mathbf{v}
+$$
+
+**相对误差**（是一个标量）：
+
+$$
+\delta_{\mathbf{v}} = \frac{\|\tilde{\mathbf{v}} - \mathbf{v}\|}{\|\mathbf{v}\|} = \frac{\|\Delta_{\mathbf{v}}\|}{\|\mathbf{v}\|}
+$$
+
+若 $\|\Delta_{\mathbf{v}}\| \leq \varepsilon$ 或 $\delta_{\mathbf{v}} \leq \varepsilon$，则称 $\varepsilon$ 为**绝对误差界**或**相对误差界**。
+
+```{r}
+#| label: vector-error
+# PPT 上的例子
+v <- c(3, 4)
+v_tilde <- c(3.2, 4.3)
+
+# 绝对误差向量
+delta_v <- v_tilde - v
+cat("绝对误差向量 Δv:", delta_v, "\n")
+
+# 绝对误差的范数（用欧几里得范数)
+# 向量类型，欧几里得范数就是2范数
+# 用向量的2-范数定义计算
+abs_err_norm <- sqrt(sum(delta_v^2))
+# 直接用函数计算
+# norm(delta_v,"2")
+cat("||Δv||_2 =", abs_err_norm, "\n")
+
+# 相对误差
+rel_err_v <- abs_err_norm / sqrt(sum(v^2))
+# rel_err_v <- abs_err_norm / norm(v,"2"))
+cat("相对误差 δ_v =", round(rel_err_v, 4), "=", round(rel_err_v * 100, 2), "%\n")
+
+# 验证误差界：ε = 0.1 是否为相对误差界？
+cat("\nδ_v =", round(rel_err_v, 4), "< 0.1 ?", rel_err_v < 0.1, "\n")
+cat("→ ε = 0.1 是一个有效的相对误差界\n")
+```
+
+## 误差界引理
+
+相对误差不仅告诉我们"偏了多少"，还能给出近似值范数的上下界。这个引理在后续分析中非常有用。
+
+**引理**：若 $\delta_{\mathbf{z}} = \|\tilde{\mathbf{z}} - \mathbf{z}\| / \|\mathbf{z}\|$，则
+
+$$
+\|\mathbf{z}\|(1 - \delta_{\mathbf{z}}) \leq \|\tilde{\mathbf{z}}\| \leq \|\mathbf{z}\|(1 + \delta_{\mathbf{z}})
+$$
+
+**证明思路**：由逆三角不等式 $\big|\|\tilde{\mathbf{z}}\| - \|\mathbf{z}\|\big| \leq \|\tilde{\mathbf{z}} - \mathbf{z}\| = \delta_{\mathbf{z}}\|\mathbf{z}\|$，展开绝对值即得。
+
+```{r}
+#| label: error-bound-lemma
+# 用上面的例子验证引理
+z <- v
+z_tilde <- v_tilde
+delta_z <- rel_err_v
+
+norm_z <- sqrt(sum(z^2))
+norm_z_tilde <- sqrt(sum(z_tilde^2))
+
+lower <- norm_z * (1 - delta_z)
+upper <- norm_z * (1 + delta_z)
+
+cat("||z|| =", norm_z, "\n")
+cat("||z̃|| =", round(norm_z_tilde, 4), "\n")
+cat("下界: ||z||(1-δ) =", round(lower, 4), "\n")
+cat("上界: ||z||(1+δ) =", round(upper, 4), "\n")
+cat("\n验证:", round(lower, 4), "≤", round(norm_z_tilde, 4), "≤", round(upper, 4), "✓\n")
+```
+
+**练习**：对矩阵也可以用同样的引理。设 $\mathbf{A} = \begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}$，$\tilde{\mathbf{A}} = \begin{pmatrix} 1.01 & 2.02 \\ 2.99 & 3.98 \end{pmatrix}$，用 Frobenius 范数计算相对误差并验证引理。
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+A_ex <- matrix(c(1, 2, 3, 4), 2, byrow = TRUE)
+A_tilde <- matrix(c(1.01, 2.02, 2.99, 3.98), 2, byrow = TRUE)
+
+delta_A <- A_tilde - A_ex
+rel_err_A <- norm(delta_A, "F") / norm(A_ex, "F")
+cat("相对误差 δ_A =", round(rel_err_A, 6), "\n")
+
+lower_A <- norm(A_ex, "F") * (1 - rel_err_A)
+upper_A <- norm(A_ex, "F") * (1 + rel_err_A)
+cat("下界:", round(lower_A, 4), "≤ ||Ã||_F =", round(norm(A_tilde, "F"), 4),
+    "≤ 上界:", round(upper_A, 4), "✓\n")
+```
+
+# 误差分解：误差从哪里来？
+
+现在我们知道了如何度量误差，接下来的关键问题是：**计算结果中的误差到底从哪里来？**
+
+## 计算的一般框架
+
+设 $f$ 是我们想要计算的数学函数（"问题"），$\tilde{f}$ 是计算机上的近似算法。理想输入是 $\mathbf{x}$，但实际拿到的是有误差的 $\tilde{\mathbf{x}}$：
+
+$$
+\text{理想} \quad \mathbf{x} \xrightarrow{f} f(\mathbf{x}) \qquad \text{vs} \qquad \text{实际} \quad \tilde{\mathbf{x}} \xrightarrow{\tilde{f}} \tilde{f}(\tilde{\mathbf{x}})
+$$
+
+我们想要 $f(\mathbf{x})$，但得到的是 $\tilde{f}(\tilde{\mathbf{x}})$。差距有多大？
+
+## 分解公式
+
+总误差可以精确分解为两部分：
+
+$$
+\underbrace{\tilde{f}(\tilde{\mathbf{x}}) - f(\mathbf{x})}_{\text{总误差}} = \underbrace{\tilde{f}(\tilde{\mathbf{x}}) - f(\tilde{\mathbf{x}})}_{\text{算法误差}} + \underbrace{f(\tilde{\mathbf{x}}) - f(\mathbf{x})}_{\text{输入传播误差}}
+$$
+
+中间巧妙地插入了 $f(\tilde{\mathbf{x}})$——用**精确函数**算**带误差的输入**，作为两部分的桥梁。
+
+**算法误差**：即使输入没问题，算法本身（舍入、截断、近似）也会引入误差。这是算法的质量问题，我们可以通过设计更好的算法来控制。
+
+**输入传播误差**：即使算法完美（用精确算术 $f$），输入本身的误差也会传播到输出。这是问题本身的性质，与算法无关。
+
+```{r}
+#| label: error-decomposition
+# PPT 上的例子：计算 e^π
+# 问题 f(x) = e^x，真实输入 x = π
+# 算法 f̃(x) = 1 + x + x²/2（泰勒截断到二阶）
+# 实际输入 x̃ = 3（对 π 的近似）
+
+f <- function(x) exp(x)                       # 精确函数
+f_tilde <- function(x) 1 + x + x^2 / 2        # 近似算法
+
+x_true <- pi
+x_tilde <- 3
+
+# 总误差
+total_err <- f_tilde(x_tilde) - f(x_true)
+
+# 算法误差：f̃(x̃) - f(x̃)
+algo_err <- f_tilde(x_tilde) - f(x_tilde)
+
+# 输入传播误差：f(x̃) - f(x)
+input_err <- f(x_tilde) - f(x_true)
+
+cat("f(π) = e^π ≈", round(f(x_true), 3), "\n")
+cat("f̃(3)      ≈", round(f_tilde(x_tilde), 3), "\n\n")
+
+cat("总误差:       ", round(total_err, 3), "\n")
+cat("算法误差:     ", round(algo_err, 3), "(截断泰勒级数)\n")
+cat("输入传播误差: ", round(input_err, 3), "(用 3 代替 π)\n")
+cat("验证: 算法误差 + 传播误差 =", round(algo_err + input_err, 3), "\n")
+```
+
+关键观察：在这个例子中，算法误差（截断级数）比输入传播误差大得多。这意味着提高算法精度（多取几项泰勒展开）比提高输入精度更有价值。
+
+```{r}
+#| label: improve-algorithm
+# 增加泰勒展开的项数，看算法误差如何减小
+cat("泰勒展开阶数 vs 算法误差：\n")
+for (k in 2:10) {
+  f_taylor <- function(x, order = k) {
+    sum(x^(0:order) / factorial(0:order))
+  }
+  ae <- f_taylor(x_tilde, k) - f(x_tilde)
+  cat(sprintf("  n = %2d: 算法误差 = %12.6f\n", k, ae))
+}
+cat("\n输入传播误差始终为:", round(input_err, 6), "（与算法无关）\n")
+```
+
+**练习**：如果改用更好的输入 $\tilde{x} = 3.14$，但仍用二阶泰勒展开，总误差会怎么变化？哪个误差减小了？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+x_tilde2 <- 3.14
+total2 <- f_tilde(x_tilde2) - f(x_true)
+algo2 <- f_tilde(x_tilde2) - f(x_tilde2)
+input2 <- f(x_tilde2) - f(x_true)
+
+cat("用 x̃ = 3.14:\n")
+cat("  总误差:   ", round(total2, 3), "\n")
+cat("  算法误差: ", round(algo2, 3), "(变大了！因为 x 更大时截断误差更大)\n")
+cat("  传播误差: ", round(input2, 3), "(大幅减小)\n")
+```
+
+# 条件数：问题本身有多敏感？
+
+## 从直觉到定义
+
+上一节告诉我们，即使算法完美，输入误差也会传播到输出。但不同的问题，传播的程度天差地别：有些问题"宽容"（输入偏一点，输出偏一点），有些问题"苛刻"（输入偏一点，输出偏十万八千里）。
+
+**条件数**就是衡量这种"苛刻程度"的量。
+
+## 形式化定义
+
+设 $f: \mathbb{R}^n \to \mathbb{R}^m$ 是一个问题，输入为 $\mathbf{x}$。
+
+**绝对条件数**是满足以下不等式的最小常数 $\kappa_{\text{abs}}$：
+
+$$
+\|f(\tilde{\mathbf{x}}) - f(\mathbf{x})\| \leq \kappa_{\text{abs}} \|\tilde{\mathbf{x}} - \mathbf{x}\|, \quad \text{当 } \tilde{\mathbf{x}} \to \mathbf{x}
+$$
+
+**相对条件数**是满足以下不等式的最小常数 $\kappa_{\text{rel}}$：
+
+$$
+\frac{\|f(\tilde{\mathbf{x}}) - f(\mathbf{x})\|}{\|f(\mathbf{x})\|} \leq \kappa_{\text{rel}} \frac{\|\tilde{\mathbf{x}} - \mathbf{x}\|}{\|\mathbf{x}\|}, \quad \text{当 } \tilde{\mathbf{x}} \to \mathbf{x}
+$$
+
+换言之：**输出的相对误差 ≤ 条件数 × 输入的相对误差**。
+
+| 条件数 | 含义 | 比喻 |
+|--------|------|------|
+| $\kappa \leq 1$ | 良态 | 输入误差不会被放大 |
+| $\kappa \gg 1$ | 病态 | 输入微小误差导致输出巨大偏差 |
+| $\kappa = \infty$ | 不适定 | 问题在该点无法可靠求解 |
+
+## 标量函数的条件数
+
+对于可微函数 $f: \mathbb{R} \to \mathbb{R}$，条件数有显式公式。由泰勒展开：
+
+$$
+f(\tilde{x}) - f(x) \approx f'(x)(\tilde{x} - x)
+$$
+
+所以绝对条件数 $\kappa_{\text{abs}} = |f'(x)|$，相对条件数：
+
+$$
+\kappa_{\text{rel}} = |f'(x)| \cdot \frac{|x|}{|f(x)|}
+$$
+
+```{r}
+#| label: scalar-condition
+# 标量函数条件数的例子
+
+# 例1：f(x) = x^(-1)
+# f'(x) = -x^(-2)，κ_abs = |f'(x)| = x^(-2)
+# κ_rel = |f'(x)| · |x|/|f(x)| = x^(-2) · |x| / |x^(-1)| = 1
+# 求倒数的相对条件数恒为 1——这是一个良态问题！
+
+x_val <- 0.001
+cat("f(x) = 1/x\n")
+cat("κ_abs =", 1/x_val^2, "（绝对条件数很大）\n")
+cat("κ_rel = 1（相对条件数恒为 1）\n\n")
+
+# 例2：f(x) = sqrt(x)
+# f'(x) = 1/(2√x)，κ_rel = (1/(2√x)) · x / √x = 1/2
+cat("f(x) = √x\n")
+cat("κ_rel = 0.5（良态，误差还会缩小一半）\n\n")
+
+# 例3：f(x) = log(x)，当 x ≈ 1 时
+# f'(x) = 1/x，κ_rel = (1/x) · x / |log(x)| = 1/|log(x)|
+# 当 x → 1 时，log(x) → 0，κ_rel → ∞！
+x_near1 <- 1.001
+kappa_log <- 1 / abs(log(x_near1))
+cat("f(x) = log(x)，x =", x_near1, "\n")
+cat("κ_rel =", round(kappa_log, 1), "（病态！因为 log(1) = 0）\n")
+```
+
+**练习**：计算 $f(x) = e^x$ 在 $x = 10$ 处的相对条件数。解释为什么指数函数在大 $x$ 处是病态的。
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+x_exp <- 10
+# f'(x) = e^x，κ_rel = e^x · |x| / e^x = |x|
+kappa_exp <- abs(x_exp)
+cat("f(x) = e^x 在 x =", x_exp, "处：\n")
+cat("κ_rel = |x| =", kappa_exp, "\n")
+cat("含义：输入 1% 的误差 → 输出 10% 的误差\n")
+cat("x 越大，条件数越大，问题越病态\n")
+
+# 数值验证
+x_pert <- x_exp * (1 + 0.01)  # 输入加 1% 扰动
+output_rel_err <- abs(exp(x_pert) - exp(x_exp)) / exp(x_exp)
+cat("\n数值验证：输入相对扰动 1%，输出相对误差 =",
+    round(output_rel_err * 100, 2), "%\n")
+cat("放大倍数 ≈", round(output_rel_err / 0.01, 2), "≈ κ_rel\n")
+```
+
+## 灾难性抵消：一个经典的病态问题
+
+PPT 中给出了一个重要的例子：加法 $f(\mathbf{x}) = x_1 + x_2$。
+
+写成矩阵形式：$f(\mathbf{x}) = \mathbf{1}^\top \mathbf{x}$，其中 $\mathbf{1} = (1, 1)^\top$。
+
+绝对条件数：
+
+$$
+|f(\tilde{\mathbf{x}}) - f(\mathbf{x})| = |\mathbf{1}^\top(\tilde{\mathbf{x}} - \mathbf{x})| \leq \|\mathbf{1}\|_2 \|\tilde{\mathbf{x}} - \mathbf{x}\|_2 = \sqrt{2}\|\tilde{\mathbf{x}} - \mathbf{x}\|_2
+$$
+
+所以 $\kappa_{\text{abs}} \leq \sqrt{2}$——绝对条件数不大。
+
+但相对条件数：
+
+$$
+\kappa_{\text{rel}} = \kappa_{\text{abs}} \frac{\|\mathbf{x}\|_2}{|f(\mathbf{x})|} \leq \sqrt{2} \frac{\|\mathbf{x}\|_2}{|x_1 + x_2|}
+$$
+
+当 $x_1 \approx -x_2$ 时，分母 $|x_1 + x_2| \approx 0$，$\kappa_{\text{rel}} \to \infty$！
+
+这就是**灾难性抵消（catastrophic cancellation）**：两个大小相近但符号相反的数相加（实际上是相减），有效数字急剧丢失。
+
+```{r}
+#| label: catastrophic-cancellation
+# 灾难性抵消的演示
+cat("===== 灾难性抵消 =====\n\n")
+
+# 情况 1：良态——两个同号数相加
+x1_good <- c(1e8, 2e8)
+kappa_good <- sqrt(2) * sqrt(sum(x1_good^2)) / abs(sum(x1_good))
+cat("x = (1e8, 2e8), 和 =", sum(x1_good), "\n")
+cat("κ_rel ≤", round(kappa_good, 2), "（良态）\n\n")
+
+# 情况 2：病态——两个大小相近的数相减
+x1_bad <- c(1e8, -1e8 + 1)
+kappa_bad <- sqrt(2) * sqrt(sum(x1_bad^2)) / abs(sum(x1_bad))
+cat("x = (1e8, -1e8+1), 和 =", sum(x1_bad), "\n")
+cat("κ_rel ≤", round(kappa_bad, 2), "（病态！）\n\n")
+
+# 实际演示：有效数字丢失
+a <- 1234567890.1234
+b <- -1234567890.1230
+cat("a =", format(a, digits = 16), "\n")
+cat("b =", format(b, digits = 16), "\n")
+cat("a + b =", format(a + b, digits = 16), "\n")
+cat("真实值应该是 0.0004，但浮点精度可能丢失\n")
+
+# 更极端的例子
+a2 <- 1 + 1e-15
+b2 <- 1
+cat("\n(1 + 1e-15) - 1 =", format(a2 - b2, digits = 20), "\n")
+cat("真实值 = 1e-15\n")
+cat("相对误差 =", abs((a2 - b2) - 1e-15) / 1e-15, "\n")
+```
+
+```{r}
+#| label: cancellation-visual
+#| fig-width: 8
+#| fig-height: 5
+# 可视化：随着抵消程度增大，相对误差急剧上升
+eps_vec <- 10^seq(0, -15, length.out = 200)
+rel_errors <- numeric(length(eps_vec))
+
+for (i in seq_along(eps_vec)) {
+  a_val <- 1
+  b_val <- -(1 - eps_vec[i])   # a + b = eps_vec[i]
+  computed_sum <- a_val + b_val
+  true_sum <- eps_vec[i]
+  rel_errors[i] <- abs(computed_sum - true_sum) / abs(true_sum)
+}
+
+plot(eps_vec, rel_errors, type = "l", log = "xy",
+     xlab = "真实和 |x₁ + x₂|", ylab = "相对误差",
+     main = "灾难性抵消：和越小，相对误差越大",
+     col = "red", lwd = 2)
+abline(h = .Machine$double.eps, lty = 2, col = "grey50")
+text(1e-5, .Machine$double.eps * 5, "机器精度", col = "grey50", cex = 0.8)
+```
+
+## 矩阵问题的条件数
+
+PPT 中推导了求解 $\mathbf{A}^{-1}\mathbf{x} = \mathbf{y}$ 时（即已知 $\mathbf{x}$，求 $\mathbf{y} = \mathbf{A}^{-1}\mathbf{x}$）的条件数。
+
+设 $f(\mathbf{x}) = \mathbf{A}^{-1}\mathbf{x}$，则：
+
+$$
+\|f(\tilde{\mathbf{x}}) - f(\mathbf{x})\| = \|\mathbf{A}^{-1}(\tilde{\mathbf{x}} - \mathbf{x})\| \leq \|\mathbf{A}^{-1}\| \cdot \|\tilde{\mathbf{x}} - \mathbf{x}\|
+$$
+
+所以 $\kappa_{\text{abs}} = \|\mathbf{A}^{-1}\|$。
+
+对于相对条件数，经过推导（见上一章笔记的详细过程）：
+
+$$
+\kappa_{\text{rel}} \leq \|\mathbf{A}^{-1}\| \cdot \|\mathbf{A}\| = \kappa(\mathbf{A})
+$$
+
+这就是**矩阵的条件数**：
+
+$$
+\kappa(\mathbf{A}) = \|\mathbf{A}\| \cdot \|\mathbf{A}^{-1}\|
+$$
+
+使用谱范数（2-范数）时：
+
+$$
+\kappa_2(\mathbf{A}) = \frac{\sigma_{\max}(\mathbf{A})}{\sigma_{\min}(\mathbf{A})} = \frac{\sqrt{\lambda_{\max}(\mathbf{A}^\top\mathbf{A})}}{\sqrt{\lambda_{\min}(\mathbf{A}^\top\mathbf{A})}}
+$$
+
+```{r}
+#| label: matrix-condition
+# PPT 测验：对角矩阵的条件数
+A_diag <- diag(c(2, 5, 0.1))
+cat("A = diag(2, 5, 0.1)\n")
+cat("奇异值:", svd(A_diag)$d, "\n")
+cat("κ_2(A) = σ_max / σ_min =", max(svd(A_diag)$d), "/", min(svd(A_diag)$d),
+    "=", max(svd(A_diag)$d) / min(svd(A_diag)$d), "\n")
+cat("R 内置 kappa():", kappa(A_diag), "\n")
+```
+
+```{r}
+#| label: condition-demo
+#| fig-width: 9
+#| fig-height: 5
+# 条件数对求解 Ax = b 的影响：系统性实验
+set.seed(42)
+n <- 10
+
+# 用不同条件数构造矩阵
+U <- qr.Q(qr(matrix(rnorm(n^2), n)))
+cond_numbers <- c(1, 10, 100, 1000, 1e6, 1e12)
+
+x_true <- rep(1, n)
+perturbation <- rnorm(n, sd = 1e-10)
+
+results <- data.frame(
+  kappa = cond_numbers,
+  rel_err_x = numeric(length(cond_numbers)),
+  amplification = numeric(length(cond_numbers))
+)
+
+for (i in seq_along(cond_numbers)) {
+  kk <- cond_numbers[i]
+  # 构造条件数为 kk 的矩阵
+  sigmas <- exp(seq(log(1), log(kk), length.out = n))
+  sigmas <- sigmas / sigmas[1]  # 最小奇异值 = 1
+  A_test <- U %*% diag(sigmas) %*% t(U)
+
+  b_true <- A_test %*% x_true
+  x_pert <- solve(A_test, b_true + perturbation)
+
+  rel_input <- sqrt(sum(perturbation^2)) / sqrt(sum(b_true^2))
+  rel_output <- sqrt(sum((x_pert - x_true)^2)) / sqrt(sum(x_true^2))
+
+  results$rel_err_x[i] <- rel_output
+  results$amplification[i] <- rel_output / rel_input
+}
+
+cat("条件数 vs 误差放大\n")
+cat(sprintf("%-12s  %-15s  %-15s\n", "κ(A)", "||Δx||/||x||", "放大倍数"))
+cat(strrep("-", 45), "\n")
+for (i in seq_len(nrow(results))) {
+  cat(sprintf("%-12.0e  %-15.2e  %-15.1f\n",
+              results$kappa[i], results$rel_err_x[i], results$amplification[i]))
+}
+
+# 可视化
+plot(results$kappa, results$amplification, type = "b", log = "xy",
+     pch = 19, col = "steelblue", lwd = 2,
+     xlab = "条件数 κ(A)", ylab = "误差放大倍数",
+     main = "条件数越大，误差放大越严重")
+abline(0, 1, lty = 2, col = "grey50")
+text(1e4, 1e2, "放大 ≈ κ", col = "grey50", srt = 35)
+```
+
+**核心结论**：条件数 $\kappa$ 给出了输出相对误差对输入相对误差的**最大放大倍数**。条件数为 $10^k$ 意味着大约会丢失 $k$ 位有效数字。
+
+**练习**：双精度浮点数有约 16 位有效数字（$\epsilon_{\text{machine}} \approx 10^{-16}$）。如果 $\kappa(\mathbf{A}) = 10^{10}$，求解 $\mathbf{Ax} = \mathbf{b}$ 的结果大约能保证几位有效数字？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+cat("机器精度: ε ≈ 1e-16（输入的相对误差下界）\n")
+cat("条件数: κ = 1e10\n")
+cat("输出相对误差 ≤ κ × ε = 1e10 × 1e-16 = 1e-6\n")
+cat("→ 约 6 位有效数字\n\n")
+cat("丢失的有效数字数 ≈ log10(κ) =", log10(1e10), "\n")
+cat("保留的有效数字数 ≈ 16 -", log10(1e10), "=", 16 - log10(1e10), "\n")
+```
+
+# 稳定性：算法有多可靠？
+
+## 从条件到稳定
+
+上一节关注的是问题本身——"即使用精确算法，输入误差也会被放大"。
+
+现在我们关注算法本身——"即使输入完美，算法也会引入误差"。
+
+回忆误差分解：
+
+$$
+\underbrace{\tilde{f}(\tilde{\mathbf{x}}) - f(\mathbf{x})}_{\text{总误差}} = \underbrace{\tilde{f}(\tilde{\mathbf{x}}) - f(\tilde{\mathbf{x}})}_{\text{算法误差}} + \underbrace{f(\tilde{\mathbf{x}}) - f(\mathbf{x})}_{\text{输入传播误差}}
+$$
+
+如果**算法误差"小"**，我们说算法是**稳定的**。
+
+更精确地说，一个算法 $\tilde{f}$ 是**后向稳定的（backward stable）**，如果对任何输入 $\mathbf{x}$，算法的输出 $\tilde{f}(\mathbf{x})$ 等于某个"稍微扰动的输入"的精确解：
+
+$$
+\tilde{f}(\mathbf{x}) = f(\mathbf{x} + \Delta\mathbf{x}), \quad \frac{\|\Delta\mathbf{x}\|}{\|\mathbf{x}\|} = O(\epsilon_{\text{machine}})
+$$
+
+也就是说：**算法没有额外引入大误差，它只是精确求解了一个略有不同的问题**。
+
+## 样本方差：稳定 vs 不稳定
+
+PPT 中给出了一个经典的例子。计算样本方差：
+
+$$
+f(\mathbf{x}) = \frac{1}{n}\sum_{i=1}^n (x_i - \bar{x})^2
+$$
+
+有两种等价的数学公式：
+
+**算法 1（稳定）**：先减均值再平方
+
+$$
+\tilde{f}_1(\mathbf{x}) = \frac{1}{n}\sum_{i=1}^n (x_i - \bar{x})^2
+$$
+
+**算法 2（不稳定）**：用展开后的公式
+
+$$
+\tilde{f}_2(\mathbf{x}) = \frac{1}{n}\sum_{i=1}^n x_i^2 - \bar{x}^2
+$$
+
+数学上完全等价，但数值上天差地别！
+
+```{r}
+#| label: variance-stability
+# PPT 上的例子：方差的两种算法
+set.seed(5)
+x <- rnorm(10^3, mean = 0, sd = 1) + 10^10   # 均值很大，方差为 1
+
+# 算法 1：稳定（先减均值）
+var1 <- mean((x - mean(x))^2)
+
+# 算法 2：不稳定（展开公式）
+var2 <- mean(x^2) - mean(x)^2
+
+cat("真实方差 ≈ 1\n")
+cat("算法 1（稳定）:  ", var1, "\n")
+cat("算法 2（不稳定）:", var2, "\n\n")
+
+# 为什么？分析中间量
+a <- mean(x^2)
+b <- mean(x)^2
+cat("a = mean(x²)  =", format(a, digits = 20), "\n")
+cat("b = mean(x)²  =", format(b, digits = 20), "\n")
+cat("a - b          =", a - b, "\n")
+cat("\n两个 ≈ 10^20 的数相减，结果 ≈ 1 → 灾难性抵消！\n")
+```
+
+为什么算法 2 不稳定？PPT 给出了精确的分析。算法 2 的最后一步是 $h(a, b) = a - b$，其条件数为：
+
+$$
+\kappa_{\text{rel}}(h, (a, b)) = \frac{\sqrt{2}\sqrt{a^2 + b^2}}{|a - b|}
+$$
+
+当 $a \approx b$ 且两者都很大时，分母趋近于 0，条件数爆炸——这一步会放大之前所有的舍入误差。
+
+```{r}
+#| label: variance-condition
+# 计算算法 2 最后一步的条件数
+a_val <- mean(x^2)
+b_val <- mean(x)^2
+
+kappa_subtraction <- sqrt(2) * sqrt(a_val^2 + b_val^2) / abs(a_val - b_val)
+cat("减法步骤的 κ_rel ≈", format(kappa_subtraction, digits = 3), "\n")
+cat("这意味着之前的微小舍入误差被放大了约", 
+    format(kappa_subtraction, digits = 3, scientific = TRUE), "倍！\n")
+```
+
+**教训**：数学上等价的公式，数值上可能完全不同。选择算法时，必须考虑每一步的条件数。
+
+**练习**：试试 `mean = 0`（即 `x <- rnorm(10^3, mean = 0, sd = 1)`），此时两种算法的差别大吗？为什么？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+set.seed(5)
+x_small <- rnorm(10^3, mean = 0, sd = 1)
+
+var1_small <- mean((x_small - mean(x_small))^2)
+var2_small <- mean(x_small^2) - mean(x_small)^2
+
+cat("均值 ≈ 0 时：\n")
+cat("算法 1:", var1_small, "\n")
+cat("算法 2:", var2_small, "\n")
+cat("差异: ", abs(var1_small - var2_small), "\n\n")
+cat("因为 mean(x) ≈ 0，所以 a = mean(x²) ≈ 1，b = mean(x)² ≈ 0\n")
+cat("a 和 b 大小差很多，不存在灾难性抵消\n")
+```
+
+## 与机器学习的联系：SGD 的稳定性
+
+PPT 提到了随机梯度下降（SGD）作为稳定性概念的实际例子。训练神经网络时：
+
+| 概念 | 对应 SGD |
+|------|----------|
+| 问题 $f$ | 求损失函数 $L(\theta)$ 的最小值 |
+| 算法 $\tilde{f}$ | 有限精度的 SGD 迭代 |
+| 算法误差 | 舍入误差 + mini-batch 估计误差的累积 |
+
+学习率太大时，梯度估计中的误差会在每次迭代中被放大——这就是算法不稳定。
+
+```{r}
+#| label: sgd-stability
+#| fig-width: 10
+#| fig-height: 5
+# 模拟一维 SGD：稳定 vs 不稳定
+# 问题：最小化 f(θ) = θ²/2，最优解 θ* = 0
+# 梯度 f'(θ) = θ
+# 带噪声的梯度估计：∇̂ = θ + noise
+
+set.seed(42)
+n_iter <- 100
+
+sgd_sim <- function(lr, noise_sd = 0.1) {
+  theta <- 5  # 初始点
+  path <- numeric(n_iter + 1)
+  path[1] <- theta
+  for (k in seq_len(n_iter)) {
+    grad_noisy <- theta + rnorm(1, sd = noise_sd)  # 带噪声的梯度
+    theta <- theta - lr * grad_noisy
+    path[k + 1] <- theta
+  }
+  path
+}
+
+path_stable <- sgd_sim(lr = 0.05)
+path_unstable <- sgd_sim(lr = 1.5)
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+plot(0:n_iter, path_stable, type = "l", col = "steelblue", lwd = 2,
+     xlab = "迭代次数", ylab = "θ",
+     main = paste0("稳定 SGD（lr = 0.05）"),
+     ylim = range(path_stable))
+abline(h = 0, lty = 2, col = "red")
+
+plot(0:n_iter, path_unstable, type = "l", col = "tomato", lwd = 2,
+     xlab = "迭代次数", ylab = "θ",
+     main = paste0("不稳定 SGD（lr = 1.5）"),
+     ylim = range(path_unstable))
+abline(h = 0, lty = 2, col = "red")
+```
+
+实际中常用的稳定化技术正是为了控制算法误差：梯度裁剪（限制单步更新大小）、Batch Normalization（控制中间层的数值范围）、混合精度训练（在关键步骤使用高精度）。
+
+# 复合算法的稳定性
+
+## 核心定理
+
+大多数算法不是一步完成的，而是分步进行：$f = h \circ g$。PPT 给出了一个关键定理，告诉我们误差在子步骤间如何传播。
+
+**定理**：设 $f(\mathbf{x}) = h(g(\mathbf{x}))$，算法 $\tilde{f} = \tilde{h} \circ \tilde{g}$，则
+
+$$
+\frac{\|\tilde{f}(\mathbf{x}) - f(\mathbf{x})\|}{\|f(\mathbf{x})\|} \leq \frac{\|\tilde{h}(\tilde{\mathbf{y}}) - h(\tilde{\mathbf{y}})\|}{\|h(\mathbf{y})\|} + \kappa_{\text{rel}}(h, g(\mathbf{x})) \cdot \frac{\|\tilde{g}(\mathbf{x}) - g(\mathbf{x})\|}{\|g(\mathbf{x})\|}
+$$
+
+其中 $\mathbf{y} = g(\mathbf{x})$，$\tilde{\mathbf{y}} = \tilde{g}(\mathbf{x})$。
+
+**直观理解**：总的相对误差由两部分组成。第一项是 $\tilde{h}$ 本身的算法误差；第二项是 $\tilde{g}$ 的误差经过 $h$ 放大后的结果，放大倍数就是 $h$ 在 $g(\mathbf{x})$ 处的条件数。
+
+**关键推论**：如果 $h$ 的条件数很大，它会**放大前面 $\tilde{g}$ 的所有误差**。因此，**条件数差的步骤应该尽早执行**——放在最前面时，后面没有高条件数步骤来放大它的误差。
+
+```{r}
+#| label: composite-stability
+# 用方差的例子说明复合算法稳定性
+
+# 算法 2 分解为两步：
+# g(x) = (mean(x²), mean(x)²)   计算两个中间量
+# h(a, b) = a - b                做减法
+
+# 步骤 1 的误差很小（求均值和平方是稳定的）
+# 步骤 2 的条件数很大（灾难性抵消）
+# → 步骤 2 放大了步骤 1 的微小误差
+
+# 算法 1 不存在这个问题：先减均值，消除了大数相减
+
+# 模拟不同均值下两种算法的表现
+means <- 10^seq(0, 15, by = 1)
+errors <- matrix(NA, length(means), 2, dimnames = list(NULL, c("稳定", "不稳定")))
+
+set.seed(123)
+for (i in seq_along(means)) {
+  x_test <- rnorm(1000, mean = means[i], sd = 1)
+  true_var <- 1  # 理论方差
+
+  # 稳定算法
+  v1 <- mean((x_test - mean(x_test))^2)
+  errors[i, 1] <- abs(v1 - true_var) / true_var
+
+  # 不稳定算法
+  v2 <- mean(x_test^2) - mean(x_test)^2
+  errors[i, 2] <- abs(v2 - true_var) / true_var
+}
+```
+
+```{r}
+#| label: composite-visual
+#| fig-width: 8
+#| fig-height: 5
+matplot(means, errors, type = "b", log = "xy", pch = c(16, 17),
+        col = c("steelblue", "tomato"), lwd = 2,
+        xlab = "数据均值", ylab = "方差估计的相对误差",
+        main = "两种方差算法：均值越大，不稳定算法误差越大")
+abline(h = .Machine$double.eps, lty = 2, col = "grey50")
+text(1e3, .Machine$double.eps * 5, "机器精度", col = "grey50")
+legend("topleft", c("算法 1（稳定）", "算法 2（不稳定）"),
+       col = c("steelblue", "tomato"), pch = c(16, 17), lwd = 2)
+```
+
+均值超过约 $10^8$ 后，不稳定算法的误差急剧上升——减法步骤的条件数开始主导，前面步骤的微小舍入误差被指数级放大。
+
+## 一个更直观的例子：求解两步线性系统
+
+```{r}
+#| label: composite-example
+# 复合问题 f = h ∘ g
+# g: 计算 y = A*x（矩阵乘法，通常稳定）
+# h: 计算 z = B^{-1}*y（求解线性系统，条件数取决于 B）
+
+set.seed(7)
+n <- 5
+A <- matrix(rnorm(n^2), n)
+
+# 构造条件数不同的 B
+U_B <- qr.Q(qr(matrix(rnorm(n^2), n)))
+
+# 情况 1：B 良态
+B_good <- U_B %*% diag(seq(1, 2, length.out = n)) %*% t(U_B)
+
+# 情况 2：B 病态
+B_bad <- U_B %*% diag(c(seq(1, 2, length.out = n-1), 1e-10)) %*% t(U_B)
+
+x_true <- rep(1, n)
+z_true_good <- solve(B_good, A %*% x_true)
+z_true_bad  <- solve(B_bad,  A %*% x_true)
+
+# 给 x 加微小扰动
+x_pert <- x_true + rnorm(n, sd = 1e-10)
+
+z_pert_good <- solve(B_good, A %*% x_pert)
+z_pert_bad  <- solve(B_bad,  A %*% x_pert)
+
+cat("f = B⁻¹(Ax)：两步复合\n\n")
+
+cat("B 良态 (κ ≈", round(kappa(B_good)), "):\n")
+cat("  ||Δz||/||z|| =", sqrt(sum((z_pert_good - z_true_good)^2)) / sqrt(sum(z_true_good^2)), "\n\n")
+
+cat("B 病态 (κ ≈", format(kappa(B_bad), digits = 3), "):\n")
+cat("  ||Δz||/||z|| =", sqrt(sum((z_pert_bad - z_true_bad)^2)) / sqrt(sum(z_true_bad^2)), "\n\n")
+
+cat("→ 第二步（h = B⁻¹·）的条件数决定了误差放大\n")
+cat("→ 定理告诉我们：κ(h) 大时，g 的小误差被剧烈放大\n")
+```
+
+# 后向误差分析
+
+## 框架
+
+上一章介绍了后向误差分析的基本思路。这里更系统地展开。
+
+求解 $\mathbf{Ax} = \mathbf{b}$，算法给出近似解 $\tilde{\mathbf{x}}$。定义**残差**：
+
+$$
+\mathbf{r} = \mathbf{A}\tilde{\mathbf{x}} - \mathbf{b}
+$$
+
+后向误差的问题是：**最小的 $\Delta\mathbf{A}$ 是什么，使得 $(\mathbf{A} + \Delta\mathbf{A})\tilde{\mathbf{x}} = \mathbf{b}$ 精确成立？**
+
+答案是：
+
+$$
+\Delta\mathbf{A} = -\frac{\mathbf{r}\tilde{\mathbf{x}}^\top}{\|\tilde{\mathbf{x}}\|^2}
+$$
+
+**后向误差**定义为：
+
+$$
+\eta = \frac{\|\Delta\mathbf{A}\|_2}{\|\mathbf{A}\|_2} = \frac{\|\mathbf{r}\|_2}{\|\mathbf{A}\|_2 \cdot \|\tilde{\mathbf{x}}\|_2}
+$$
+
+如果 $\eta \approx \epsilon_{\text{machine}}$（约 $10^{-16}$），算法是后向稳定的；如果 $\eta \gg \epsilon_{\text{machine}}$，算法不稳定。
+
+## 后向误差 + 条件数 = 前向误差
+
+把后向误差和条件数结合起来，我们得到**前向误差界**：
+
+$$
+\frac{\|\tilde{\mathbf{x}} - \mathbf{x}\|}{\|\mathbf{x}\|} \leq \kappa(\mathbf{A}) \cdot \eta
+$$
+
+这就是数值分析的核心等式：**前向误差 ≤ 条件数 × 后向误差**。
+
+一个后向稳定的算法（$\eta \approx \epsilon_{\text{machine}}$）在良态问题（$\kappa$ 小）上给出好的结果；在病态问题上，即使算法完美也无能为力——这是问题本身的"硬限制"。
+
+```{r}
+#| label: backward-error-demo
+# 演示后向误差分析
+set.seed(42)
+n <- 6
+
+# 构造不同条件数的矩阵
+for (target_kappa in c(1e1, 1e5, 1e10, 1e14)) {
+  U <- qr.Q(qr(matrix(rnorm(n^2), n)))
+  sigmas <- exp(seq(0, log(target_kappa), length.out = n))
+  A <- U %*% diag(sigmas) %*% t(U)
+
+  x_true <- c(1, -1, 2, -2, 3, -3)
+  b <- A %*% x_true
+
+  # 用 LU 分解求解
+  x_hat <- solve(A, b)
+
+  # 残差
+  r <- as.vector(A %*% x_hat - b)
+
+  # 后向误差
+  eta <- sqrt(sum(r^2)) / (norm(A, "2") * sqrt(sum(x_hat^2)))
+
+  # 前向误差
+  fwd_err <- sqrt(sum((x_hat - x_true)^2)) / sqrt(sum(x_true^2))
+
+  cat(sprintf("κ = %.0e | η = %.2e | 前向误差 = %.2e | κ·η = %.2e\n",
+              kappa(A), eta, fwd_err, kappa(A) * eta))
+}
+
+cat("\n规律：后向误差 η 始终 ≈ ε_machine（算法稳定）\n")
+cat("但前向误差随 κ 增大而增大（问题越病态，结果越差）\n")
+cat("前向误差 ≤ κ × η（理论上界）\n")
+```
+
+**练习**：比较 LU 分解（`solve()`）和 QR 分解（`qr.solve()`）在条件数 $10^{12}$ 的矩阵上的后向误差。
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+set.seed(99)
+n <- 8
+U <- qr.Q(qr(matrix(rnorm(n^2), n)))
+sigmas <- exp(seq(0, log(1e12), length.out = n))
+A_ill <- U %*% diag(sigmas) %*% t(U)
+x_true <- rep(1, n)
+b_ill <- A_ill %*% x_true
+
+# LU 分解（solve 的默认方法）
+x_lu <- solve(A_ill, b_ill)
+r_lu <- as.vector(A_ill %*% x_lu - b_ill)
+eta_lu <- sqrt(sum(r_lu^2)) / (norm(A_ill, "2") * sqrt(sum(x_lu^2)))
+
+# QR 分解 —— 注意：必须放宽容差，否则默认 tol=1e-7 会判定矩阵奇异
+x_qr <- qr.solve(A_ill, b_ill, tol = 1e-16)
+r_qr <- as.vector(A_ill %*% x_qr - b_ill)
+eta_qr <- sqrt(sum(r_qr^2)) / (norm(A_ill, "2") * sqrt(sum(x_qr^2)))
+
+cat("κ(A) ≈", format(kappa(A_ill), digits = 3), "\n\n")
+cat("LU:  后向误差 η =", format(eta_lu, digits = 3), "\n")
+cat("     前向误差   =", format(sqrt(sum((x_lu - x_true)^2)) / sqrt(sum(x_true^2)), digits = 3), "\n\n")
+cat("QR:  后向误差 η =", format(eta_qr, digits = 3), "\n")
+cat("     前向误差   =", format(sqrt(sum((x_qr - x_true)^2)) / sqrt(sum(x_true^2)), digits = 3), "\n\n")
+cat("两者后向误差都 ≈ ε_machine —— 都是后向稳定的算法\n")
+cat("前向误差都 ≈ κ × ε_machine —— 这是问题本身的限制\n")
+```
+
+# 综合案例：从理论到实践
+
+## 案例 1：二次方程的数值求解
+
+求解 $ax^2 + bx + c = 0$，标准公式 $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$。
+
+当 $b^2 \gg 4ac$ 时，$\sqrt{b^2 - 4ac} \approx |b|$，导致分子中出现灾难性抵消。
+
+```{r}
+#| label: quadratic
+# 求解 x² - 1e8·x + 1 = 0
+# 精确解：x ≈ 1e8 和 x ≈ 1e-8
+a <- 1; b <- -1e8; c_val <- 1
+
+# 标准公式
+disc <- sqrt(b^2 - 4 * a * c_val)
+x1_std <- (-b + disc) / (2 * a)
+x2_std <- (-b - disc) / (2 * a)
+
+cat("标准公式:\n")
+cat("  x₁ =", format(x1_std, digits = 16), "\n")
+cat("  x₂ =", format(x2_std, digits = 16), "\n")
+
+# 真实解（用高精度验算：x₁·x₂ = c/a = 1）
+x1_true <- x1_std                          # 大根没问题
+x2_true <- c_val / (a * x1_true)           # 利用韦达定理 x₁·x₂ = c/a
+
+cat("\n韦达定理修正:\n")
+cat("  x₁ =", format(x1_true, digits = 16), "\n")
+cat("  x₂ =", format(x2_true, digits = 16), "\n")
+
+cat("\nx₂ 的相对误差:\n")
+cat("  标准公式:", abs(x2_std - x2_true) / abs(x2_true), "\n")
+cat("  → 灾难性抵消导致 x₂ 丢失了大量精度！\n")
+```
+
+**稳定做法**：先算不发生抵消的那个根，再用韦达定理（$x_1 x_2 = c/a$）算另一个根。
+
+```{r}
+#| label: quadratic-stable
+# 稳定的二次方程求解
+stable_quadratic <- function(a, b, c_val) {
+  disc <- sqrt(b^2 - 4 * a * c_val)
+  # 选择不发生抵消的根
+  if (b >= 0) {
+    x1 <- (-b - disc) / (2 * a)
+  } else {
+    x1 <- (-b + disc) / (2 * a)
+  }
+  x2 <- c_val / (a * x1)  # 韦达定理
+  c(x1, x2)
+}
+
+roots <- stable_quadratic(1, -1e8, 1)
+cat("稳定算法:\n")
+cat("  x₁ =", format(max(roots), digits = 16), "\n")
+cat("  x₂ =", format(min(roots), digits = 16), "\n")
+cat("  x₂ 的相对误差:", abs(min(roots) - x2_true) / abs(x2_true), "\n")
+```
+
+## 案例 2：条件数在机器学习中的意义
+
+```{r}
+#| label: ml-condition
+#| fig-width: 9
+#| fig-height: 5
+# 线性回归中：X'X 的条件数决定了参数估计的稳定性
+set.seed(42)
+n <- 100; p <- 5
+
+# 构造不同程度共线性的特征矩阵
+results_ml <- data.frame()
+
+for (corr in c(0, 0.9, 0.99, 0.999, 0.9999)) {
+  # 生成相关特征
+  X_base <- matrix(rnorm(n * p), n)
+  if (corr > 0) {
+    X_base[, p] <- corr * X_base[, 1] + sqrt(1 - corr^2) * rnorm(n)
+  }
+
+  beta_true <- c(1, -2, 0.5, 0, 3)
+  y <- X_base %*% beta_true + rnorm(n, sd = 0.5)
+
+  # OLS
+  XtX <- crossprod(X_base)
+  beta_hat <- solve(XtX, crossprod(X_base, y))
+  err <- sqrt(sum((beta_hat - beta_true)^2)) / sqrt(sum(beta_true^2))
+
+  results_ml <- rbind(results_ml, data.frame(
+    corr = corr,
+    kappa = kappa(XtX),
+    rel_err = err
+  ))
+}
+
+cat(sprintf("%-10s  %-15s  %-15s\n", "相关系数", "κ(X'X)", "β̂ 相对误差"))
+cat(strrep("-", 45), "\n")
+for (i in seq_len(nrow(results_ml))) {
+  cat(sprintf("%-10.4f  %-15.1f  %-15.6f\n",
+              results_ml$corr[i], results_ml$kappa[i], results_ml$rel_err[i]))
+}
+
+par(mfrow = c(1, 1), mar = c(4, 4, 3, 1))
+plot(results_ml$kappa, results_ml$rel_err, type = "b",
+     log = "x", pch = 19, col = "steelblue", lwd = 2,
+     xlab = "κ(X'X)", ylab = "β̂ 的相对误差",
+     main = "特征共线性 → 条件数大 → 参数估计不稳定")
+```
+
+**这就是为什么岭回归有效**——它把 $\mathbf{X}^\top\mathbf{X}$ 替换为 $\mathbf{X}^\top\mathbf{X} + \lambda\mathbf{I}$，直接降低条件数。
+
+```{r}
+#| label: ridge-condition
+# 岭回归如何改善条件数
+set.seed(42)
+n <- 100; p <- 5
+X <- matrix(rnorm(n * p), n)
+X[, p] <- 0.9999 * X[, 1] + sqrt(1 - 0.9999^2) * rnorm(n)
+
+XtX <- crossprod(X)
+cat("无正则化: κ(X'X) =", format(kappa(XtX), digits = 3), "\n")
+
+for (lam in c(0.001, 0.01, 0.1, 1, 10)) {
+  XtX_reg <- XtX + lam * diag(p)
+  cat(sprintf("λ = %-6.3f: κ(X'X + λI) = %.1f\n", lam, kappa(XtX_reg)))
+}
+```
+
+# 小测验
+
+## 测验 1：误差分解
+
+设 $f(x) = \sin(x)$，用算法 $\tilde{f}(x) = x - x^3/6$（三阶泰勒），输入 $\tilde{x} = 3.0$（真实值 $x = \pi$）。
+总误差 $\tilde{f}(\tilde{x}) - f(x)$ 中，算法误差和传播误差分别是多少？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+f_sin <- sin
+f_tilde_sin <- function(x) x - x^3 / 6
+
+x_true_q <- pi
+x_tilde_q <- 3.0
+
+total <- f_tilde_sin(x_tilde_q) - f_sin(x_true_q)
+algo <- f_tilde_sin(x_tilde_q) - f_sin(x_tilde_q)
+prop <- f_sin(x_tilde_q) - f_sin(x_true_q)
+
+cat("总误差:       ", total, "\n")
+cat("算法误差:     ", algo, "(截断误差)\n")
+cat("传播误差:     ", prop, "(sin(3) ≠ sin(π))\n")
+cat("验证: ", algo, "+", prop, "=", algo + prop, "\n")
+```
+
+## 测验 2：条件数
+
+下面哪个运算在 $x \approx 0$ 时是病态的？
+
+A. $f(x) = e^x$
+B. $f(x) = \sin(x)$
+C. $f(x) = \ln(1 + x)$
+D. $f(x) = (1 + x) - 1$
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+# 计算各函数在 x ≈ 0 处的相对条件数 κ_rel = |f'(x)| · |x| / |f(x)|
+x0 <- 1e-10
+
+# A: f(x) = e^x, f'(x) = e^x
+kA <- exp(x0) * abs(x0) / abs(exp(x0))
+cat("A. e^x:        κ_rel =", kA, "\n")
+
+# B: f(x) = sin(x), f'(x) = cos(x)
+kB <- abs(cos(x0)) * abs(x0) / abs(sin(x0))
+cat("B. sin(x):     κ_rel =", kB, "（≈ 1，良态）\n")
+
+# C: f(x) = ln(1+x), f'(x) = 1/(1+x)
+kC <- abs(1 / (1 + x0)) * abs(x0) / abs(log(1 + x0))
+cat("C. ln(1+x):    κ_rel =", kC, "（≈ 1，良态）\n")
+
+# D: f(x) = (1+x) - 1 = x，计算上会有灾难性抵消
+# 数学上 f(x) = x，但计算 (1+x)-1 时会丢精度
+val_D <- (1 + x0) - 1
+cat("D. (1+x) - 1:  计算值 =", val_D, "，真实值 =", x0, "\n")
+cat("   相对误差 =", abs(val_D - x0) / abs(x0), "\n")
+cat("\n答案：D —— 灾难性抵消，计算时相当于两个近似相等的数相减\n")
+```
+
+## 测验 3：稳定性
+
+为什么 PPT 说"条件数差的步骤应尽早执行"？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+cat("由复合算法稳定性定理：\n\n")
+cat("  总误差 ≤ h 的算法误差 + κ(h) × g 的误差\n\n")
+cat("如果 h（后面的步骤）条件数大，它会放大前面所有步骤的误差。\n")
+cat("反过来，如果条件数大的步骤放在最前面（作为 g），\n")
+cat("后面的 h 只要条件数不大，就不会进一步放大。\n\n")
+cat("简单比喻：\n")
+cat("  - 先做 '危险操作'，误差只影响这一步\n")
+cat("  - 后做 '危险操作'，它会放大前面所有步骤累积的误差\n")
+```
+
+# 总结
+
+## 知识地图
+
+```
+数值误差分析
+├── 误差度量
+│   ├── 绝对误差 Δ = ṽ - v
+│   ├── 相对误差 δ = ||Δ|| / ||v||
+│   └── 误差界引理：||v||(1-δ) ≤ ||ṽ|| ≤ ||v||(1+δ)
+│
+├── 误差分解
+│   ├── 总误差 = 算法误差 + 输入传播误差
+│   ├── 算法误差 → 衡量算法质量 → 稳定性
+│   └── 传播误差 → 衡量问题难度 → 条件数
+│
+├── 条件数（问题的性质）
+│   ├── 绝对条件数 κ_abs
+│   ├── 相对条件数 κ_rel
+│   ├── 矩阵条件数 κ(A) = ||A|| · ||A⁻¹|| = σ_max/σ_min
+│   └── 灾难性抵消：大数相减的 κ_rel → ∞
+│
+├── 稳定性（算法的性质）
+│   ├── 后向稳定：算法误差 ≈ ε_machine
+│   ├── 复合定理：κ(h) 放大 g 的误差
+│   └── 原则：条件数差的步骤尽早执行
+│
+└── 核心等式
+    └── 前向误差 ≤ 条件数 × 后向误差
+```
+
+## 核心公式卡
+
+| 概念 | 公式 |
+|------|------|
+| 相对误差 | $\delta_{\mathbf{v}} = \|\tilde{\mathbf{v}} - \mathbf{v}\| / \|\mathbf{v}\|$ |
+| 误差分解 | 总误差 = $[\tilde{f}(\tilde{\mathbf{x}}) - f(\tilde{\mathbf{x}})]$ + $[f(\tilde{\mathbf{x}}) - f(\mathbf{x})]$ |
+| 标量条件数 | $\kappa_{\text{rel}} = |f'(x)| \cdot |x| / |f(x)|$ |
+| 矩阵条件数 | $\kappa(\mathbf{A}) = \|\mathbf{A}\| \cdot \|\mathbf{A}^{-1}\| = \sigma_{\max} / \sigma_{\min}$ |
+| 后向误差 | $\eta = \|\mathbf{r}\|_2 / (\|\mathbf{A}\|_2 \cdot \|\tilde{\mathbf{x}}\|_2)$ |
+| 前向误差界 | $\|\tilde{\mathbf{x}} - \mathbf{x}\| / \|\mathbf{x}\| \leq \kappa(\mathbf{A}) \cdot \eta$ |
+| 复合算法 | 总误差 ≤ $\tilde{h}$ 误差 + $\kappa(h) \times \tilde{g}$ 误差 |
+
+## 实践指南
+
+| 你遇到了什么 | 怎么做 |
+|--------------|--------|
+| 大数相减 | 改用等价公式避免抵消 |
+| $\kappa(\mathbf{A})$ 很大 | 用正则化（岭回归）降低条件数 |
+| 算法结果可疑 | 计算后向误差 $\eta$，看是否 ≈ $\epsilon_{\text{machine}}$ |
+| 多步算法 | 把条件数差的步骤放在最前面 |
+| 精度不够 | 先检查 $\kappa$——如果 $\kappa \times \epsilon > \text{要求}$，换算法也没用 |
+```
