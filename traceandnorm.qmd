@@ -9,6 +9,20 @@ format:
     code-fold: false
     theme: cosmo
     code-overflow: wrap
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}   
 execute:
   warning: false
   message: false
@@ -29,6 +43,54 @@ rm(list = ls())
 - **正交性**与内积
 
 如果记不清，没关系——后面用到时会用 R 帮你回忆。
+
+# 正交矩阵：完美的变换
+
+## 定义
+
+$\mathbf{Q} \in \mathbb{R}^{n \times n}$ 是**正交矩阵**，当且仅当列向量标准正交，即 $\mathbf{Q}^\top\mathbf{Q} = \mathbf{I}$。
+
+几何上它表示**旋转**和/或**反射**——形状和大小完全不变。
+
+## 关键性质
+
+| 性质 | 公式 | 含义 |
+|------|------|------|
+| 保长度 | $\|\mathbf{Qx}\|_2 = \|\mathbf{x}\|_2$ | 不拉伸、不压缩 |
+| 逆 = 转置 | $\mathbf{Q}^{-1} = \mathbf{Q}^\top$ | 求逆零成本 |
+| 条件数 = 1 | $\kappa_2(\mathbf{Q}) = 1$ | 数值最稳定 |
+| 乘积仍正交 | $\mathbf{Q}_1\mathbf{Q}_2$ 正交 | 旋转叠旋转还是旋转 |
+
+```{r}
+#| label: ortho-props
+# 构造 30° 旋转矩阵
+angle <- pi / 6
+Q <- matrix(c(cos(angle), -sin(angle),
+              sin(angle),  cos(angle)), nrow = 2, byrow = TRUE)
+cat("30° 旋转矩阵 Q:\n")
+print(round(Q, 4))
+
+# 性质 1：Q'Q = I
+cat("\nQ'Q:\n")
+print(round(crossprod(Q), 10))
+
+# 性质 2：保长度
+x <- c(3, 4)
+c(before = sqrt(sum(x^2)), after = sqrt(sum((Q %*% x)^2)))
+
+# 性质 3：条件数
+kappa(Q)
+
+# 性质 4：谱范数 = 1
+norm(Q, "2")
+
+# 性质 5：乘积仍正交
+Q2 <- matrix(c(cos(pi/4), -sin(pi/4),
+               sin(pi/4),  cos(pi/4)), nrow = 2, byrow = TRUE)
+QQ2 <- Q %*% Q2
+cat("\nQ·Q2 的 Q'Q:\n")
+print(round(crossprod(QQ2), 10))
+```
 
 # 矩阵的迹（Trace）
 
@@ -211,6 +273,45 @@ eig_S$values                    # 全是实数
 c(sum_eigenvalues = sum(eig_S$values), trace = tr(S))
 ```
 
+# 矩阵范数的一般定义
+
+在介绍算子范数之前，先明确"矩阵范数"这个概念的公理。
+
+函数 $\|\cdot\| : \mathbb{R}^{m \times n} \to [0,\infty)$ 是**矩阵范数**，当且仅当对所有 $\mathbf{A},\mathbf{B}$ 和标量 $c$：
+
+1. **正定性**：$\|\mathbf{A}\| = 0 \iff \mathbf{A} = \mathbf{0}$
+2. **绝对齐次性**：$\|c\mathbf{A}\| = |c|\cdot\|\mathbf{A}\|$
+3. **三角不等式**：$\|\mathbf{A}+\mathbf{B}\| \le \|\mathbf{A}\|+\|\mathbf{B}\|$
+
+这和向量范数的公理一模一样——事实上，向量范数就是 $\mathbb{R}^{n \times 1}$ 上的矩阵范数。
+
+# 逐元素范数家族
+
+把矩阵铺平成长向量 $\text{vec}(\mathbf{A}) \in \mathbb{R}^{mn}$，然后套用向量范数：
+
+| 名称 | 定义 | R |
+|------|------|---|
+| Frobenius | $\|\text{vec}(\mathbf{A})\|_2 = \sqrt{\sum a_{ij}^2}$ | `norm(A,"F")` |
+| 和范数 | $\|\text{vec}(\mathbf{A})\|_1 = \sum |a_{ij}|$ | `sum(abs(A))` |
+| 最大范数 | $\|\text{vec}(\mathbf{A})\|_\infty = \max |a_{ij}|$ | `max(abs(A))` |
+
+```{r}
+#| label: elem-norms
+M <- matrix(c(2, -1, 0,
+              0,  3, 5,
+              1,  0, -2), nrow = 3, byrow = TRUE)
+M
+cat("Frobenius:", norm(M, "F"), "\n")
+cat("和范数:   ", sum(abs(M)), "\n")
+cat("最大范数: ", max(abs(M)), "\n")
+```
+
+**问题**：单位矩阵什么都不做，但 $\|\mathbf{I}_n\|_F = \sqrt{n}$ 随维度增长！
+
+```{r}
+sapply(c(2, 5, 10, 100), function(n) norm(diag(n), "F"))
+```
+
 # Frobenius 范数：最直观的开始
 
 ## 定义
@@ -223,11 +324,6 @@ $$
 
 ```{r}
 #| label: frob-def
-M <- matrix(c(2, -1, 0,
-              0,  3, 5,
-              1,  0, -2), nrow = 3, byrow = TRUE)
-M
-
 # 手动
 sqrt(sum(M^2))
 
@@ -256,6 +352,18 @@ norm(M, "F")^2
 # 也等于 A'A 的特征值之和
 sum(eigen(t(M) %*% M)$values)
 sum(eigen(M %*% t(M))$values)
+```
+
+还有一个漂亮灯饰：**把 F 范数和奇异值链接起来**
+
+Frobenius 范数 = √(σ₁² + σ₂² + ... + σₙ²)
+
+```{r}
+norm(M, "F")
+
+s <- (svd(M)$d)^2
+sqrt(sum(s))
+
 ```
 
 ## Frobenius 范数的问题/局限性
@@ -294,41 +402,6 @@ for (info in list(list(A1, "A1：恒等"), list(A2, "A2：交换"), list(A3, "A3
 ```
 
 **结论**：Frobenius 范数无法区分这三种截然不同的变换。我们需要一种能"看到"变换本质的范数——**算子范数**。
-
-# 矩阵范数的一般定义
-
-在介绍算子范数之前，先明确"矩阵范数"这个概念的公理。
-
-函数 $\|\cdot\| : \mathbb{R}^{m \times n} \to [0,\infty)$ 是**矩阵范数**，当且仅当对所有 $\mathbf{A},\mathbf{B}$ 和标量 $c$：
-
-1. **正定性**：$\|\mathbf{A}\| = 0 \iff \mathbf{A} = \mathbf{0}$
-2. **绝对齐次性**：$\|c\mathbf{A}\| = |c|\cdot\|\mathbf{A}\|$
-3. **三角不等式**：$\|\mathbf{A}+\mathbf{B}\| \le \|\mathbf{A}\|+\|\mathbf{B}\|$
-
-这和向量范数的公理一模一样——事实上，向量范数就是 $\mathbb{R}^{n \times 1}$ 上的矩阵范数。
-
-## 逐元素范数家族
-
-把矩阵铺平成长向量 $\text{vec}(\mathbf{A}) \in \mathbb{R}^{mn}$，然后套用向量范数：
-
-| 名称 | 定义 | R |
-|------|------|---|
-| Frobenius | $\|\text{vec}(\mathbf{A})\|_2 = \sqrt{\sum a_{ij}^2}$ | `norm(A,"F")` |
-| 和范数 | $\|\text{vec}(\mathbf{A})\|_1 = \sum |a_{ij}|$ | `sum(abs(A))` |
-| 最大范数 | $\|\text{vec}(\mathbf{A})\|_\infty = \max |a_{ij}|$ | `max(abs(A))` |
-
-```{r}
-#| label: elem-norms
-cat("Frobenius:", norm(M, "F"), "\n")
-cat("和范数:   ", sum(abs(M)), "\n")
-cat("最大范数: ", max(abs(M)), "\n")
-```
-
-**问题**：单位矩阵什么都不做，但 $\|\mathbf{I}_n\|_F = \sqrt{n}$ 随维度增长！
-
-```{r}
-sapply(c(2, 5, 10, 100), function(n) norm(diag(n), "F"))
-```
 
 # 算子范数：衡量矩阵的拉伸能力
 
@@ -545,7 +618,9 @@ matrix_Array <- eig_Array$vectors
 diag_Array <- diag(values_Array)
 # 验证
 duplicated_Array <- matrix_Array %*% diag_Array %*% t(matrix_Array)
-all.equal(s_Array, duplicated_Array)
+all.equal(s_Array, duplicated_Array)  # 注意：Q * D对角矩阵 * Q^T 等于实对称矩阵
+duplicated_Array <- t(matrix_Array) %*% diag_Array %*% matrix_Array
+all.equal(s_Array, duplicated_Array)  # 注意: Q^T * D对角矩阵 * Q 没有意义 ！！！！
 # 奇异值, 理论上特征值应该大于0，但是计算机的浮点误差可能产生很小的负数
 svd_values <- sqrt(pmax(values_Array,0))
 svd_values_direct <- svd(any_Array)$d
@@ -586,87 +661,6 @@ cat("直接连乘 S^10:\n")
 print(round(S_10_direct))
 ```
 
-# 正交矩阵：完美的变换
-
-## 定义
-
-$\mathbf{Q} \in \mathbb{R}^{n \times n}$ 是**正交矩阵**，当且仅当列向量标准正交，即 $\mathbf{Q}^\top\mathbf{Q} = \mathbf{I}$。
-
-几何上它表示**旋转**和/或**反射**——形状和大小完全不变。
-
-## 关键性质
-
-| 性质 | 公式 | 含义 |
-|------|------|------|
-| 保长度 | $\|\mathbf{Qx}\|_2 = \|\mathbf{x}\|_2$ | 不拉伸、不压缩 |
-| 逆 = 转置 | $\mathbf{Q}^{-1} = \mathbf{Q}^\top$ | 求逆零成本 |
-| 条件数 = 1 | $\kappa_2(\mathbf{Q}) = 1$ | 数值最稳定 |
-| 乘积仍正交 | $\mathbf{Q}_1\mathbf{Q}_2$ 正交 | 旋转叠旋转还是旋转 |
-
-```{r}
-#| label: ortho-props
-# 构造 30° 旋转矩阵
-angle <- pi / 6
-Q <- matrix(c(cos(angle), -sin(angle),
-              sin(angle),  cos(angle)), nrow = 2, byrow = TRUE)
-cat("30° 旋转矩阵 Q:\n")
-print(round(Q, 4))
-
-# 性质 1：Q'Q = I
-cat("\nQ'Q:\n")
-print(round(crossprod(Q), 10))
-
-# 性质 2：保长度
-x <- c(3, 4)
-c(before = sqrt(sum(x^2)), after = sqrt(sum((Q %*% x)^2)))
-
-# 性质 3：条件数
-kappa(Q)
-
-# 性质 4：谱范数 = 1
-norm(Q, "2")
-
-# 性质 5：乘积仍正交
-Q2 <- matrix(c(cos(pi/4), -sin(pi/4),
-               sin(pi/4),  cos(pi/4)), nrow = 2, byrow = TRUE)
-QQ2 <- Q %*% Q2
-cat("\nQ·Q2 的 Q'Q:\n")
-print(round(crossprod(QQ2), 10))
-```
-
-## 可视化：旋转不变形
-
-```{r}
-#| label: ortho-vs-general
-#| fig-width: 10
-#| fig-height: 5
-theta <- seq(0, 2 * pi, length.out = 300)
-circle <- rbind(cos(theta), sin(theta))
-
-par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
-
-# 正交矩阵：圆还是圆
-img_Q <- Q %*% circle
-plot(circle[1,], circle[2,], type = "l", asp = 1,
-     xlim = c(-1.5, 1.5), ylim = c(-1.5, 1.5),
-     col = "grey60", lwd = 2, lty = 2,
-     main = "正交矩阵（旋转）", xlab = "x₁", ylab = "x₂")
-lines(img_Q[1,], img_Q[2,], col = "steelblue", lwd = 2)
-legend("topright", c("原圆", "旋转后"), col = c("grey60", "steelblue"), lwd = 2, cex = .8)
-abline(h = 0, v = 0, col = "grey90", lty = 3)
-
-# 一般矩阵：圆变椭圆
-G <- matrix(c(2, 1, 0.5, 1.5), 2, byrow = TRUE)
-img_G <- G %*% circle
-plot(circle[1,], circle[2,], type = "l", asp = 1,
-     xlim = c(-3, 3), ylim = c(-3, 3),
-     col = "grey60", lwd = 2, lty = 2,
-     main = "一般矩阵（拉伸+旋转）", xlab = "x₁", ylab = "x₂")
-lines(img_G[1,], img_G[2,], col = "tomato", lwd = 2)
-legend("topright", c("原圆", "变换后"), col = c("grey60", "tomato"), lwd = 2, cex = .8)
-abline(h = 0, v = 0, col = "grey90", lty = 3)
-```
-
 # 条件数：问题有多"病态"？
 
 ## 定义
@@ -676,6 +670,8 @@ $$
 $$
 
 用谱范数来算：$\|\mathbf{A}\|_2 = \sigma_{\max}$，$\|\mathbf{A}^{-1}\|_2 = 1/\sigma_{\min}$，所以
+
+**注意**：根据奇异值分解定理，$A^{−1}$的奇异值是 A 的奇异值的倒数，所以，$A^{−1}$谱范数为A的最小范数的倒数。
 
 $$
 \kappa_2(\mathbf{A}) = \frac{\sigma_{\max}}{\sigma_{\min}}
@@ -689,36 +685,116 @@ $$
 
 ## 直观感受：圆碗 vs 峡谷
 
+- 奇异值代表矩阵在各方向的拉伸/压缩程度 ✓
+- 条件数 = 最大奇异值/最小奇异值 ✓
+- 条件数越大，椭圆越扁 ✓
+- 基于以上认知，求解方程组 Ax = b
+- x = $A^{-1}b$ 是我们要求的解，本质上是针对输出结果b的逆变换
+- 即知道了椭圆的点，反推圆上的点
+- 因为b是有测量/系统带来的误差
+- 所以实际上我们观测到的是 b + Δb，而不是真正的 b
+- 我们求解的是 x = A⁻¹(b + Δb)，而不是真正的 x = A⁻¹b
+- 误差 Δb 也会被 A⁻¹ 变换，变成 Δx = A⁻¹Δb
+- 回到椭圆和圆的图像：椭圆上的小偏移 Δb，反推回圆上变成 Δx
+- 椭圆越扁，短轴方向上的小偏移，反推回去就越大
+- 所以条件数越大，b 的小误差可能导致 x 的大误差
+
+**通过下面图可以看出，在相同的输入误差（Δb = 0.1）情况下，病态矩阵给求解 x 带来的误差更大**
+**即：条件数越大，同样的 b 误差会导致更大的 x 误差**
+
 ```{r}
-#| label: condition-vis
-#| fig-width: 10
-#| fig-height: 5
 theta <- seq(0, 2 * pi, length.out = 300)
+# 按行绑定, 第一行是 x 轴坐标，第二行是 y 轴坐标，所以 circle 是 2 x 300 的矩阵存储圆坐标（300个角度）
 circle <- rbind(cos(theta), sin(theta))
 
-good <- diag(c(2, 1.8))   # 条件数 ≈ 1.1
-bad  <- diag(c(2, 0.02))  # 条件数 = 100
+# 良态矩阵
+good <- diag(c(2, 1.5))
+# 病态矩阵
+bad  <- diag(c(2, 0.1))
 
-par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
 
+# ========== 单位圆经过良态矩阵变换后的图像 ==========
 img_good <- good %*% circle
 plot(img_good[1,], img_good[2,], type = "l", asp = 1,
      xlim = c(-2.5, 2.5), ylim = c(-2.5, 2.5),
      col = "forestgreen", lwd = 2,
-     main = paste0("良态  κ = ", round(kappa(good), 1)),
+     main = paste0("良态 κ = ", round(kappa(good), 1)),
+     xlab = "b₁", ylab = "b₂")
+
+# 在椭圆上取一个点 b，加上误差 Δb
+# 单位圆上最右边的点（1，0）乘以 good 良态矩阵变换后得到变换后的椭圆上的点 b 
+b_good <- good %*%  c(0.5, sqrt(1 - 0.5^2))  # (0.5, 0.866)，在圆上
+# 短轴方向的奇异值 σ_min 在逆变换时变成 1/σ_min，这是最大的放大倍数。
+# 所以故意在短轴方向加误差，能最明显地展示条件数的影响
+delta_b <- c(0, 0.3)        # 施加短轴方向的误差
+b_good_err <- b_good + delta_b
+
+# 椭圆上的理想的点
+points(b_good[1], b_good[2], pch = 19, col = "blue", cex = 1.5)
+# 椭圆上叠加了误差后的点
+points(b_good_err[1], b_good_err[2], pch = 19, col = "red", cex = 1.5)
+arrows(b_good[1], b_good[2], b_good_err[1], b_good_err[2], 
+       col = "red", lwd = 2, length = 0.1)
+legend("topright", legend = c("真实 b", "带误差 b"), 
+       col = c("blue", "red"), pch = 19, cex = 0.8)
+
+# 逆变换回圆：看 x 的误差
+x_good <- solve(good) %*% b_good
+x_good_err <- solve(good) %*% b_good_err
+delta_x_good <- x_good_err - x_good
+
+plot(circle[1,], circle[2,], type = "l", asp = 1,
+     xlim = c(-1.5, 1.5), ylim = c(-1.5, 1.5),
+     col = "forestgreen", lwd = 2,
+     main = paste0("逆变换回圆 | Δx = ", round(sqrt(sum(delta_x_good^2)), 3)),
      xlab = "x₁", ylab = "x₂")
 abline(h = 0, v = 0, col = "grey80", lty = 3)
 
+points(x_good[1], x_good[2], pch = 19, col = "blue", cex = 1.5)
+points(x_good_err[1], x_good_err[2], pch = 19, col = "red", cex = 1.5)
+arrows(x_good[1], x_good[2], x_good_err[1], x_good_err[2], 
+       col = "red", lwd = 2, length = 0.1)
+
+# ========== 单位圆经过病态矩阵变换后的图像 ==========
 img_bad <- bad %*% circle
 plot(img_bad[1,], img_bad[2,], type = "l", asp = 1,
-     xlim = c(-2.5, 2.5), ylim = c(-0.1, 0.1),
+     xlim = c(-2.5, 2.5), ylim = c(-0.15, 0.15),
      col = "red", lwd = 2,
-     main = paste0("病态  κ = ", round(kappa(bad))),
+     main = paste0("病态 κ = ", round(kappa(bad))),
+     xlab = "b₁", ylab = "b₂")
+abline(h = 0, v = 0, col = "grey80", lty = 3)
+
+# 同样的误差 Δb
+b_bad <- bad %*% c(0.5, sqrt(1 - 0.5^2))
+b_bad_err <- b_bad + delta_b
+
+points(b_bad[1], b_bad[2], pch = 19, col = "blue", cex = 1.5)
+points(b_bad_err[1], b_bad_err[2], pch = 19, col = "red", cex = 1.5)
+arrows(b_bad[1], b_bad[2], b_bad_err[1], b_bad_err[2], 
+       col = "red", lwd = 2, length = 0.1)
+legend("topright", legend = c("真实 b", "带误差 b"), 
+       col = c("blue", "red"), pch = 19, cex = 0.8)
+
+# 逆变换回圆
+x_bad <- solve(bad) %*% b_bad
+x_bad_err <- solve(bad) %*% b_bad_err
+delta_x_bad <- x_bad_err - x_bad
+
+plot(circle[1,], circle[2,], type = "l", asp = 1,
+     xlim = c(-1.5, 1.5), ylim = c(-6, 6),
+     col = "red", lwd = 2,
+     main = paste0("逆变换回圆 | Δx = ", round(sqrt(sum(delta_x_bad^2)), 3)),
      xlab = "x₁", ylab = "x₂")
 abline(h = 0, v = 0, col = "grey80", lty = 3)
+
+points(x_bad[1], x_bad[2], pch = 19, col = "blue", cex = 1.5)
+points(x_bad_err[1], x_bad_err[2], pch = 19, col = "red", cex = 1.5)
+arrows(x_bad[1], x_bad[2], x_bad_err[1], x_bad_err[2], 
+       col = "red", lwd = 2, length = 0.1)
 ```
 
-## 条件数对求解 Ax = b 的影响
+## 条件数对求解 Ax = b 的影响 (前向误差分析)
 
 ```{r}
 #| label: condition-demo
@@ -726,12 +802,18 @@ set.seed(1)
 
 # 构造一个病态矩阵
 n <- 5
+# rnorm - 产生 n x n 的随机矩阵
+# qr - 对矩阵做QR分解，得到Q和R
+# QR 分解的性质：任何矩阵都可以分解为 Q × R，其中 Q 是正交矩阵
+# 代码的作用是：生成一个随机的正交矩阵
+# qr.Q - 提取其中的 Q 矩阵
 U <- qr.Q(qr(matrix(rnorm(n^2), n)))   # 随机正交矩阵
-sigma_good <- c(5, 4, 3, 2, 1)         # 良态奇异值
-sigma_bad  <- c(5, 4, 3, 2, 0.001)     # 病态奇异值
+sigma_good <- c(5, 4, 3, 2, 1)         # 良态奇异值，指定奇异值
+sigma_bad  <- c(5, 4, 3, 2, 0.001)     # 病态奇异值，指定奇异值
 
-A_good <- U %*% diag(sigma_good) %*% t(U)
-A_bad  <- U %*% diag(sigma_bad)  %*% t(U)
+# 这让对比更加公平——只有条件数不同，其他性质尽量一致
+A_good <- U %*% diag(sigma_good) %*% t(U) # 因为对称矩阵可以写为 U x D x U^T, 所以这步是构建测试用的对称矩阵
+A_bad  <- U %*% diag(sigma_bad)  %*% t(U) # 同上
 
 cat("良态矩阵条件数:", kappa(A_good), "\n")
 cat("病态矩阵条件数:", kappa(A_bad), "\n")
@@ -743,6 +825,9 @@ b_bad  <- A_bad  %*% x_true
 
 perturbation <- rnorm(n, sd = 1e-6)
 
+# 求解方程
+# solve(A, b)  
+# 解 Ax = b，返回 x
 x_good_perturbed <- solve(A_good, b_good + perturbation)
 x_bad_perturbed  <- solve(A_bad,  b_bad  + perturbation)
 
@@ -787,15 +872,21 @@ steps <- 30
 
 # 良态
 A_gd_good <- matrix(c(2, 0, 0, 1.8), 2)
+# 精确解
+solve(A_gd_good) %*% b_target
+# 梯度下降解
 path_good <- gradient_descent(A_gd_good, b_target, lr = 0.15, steps)
 
 # 病态
 A_gd_bad <- matrix(c(2, 0, 0, 0.1), 2)
+# 精确解
+solve(A_gd_bad) %*% b_target
 path_bad <- gradient_descent(A_gd_bad, b_target, lr = 0.15, steps)
 
 par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
 
 # 良态
+# 精确解
 x_sol <- solve(A_gd_good, b_target)
 plot(path_good[, 1], path_good[, 2], type = "b", pch = 16, cex = .5,
      col = "steelblue",
@@ -806,6 +897,7 @@ plot(path_good[, 1], path_good[, 2], type = "b", pch = 16, cex = .5,
 points(x_sol[1], x_sol[2], pch = 4, cex = 2, col = "red", lwd = 2)
 
 # 病态
+# 精确解
 x_sol2 <- solve(A_gd_bad, b_target)
 plot(path_bad[, 1], path_bad[, 2], type = "b", pch = 16, cex = .5,
      col = "tomato",
@@ -818,7 +910,7 @@ points(x_sol2[1], x_sol2[2], pch = 4, cex = 2, col = "red", lwd = 2)
 
 良态问题直接收敛，病态问题来回弹跳——这就是条件数在实际中的影响。
 
-# 特征值 vs 奇异值
+# 特征值 vs 奇异值 vs 谱范数
 
 这两个概念容易混淆，用表格理清：
 
@@ -831,10 +923,30 @@ points(x_sol2[1], x_sol2[2], pch = 4, cex = 2, col = "red", lwd = 2)
 
 对于**对称正定矩阵**，两者相等。
 
+**正定矩阵的定义**：
+
+- 对于任意非零向量 x，都有 xᵀAx > 0
+- 正定矩阵必须是对称矩阵
+
+**直观理解**：
+
+把 xᵀAx 想象成一个"能量"或"碗的形状"：
+
+- 正定矩阵：碗口朝上，有唯一最低点
+- 负定矩阵：碗口朝下，有唯一最高点
+- 不定矩阵：马鞍形，有的方向上升有的方向下降
+
+**等价条件**：
+
+- 所有特征值 > 0
+- 所有奇异值 > 0（对于对称矩阵）
+- 矩阵可以做 Cholesky 分解
+
 ```{r}
 #| label: eig-vs-svd
 # 对称正定矩阵
 S <- matrix(c(4, 2, 2, 3), 2, byrow = TRUE)
+# 确定特征值是不是都大于0
 cat("对称正定矩阵 S:\n"); print(S)
 cat("特征值:", eigen(S)$values, "\n")
 cat("奇异值:", svd(S)$d, "\n")
@@ -864,7 +976,7 @@ $$
 \|\mathbf{A}\|_{S,p} = \left(\sum_{i=1}^{r} \sigma_i^p\right)^{1/p}
 $$
 
-## 三个重要特例
+## 三个重要范数用奇异值表示
 
 | $p$ | 名称 | 公式 | 用途 |
 |-----|------|------|------|
@@ -982,6 +1094,75 @@ cat(norm(G, "2"), "≤", norm(G, "F"), "≤", sqrt(2) * norm(G, "2"), "\n")
 
 # 误差分析中的范数
 
+## 在机器学习里面的背景
+
+回想前一个章节，方程 Ax = b，其中：
+
+- x - 模型权重
+- b - 目标值（即标记的结果，类似观察到的样本房价）
+- A - 特征矩阵（一堆样本数据，面积，房间数量，楼层等特征）
+
+因为收到的房屋销售样本数据里面面积，楼层等数据可能存在误差，所以实际上：
+
+**你以为求解的是**：
+
+Ax = b
+
+**你实际求解的是**：
+
+(A + ΔA)x = (b + Δb)
+
+其中：
+
+- ΔA 是特征矩阵的误差（面积测量误差、楼层录入错误等）
+- Δb 是标签的误差（房价记录不准等）
+
+**后向误差分析告诉我们**：
+
+1. 如果矩阵良态（条件数小）
+
+- 数据误差对模型参数 x 影响小
+- 模型稳定、可靠
+
+2. 如果矩阵病态（条件数大）
+
+- 数据的微小误差会导致 x 剧烈变化
+- 模型不稳定、不可靠
+
+**实际意义**
+
+- 不需要追求完美数据
+- 不需要追求精确解
+- 只要保证算法引入的误差 < 数据本身的误差就够了
+- 条件数帮助你判断**模型对数据噪声的敏感程度**
+
+
+**目标**：找 $\Delta\mathbf{A}$ 使得 $(\mathbf{A} + \Delta\mathbf{A})\tilde{\mathbf{x}} = \mathbf{b}$
+
+- **维度设定**：
+	- $\mathbf{A}$：$m \times n$ 矩阵
+	- $\tilde{\mathbf{x}}$：$n \times 1$ 向量
+	- $\mathbf{b}$：$m \times 1$ 向量
+	- $\mathbf{r} = \mathbf{A}\tilde{\mathbf{x}} - \mathbf{b}$：$m \times 1$ 向量，即**残差**
+	- $\Delta\mathbf{A}$：$m \times n$ 矩阵
+- **展开**：
+	- $\mathbf{A}\tilde{\mathbf{x}} + \Delta\mathbf{A} \cdot \tilde{\mathbf{x}} = \mathbf{b}$
+	- $\Delta\mathbf{A} \cdot \tilde{\mathbf{x}} = \mathbf{b} - \mathbf{A}\tilde{\mathbf{x}} = -\mathbf{r}$
+- **外积**：两个向量的外积：$\mathbf{u} \cdot \mathbf{v}^\top$，其中 $\mathbf{u}$ 是 $m \times 1$，$\mathbf{v}$ 是 $n \times 1$，结果是 $m \times n$ 矩阵
+- **分析**：$\Delta\mathbf{A}$ 是 $m \times n$ 矩阵，有 $m \times n$ 个未知数，但方程 $\Delta\mathbf{A} \cdot \tilde{\mathbf{x}} = -\mathbf{r}$ 只有 $m$ 个约束，**所以解不唯一**，有无穷多个 $\Delta\mathbf{A}$ 满足条件
+- **归一化的外积**：$\dfrac{-\mathbf{r} \cdot \tilde{\mathbf{x}}^\top}{|\tilde{\mathbf{x}}|^2}$ 是其中**一个**解
+- 满足 $\Delta\mathbf{A} \cdot \tilde{\mathbf{x}} = -\mathbf{r}$ ✓
+- **绝对扰动**：$|\Delta\mathbf{A}|_2 = \dfrac{|\mathbf{r}|_2}{|\tilde{\mathbf{x}}|_2}$ 表示 $\Delta\mathbf{A}$ 本身的大小， 利用了公式：秩1矩阵的范数，对于外积 $\mathbf{u} \cdot \mathbf{v}^\top$，有：$|\mathbf{u} \cdot \mathbf{v}^\top|_2 = |\mathbf{u}|_2 \cdot |\mathbf{v}|_2$
+	- **左边是** 矩阵的谱范数，等于最大奇异值
+	- **右边是** 向量的2-范数，即欧几里得范数: $|\mathbf{u}|_2 = \sqrt{u_1^2 + u_2^2 + \cdots + u_m^2}$
+- **相对扰动**：$\eta = \dfrac{|\Delta\mathbf{A}|_2}{|\mathbf{A}|_2} = \dfrac{|\mathbf{r}|_2}{|\mathbf{A}|_2 \cdot |\tilde{\mathbf{x}}|_2}$, 这个 $\eta$ 就叫**后向误差**（backward error）
+	- $\eta \approx \epsilon_{\text{machine}}$（如 $10^{-16}$）→ 算法后向稳定
+	- $\eta \gg \epsilon_{\text{machine}}$ → 算法不稳定
+- **意义**：这个比值越小，说明：
+	- $\tilde{\mathbf{x}}$ 越接近真实解
+	- 算法越稳定（后向稳定）
+	- 只需微小扰动 $\mathbf{A}$，$\tilde{\mathbf{x}}$ 就是精确解
+
 ## 后向误差分析
 
 **场景**：你想求解 $\mathbf{Ax} = \mathbf{b}$，但计算机给出的是近似解 $\tilde{\mathbf{x}}$。
@@ -994,30 +1175,56 @@ $$
 \Delta\mathbf{A} = -\frac{\mathbf{r}\tilde{\mathbf{x}}^\top}{\|\tilde{\mathbf{x}}\|^2}, \qquad \mathbf{r} = \mathbf{A}\tilde{\mathbf{x}} - \mathbf{b}
 $$
 
+- r 就是残差 ： 把近似解 x̃ 代入原方程，得到的"差距"。如果 x̃ 是精确解，r = 0
+
 **相对扰动**：$\dfrac{\|\Delta\mathbf{A}\|_2}{\|\mathbf{A}\|_2} = \dfrac{\|\mathbf{r}\|_2}{\|\mathbf{A}\|_2\cdot\|\tilde{\mathbf{x}}\|_2}$
 
 ```{r}
 #| label: backward-error
-A_be <- matrix(c(1, 2, 3, 4), 2, byrow = TRUE)
-b_be <- c(5, 6)
-x_true <- solve(A_be, b_be)
+# ========== 对比：稳定 vs 不稳定算法 ==========
+cat("===== 稳定 vs 不稳定算法 =====\n")
 
-# 模拟近似解
-x_approx <- x_true + c(0.01, -0.01)
+# 构造中等病态矩阵
+set.seed(123)
+n <- 5
+A <- matrix(rnorm(n*n), n, n)
+A <- A + t(A)  # 对称矩阵, 乘法也可以
+A <- A + n * diag(n)  # 加对角使其可逆，对角占优的矩阵一定可逆，对角线元素变大，矩阵更稳定
 
-# 残差
-r <- as.vector(A_be %*% x_approx - b_be)
-cat("残差 r:", r, "\n")
+b <- rowSums(A)  # 使得真实解为全1向量
 
-# 扰动矩阵
-Delta_A <- -outer(r, x_approx) / sum(x_approx^2)
+cat("矩阵大小:", n, "x", n, "\n")
+cat("条件数 κ(A) =", kappa(A), "\n\n")
 
-# 验证 (A + ΔA) x_approx = b
-cat("验证:", as.vector((A_be + Delta_A) %*% x_approx), "≈ b =", b_be, "\n")
+# 稳定算法: LU分解
+x_lu <- solve(A, b)
+# 计算残差
+r_lu <- as.vector(A %*% x_lu - b)
+# 计算相对扰动
+eta_lu <- sqrt(sum(r_lu^2)) / (norm(A, "2") * sqrt(sum(x_lu^2)))
 
-# 相对扰动
-cat("相对扰动 ||ΔA||/||A|| =", norm(Delta_A, "2") / norm(A_be, "2"), "\n")
+# 稳定算法: QR分解
+x_qr <- qr.solve(A, b)
+r_qr <- as.vector(A %*% x_qr - b)
+eta_qr <- sqrt(sum(r_qr^2)) / (norm(A, "2") * sqrt(sum(x_qr^2)))
+
+# 稳定算法: SVD伪逆
+x_svd <- as.vector(MASS::ginv(A) %*% b)
+r_svd <- as.vector(A %*% x_svd - b)
+eta_svd <- sqrt(sum(r_svd^2)) / (norm(A, "2") * sqrt(sum(x_svd^2)))
+
+cat("LU分解  后向误差 η =", eta_lu, "\n")
+cat("QR分解  后向误差 η =", eta_qr, "\n")
+cat("SVD伪逆 后向误差 η =", eta_svd, "\n")
+cat("机器精度 ε =", .Machine$double.eps, "\n\n")
+
+cat("===== 结论 =====\n")
+cat("LU分解:  η ≈ ε，后向稳定\n")
+cat("QR分解:  η ≈ ε，后向稳定\n")
+cat("SVD伪逆: η ≈ 100ε，略差但仍可接受\n")
 ```
+
+**后向误差是检验算法质量的工具**
 
 # 机器学习中的应用
 
