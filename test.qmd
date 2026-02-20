@@ -1,0 +1,148 @@
+---
+title: "最简单梯度下降示例（R + Python）"
+author: "你的名字"
+date: "2026-02-20"
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: true
+    code-tools: true
+    fig-align: center
+engine: knitr
+---
+
+```{r setup, include=FALSE}
+library(reticulate)
+use_python("C:/Users/ASUS/miniforge3/python.exe", required = TRUE)
+```
+
+# 引言
+
+本示例展示线性回归的最简单梯度下降（Batch GD）。  
+目标函数：最小化均方误差（MSE）
+
+$$
+\loss(w, b) = \frac{1}{n} \sum_{i=1}^n \left( y_i - (w x_i + b) \right)^2
+$$
+
+梯度公式：
+
+$$
+\frac{\partial \loss}{\partial w} = -\frac{2}{n} \sum_{i=1}^n (y_i - \hat{y}_i) x_i
+$$
+
+$$
+\frac{\partial \loss}{\partial b} = -\frac{2}{n} \sum_{i=1}^n (y_i - \hat{y}_i)
+$$
+
+我们将分别用 **R** 和 **Python** 实现，并比较结果。
+
+# 1. 生成模拟数据（用 R）
+
+```{r}
+#| label: data-gen
+#| fig-cap: "模拟数据散点图"
+#| fig-width: 6
+#| fig-height: 4
+
+set.seed(123)
+n <- 100
+x <- runif(n, -2, 2)
+true_w <- 3.5
+true_b <- 1.2
+y <- true_w * x + true_b + rnorm(n, 0, 0.6)
+
+library(ggplot2)
+ggplot(data.frame(x = x, y = y), aes(x, y)) +
+  geom_point(color = "steelblue", alpha = 0.7) +
+  geom_abline(slope = true_w, intercept = true_b, color = "red", linetype = "dashed") +
+  labs(title = "模拟数据（真实直线为红色虚线）", x = "x", y = "y") +
+  theme_minimal()
+```
+
+```{r}
+#| label: r-gd
+#| fig-cap: "R 中梯度下降的收敛曲线"
+#| fig-width: 7
+#| fig-height: 5
+
+# 初始化
+w <- 0
+b <- 0
+lr <- 0.05
+epochs <- 800
+mse_hist <- numeric(epochs)
+
+for (ep in 1:epochs) {
+  y_pred <- w * x + b
+  error <- y - y_pred
+  mse_hist[ep] <- mean(error^2)
+  
+  dw <- -2 * mean(error * x)
+  db <- -2 * mean(error)
+  
+  w <- w - lr * dw
+  b <- b - lr * db
+}
+
+# 结果
+cat("R 学到的参数：w =", round(w, 3), "b =", round(b, 3), "\n")
+cat("真实值：w =", true_w, "b =", true_b, "\n")
+
+# 收敛曲线
+df <- data.frame(epoch = 1:epochs, mse = mse_hist)
+ggplot(df, aes(epoch, mse)) +
+  geom_line(color = "darkgreen", linewidth = 1.2) +
+  labs(title = "R 梯度下降收敛过程", x = "迭代次数", y = "MSE") +
+  theme_minimal()
+```
+
+```{python}
+#| label: py-gd
+#| fig-cap: "Python 中梯度下降的收敛曲线"
+
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+
+# 设置中文字体
+plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'SimSun']
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+
+
+# 从 R 环境中获取数据（reticulate 自动桥接）
+x_r = r.x
+y_r = r.y
+
+X = torch.tensor(x_r, dtype=torch.float32).unsqueeze(1)
+Y = torch.tensor(y_r, dtype=torch.float32).unsqueeze(1)
+
+# 初始化参数
+w = torch.tensor([0.0], requires_grad=True)
+b = torch.tensor([0.0], requires_grad=True)
+
+optimizer = torch.optim.SGD([w, b], lr=0.05)
+mse_history = []
+
+for epoch in range(800):
+    Y_pred = X @ w + b
+    loss = torch.mean((Y - Y_pred)**2)
+    mse_history.append(loss.item())
+    
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+# 结果
+print(f"Python 学到的参数：w = {w.item():.3f}, b = {b.item():.3f}")
+
+# 画图（matplotlib）
+plt.figure(figsize=(7, 5))
+plt.plot(range(800), mse_history, color='purple', linewidth=2)
+plt.title("Python (PyTorch) 梯度下降收敛过程")
+plt.xlabel("Epoch")
+plt.ylabel("MSE")
+plt.grid(True, alpha=0.3)
+plt.show()
+```
