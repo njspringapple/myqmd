@@ -180,6 +180,7 @@ A_tilde <- matrix(c(1.01, 2.02, 2.99, 3.98), 2, byrow = TRUE)
 
 delta_A <- A_tilde - A_ex
 rel_err_A <- norm(delta_A, "F") / norm(A_ex, "F")
+# rel_err_A <- norm(delta_A, "F") / norm(A_ex, "F")
 cat("相对误差 δ_A =", round(rel_err_A, 6), "\n")
 
 lower_A <- norm(A_ex, "F") * (1 - rel_err_A)
@@ -229,10 +230,10 @@ f_tilde <- function(x) 1 + x + x^2 / 2        # 近似算法
 x_true <- pi
 x_tilde <- 3
 
-# 总误差
+# 总误差 - 由于数据和算法永远有误差，所以总误差永远算不出来
 total_err <- f_tilde(x_tilde) - f(x_true)
 
-# 算法误差：f̃(x̃) - f(x̃)
+# 算法误差：f̃(x̃) - f(x̃) - 永远无法得到精确的数据，所以算法误差总是基于观测数据计算
 algo_err <- f_tilde(x_tilde) - f(x_tilde)
 
 # 输入传播误差：f(x̃) - f(x)
@@ -247,7 +248,7 @@ cat("输入传播误差: ", round(input_err, 3), "(用 3 代替 π)\n")
 cat("验证: 算法误差 + 传播误差 =", round(algo_err + input_err, 3), "\n")
 ```
 
-关键观察：在这个例子中，算法误差（截断级数）比输入传播误差大得多。这意味着提高算法精度（多取几项泰勒展开）比提高输入精度更有价值。
+**关键观察**：在这个例子中，算法误差（截断级数）比输入传播误差大得多。这意味着提高算法精度（多取几项泰勒展开）比提高输入精度更有价值。
 
 ```{r}
 #| label: improve-algorithm
@@ -461,11 +462,12 @@ PPT 中推导了求解 $\mathbf{A}^{-1}\mathbf{x} = \mathbf{y}$ 时（即已知 
 
 设 $f(\mathbf{x}) = \mathbf{A}^{-1}\mathbf{x}$，则：
 
+- **利用范数的次可乘性性质**
 $$
 \|f(\tilde{\mathbf{x}}) - f(\mathbf{x})\| = \|\mathbf{A}^{-1}(\tilde{\mathbf{x}} - \mathbf{x})\| \leq \|\mathbf{A}^{-1}\| \cdot \|\tilde{\mathbf{x}} - \mathbf{x}\|
 $$
 
-所以 $\kappa_{\text{abs}} = \|\mathbf{A}^{-1}\|$。
+所以，根据绝对条件数的定义， $\kappa_{\text{abs}} = \|\mathbf{A}^{-1}\|$。
 
 对于相对条件数，经过推导（见上一章笔记的详细过程）：
 
@@ -488,12 +490,16 @@ $$
 ```{r}
 #| label: matrix-condition
 # PPT 测验：对角矩阵的条件数
+# kappa() 函数有一个参数 exact，默认值是 FALSE。
+# 当 exact = FALSE 时，R 使用一种近似估计算法来计算条件数，而不是直接通过奇异值分解计算精确值。
+# 这种近似方法计算更快，但结果会有偏差
 A_diag <- diag(c(2, 5, 0.1))
 cat("A = diag(2, 5, 0.1)\n")
 cat("奇异值:", svd(A_diag)$d, "\n")
 cat("κ_2(A) = σ_max / σ_min =", max(svd(A_diag)$d), "/", min(svd(A_diag)$d),
     "=", max(svd(A_diag)$d) / min(svd(A_diag)$d), "\n")
 cat("R 内置 kappa():", kappa(A_diag), "\n")
+# cat("R 内置 kappa():", kappa(A_diag, exact = TRUE), "\n")
 ```
 
 ```{r}
@@ -505,29 +511,54 @@ set.seed(42)
 n <- 10
 
 # 用不同条件数构造矩阵
+# 生成一个随机的正交矩阵 U
+# 随机生成的一般矩阵不是正交的，但对它做 QR 分解后，
+# Q 矩阵一定满足: Q^TQ = I
 U <- qr.Q(qr(matrix(rnorm(n^2), n)))
 cond_numbers <- c(1, 10, 100, 1000, 1e6, 1e12)
 
 x_true <- rep(1, n)
 perturbation <- rnorm(n, sd = 1e-10)
 
+# 这个实验要验证的是：条件数越大，输入的微小扰动被放大得越厉害
 results <- data.frame(
   kappa = cond_numbers,
+  # 解x的相对误差 - |Δx| / |x|
   rel_err_x = numeric(length(cond_numbers)),
+  # 误差放大倍数
   amplification = numeric(length(cond_numbers))
 )
 
 for (i in seq_along(cond_numbers)) {
   kk <- cond_numbers[i]
   # 构造条件数为 kk 的矩阵
+  # seq(log(1), log(kk), length.out = n)：在对数尺度上生成 n 个均匀分布的点
+  # 最小值是 log(1) 最大值是 log(10)
+  # exp(...)：转回原尺度，得到从 1 到 kk 的等比数列作为奇异值
+  # 为什么是等比： 假定生成的数为 a, a+d, a+2d, ...
+  # exp 后是 e^a e^{a+d} e^{a+2d}
+  # 前后项相除得到公比为 e^d
   sigmas <- exp(seq(log(1), log(kk), length.out = n))
-  sigmas <- sigmas / sigmas[1]  # 最小奇异值 = 1
+  # 归一化，使最小奇异值为 1，最大为 kk
+  #sigmas <- sigmas / sigmas[1]  # 最小奇异值 = 1
+  # 通过 SVD 的形式构造矩阵
+  # 等差数列的问题：奇异值集中在大值附近，小奇异值只有一个（1），其他都是几百。
+  # 这不符合实际矩阵的奇异值分布特征。真实的病态矩阵，奇异值通常在各个数量级都有分布。
+  # 等比数列的优势, 等比数列让奇异值在每个数量级都有代表
+  # 通过特征值分解形势构造一个对称矩阵
   A_test <- U %*% diag(sigmas) %*% t(U)
 
+  # Ax = b 的真实结果
   b_true <- A_test %*% x_true
+  # 真实结果 + 微小的扰动
+  # 验证的正是条件数的定义：输入 b 的微小扰动，会导致输出 x 多大的误差
+  # b 上叠加扰动： 测量误差、数据噪声
+  # A 上叠加扰动： 模型参数不确定性、浮点数舍入误差
   x_pert <- solve(A_test, b_true + perturbation)
 
+  # 输入值的相对误差
   rel_input <- sqrt(sum(perturbation^2)) / sqrt(sum(b_true^2))
+  # 输出的相对误差
   rel_output <- sqrt(sum((x_pert - x_true)^2)) / sqrt(sum(x_true^2))
 
   results$rel_err_x[i] <- rel_output
@@ -553,7 +584,16 @@ text(1e4, 1e2, "放大 ≈ κ", col = "grey50", srt = 35)
 
 **核心结论**：条件数 $\kappa$ 给出了输出相对误差对输入相对误差的**最大放大倍数**。条件数为 $10^k$ 意味着大约会丢失 $k$ 位有效数字。
 
-**练习**：双精度浮点数有约 16 位有效数字（$\epsilon_{\text{machine}} \approx 10^{-16}$）。如果 $\kappa(\mathbf{A}) = 10^{10}$，求解 $\mathbf{Ax} = \mathbf{b}$ 的结果大约能保证几位有效数字？
+**练习**：双精度浮点数（double类型）有约 16 位有效数字（$\epsilon_{\text{machine}} \approx 10^{-16}$）。如果 $\kappa(\mathbf{A}) = 10^{10}$，求解 $\mathbf{Ax} = \mathbf{b}$ 的结果大约能保证几位有效数字？
+
+**误差放大**：
+
+- 根据条件数的定义：输出相对误差 ≤ κ × 输入相对误差
+- 即使输入误差只有机器精度（最小可能的误差）输出相对误差 ≤ $10×10^{−16}=10^{−6}$
+- 有效数字的意义:
+  - 相对误差 $10^{−16}$ → 约 16 位有效数字
+  - 相对误差 $10^{−6}$ → 约 6 位有效数字
+- 简单理解: 条件数 𝜅 = 10 意味着大约丢失 k 位有效数字
 
 ```{r}
 #| code-fold: true
@@ -570,7 +610,7 @@ cat("保留的有效数字数 ≈ 16 -", log10(1e10), "=", 16 - log10(1e10), "\n
 
 ## 从条件到稳定
 
-上一节关注的是问题本身——"即使用精确算法，输入误差也会被放大"。
+上一节关注的是问题本身——"即使用精确算法，**输入误差**也会被放大"。
 
 现在我们关注算法本身——"即使输入完美，算法也会引入误差"。
 
@@ -607,6 +647,58 @@ $$
 $$
 
 **算法 2（不稳定）**：用展开后的公式
+
+### 方差公式的展开推导
+
+从定义式出发：
+
+$$
+\text{Var} = \frac{1}{n}\sum_{i=1}^n (x_i - \bar{x})^2
+$$
+
+##### 展开步骤
+
+把平方项展开：
+
+$$
+(x_i - \bar{x})^2 = x_i^2 - 2x_i\bar{x} + \bar{x}^2
+$$
+
+代入求和：
+
+$$
+\frac{1}{n}\sum_{i=1}^n (x_i^2 - 2x_i\bar{x} + \bar{x}^2)
+$$
+
+拆成三项：
+
+$$
+\frac{1}{n}\sum_{i=1}^n x_i^2 - \frac{2\bar{x}}{n}\sum_{i=1}^n x_i + \frac{1}{n}\sum_{i=1}^n \bar{x}^2
+$$
+
+##### 化简每一项
+
+第一项不变：\(\frac{1}{n}\sum_{i=1}^n x_i^2\)
+
+第二项：因为 \(\bar{x} = \frac{1}{n}\sum_{i=1}^n x_i\)，所以 \(\sum_{i=1}^n x_i = n\bar{x}\)
+
+$$
+\frac{2\bar{x}}{n} \cdot n\bar{x} = 2\bar{x}^2
+$$
+
+第三项：\(\bar{x}^2\) 是常数，求和 n 次再除以 n
+
+$$
+\frac{1}{n} \cdot n\bar{x}^2 = \bar{x}^2
+$$
+
+##### 最终结果
+
+$$
+\frac{1}{n}\sum_{i=1}^n x_i^2 - 2\bar{x}^2 + \bar{x}^2 = \frac{1}{n}\sum_{i=1}^n x_i^2 - \bar{x}^2
+$$
+
+这就是第二个公式。
 
 $$
 \tilde{f}_2(\mathbf{x}) = \frac{1}{n}\sum_{i=1}^n x_i^2 - \bar{x}^2
@@ -846,114 +938,6 @@ cat("→ 第二步（h = B⁻¹·）的条件数决定了误差放大\n")
 cat("→ 定理告诉我们：κ(h) 大时，g 的小误差被剧烈放大\n")
 ```
 
-# 后向误差分析
-
-## 框架
-
-上一章介绍了后向误差分析的基本思路。这里更系统地展开。
-
-求解 $\mathbf{Ax} = \mathbf{b}$，算法给出近似解 $\tilde{\mathbf{x}}$。定义**残差**：
-
-$$
-\mathbf{r} = \mathbf{A}\tilde{\mathbf{x}} - \mathbf{b}
-$$
-
-后向误差的问题是：**最小的 $\Delta\mathbf{A}$ 是什么，使得 $(\mathbf{A} + \Delta\mathbf{A})\tilde{\mathbf{x}} = \mathbf{b}$ 精确成立？**
-
-答案是：
-
-$$
-\Delta\mathbf{A} = -\frac{\mathbf{r}\tilde{\mathbf{x}}^\top}{\|\tilde{\mathbf{x}}\|^2}
-$$
-
-**后向误差**定义为：
-
-$$
-\eta = \frac{\|\Delta\mathbf{A}\|_2}{\|\mathbf{A}\|_2} = \frac{\|\mathbf{r}\|_2}{\|\mathbf{A}\|_2 \cdot \|\tilde{\mathbf{x}}\|_2}
-$$
-
-如果 $\eta \approx \epsilon_{\text{machine}}$（约 $10^{-16}$），算法是后向稳定的；如果 $\eta \gg \epsilon_{\text{machine}}$，算法不稳定。
-
-## 后向误差 + 条件数 = 前向误差
-
-把后向误差和条件数结合起来，我们得到**前向误差界**：
-
-$$
-\frac{\|\tilde{\mathbf{x}} - \mathbf{x}\|}{\|\mathbf{x}\|} \leq \kappa(\mathbf{A}) \cdot \eta
-$$
-
-这就是数值分析的核心等式：**前向误差 ≤ 条件数 × 后向误差**。
-
-一个后向稳定的算法（$\eta \approx \epsilon_{\text{machine}}$）在良态问题（$\kappa$ 小）上给出好的结果；在病态问题上，即使算法完美也无能为力——这是问题本身的"硬限制"。
-
-```{r}
-#| label: backward-error-demo
-# 演示后向误差分析
-set.seed(42)
-n <- 6
-
-# 构造不同条件数的矩阵
-for (target_kappa in c(1e1, 1e5, 1e10, 1e14)) {
-  U <- qr.Q(qr(matrix(rnorm(n^2), n)))
-  sigmas <- exp(seq(0, log(target_kappa), length.out = n))
-  A <- U %*% diag(sigmas) %*% t(U)
-
-  x_true <- c(1, -1, 2, -2, 3, -3)
-  b <- A %*% x_true
-
-  # 用 LU 分解求解
-  x_hat <- solve(A, b)
-
-  # 残差
-  r <- as.vector(A %*% x_hat - b)
-
-  # 后向误差
-  eta <- sqrt(sum(r^2)) / (norm(A, "2") * sqrt(sum(x_hat^2)))
-
-  # 前向误差
-  fwd_err <- sqrt(sum((x_hat - x_true)^2)) / sqrt(sum(x_true^2))
-
-  cat(sprintf("κ = %.0e | η = %.2e | 前向误差 = %.2e | κ·η = %.2e\n",
-              kappa(A), eta, fwd_err, kappa(A) * eta))
-}
-
-cat("\n规律：后向误差 η 始终 ≈ ε_machine（算法稳定）\n")
-cat("但前向误差随 κ 增大而增大（问题越病态，结果越差）\n")
-cat("前向误差 ≤ κ × η（理论上界）\n")
-```
-
-**练习**：比较 LU 分解（`solve()`）和 QR 分解（`qr.solve()`）在条件数 $10^{12}$ 的矩阵上的后向误差。
-
-```{r}
-#| code-fold: true
-#| code-summary: "点击查看答案"
-set.seed(99)
-n <- 8
-U <- qr.Q(qr(matrix(rnorm(n^2), n)))
-sigmas <- exp(seq(0, log(1e12), length.out = n))
-A_ill <- U %*% diag(sigmas) %*% t(U)
-x_true <- rep(1, n)
-b_ill <- A_ill %*% x_true
-
-# LU 分解（solve 的默认方法）
-x_lu <- solve(A_ill, b_ill)
-r_lu <- as.vector(A_ill %*% x_lu - b_ill)
-eta_lu <- sqrt(sum(r_lu^2)) / (norm(A_ill, "2") * sqrt(sum(x_lu^2)))
-
-# QR 分解 —— 注意：必须放宽容差，否则默认 tol=1e-7 会判定矩阵奇异
-x_qr <- qr.solve(A_ill, b_ill, tol = 1e-16)
-r_qr <- as.vector(A_ill %*% x_qr - b_ill)
-eta_qr <- sqrt(sum(r_qr^2)) / (norm(A_ill, "2") * sqrt(sum(x_qr^2)))
-
-cat("κ(A) ≈", format(kappa(A_ill), digits = 3), "\n\n")
-cat("LU:  后向误差 η =", format(eta_lu, digits = 3), "\n")
-cat("     前向误差   =", format(sqrt(sum((x_lu - x_true)^2)) / sqrt(sum(x_true^2)), digits = 3), "\n\n")
-cat("QR:  后向误差 η =", format(eta_qr, digits = 3), "\n")
-cat("     前向误差   =", format(sqrt(sum((x_qr - x_true)^2)) / sqrt(sum(x_true^2)), digits = 3), "\n\n")
-cat("两者后向误差都 ≈ ε_machine —— 都是后向稳定的算法\n")
-cat("前向误差都 ≈ κ × ε_machine —— 这是问题本身的限制\n")
-```
-
 # 综合案例：从理论到实践
 
 ## 案例 1：二次方程的数值求解
@@ -1186,10 +1170,11 @@ cat("  - 后做 '危险操作'，它会放大前面所有步骤累积的误差\n
 │   ├── 后向稳定：算法误差 ≈ ε_machine
 │   ├── 复合定理：κ(h) 放大 g 的误差
 │   └── 原则：条件数差的步骤尽早执行
-│
-└── 核心等式
-    └── 前向误差 ≤ 条件数 × 后向误差
 ```
+
+- **条件（Kondition）**描述问题对输入误差的**敏感性**
+- **稳定性（Stabilität）**描述算法对误差的**鲁棒性**
+- **条件数差的步骤应尽早执行！**
 
 ## 核心公式卡
 
@@ -1199,8 +1184,6 @@ cat("  - 后做 '危险操作'，它会放大前面所有步骤累积的误差\n
 | 误差分解 | 总误差 = $[\tilde{f}(\tilde{\mathbf{x}}) - f(\tilde{\mathbf{x}})]$ + $[f(\tilde{\mathbf{x}}) - f(\mathbf{x})]$ |
 | 标量条件数 | $\kappa_{\text{rel}} = |f'(x)| \cdot |x| / |f(x)|$ |
 | 矩阵条件数 | $\kappa(\mathbf{A}) = \|\mathbf{A}\| \cdot \|\mathbf{A}^{-1}\| = \sigma_{\max} / \sigma_{\min}$ |
-| 后向误差 | $\eta = \|\mathbf{r}\|_2 / (\|\mathbf{A}\|_2 \cdot \|\tilde{\mathbf{x}}\|_2)$ |
-| 前向误差界 | $\|\tilde{\mathbf{x}} - \mathbf{x}\| / \|\mathbf{x}\| \leq \kappa(\mathbf{A}) \cdot \eta$ |
 | 复合算法 | 总误差 ≤ $\tilde{h}$ 误差 + $\kappa(h) \times \tilde{g}$ 误差 |
 
 ## 实践指南
