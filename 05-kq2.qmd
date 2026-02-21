@@ -1,0 +1,538 @@
+---
+title: "最小二乘法：从直觉到算法（数值线代·一课版）"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-summary: "展开代码"
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+# 课前 10 分钟速通：本章“够用就行”的前置知识 {#prereq}
+
+> 本章目标：不靠背诵公式，通过**动手 + 观察**建立最小二乘的几何直觉与算法选择能力。  
+> 你只需要掌握下面 4 件事（每件都有 1 个可运行的检验）。
+
+## 1. 向量 2-范数与“距离”
+
+我们用 $\|\cdot\|_2$ 表示欧氏长度。最小二乘就是在找“离 $\mathbf{b}$ 最近的 $\mathbf{Ax}$”。
+
+## 2. 正交矩阵：不改变长度（数值稳定的关键）
+
+若 $\mathbf{Q}^T\mathbf{Q}=\mathbf{I}$，则对任意 $\mathbf{z}$：$\|\mathbf{Qz}\|_2=\|\mathbf{z}\|_2$。  
+这意味着“乘一个正交矩阵”**不会放大误差**，也不会改变最小化问题的解。
+
+## 3. 条件数：一句话就够
+
+$\kappa_2(\mathbf{A})=\sigma_{\max}/\sigma_{\min}$ 大 $\Rightarrow$ 问题对扰动更敏感（更容易“翻车”）。  
+数值线代里：我们关心的不只是“数学上对”，更是“浮点数下稳不稳”。
+
+## 4. 三个分解只记用途（不记定义也能用）
+
+- **正规方程 + Cholesky**：快，但会形成 $\mathbf{A}^T\mathbf{A}$，可能把条件数**平方化**  
+- **QR（Householder）**：默认首选，稳定  
+- **SVD**：最稳，能处理（近）秩亏，但更慢
+
+```{r}
+#| label: setup
+#| code-fold: false
+# 基础工具函数（尽量少、尽量通用）
+
+vnorm <- function(x) sqrt(sum(drop(x)^2))
+
+kappa2 <- function(A, tol = 0) {
+  sv <- svd(A, nu = 0, nv = 0)
+  d <- sv$d
+  if (length(d) == 0) return(NA_real_)
+  if (tol > 0) d <- d[d > tol * max(d)]
+  if (length(d) == 0) return(Inf)
+  max(d) / min(d)
+}
+
+ls_residual <- function(A, x, b) b - A %*% x
+
+relerr <- function(x_hat, x_true) vnorm(x_hat - x_true) / max(vnorm(x_true), .Machine$double.eps)
+
+# 课前检验：正交不变性（可跳过）
+set.seed(1)
+n <- 5
+Q <- qr.Q(qr(matrix(rnorm(n^2), n)))
+z <- rnorm(n)
+cat("检验 ||Qz|| == ||z||: ", signif(vnorm(Q%*%z) - vnorm(z), 3), "\n")
+```
+
+# 学习导航：这一章你要会做的 3 件事 {#map}
+
+1. **直觉**：最小二乘 = 把 $\mathbf{b}$ 正交投影到 $\text{col}(\mathbf{A})$  
+2. **判据**：残差 $\mathbf{r}=\mathbf{b}-\mathbf{A}\hat{\mathbf{x}}$ 满足 $\mathbf{A}^T\mathbf{r}=0$  
+3. **算法选择**（一课版结论先给）：  
+   - 默认用 **QR**（`qr.solve` / `lm`）  
+   - $\mathbf{A}$（近）秩亏或很病态：用 **SVD**（或正则化）  
+   - $\kappa$ 很小且要对很多不同 $\mathbf{b}$ 重复求解：可以考虑 **Cholesky/正规方程**（快，但要小心）
+
+---
+
+# 动机：为什么需要最小二乘？（从“无解”到“最优近似”） {#motivation}
+
+## 房价例子：超定方程组一般无精确解
+
+```{r}
+#| label: motivation-data
+area  <- c(50, 70, 80, 100, 120)
+price <- c(150, 200, 230, 310, 350)
+
+A <- cbind(1, area)  # [1, x]
+b <- price
+
+cat("A 的尺寸:", nrow(A), "×", ncol(A), "\n")
+cat("这是超定系统 m>n，一般无精确解：想找最优近似\n")
+```
+
+```{r}
+#| label: motivation-plot
+#| fig-width: 7
+#| fig-height: 5
+plot(area, price, pch = 19, col = "steelblue", cex = 1.4,
+     xlab = "面积 (m²)", ylab = "价格 (千€)",
+     main = "数据点不共线：不存在一条直线精确穿过所有点")
+grid()
+```
+
+**我们要做的事（最小二乘）**：找 $\hat{\boldsymbol{\beta}}$ 使得  
+$$
+\|\mathbf{A}\hat{\boldsymbol{\beta}}-\mathbf{b}\|_2
+\quad \text{最小。}
+$$
+
+---
+
+# 核心直觉：最小二乘 = 投影 {#geometry}
+
+## 一句话
+
+$\mathbf{A}\hat{\mathbf{x}}$ 是 $\mathbf{b}$ 在 $\text{col}(\mathbf{A})$ 上的**正交投影**，  
+残差 $\mathbf{r}=\mathbf{b}-\mathbf{A}\hat{\mathbf{x}}$ 垂直于列空间。
+
+## 动手 1（5 分钟）：2D 投影图 + “垂直”数值检验
+
+```{r}
+#| label: geometry-2d
+#| fig-width: 8
+#| fig-height: 6
+a <- c(1, 2)
+b_vec <- c(3, 1)
+
+proj_coeff <- sum(a * b_vec) / sum(a * a)
+b_hat <- proj_coeff * a
+r <- b_vec - b_hat
+
+plot(NULL, xlim = c(-0.5, 4), ylim = c(-0.5, 3), asp = 1,
+     xlab = "", ylab = "",
+     main = "几何直觉：b 投影到 col(A) 上，残差 r 垂直于 col(A)")
+grid()
+
+arrows(0,0, 3,6, col="grey70", lwd=1, length=0.08); text(3.1,5.7,"col(A)", col="grey50")
+arrows(0,0, b_vec[1], b_vec[2], col="steelblue", lwd=3, length=0.12); text(b_vec[1]+.1,b_vec[2]+.1,"b", col="steelblue")
+arrows(0,0, b_hat[1], b_hat[2], col="tomato", lwd=3, length=0.12); text(b_hat[1]+.1,b_hat[2]-.2,"b_hat", col="tomato")
+arrows(b_hat[1], b_hat[2], b_vec[1], b_vec[2], col="orange", lwd=2, lty=2, length=0.1); text((b_hat[1]+b_vec[1])/2+.2,(b_hat[2]+b_vec[2])/2,"r", col="orange")
+
+cat("数值检验 a^T r 应接近 0: ", signif(sum(a*r), 4), "\n")
+```
+
+---
+
+# 从直觉到可计算：正规方程 $A^T r=0$ {#normal}
+
+## 推导（只保留“可用的结论”）
+
+残差 $\mathbf{r}=\mathbf{b}-\mathbf{A}\hat{\mathbf{x}}$ 垂直于列空间  
+$\Rightarrow$ 对 $\mathbf{A}$ 的每一列 $\mathbf{a}_j$：$\mathbf{a}_j^T\mathbf{r}=0$  
+$\Rightarrow$
+$$
+\mathbf{A}^T(\mathbf{b}-\mathbf{A}\hat{\mathbf{x}})=0
+\quad\Longleftrightarrow\quad
+\mathbf{A}^T\mathbf{A}\hat{\mathbf{x}}=\mathbf{A}^T\mathbf{b}.
+$$
+
+> **数值线代观点**：正规方程是“数学上正确的条件”，但不一定是“数值上好的算法”。
+
+## 动手 2（5 分钟）：用房价数据验证 $A^T r=0$
+
+```{r}
+#| label: normal-check
+x_ne <- solve(crossprod(A), crossprod(A, b)) # 解正规方程（不显式求逆）
+r_ne <- b - A %*% x_ne
+
+cat("正规方程解 x = (β0, β1):\n"); print(round(x_ne, 6))
+cat("检验 A^T r 接近 0:\n"); print(drop(crossprod(A, r_ne)))
+cat("残差范数 ||r||:", round(vnorm(r_ne), 6), "\n")
+```
+
+---
+
+# 重要警告：正规方程会“平方化”条件数（为什么 QR 更稳） {#conditioning}
+
+> 这一节只想让你形成**可操作的直觉**：  
+> “形成 $A^TA$ 会让问题更敏感”，所以默认不要用它当首选算法。
+
+## 关键事实（不用背推导）
+
+$$
+\kappa_2(\mathbf{A}^T\mathbf{A}) \approx \kappa_2(\mathbf{A})^2.
+$$
+
+这意味着：如果 $\kappa_2(A)=10^8$，那么 $\kappa_2(A^TA)\approx 10^{16}$（双精度的极限），算法可能直接失去有效数字。
+
+## 动手 3（8 分钟）：一个“短反例”——NE vs QR 在病态矩阵上
+
+我们构造一个有精确解的最小二乘问题（$\mathbf{b}\in\text{col}(A)$），这样比较更干净：差异主要来自数值稳定性，而不是拟合误差。
+
+```{r}
+#| label: short-counterexample
+set.seed(2)
+m <- 40; n <- 6
+
+ls_svd <- function(A, b, tol = 1e-12) {
+  sv <- svd(A)
+  d <- sv$d
+  keep <- d > tol * max(d)
+  Utb <- drop(t(sv$u) %*% b)
+  coeff <- rep(0, length(d))
+  coeff[keep] <- Utb[keep] / d[keep]
+  x <- sv$v %*% coeff
+  drop(x)
+}
+
+# 用 SVD 构造指定条件数的 A
+make_A_with_kappa <- function(m, n, kappa_target) {
+  U <- qr.Q(qr(matrix(rnorm(m*m), m)))
+  V <- qr.Q(qr(matrix(rnorm(n*n), n)))
+  sig <- exp(seq(log(1), log(kappa_target), length.out = n))
+  U[,1:n] %*% diag(sig) %*% t(V)
+}
+
+k_target <- 1e12
+A_bad <- make_A_with_kappa(m, n, k_target)
+x_true <- rep(1, n)
+b_exact <- A_bad %*% x_true
+
+# 1) 正规方程解
+x_ne_bad <- tryCatch(
+  solve(crossprod(A_bad), crossprod(A_bad, b_exact)),
+  error = function(e) rep(NA_real_, n)
+)
+
+# 2) QR 解（推荐）
+x_qr_bad <- tryCatch(
+  qr.solve(A_bad, b_exact),
+  error = function(e) {
+    message("QR 失败（数值上秩亏/极病态），回退到 SVD。")
+    ls_svd(A_bad, b_exact, tol = 1e-12)
+  }
+)
+
+cat("kappa2(A)      ~", format(kappa2(A_bad), digits = 4), "\n")
+cat("kappa2(A^T A)  ~", format(kappa2(crossprod(A_bad)), digits = 4), "\n\n")
+
+cat("相对误差（有精确解时更能看出算法差异）：\n")
+cat("  NE:", signif(relerr(x_ne_bad, x_true), 4), "\n")
+cat("  QR:", signif(relerr(x_qr_bad, x_true), 4), "\n")
+```
+
+> 你应该观察到：在足够病态时，NE 的误差显著更大，甚至可能直接失败；QR 通常还能给出可用精度。
+
+---
+
+# 三种算法：你需要会用、会选（不要求手搓实现） {#algorithms}
+
+## 方法 A：正规方程 + Cholesky（快，但有风险）
+
+- 适合：$\kappa(A)$ 小、对很多不同 $\mathbf{b}$ 反复求解、追求速度  
+- 风险：条件数平方化；病态时不可靠
+
+```{r}
+#| label: ls-chol
+ls_chol <- function(A, b) {
+  AtA <- crossprod(A)
+  Atb <- crossprod(A, b)
+  R <- chol(AtA)              # AtA = R^T R
+  y <- forwardsolve(t(R), Atb)
+  x <- backsolve(R, y)
+  x
+}
+
+x_chol <- ls_chol(A, b)
+cat("Cholesky(NE) 解:", round(x_chol, 6), "\n")
+```
+
+## 方法 B：QR（默认首选，数值稳定）
+
+> 你不需要构造完整的 $Q$。核心是：把问题变成上三角回代。
+
+在 R 中直接用：
+
+- `qr.solve(A, b)`（最小二乘解）
+- `lm(y ~ x)`（内部就是 QR）
+
+```{r}
+#| label: ls-qr
+x_qr <- qr.solve(A, b)
+cat("QR 解:", round(x_qr, 6), "\n")
+
+fit <- lm(price ~ area)
+cat("lm() 系数:", round(coef(fit), 6), "\n")
+```
+
+## 方法 C：SVD（最稳；秩亏/近秩亏的“保险方案”）
+
+适合：列（几乎）线性相关、奇异值尾部接近 0、你需要最小范数解。
+
+```{r}
+#| label: ls-svd
+ls_svd <- function(A, b, tol = 1e-12) {
+  sv <- svd(A)
+  d <- sv$d
+  keep <- d > tol * max(d)
+  Utb <- drop(t(sv$u) %*% b)
+  coeff <- rep(0, length(d))
+  coeff[keep] <- Utb[keep] / d[keep]
+  x <- sv$v %*% coeff
+  drop(x)
+}
+
+x_svd <- ls_svd(A, b)
+cat("SVD 解:", round(x_svd, 6), "\n")
+```
+
+---
+
+# 方法选择：一课版“决策树” {#decision}
+
+把这 4 行当作你的实际工作流程（不需要背大定理）：
+
+1. **默认**：`qr.solve(A,b)`（稳定、够快）  
+2. 若 `kappa2(A)` 很大或你怀疑共线：**看奇异值** `svd(A)$d`  
+3. 若尾部奇异值接近 0（近秩亏）：用 **SVD**（或正则化）  
+4. 若 $\kappa(A)$ 很小且你要反复解很多次：可考虑 **Cholesky（NE）** 提速
+
+```{r}
+#| label: decision-demo
+cat("房价例子：\n")
+cat("  kappa2(A) =", format(kappa2(A), digits = 4), "\n")
+cat("  建议：默认 QR（lm/qr.solve）即可\n")
+```
+
+---
+
+# 综合案例 1：高阶多项式拟合为什么会不稳定？如何修复？ {#poly}
+
+> 本案例的学习点不是“过拟合”本身，而是：  
+> **Vandermonde 矩阵会迅速病态** $\Rightarrow$ 需要换基/缩放/正则化。
+
+## 现象：Vandermonde 条件数随阶数飙升
+
+```{r}
+#| label: poly-data
+set.seed(42)
+n_pts <- 20
+x_data <- seq(0, 1, length.out = n_pts)
+y_true <- sin(2 * pi * x_data)
+y_data <- y_true + rnorm(n_pts, sd = 0.3)
+
+x_fine <- seq(0, 1, length.out = 200)
+
+kappa_by_degree <- function(x, max_deg = 18) {
+  sapply(1:max_deg, function(d) {
+    A <- outer(x, 0:d, "^")
+    kappa2(A)
+  })
+}
+
+kappas <- kappa_by_degree(x_data, 18)
+```
+
+```{r}
+#| label: poly-kappa-plot
+#| fig-width: 8
+#| fig-height: 5
+plot(1:18, kappas, type = "b", log = "y",
+     pch = 19, col = "steelblue", lwd = 2,
+     xlab = "多项式阶数 d", ylab = expression(kappa[2](A)),
+     main = "Vandermonde 条件数随阶数快速增长 → 数值不稳定风险")
+grid()
+abline(h = 1/.Machine$double.eps, col = "red", lty = 2)
+text(6, (1/.Machine$double.eps)/5, "≈ 1/ε（双精度极限）", col = "red", cex = 0.85)
+```
+
+## 动手 4（10 分钟）：同样阶数，用“正交多项式基”修复病态
+
+我们对比两种设计矩阵：
+
+- 原始幂基：$1, x, x^2, \dots, x^d$（Vandermonde）
+- 正交基：`poly(x, d, raw = FALSE)`（数值更稳）
+
+```{r}
+#| label: poly-fix
+#| fig-width: 10
+#| fig-height: 6
+compare_degree <- 12
+
+A_raw  <- outer(x_data, 0:compare_degree, "^")
+A_orth <- cbind(1, poly(x_data, compare_degree, raw = FALSE))  # 保留截距列
+
+cat("d =", compare_degree, "\n")
+cat("  kappa2(raw)  =", format(kappa2(A_raw), digits = 4), "\n")
+cat("  kappa2(orth) =", format(kappa2(A_orth), digits = 4), "\n\n")
+
+beta_raw  <- ls_svd(A_raw,  y_data)   # 用 SVD 避免“算法差”混进来
+beta_orth <- ls_svd(A_orth, y_data)
+
+A_raw_f  <- outer(x_fine, 0:compare_degree, "^")
+A_orth_f <- cbind(1, poly(x_fine, compare_degree, raw = FALSE))
+
+y_raw  <- A_raw_f  %*% beta_raw
+y_orth <- A_orth_f %*% beta_orth
+
+par(mfrow = c(1,2), mar = c(4,4,3,1))
+plot(x_data, y_data, pch=19, col="steelblue",
+     main="幂基（Vandermonde）", xlab="x", ylab="y", ylim=c(-2,2))
+grid()
+lines(x_fine, sin(2*pi*x_fine), col="grey50", lty=2)
+lines(x_fine, y_raw, col="tomato", lwd=2)
+
+plot(x_data, y_data, pch=19, col="steelblue",
+     main="正交多项式基 poly()", xlab="x", ylab="y", ylim=c(-2,2))
+grid()
+lines(x_fine, sin(2*pi*x_fine), col="grey50", lty=2)
+lines(x_fine, y_orth, col="tomato", lwd=2)
+```
+
+> 你应该看到：同样阶数下，正交基的条件数显著更小，拟合更“听话”。  
+> 这就是数值线代的思维：**先改问题表示，再谈算法**。
+
+---
+
+# 综合案例 2：共线性（近秩亏）与岭回归：从 SVD 视角看“被抑制的方向” {#ridge}
+
+> 这一节的重点：当某些奇异值很小，说明某些方向信息不足。  
+> 岭回归相当于在这些方向上“刹车”，让解不要乱飙。
+
+```{r}
+#| label: ridge-data
+set.seed(123)
+n_obs <- 120; n_feat <- 5
+X <- matrix(rnorm(n_obs * n_feat), n_obs, n_feat)
+
+corr_level <- 0.9999
+X[, n_feat] <- corr_level * X[, 1] + sqrt(1 - corr_level^2) * rnorm(n_obs)
+
+beta_true <- c(1, -2, 0.5, 0, 3)
+y <- X %*% beta_true + rnorm(n_obs, sd = 0.5)
+
+svX <- svd(X, nu = 0, nv = 0)
+cat("kappa2(X) =", format(max(svX$d)/min(svX$d), digits = 4), "\n")
+cat("奇异值（看尾部是否接近 0）：\n"); print(signif(svX$d, 4))
+```
+
+## 岭回归与“滤波因子”可视化（建立直觉）
+
+岭回归解：
+$$
+\hat\beta_\lambda = (X^TX+\lambda I)^{-1}X^Ty.
+$$
+在 SVD 视角下，小奇异值方向会被更强地抑制。
+
+```{r}
+#| label: ridge-filter
+#| fig-width: 9
+#| fig-height: 5
+lambdas <- 10^seq(-6, 2, length.out = 200)
+d <- svX$d
+
+# 每个奇异值方向的“增益”（越小越抑制）
+gain <- sapply(lambdas, function(lam) d / (d^2 + lam))  # proportional filter
+
+matplot(lambdas, t(gain), type = "l", log = "x", lwd = 2,
+        xlab = expression(lambda), ylab = "滤波因子（相对增益）",
+        main = "岭回归抑制小奇异值方向：λ 越大，抑制越强")
+grid()
+legend("topright", legend = paste0("σ", 1:length(d)), lwd = 2, col = 1:length(d), cex = 0.8)
+```
+
+---
+
+# 小测验（不背诵，用一句话/一行代码回答） {#quiz}
+
+## 测验 1：残差与列空间
+
+**问**：最小二乘解的残差 $\mathbf{r}$ 与什么垂直？给一个数值验证方式。  
+
+```{r}
+#| label: quiz1
+#| code-fold: true
+xhat <- qr.solve(A, b)
+r <- b - A %*% xhat
+cat("应垂直于 col(A)，等价于 A^T r = 0\n")
+cat("数值验证 crossprod(A, r):\n")
+print(drop(crossprod(A, r)))
+```
+
+## 测验 2：为什么不默认用正规方程？
+
+**问**：用一句话解释“为什么形成 $A^TA$ 会更危险”。  
+
+```{r}
+#| label: quiz2
+#| code-fold: true
+cat("因为 κ2(A^T A) ≈ κ2(A)^2，条件数平方化会放大舍入误差，病态时容易丢失有效数字。\n")
+```
+
+## 测验 3：方法选择
+
+**问**：当你怀疑 $\mathbf{A}$ 近秩亏，第一步你会看什么？选择什么求解器？  
+
+```{r}
+#| label: quiz3
+#| code-fold: true
+cat("先看 svd(A)$d 的尾部（小奇异值）。近秩亏用 SVD（或正则化/岭回归），默认 QR 也可但不如 SVD 保险。\n")
+```
+
+---
+
+# 总结：一课版你需要带走的“工作记忆” {#summary}
+
+## 1. 直觉
+
+- 最小二乘：在所有 $\mathbf{Ax}$ 里找离 $\mathbf{b}$ 最近的那个  
+- 几何：$\mathbf{A}\hat{\mathbf{x}}$ 是 $\mathbf{b}$ 在 $\text{col}(A)$ 的正交投影  
+- 判据：$\mathbf{A}^T(\mathbf{b}-\mathbf{A}\hat{\mathbf{x}})=0$
+
+## 2. 算法（按优先级）
+
+1. **QR：** `qr.solve(A,b)`（默认首选，稳）  
+2. **SVD：** 近秩亏/很病态时的保险：看 `svd(A)$d`，必要时截断小奇异值  
+3. **Cholesky（NE）：** 良态 + 多次求解 + 追求速度可用，但要记住风险：$\kappa$ 平方化
+
+## 3. 数值线代的核心习惯
+
+- 先问：问题是不是病态？（`kappa2(A)`、奇异值尾部）  
+- 再选：合适的表示（正交基/缩放/正则化）与算法（QR/SVD）  
+- 最后做：用残差、正交性检验等**可观察量**验证结果是否可信
+
+---
+
+# 附录：扩展阅读（可选） {#appendix}
+
+## A. 关于 b 与 A 的扰动上界（本课不要求掌握）
+
+> 这一部分放在附录：有助于深入理解“为什么残差大时更敏感”，但一课不需要推公式。
+
+- 固定 $A$ 看 $b$ 的扰动：敏感性与 $\kappa_2(A)$ 以及 $b$ 在列空间的投影比例有关  
+- 固定 $b$ 看 $A$ 的扰动：在无精确解时可能出现 $\kappa_2(A)^2$ 量级项
+
+（如果你要讲误差分析完整证明，可在此处继续补充。）

@@ -1,0 +1,1512 @@
+---
+title: "最小二乘法：从直觉到算法"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: false
+    theme: cosmo
+---
+
+# 前置知识回顾
+
+在开始之前，确认你对以下概念有基本了解：
+
+- **矩阵范数与条件数**：$\kappa(\mathbf{A}) = \|\mathbf{A}\|\|\mathbf{A}^{-1}\|$，条件数越大问题越"病态"
+- **正交矩阵**：满足 $\mathbf{Q}^T\mathbf{Q} = \mathbf{I}$，保持向量长度和角度不变
+- **矩阵分解**：LU分解、Cholesky分解、SVD（奇异值分解）
+- **误差分析**：绝对误差、相对误差、误差分解（算法误差 + 输入传播误差）
+
+如果对条件数和误差分析还不熟悉，建议先回顾上一章。本章将从"**当方程组无精确解时怎么办**"这个最实际的问题出发，系统建立最小二乘法的理论和算法框架。
+
+```{r}
+#| label: setup
+# 辅助函数
+tr <- function(A) sum(diag(A))
+
+# 向量2-范数
+vnorm <- function(x) sqrt(sum(x^2))
+
+# Frobenius范数
+fnorm <- function(A) sqrt(sum(A^2))
+```
+
+# 动机：为什么需要最小二乘？
+
+## 一个简单的例子
+
+假设你是一名房产中介，想根据房屋面积预测房价。你手上有 5 套房子的数据：
+
+```{r}
+#| label: motivation-data
+# 房屋数据
+area <- c(50, 70, 80, 100, 120)    # 面积 (m²)
+price <- c(150, 200, 230, 310, 350)  # 价格 (千€)
+
+cat("面积 (m²):  ", area, "\n")
+cat("价格 (千€): ", price, "\n")
+```
+
+你想找一个线性模型 $y = \beta_0 + \beta_1 x$ 来描述"面积→价格"的关系。把每个数据点代入，得到 5 个方程、2 个未知数：
+
+$$
+\begin{cases}
+\beta_0 + 50\beta_1 = 150 \\
+\beta_0 + 70\beta_1 = 200 \\
+\beta_0 + 80\beta_1 = 230 \\
+\beta_0 + 100\beta_1 = 310 \\
+\beta_0 + 120\beta_1 = 350
+\end{cases}
+$$
+
+**5 个方程，2 个未知数**——方程比未知数多，这叫**超定系统（overdetermined system）**。一般来说，不可能找到一组 $(\beta_0, \beta_1)$ 同时满足所有方程。
+
+```{r}
+#| label: motivation-visual
+#| fig-width: 7
+#| fig-height: 5
+
+# 可视化：数据点不在一条直线上
+plot(area, price, pch = 19, col = "steelblue", cex = 1.5,
+     xlab = "面积 (m²)", ylab = "价格 (千€)",
+     main = "房价数据：无法找到一条直线精确穿过所有点",
+     xlim = c(40, 130), ylim = c(100, 400))
+grid()
+
+# 随便画两条线，说明没有"完美"的
+abline(a = 20, b = 2.5, col = "grey60", lty = 2)
+abline(a = 50, b = 2.8, col = "grey60", lty = 2)
+text(125, 335, "?", col = "grey40", cex = 2)
+legend("topleft", "数据点", pch = 19, col = "steelblue")
+```
+
+**问题**：既然没有精确解，能不能找一个"最好的近似"？
+
+**答案**：最小二乘法——找使所有偏差的**平方和最小**的那组参数。
+
+## 写成矩阵形式
+
+把上面的方程组写成 $\mathbf{A}\boldsymbol{\beta} = \mathbf{b}$：
+
+$$
+\underbrace{\begin{pmatrix} 1 & 50 \\ 1 & 70 \\ 1 & 80 \\ 1 & 100 \\ 1 & 120 \end{pmatrix}}_{\mathbf{A}} \underbrace{\begin{pmatrix} \beta_0 \\ \beta_1 \end{pmatrix}}_{\boldsymbol{\beta}} = \underbrace{\begin{pmatrix} 150 \\ 200 \\ 230 \\ 310 \\ 350 \end{pmatrix}}_{\mathbf{b}}
+$$
+
+最小二乘法就是要找 $\hat{\boldsymbol{\beta}}$ 使得 $\|\mathbf{A}\hat{\boldsymbol{\beta}} - \mathbf{b}\|_2$ 最小。
+
+```{r}
+#| label: motivation-matrix
+# 构造矩阵
+A <- cbind(1, area)
+b <- price
+
+cat("矩阵 A:\n")
+print(A)
+cat("\n向量 b:", b, "\n")
+cat("\nA 是", nrow(A), "×", ncol(A), "矩阵：", nrow(A), "个方程，", ncol(A), "个未知数\n")
+cat("方程数 > 未知数 → 超定系统 → 一般无精确解\n")
+```
+
+```{r}
+#| label: motivation-solve
+#| fig-width: 7
+#| fig-height: 5
+
+# 用最小二乘求解
+beta_hat <- solve(t(A) %*% A, t(A) %*% b)
+cat("最小二乘解:\n")
+cat("  β₀ (截距) =", round(beta_hat[1], 2), "\n")
+cat("  β₁ (斜率) =", round(beta_hat[2], 2), "\n")
+cat("  模型: 价格 ≈", round(beta_hat[1], 2), "+", round(beta_hat[2], 2), "× 面积\n\n")
+
+# 残差
+residuals <- b - A %*% beta_hat
+cat("残差（每个点的偏差）:", round(residuals, 2), "\n")
+cat("残差平方和:", round(sum(residuals^2), 2), "\n")
+
+# 可视化
+plot(area, price, pch = 19, col = "steelblue", cex = 1.5,
+     xlab = "面积 (m²)", ylab = "价格 (千€)",
+     main = "最小二乘拟合：最小化所有偏差的平方和",
+     xlim = c(40, 130), ylim = c(100, 400))
+grid()
+abline(beta_hat[1], beta_hat[2], col = "tomato", lwd = 2)
+
+# 画残差线
+fitted <- A %*% beta_hat
+segments(area, price, area, fitted, col = "orange", lwd = 2, lty = 2)
+
+legend("topleft", c("数据点", "最小二乘拟合线", "残差"),
+       col = c("steelblue", "tomato", "orange"),
+       pch = c(19, NA, NA), lty = c(NA, 1, 2), lwd = 2)
+```
+
+**关键观察**：最小二乘线不需要穿过任何一个数据点，但它让所有橙色虚线（残差）的**平方和最小**。
+
+## 更广泛的应用
+
+最小二乘不仅仅是"拟合直线"。它是统计学和机器学习中最基础的工具之一，应用场景包括广义线性模型和加性模型（通过迭代最小二乘求近似解）、深度学习（最小化平方误差损失函数）、计算机视觉（相机标定、3D重建）、信号处理（降噪、信号估计）以及大地测量（GPS定位）等。
+
+# 最小二乘问题的形式化
+
+## 问题定义
+
+**最小二乘问题（KQ问题）**：给定矩阵 $\mathbf{A} \in \mathbb{R}^{m \times n}$ 和向量 $\mathbf{b} \in \mathbb{R}^m$，寻找
+
+$$
+\hat{\mathbf{x}} = \arg\min_{\mathbf{x} \in \mathbb{R}^n} \|\mathbf{A}\mathbf{x} - \mathbf{b}\|_2
+$$
+
+注意两种特殊情况：如果 $\mathbf{Ax} = \mathbf{b}$ 恰好有精确解 $\mathbf{x}^*$，那么 $\|\mathbf{Ax}^* - \mathbf{b}\| = 0$，此时精确解也是最小二乘解。最小二乘方法特别适用于**没有精确解**的超定系统 $\mathbf{Ax} \approx \mathbf{b}$（$m > n$）。
+
+## 几何解释：投影
+
+最小二乘的核心思想是**投影**。理解了投影，就理解了最小二乘。
+
+```{r}
+#| label: geometry-2d
+#| fig-width: 8
+#| fig-height: 6
+
+# 二维几何解释
+# 列空间是一维的（一条直线），b 不在这条直线上
+# 最小二乘解对应 b 在列空间上的投影
+
+# 简单例子：A 只有一列
+a <- c(1, 2)  # 列空间方向
+b_vec <- c(3, 1)  # 目标向量
+
+# 投影 b 到 a 的方向
+proj_coeff <- sum(a * b_vec) / sum(a * a)
+b_hat <- proj_coeff * a
+residual <- b_vec - b_hat
+
+plot(NULL, xlim = c(-0.5, 4), ylim = c(-0.5, 3),
+     xlab = "", ylab = "", asp = 1,
+     main = "最小二乘的几何本质：投影")
+grid()
+
+# 列空间（直线）
+arrows(0, 0, 2.5, 5, col = "grey70", lwd = 1, length = 0.1)
+arrows(0, 0, -0.5, -1, col = "grey70", lwd = 1, length = 0)
+text(2.6, 4.7, "col(A)", col = "grey50", cex = 0.9)
+
+# 向量 b
+arrows(0, 0, b_vec[1], b_vec[2], col = "steelblue", lwd = 3, length = 0.15)
+text(b_vec[1] + 0.15, b_vec[2] + 0.15, expression(bold(b)), col = "steelblue", cex = 1.3)
+
+# 投影 b_hat
+arrows(0, 0, b_hat[1], b_hat[2], col = "tomato", lwd = 3, length = 0.15)
+text(b_hat[1] + 0.2, b_hat[2] - 0.2,
+     expression(hat(bold(b)) == bold(A)*hat(bold(x))), col = "tomato", cex = 1.1)
+
+# 残差
+arrows(b_hat[1], b_hat[2], b_vec[1], b_vec[2],
+       col = "orange", lwd = 2, lty = 2, length = 0.1)
+text((b_hat[1] + b_vec[1])/2 + 0.3, (b_hat[2] + b_vec[2])/2,
+     expression(bold(r) == bold(b) - hat(bold(b))), col = "orange", cex = 1.0)
+
+# 直角标记
+rect_size <- 0.15
+mid_x <- b_hat[1]
+mid_y <- b_hat[2]
+# 画一个小正方形表示直角
+segments(mid_x + rect_size * (b_vec[1]-b_hat[1])/vnorm(residual),
+         mid_y + rect_size * (b_vec[2]-b_hat[2])/vnorm(residual),
+         mid_x + rect_size * (b_vec[1]-b_hat[1])/vnorm(residual) + rect_size * a[1]/vnorm(a),
+         mid_y + rect_size * (b_vec[2]-b_hat[2])/vnorm(residual) + rect_size * a[2]/vnorm(a),
+         col = "darkgreen", lwd = 1.5)
+segments(mid_x + rect_size * a[1]/vnorm(a),
+         mid_y + rect_size * a[2]/vnorm(a),
+         mid_x + rect_size * (b_vec[1]-b_hat[1])/vnorm(residual) + rect_size * a[1]/vnorm(a),
+         mid_y + rect_size * (b_vec[2]-b_hat[2])/vnorm(residual) + rect_size * a[2]/vnorm(a),
+         col = "darkgreen", lwd = 1.5)
+
+text(3.2, 0.5, expression(bold(r) %perp% "col("*bold(A)*")"), col = "darkgreen", cex = 1.0)
+
+points(0, 0, pch = 19, cex = 0.8)
+```
+
+**核心几何事实**：
+
+- $\text{col}(\mathbf{A})$：矩阵 $\mathbf{A}$ 的列空间——所有可能的 $\mathbf{Ax}$ 形成的子空间
+- $\hat{\mathbf{b}} = \mathbf{A}\hat{\mathbf{x}}$：$\mathbf{b}$ 在列空间上的**正交投影**
+- $\mathbf{r} = \mathbf{b} - \hat{\mathbf{b}}$：残差向量，**垂直于列空间**
+
+**解释**：
+
+1. 想象矩阵 A 的每一列都是一个方向箭头，列空间就是：用这些方向箭头任意组合（加权相加）能到达的所有位置。
+2. Ax 的意思就是：用向量 x 的各个分量去加权组合 A 的列
+3. 现在你有一个目标向量 b，但它可能不在列空间里
+4. 正交投影就是：在列空间内找到离 b 最近的点 $\hat{b}$
+5. 具体做法是：从 b 向列空间垂直投下一条影子，影子落点就是 $\hat{b}$
+
+想象下，如果2列，且线性无关，那列空间就是整个二维空间，b 一定在空间内。
+
+如果A是3x2，即3个方程只有2个变量（列 < 行），A 的列空间是三维空间内的2维平面，b 就可能不在这个平面，
+
+因此需要找到投影 $\hat{b}$ ，使得 $|b - A\hat{x}|$ 最小
+
+同理，如果列为2，但是秩为1，列空间就是直线，大部分b不在直线上，投影才有意义。
+
+投影公式：$\hat{b} = A\hat{x}$
+
+- b 待投影的向量
+- $\hat{b}$ 投影后的向量（结果）
+- $A$ 矩阵
+- $\hat{x}$ 投影系数（待求）
+
+直接求解：
+
+- $\hat{x} = (A^TA)^{-1}A^Tb$
+- $\hat{b} = A(A^TA)^{-1}A^Tb$
+
+简单理解：$A^T$ 用于一次性检查 残差 r 是否与 A 的列空间（所有列）垂直
+
+
+**为什么投影给出最小距离？** 这是初等几何的事实：从空间中一个点到一个平面（或直线），**垂线段最短**。
+
+```{r}
+#| label: geometry-why-projection
+#| fig-width: 8
+#| fig-height: 5
+
+# 为什么投影是最优的？画出不同的 x 对应的 ||Ax - b||
+# 一维情况：min_x ||ax - b||
+a_1d <- c(1, 2)
+b_1d <- c(3, 1)
+
+x_range <- seq(-1, 3, length.out = 200)
+errors <- sapply(x_range, function(x) vnorm(x * a_1d - b_1d))
+
+x_opt <- sum(a_1d * b_1d) / sum(a_1d * a_1d)
+
+plot(x_range, errors, type = "l", lwd = 2, col = "steelblue",
+     xlab = "x", ylab = expression("||Ax - b||"[2]),
+     main = "残差范数随 x 变化：投影点处取最小值")
+grid()
+abline(v = x_opt, col = "tomato", lty = 2, lwd = 2)
+points(x_opt, vnorm(x_opt * a_1d - b_1d), pch = 19, col = "tomato", cex = 1.5)
+text(x_opt + 0.3, vnorm(x_opt * a_1d - b_1d) + 0.1,
+     paste0("x̂ = ", round(x_opt, 3)), col = "tomato", cex = 1.0)
+```
+
+**定理**：最小二乘问题的解集等于线性方程组 $\mathbf{A}\hat{\mathbf{x}} = \hat{\mathbf{b}}$ 的解集，其中 $\hat{\mathbf{b}} = \text{proj}_{\text{col}(\mathbf{A})}\mathbf{b}$。
+
+# 正规方程
+
+## 推导
+
+由几何解释，残差 $\mathbf{r} = \mathbf{b} - \mathbf{A}\hat{\mathbf{x}}$ 垂直于列空间，即对 $\mathbf{A}$ 的每一列 $\mathbf{a}_j$ 都有 $\mathbf{a}_j^T \mathbf{r} = 0$。写成矩阵形式：
+
+$$
+\mathbf{A}^T(\mathbf{b} - \mathbf{A}\hat{\mathbf{x}}) = \mathbf{0}
+$$
+
+展开得到**正规方程**：
+
+$$
+\mathbf{A}^T\mathbf{A}\hat{\mathbf{x}} = \mathbf{A}^T\mathbf{b}
+$$
+
+**另一种推导**（微积分方法）：令 $\phi(\mathbf{x}) = \|\mathbf{Ax} - \mathbf{b}\|^2$，展开后对 $\mathbf{x}$ 求导令其为零，也得到同样的方程。
+
+```{r}
+#| label: normal-equation-demo
+# 用房价数据验证正规方程
+A_house <- cbind(1, area)
+b_house <- price
+
+# 计算正规方程的两边
+AtA <- t(A_house) %*% A_house
+Atb <- t(A_house) %*% b_house
+
+cat("A^T A =\n")
+print(AtA)
+cat("\nA^T b =\n")
+print(Atb)
+
+# 求解正规方程
+beta_ne <- solve(AtA, Atb)
+cat("\n正规方程的解:\n")
+cat("  β₀ =", round(beta_ne[1], 4), "\n")
+cat("  β₁ =", round(beta_ne[2], 4), "\n")
+
+# 验证残差垂直于列空间
+resid <- b_house - A_house %*% beta_ne
+cat("\n验证 A^T r = 0:\n")
+cat("  A^T r =", round(t(A_house) %*% resid, 10), "\n")
+cat("  → 残差确实垂直于列空间 ✓\n")
+```
+
+## 唯一性条件
+
+**定理**：如果 $\text{rank}(\mathbf{A}) = n$（即 $\mathbf{A}$ 的列满秩），则 $\mathbf{A}^T\mathbf{A}$ 可逆，最小二乘问题有**唯一解**：
+
+$$
+\hat{\mathbf{x}} = (\mathbf{A}^T\mathbf{A})^{-1}\mathbf{A}^T\mathbf{b} =: \mathbf{A}^+\mathbf{b}
+$$
+
+这里 $\mathbf{A}^+ = (\mathbf{A}^T\mathbf{A})^{-1}\mathbf{A}^T$ 称为 $\mathbf{A}$ 的 **Moore-Penrose 伪逆**。
+
+```{r}
+#| label: pseudoinverse
+# 伪逆的计算和性质
+A_plus <- solve(t(A_house) %*% A_house) %*% t(A_house)
+
+cat("A⁺ 的维度:", nrow(A_plus), "×", ncol(A_plus), "\n")
+cat("A 的维度: ", nrow(A_house), "×", ncol(A_house), "\n\n")
+
+# 验证 A⁺b = x̂
+x_via_pinv <- A_plus %*% b_house
+cat("A⁺b =", round(x_via_pinv, 4), "\n")
+cat("正规方程解 =", round(beta_ne, 4), "\n")
+cat("一致 ✓\n\n")
+
+# A A⁺ 是投影矩阵
+P <- A_house %*% A_plus
+cat("A A⁺ 是投影矩阵吗？\n")
+cat("  (AA⁺)² ≈ AA⁺ ?", max(abs(P %*% P - P)) < 1e-10, "\n")
+cat("  (AA⁺)^T ≈ AA⁺ ?", max(abs(t(P) - P)) < 1e-10, "(对称)\n")
+cat("  → AA⁺ 是到 col(A) 的正交投影矩阵 ✓\n")
+```
+
+## 小测验
+
+以下哪些陈述是正确的？
+
+1. $\mathbf{AA}^+ = \mathbf{I}_m$
+2. $\mathbf{AA}^+\mathbf{b} = \text{proj}_{\text{col}(\mathbf{A})}\mathbf{b}$
+3. $\mathbf{r} = \mathbf{b} - \mathbf{A}\hat{\mathbf{x}} \perp \text{col}(\mathbf{A})$
+4. $\mathbf{b} = \text{proj}_V\mathbf{b} + \text{proj}_{V^\perp}\mathbf{b}$ 对任意子空间 $V$ 成立
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+cat("1. 错误：AA⁺ ≠ I_m（除非 A 是方阵且可逆）\n")
+cat("   AA⁺ 是 m×m 的投影矩阵，不是单位矩阵\n\n")
+
+# 数值验证
+cat("   AA⁺ =\n")
+print(round(P, 4))
+cat("   I_5 =\n")
+print(diag(5))
+cat("\n")
+
+cat("2. 正确：AA⁺ 恰好是到 col(A) 的正交投影矩阵\n\n")
+
+# 验证
+b_proj <- P %*% b_house
+b_hat_direct <- A_house %*% beta_ne
+cat("   AA⁺b =", round(b_proj, 2), "\n")
+cat("   Ax̂   =", round(b_hat_direct, 2), "\n\n")
+
+cat("3. 正确：残差垂直于列空间，这是最小二乘解的几何特征\n\n")
+cat("4. 正确：任意向量都可以分解为在子空间上的投影和在其正交补上的投影之和\n")
+```
+
+# 条件数：最小二乘有多敏感？
+
+## 为什么要关心条件数？
+
+上一章我们学过：条件数衡量问题对输入扰动的敏感程度。对于最小二乘问题，输入是 $\mathbf{A}$ 和 $\mathbf{b}$，输出是 $\hat{\mathbf{x}}$。问题是：$\mathbf{A}$ 或 $\mathbf{b}$ 的微小变化，会导致 $\hat{\mathbf{x}}$ 偏多少？
+
+对于非方阵 $\mathbf{A} \in \mathbb{R}^{m \times n}$，条件数定义为：
+
+$$
+\kappa_2(\mathbf{A}) = \|\mathbf{A}\|_2 \|\mathbf{A}^+\|_2 = \frac{\sigma_{\max}(\mathbf{A})}{\sigma_{\min}(\mathbf{A})}
+$$
+
+当 $\text{rank}(\mathbf{A}) < n$ 时，$\kappa(\mathbf{A}) = \infty$。
+
+## 关于 b 的条件数
+
+固定 $\mathbf{A}$，看 $\mathbf{b}$ 的扰动如何影响解。
+
+**定理**：设 $f(\mathbf{b}) = \mathbf{A}^+\mathbf{b}$，则
+
+$$
+\frac{\|f(\tilde{\mathbf{b}}) - f(\mathbf{b})\|}{\|f(\mathbf{b})\|} \leq \kappa \cdot \frac{\|\tilde{\mathbf{b}} - \mathbf{b}\|}{\|\mathbf{b}\|}, \quad \text{其中} \quad \kappa = \kappa_2(\mathbf{A}) \cdot \frac{\|\mathbf{b}\|}{\|\text{proj}_{\text{col}(\mathbf{A})}\mathbf{b}\|}
+$$
+
+**证明思路**：
+
+$$
+\frac{\|\mathbf{A}^+\tilde{\mathbf{b}} - \mathbf{A}^+\mathbf{b}\|}{\|\mathbf{A}^+\mathbf{b}\|} = \frac{\|\mathbf{A}^+(\tilde{\mathbf{b}} - \mathbf{b})\|}{\|\mathbf{A}^+\mathbf{b}\|} \leq \frac{\|\mathbf{A}^+\|\|\tilde{\mathbf{b}} - \mathbf{b}\|}{\|\mathbf{A}^+\mathbf{b}\|}
+$$
+
+利用 $\|\mathbf{A}^+\mathbf{b}\| \geq \|\mathbf{A}\mathbf{A}^+\mathbf{b}\|/\|\mathbf{A}\| = \|\text{proj}_{\text{col}(\mathbf{A})}\mathbf{b}\|/\|\mathbf{A}\|$，即得。
+
+```{r}
+#| label: condition-b
+#| fig-width: 9
+#| fig-height: 5
+
+# 演示：b 的投影分量越小，条件数越大
+set.seed(42)
+m <- 50; n <- 3
+A_cond <- matrix(rnorm(m * n), m, n)
+
+kappa_A <- kappa(A_cond, exact = TRUE)
+cat("κ₂(A) =", round(kappa_A, 2), "\n\n")
+
+# 构造不同"投影比例"的 b
+# b = b_col + b_perp，其中 b_col ∈ col(A)，b_perp ⊥ col(A)
+P_A <- A_cond %*% solve(t(A_cond) %*% A_cond) %*% t(A_cond)
+
+b_col <- P_A %*% rnorm(m)        # 列空间中的分量
+b_perp <- (diag(m) - P_A) %*% rnorm(m)  # 正交补中的分量
+b_col <- b_col / vnorm(b_col)
+b_perp <- b_perp / vnorm(b_perp)
+
+# 不同的"角度"
+alphas <- seq(0.01, pi/2 - 0.01, length.out = 100)
+cond_vals <- numeric(length(alphas))
+actual_amplification <- numeric(length(alphas))
+
+pert <- rnorm(m, sd = 1e-8)
+
+for (i in seq_along(alphas)) {
+  b_test <- cos(alphas[i]) * b_col + sin(alphas[i]) * b_perp
+  b_test <- b_test / vnorm(b_test) * 10  # 归一化
+
+  proj_b <- P_A %*% b_test
+  ratio <- vnorm(b_test) / vnorm(proj_b)
+  cond_vals[i] <- kappa_A * ratio
+
+  # 数值验证
+  x1 <- solve(t(A_cond) %*% A_cond, t(A_cond) %*% b_test)
+  x2 <- solve(t(A_cond) %*% A_cond, t(A_cond) %*% (b_test + pert))
+  rel_out <- vnorm(x2 - x1) / vnorm(x1)
+  rel_in <- vnorm(pert) / vnorm(b_test)
+  actual_amplification[i] <- rel_out / rel_in
+}
+
+par(mar = c(4, 4, 3, 1))
+plot(alphas * 180 / pi, cond_vals, type = "l", log = "y",
+     col = "tomato", lwd = 2,
+     xlab = "b 与 col(A) 的夹角 (度)", ylab = "条件数 (对数刻度)",
+     main = "b 越偏离列空间，条件数越大")
+lines(alphas * 180 / pi, actual_amplification, col = "steelblue", lwd = 2, lty = 2)
+abline(h = kappa_A, col = "grey50", lty = 3)
+text(10, kappa_A * 1.5, expression(kappa[2](A)), col = "grey50")
+legend("topleft", c("理论条件数上界", "实际误差放大倍数"),
+       col = c("tomato", "steelblue"), lwd = 2, lty = c(1, 2))
+```
+
+**理解条件数公式中的 $\|\mathbf{b}\|/\|\text{proj}_{\text{col}(\mathbf{A})}\mathbf{b}\|$**：
+
+由勾股定理，$\|\mathbf{b}\|^2 = \|\text{proj}_{\text{col}(\mathbf{A})}\mathbf{b}\|^2 + \|\text{proj}_{\text{col}(\mathbf{A})^\perp}\mathbf{b}\|^2$，所以 $\|\mathbf{b}\| \geq \|\text{proj}_{\text{col}(\mathbf{A})}\mathbf{b}\|$。
+
+- **最好情况**：$\mathbf{b} \in \text{col}(\mathbf{A})$，此时比值 = 1，$\kappa = \kappa_2(\mathbf{A})$
+- **最坏情况**：$\mathbf{b} \perp \text{col}(\mathbf{A})$，此时投影 = 0，$\kappa = \infty$
+
+直观来说：如果 $\mathbf{b}$ 几乎垂直于列空间，那么 $\hat{\mathbf{b}}$ 几乎为零，微小扰动就能让投影方向剧烈变化。
+
+## 关于 A 的条件数
+
+固定 $\mathbf{b}$，看 $\mathbf{A}$ 的扰动如何影响解。
+
+**定理**：设 $f(\mathbf{A}) = \mathbf{A}^+\mathbf{b}$，则
+
+$$
+\frac{\|f(\tilde{\mathbf{A}}) - f(\mathbf{A})\|}{\|f(\mathbf{A})\|} \leq \kappa \cdot \frac{\|\tilde{\mathbf{A}} - \mathbf{A}\|}{\|\mathbf{A}\|}, \quad \text{其中} \quad \kappa = \kappa_2(\mathbf{A}) + \kappa_2(\mathbf{A})^2 \cdot \frac{\|\mathbf{r}\|}{\|\text{proj}_{\text{col}(\mathbf{A})}\mathbf{b}\|}
+$$
+
+其中 $\mathbf{r} = \mathbf{b} - \mathbf{A}\hat{\mathbf{x}}$ 是残差向量。
+
+**注意 $\kappa_2(\mathbf{A})^2$ 这一项！** 当残差不为零时（即不存在精确解），条件数可达 $\kappa_2(\mathbf{A})$ 的平方量级。
+
+```{r}
+#| label: condition-A
+#| fig-width: 9
+#| fig-height: 5
+
+# 演示：残差越大，关于 A 的条件数越大
+set.seed(123)
+n_dim <- 5
+
+# 构造不同条件数的 A
+U <- qr.Q(qr(matrix(rnorm(20 * 20), 20)))
+V <- qr.Q(qr(matrix(rnorm(n_dim * n_dim), n_dim)))
+
+kappa_values <- c(1, 5, 10, 50, 100)
+residual_scales <- c(0, 0.01, 0.1, 1, 5)
+
+results <- expand.grid(kappa_A = kappa_values, resid_scale = residual_scales)
+results$effective_kappa <- NA
+
+m_dim <- 20
+
+for (i in seq_len(nrow(results))) {
+  kk <- results$kappa_A[i]
+  rs <- results$resid_scale[i]
+
+  sigmas <- exp(seq(log(1), log(kk), length.out = n_dim))
+  A_test <- U[, 1:n_dim] %*% diag(sigmas) %*% t(V)
+
+  # 构造 b = A*x_true + rs*noise_perp
+  x_true <- rep(1, n_dim)
+  b_in_col <- A_test %*% x_true
+  noise_perp <- (diag(m_dim) - A_test %*% solve(t(A_test) %*% A_test) %*% t(A_test)) %*% rnorm(m_dim)
+  if (vnorm(noise_perp) > 0) noise_perp <- noise_perp / vnorm(noise_perp)
+  b_test <- b_in_col + rs * noise_perp
+
+  # 扰动 A
+  delta_A <- matrix(rnorm(m_dim * n_dim), m_dim, n_dim) * 1e-8
+  x_hat <- solve(t(A_test) %*% A_test, t(A_test) %*% b_test)
+  A_pert <- A_test + delta_A
+  x_hat_pert <- solve(t(A_pert) %*% A_pert, t(A_pert) %*% b_test)
+
+  rel_out <- vnorm(x_hat_pert - x_hat) / vnorm(x_hat)
+  rel_in <- norm(delta_A, "F") / norm(A_test, "F")
+  results$effective_kappa[i] <- rel_out / rel_in
+}
+
+# 绘图
+par(mar = c(4, 4, 3, 1))
+colors <- c("steelblue", "orange", "tomato", "purple", "darkred")
+
+plot(NULL, xlim = range(kappa_values), ylim = c(1, max(results$effective_kappa, na.rm = TRUE) * 2),
+     log = "xy", xlab = expression(kappa[2](A)), ylab = "实际误差放大倍数",
+     main = "关于 A 的条件数：残差越大，敏感性越高")
+grid()
+
+for (j in seq_along(residual_scales)) {
+  idx <- results$resid_scale == residual_scales[j]
+  lines(results$kappa_A[idx], results$effective_kappa[idx],
+        col = colors[j], lwd = 2, type = "b", pch = 19)
+}
+
+# 参考线
+abline(0, 1, lty = 3, col = "grey50")
+abline(0, 2, lty = 3, col = "grey80")
+text(80, 60, expression(kappa), col = "grey50", cex = 0.8)
+text(80, 5000, expression(kappa^2), col = "grey80", cex = 0.8)
+
+legend("topleft",
+       paste("残差 =", residual_scales),
+       col = colors, lwd = 2, pch = 19, cex = 0.8,
+       title = "残差大小")
+```
+
+## 条件数总结
+
+| 情况 | 关于 $\mathbf{b}$ 的条件数 | 关于 $\mathbf{A}$ 的条件数 |
+|------|------|------|
+| 精确解存在 ($\mathbf{b} \in \text{col}(\mathbf{A})$) | $\kappa_2(\mathbf{A})$ | $\kappa_2(\mathbf{A})$ |
+| 一般最小二乘 | $\kappa_2(\mathbf{A}) \cdot \frac{\|\mathbf{b}\|}{\|\hat{\mathbf{b}}\|}$ | $O(\kappa_2(\mathbf{A})^2)$ |
+| 病态情况 ($\mathbf{b} \perp \text{col}(\mathbf{A})$) | $\infty$ | $\infty$ |
+
+**核心发现**：最小二乘问题的条件数不仅取决于矩阵 $\mathbf{A}$，还强烈依赖于 $\mathbf{b}$ 与列空间的关系。残差越大（"拟合"越差），问题越敏感。
+
+**练习**：构造一个 $\kappa_2(\mathbf{A}) = 10$ 但关于 $\mathbf{A}$ 的有效条件数接近 100 的例子。
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+set.seed(7)
+m_ex <- 20; n_ex <- 3
+
+# 构造 κ₂(A) = 10 的矩阵
+U_ex <- qr.Q(qr(matrix(rnorm(m_ex^2), m_ex)))
+V_ex <- qr.Q(qr(matrix(rnorm(n_ex^2), n_ex)))
+sigmas_ex <- c(10, 5, 1)  # κ = 10/1 = 10
+A_ex <- U_ex[, 1:n_ex] %*% diag(sigmas_ex) %*% t(V_ex)
+
+cat("κ₂(A) =", round(max(sigmas_ex)/min(sigmas_ex), 2), "\n\n")
+
+# 构造 b 使残差很大
+x_true_ex <- c(1, 1, 1)
+b_col <- A_ex %*% x_true_ex
+P_ex <- A_ex %*% solve(t(A_ex) %*% A_ex) %*% t(A_ex)
+b_perp <- (diag(m_ex) - P_ex) %*% rnorm(m_ex)
+b_perp <- b_perp / vnorm(b_perp) * vnorm(b_col) * 3  # 残差是投影的 3 倍
+
+b_ex <- b_col + b_perp
+resid_ex <- b_ex - P_ex %*% b_ex
+proj_ex <- P_ex %*% b_ex
+
+kappa_theoretical <- max(sigmas_ex)/min(sigmas_ex) +
+  (max(sigmas_ex)/min(sigmas_ex))^2 * vnorm(resid_ex)/vnorm(proj_ex)
+cat("理论条件数上界 ≈", round(kappa_theoretical, 1), "\n")
+cat("  其中 κ₂(A) 贡献:", round(max(sigmas_ex)/min(sigmas_ex), 1), "\n")
+cat("  κ₂(A)² × ||r||/||proj|| 贡献:",
+    round((max(sigmas_ex)/min(sigmas_ex))^2 * vnorm(resid_ex)/vnorm(proj_ex), 1), "\n")
+cat("\n结论: 虽然矩阵条件数只有 10，但大残差使有效条件数接近 κ² 量级\n")
+```
+
+# 三种求解算法
+
+## 从正规方程说起
+
+正规方程 $\mathbf{A}^T\mathbf{A}\hat{\mathbf{x}} = \mathbf{A}^T\mathbf{b}$ 给出了最直接的求解思路：先算 $\mathbf{A}^T\mathbf{A}$，然后求解线性方程组。
+
+但是——**先看一个"错误"的实现**：
+
+```{r}
+#| label: wrong-implementation
+# 一个数学上正确但数值上错误的函数
+kq_solve_bad <- function(A, b) {
+  solve(t(A) %*% A) %*% t(A) %*% b   # ← 显式求逆！
+}
+
+# "正确"的正规方程实现
+kq_solve_ne <- function(A, b) {
+  solve(t(A) %*% A, t(A) %*% b)       # ← 求解线性方程组
+}
+
+# 对比
+set.seed(42)
+m <- 100; n <- 5
+A_test <- matrix(rnorm(m * n), m, n)
+b_test <- rnorm(m)
+
+x_bad <- kq_solve_bad(A_test, b_test)
+x_good <- kq_solve_ne(A_test, b_test)
+x_ref <- qr.solve(A_test, b_test)  # R 内置，使用 QR 分解
+
+cat("显式求逆 vs QR 的误差:", vnorm(x_bad - x_ref), "\n")
+cat("正规方程 vs QR 的误差:", vnorm(x_good - x_ref), "\n")
+cat("\n这里差别不大，但对于病态矩阵...\n")
+```
+
+**规则**：**永远不要显式计算 $(\mathbf{A}^T\mathbf{A})^{-1}$！** 应该用 `solve(AtA, Atb)` 求解线性方程组。
+
+## 方法 1：正规方程 + Cholesky 分解
+
+由于 $\mathbf{A}^T\mathbf{A}$ 是对称正定矩阵（当 $\mathbf{A}$ 列满秩时），可以使用 Cholesky 分解。
+
+**算法步骤**：
+
+1. 计算 $\mathbf{M} = \mathbf{A}^T\mathbf{A}$ 和 $\mathbf{c} = \mathbf{A}^T\mathbf{b}$
+2. Cholesky 分解：$\mathbf{M} = \mathbf{LL}^T$
+3. 前向替换：求解 $\mathbf{Ly} = \mathbf{c}$
+4. 回代：求解 $\mathbf{L}^T\hat{\mathbf{x}} = \mathbf{y}$
+
+```{r}
+#| label: cholesky-method
+# Cholesky 方法
+kq_solve_chol <- function(A, b) {
+  M <- crossprod(A)       # = A^T A（比 t(A) %*% A 更高效）
+  c_vec <- crossprod(A, b)  # = A^T b
+  L <- chol(M)            # R 的 chol() 返回上三角 R，满足 M = R^T R
+  # 求解 R^T R x = c，即先解 R^T y = c，再解 R x = y
+  y <- forwardsolve(t(L), c_vec)
+  x <- backsolve(L, y)
+  x
+}
+
+x_chol <- kq_solve_chol(A_test, b_test)
+cat("Cholesky 方法 vs QR 的误差:", vnorm(x_chol - x_ref), "\n")
+```
+
+**问题**：这个方法计算了 $\mathbf{A}^T\mathbf{A}$，条件数会平方化！
+
+```{r}
+#| label: condition-squaring
+# 条件数平方化的演示
+set.seed(42)
+m_sq <- 50; n_sq <- 5
+
+# 构造不同条件数的矩阵
+U_sq <- qr.Q(qr(matrix(rnorm(m_sq^2), m_sq)))
+V_sq <- qr.Q(qr(matrix(rnorm(n_sq^2), n_sq)))
+
+cat(sprintf("%-12s  %-15s  %-15s  %-10s\n", "κ(A)", "κ(A^T A)", "κ(A)²", "比值"))
+cat(strrep("-", 58), "\n")
+
+for (kk in c(1, 10, 100, 1000, 1e6)) {
+  sigmas_sq <- exp(seq(log(1), log(kk), length.out = n_sq))
+  A_sq <- U_sq[, 1:n_sq] %*% diag(sigmas_sq) %*% t(V_sq)
+
+  kA <- kappa(A_sq, exact = TRUE)
+  kAtA <- kappa(crossprod(A_sq), exact = TRUE)
+
+  cat(sprintf("%-12.1e  %-15.1e  %-15.1e  %-10.2f\n",
+              kA, kAtA, kA^2, kAtA / kA^2))
+}
+cat("\n结论: κ(A^T A) ≈ κ(A)² — 条件数确实被平方化了！\n")
+```
+
+**这就是正规方程方法的致命弱点**：即使 $\mathbf{A}$ 的条件数只有 $10^4$，$\mathbf{A}^T\mathbf{A}$ 的条件数就达到 $10^8$，双精度浮点数（16位有效数字）只剩 8 位有效数字。如果 $\kappa(\mathbf{A}) = 10^8$，那么 $\kappa(\mathbf{A}^T\mathbf{A}) = 10^{16}$，几乎完全丢失精度！
+
+## 正交矩阵：解决问题的钥匙
+
+要避免条件数平方化，我们需要一个新思路：**直接操作 $\mathbf{A}$，不计算 $\mathbf{A}^T\mathbf{A}$**。
+
+核心思想：用正交矩阵 $\mathbf{Q}$ 变换问题。
+
+**回忆正交矩阵的关键性质**：
+
+```{r}
+#| label: orthogonal-properties
+# 正交矩阵的数值演示
+set.seed(1)
+n_orth <- 4
+Q <- qr.Q(qr(matrix(rnorm(n_orth^2), n_orth)))
+
+cat("Q^T Q =\n")
+print(round(t(Q) %*% Q, 10))
+cat("\n")
+
+# 保范性
+x_test_orth <- c(1, 2, 3, 4)
+cat("||x||   =", vnorm(x_test_orth), "\n")
+cat("||Qx||  =", vnorm(Q %*% x_test_orth), "\n")
+cat("→ 正交变换保持向量长度不变 ✓\n\n")
+
+# 条件数
+cat("κ₂(Q) =", kappa(Q, exact = TRUE), "\n")
+cat("→ 正交矩阵的条件数恒为 1（完美！）\n\n")
+
+cat("核心推论：\n")
+cat("  · 乘以 Q 不会放大误差\n")
+cat("  · 乘以 Q 不会改变最小化问题的解\n")
+cat("  · ||QAx - Qb|| = ||Ax - b|| 对所有 x 成立\n")
+```
+
+**为什么正交变换不改变最小二乘解？** 因为
+
+$$
+\|\mathbf{QAx} - \mathbf{Qb}\|_2 = \|\mathbf{Q}(\mathbf{Ax} - \mathbf{b})\|_2 = \|\mathbf{Ax} - \mathbf{b}\|_2
+$$
+
+最后一步用了正交矩阵的保范性。所以最小化 $\|\mathbf{QAx} - \mathbf{Qb}\|$ 等价于最小化 $\|\mathbf{Ax} - \mathbf{b}\|$。
+
+## 方法 2：QR 分解
+
+### QR 分解是什么？
+
+**定义**：对于 $\mathbf{A} \in \mathbb{R}^{m \times n}$（$m \geq n$），存在正交矩阵 $\mathbf{Q} \in \mathbb{R}^{m \times m}$ 使得
+
+$$
+\mathbf{Q}^T\mathbf{A} = \begin{pmatrix} \mathbf{R} \\ \mathbf{0}_{(m-n) \times n} \end{pmatrix}
+$$
+
+其中 $\mathbf{R} \in \mathbb{R}^{n \times n}$ 是上三角矩阵。等价地写成
+
+$$
+\mathbf{A} = \mathbf{Q} \begin{pmatrix} \mathbf{R} \\ \mathbf{0} \end{pmatrix}
+$$
+
+```{r}
+#| label: qr-example
+# QR 分解的例子（手算验证）
+A_ex <- matrix(c(1, 2,
+                  0, 0,
+                  0, 2), nrow = 3, byrow = TRUE)
+cat("A =\n")
+print(A_ex)
+
+qr_result <- qr(A_ex)
+Q_full <- qr.Q(qr_result, complete = TRUE)
+R_full <- qr.R(qr_result)
+
+cat("\nQ =\n")
+print(round(Q_full, 4))
+cat("\nR (上三角) =\n")
+print(round(R_full, 4))
+
+cat("\n验证 Q^T A =\n")
+print(round(t(Q_full) %*% A_ex, 10))
+cat("→ 下面的行确实为零 ✓\n")
+
+cat("\n验证 QR = A:\n")
+R_padded <- rbind(R_full, rep(0, ncol(A_ex)))
+cat("||QR - A|| =", norm(Q_full %*% R_padded - A_ex, "F"), "✓\n")
+```
+
+### QR 分解如何求解最小二乘？
+
+**定理**：设 $\mathbf{Q}^T\mathbf{A} = \begin{pmatrix} \mathbf{R} \\ \mathbf{0} \end{pmatrix}$，$\mathbf{Q}^T\mathbf{b} = \begin{pmatrix} \mathbf{c}_1 \\ \mathbf{c}_2 \end{pmatrix}$，其中 $\mathbf{R}$ 可逆，则 $\hat{\mathbf{x}} = \mathbf{R}^{-1}\mathbf{c}_1$。
+
+**证明**——这是全文最优美的推导之一：
+
+$$
+\|\mathbf{Ax} - \mathbf{b}\|^2 = \|\mathbf{Q}^T(\mathbf{Ax} - \mathbf{b})\|^2 = \|\mathbf{Q}^T\mathbf{Ax} - \mathbf{Q}^T\mathbf{b}\|^2
+$$
+
+$$
+= \left\| \begin{pmatrix} \mathbf{R} \\ \mathbf{0} \end{pmatrix} \mathbf{x} - \begin{pmatrix} \mathbf{c}_1 \\ \mathbf{c}_2 \end{pmatrix} \right\|^2 = \|\mathbf{Rx} - \mathbf{c}_1\|^2 + \|\mathbf{c}_2\|^2
+$$
+
+第二项 $\|\mathbf{c}_2\|^2$ 不依赖于 $\mathbf{x}$，所以最小化等价于令 $\|\mathbf{Rx} - \mathbf{c}_1\| = 0$，即 $\hat{\mathbf{x}} = \mathbf{R}^{-1}\mathbf{c}_1$。
+
+而且 $\|\mathbf{c}_2\|^2$ 就是最小残差的平方！
+
+```{r}
+#| label: qr-solve-demo
+# QR 方法求解最小二乘
+kq_solve_qr <- function(A, b) {
+  qr_dec <- qr(A)
+  Q <- qr.Q(qr_dec, complete = TRUE)
+  R <- qr.R(qr_dec)
+
+  Qtb <- t(Q) %*% b
+  n <- ncol(A)
+  c1 <- Qtb[1:n]
+  c2 <- Qtb[(n+1):length(Qtb)]
+
+  x_hat <- backsolve(R, c1)
+
+  list(x = x_hat,
+       min_residual_norm = vnorm(c2),
+       c1 = c1, c2 = c2)
+}
+
+# 用房价数据测试
+result_qr <- kq_solve_qr(A_house, b_house)
+cat("QR 方法的解:\n")
+cat("  β₀ =", round(result_qr$x[1], 4), "\n")
+cat("  β₁ =", round(result_qr$x[2], 4), "\n")
+cat("  最小残差 ||c₂|| =", round(result_qr$min_residual_norm, 4), "\n\n")
+
+cat("与正规方程对比:\n")
+cat("  正规方程:", round(beta_ne, 4), "\n")
+cat("  QR 方法: ", round(result_qr$x, 4), "\n")
+cat("  完全一致 ✓\n")
+```
+
+### 构造 Q：Householder 反射
+
+QR 分解的关键步骤是构造正交矩阵 $\mathbf{Q}$。最常用的方法是 **Householder 反射**。
+
+**思想**：通过一系列反射操作，逐列消去 $\mathbf{A}$ 的下三角元素。每次反射由一个向量 $\mathbf{v}$ 定义：
+
+$$
+\mathbf{H} = \mathbf{I} - 2\frac{\mathbf{v}\mathbf{v}^T}{\mathbf{v}^T\mathbf{v}}
+$$
+
+$\mathbf{H}$ 是正交的、对称的，且 $\mathbf{H}^2 = \mathbf{I}$（反射两次回到原处）。
+
+```{r}
+#| label: householder-visual
+#| fig-width: 8
+#| fig-height: 6
+
+# Householder 反射的几何演示
+# 在 2D 中：将向量 a 反射到 e1 方向
+
+a_hh <- c(3, 4)  # 要反射的向量
+alpha <- vnorm(a_hh)  # 反射后长度不变
+e1 <- c(1, 0)
+
+# Householder 向量
+v_hh <- a_hh - alpha * e1
+v_hh_norm <- v_hh / vnorm(v_hh)
+
+# Householder 矩阵
+H <- diag(2) - 2 * outer(v_hh_norm, v_hh_norm)
+
+# 反射结果
+a_reflected <- H %*% a_hh
+
+plot(NULL, xlim = c(-1, 6), ylim = c(-1, 5.5), asp = 1,
+     xlab = "", ylab = "",
+     main = "Householder 反射：将 a 映射到 αe₁")
+grid()
+
+# 反射超平面（垂直于 v 的直线）
+midpoint <- (a_hh + a_reflected) / 2
+perp_dir <- c(-v_hh[2], v_hh[1])
+perp_dir <- perp_dir / vnorm(perp_dir)
+segments(midpoint[1] - 4*perp_dir[1], midpoint[2] - 4*perp_dir[2],
+         midpoint[1] + 4*perp_dir[1], midpoint[2] + 4*perp_dir[2],
+         col = "grey70", lwd = 1, lty = 2)
+text(midpoint[1] + 2*perp_dir[1] + 0.3, midpoint[2] + 2*perp_dir[2],
+     "反射面", col = "grey50", cex = 0.9)
+
+# 向量 a
+arrows(0, 0, a_hh[1], a_hh[2], col = "steelblue", lwd = 3, length = 0.15)
+text(a_hh[1] + 0.2, a_hh[2] + 0.2, expression(bold(a)), col = "steelblue", cex = 1.3)
+
+# 反射结果 = α e₁
+arrows(0, 0, a_reflected[1], a_reflected[2], col = "tomato", lwd = 3, length = 0.15)
+text(a_reflected[1] + 0.2, a_reflected[2] - 0.3,
+     expression(alpha*bold(e)[1]), col = "tomato", cex = 1.2)
+
+# Householder 向量 v
+arrows(a_reflected[1], a_reflected[2], a_hh[1], a_hh[2],
+       col = "darkgreen", lwd = 2, length = 0.12, lty = 1)
+text((a_hh[1] + a_reflected[1])/2 + 0.5, (a_hh[2] + a_reflected[2])/2 + 0.3,
+     expression(bold(v) == bold(a) - alpha*bold(e)[1]), col = "darkgreen", cex = 1.0)
+
+# 圆弧表示长度不变
+theta_arc <- seq(0, atan2(a_hh[2], a_hh[1]), length.out = 100)
+r_arc <- alpha
+lines(r_arc * cos(theta_arc), r_arc * sin(theta_arc),
+      col = "grey50", lty = 3, lwd = 1)
+
+points(0, 0, pch = 19, cex = 0.8)
+
+cat("a =", a_hh, "\n")
+cat("Ha =", round(a_reflected, 10), "= (", alpha, ", 0 ) ✓\n")
+cat("||a|| = ||Ha|| =", alpha, "（长度不变）✓\n")
+```
+
+### QR 方法为什么更稳定？
+
+```{r}
+#| label: qr-vs-cholesky
+#| fig-width: 9
+#| fig-height: 5
+
+# 关键对比实验：QR vs Cholesky 在不同条件数下的表现
+set.seed(42)
+m_cmp <- 100; n_cmp <- 10
+
+U_cmp <- qr.Q(qr(matrix(rnorm(m_cmp^2), m_cmp)))
+V_cmp <- qr.Q(qr(matrix(rnorm(n_cmp^2), n_cmp)))
+
+kappa_range <- 10^seq(0, 14, by = 1)
+
+err_chol <- numeric(length(kappa_range))
+err_qr <- numeric(length(kappa_range))
+err_svd <- numeric(length(kappa_range))
+
+x_true_cmp <- rep(1, n_cmp)
+
+for (i in seq_along(kappa_range)) {
+  kk <- kappa_range[i]
+  sigmas_cmp <- exp(seq(log(1), log(kk), length.out = n_cmp))
+  A_cmp <- U_cmp[, 1:n_cmp] %*% diag(sigmas_cmp) %*% t(V_cmp)
+  b_cmp <- A_cmp %*% x_true_cmp  # b ∈ col(A)，有精确解
+
+  # Cholesky 方法
+  tryCatch({
+    AtA <- crossprod(A_cmp)
+    Atb <- crossprod(A_cmp, b_cmp)
+    x_chol_cmp <- solve(AtA, Atb)
+    err_chol[i] <- vnorm(x_chol_cmp - x_true_cmp) / vnorm(x_true_cmp)
+  }, error = function(e) { err_chol[i] <<- NA })
+
+  # QR 方法
+  tryCatch({
+    x_qr_cmp <- qr.solve(A_cmp, b_cmp)
+    err_qr[i] <- vnorm(x_qr_cmp - x_true_cmp) / vnorm(x_true_cmp)
+  }, error = function(e) { err_qr[i] <<- NA })
+
+  # SVD 方法
+  tryCatch({
+    sv <- svd(A_cmp)
+    x_svd_cmp <- sv$v %*% diag(1/sv$d) %*% t(sv$u) %*% b_cmp
+    err_svd[i] <- vnorm(x_svd_cmp - x_true_cmp) / vnorm(x_true_cmp)
+  }, error = function(e) { err_svd[i] <<- NA })
+}
+
+par(mar = c(4, 4, 3, 1))
+plot(kappa_range, err_chol, type = "b", log = "xy", pch = 17,
+     col = "tomato", lwd = 2,
+     xlab = expression(kappa[2](A)), ylab = "解的相对误差",
+     main = "三种方法在不同条件数下的精度",
+     ylim = c(1e-16, 1e2))
+lines(kappa_range, err_qr, type = "b", pch = 19, col = "steelblue", lwd = 2)
+lines(kappa_range, err_svd, type = "b", pch = 15, col = "darkgreen", lwd = 2)
+
+# 理论参考线
+abline(h = .Machine$double.eps, lty = 3, col = "grey50")
+text(1e2, .Machine$double.eps * 5, "机器精度 ε", col = "grey50", cex = 0.8)
+
+# κ·ε 和 κ²·ε 参考线
+lines(kappa_range, kappa_range * .Machine$double.eps,
+      lty = 2, col = "steelblue", lwd = 1)
+lines(kappa_range, kappa_range^2 * .Machine$double.eps,
+      lty = 2, col = "tomato", lwd = 1)
+text(1e10, 1e10 * .Machine$double.eps * 5,
+     expression(kappa %.% epsilon), col = "steelblue", cex = 0.8)
+text(1e5, 1e10 * .Machine$double.eps * 5,
+     expression(kappa^2 %.% epsilon), col = "tomato", cex = 0.8)
+
+legend("topleft",
+       c("Cholesky (正规方程)", "QR 分解", "SVD"),
+       col = c("tomato", "steelblue", "darkgreen"),
+       pch = c(17, 19, 15), lwd = 2)
+```
+
+**关键观察**：
+
+- **Cholesky（红色）**：误差大致沿 $\kappa^2 \cdot \epsilon$ 线增长——条件数被平方化
+- **QR（蓝色）** 和 **SVD（绿色）**：误差大致沿 $\kappa \cdot \epsilon$ 线增长——条件数没有平方化
+
+当 $\kappa(\mathbf{A}) \approx 10^8$ 时，Cholesky 方法已经完全丢失精度，而 QR 和 SVD 仍然能给出约 8 位有效数字。
+
+## 方法 3：SVD（奇异值分解）
+
+### 用 SVD 求解最小二乘
+
+设 $\mathbf{A} = \mathbf{U\Sigma V}^T$ 是 $\mathbf{A}$ 的 SVD，则
+
+$$
+\hat{\mathbf{x}} = \mathbf{A}^+\mathbf{b} = \mathbf{V}\boldsymbol{\Sigma}^+\mathbf{U}^T\mathbf{b}
+$$
+
+其中 $\boldsymbol{\Sigma}^+$ 是将 $\boldsymbol{\Sigma}$ 的非零对角元素取倒数得到的矩阵。
+
+```{r}
+#| label: svd-method
+# SVD 方法
+kq_solve_svd <- function(A, b) {
+  sv <- svd(A)
+  # A⁺ = V Σ⁺ U^T
+  # x = V Σ⁺ U^T b
+
+  # 计算 U^T b
+  Utb <- t(sv$u) %*% b
+
+  # 除以奇异值（对应 Σ⁺ 的操作）
+  # 只取前 n 个分量（对应非零奇异值）
+  n <- length(sv$d)
+  coeffs <- Utb[1:n] / sv$d
+
+  # 乘以 V
+  x_hat <- sv$v %*% coeffs
+
+  list(x = x_hat, singular_values = sv$d)
+}
+
+result_svd <- kq_solve_svd(A_house, b_house)
+cat("SVD 方法的解:\n")
+cat("  β₀ =", round(result_svd$x[1], 4), "\n")
+cat("  β₁ =", round(result_svd$x[2], 4), "\n")
+cat("  奇异值:", round(result_svd$singular_values, 4), "\n")
+cat("  κ₂(A) =", round(max(result_svd$singular_values) /
+                         min(result_svd$singular_values), 2), "\n")
+```
+
+### SVD 的独特优势：处理秩亏矩阵
+
+当 $\mathbf{A}$ 不是列满秩时（$\text{rank}(\mathbf{A}) < n$），正规方程和 QR 方法都会遇到麻烦。但 SVD 可以自然地处理这种情况：只需忽略为零（或接近零）的奇异值。
+
+```{r}
+#| label: svd-rank-deficient
+#| fig-width: 8
+#| fig-height: 5
+
+# 秩亏矩阵的例子
+set.seed(42)
+m_rd <- 20; n_rd <- 5
+
+# 构造秩为 3 的 5 列矩阵（第 4、5 列是前 3 列的线性组合）
+A_base <- matrix(rnorm(m_rd * 3), m_rd, 3)
+A_rd <- cbind(A_base,
+              0.5 * A_base[,1] + 0.3 * A_base[,2],
+              -0.2 * A_base[,1] + 0.7 * A_base[,3])
+
+# 加一点噪声模拟"几乎秩亏"
+A_almost_rd <- A_rd + matrix(rnorm(m_rd * n_rd, sd = 1e-10), m_rd, n_rd)
+
+b_rd <- rnorm(m_rd)
+
+cat("A 的奇异值:\n")
+sv_rd <- svd(A_rd)
+cat("  精确秩亏:", round(sv_rd$d, 10), "\n")
+
+sv_ard <- svd(A_almost_rd)
+cat("  近似秩亏:", format(sv_ard$d, digits = 4), "\n\n")
+
+# 正规方程方法——失败
+tryCatch({
+  x_ne_rd <- solve(crossprod(A_rd), crossprod(A_rd, b_rd))
+  cat("正规方程（精确秩亏）: 成功\n")
+}, error = function(e) {
+  cat("正规方程（精确秩亏）: 失败 —", e$message, "\n")
+})
+
+# SVD 方法——成功，给出最小范数解
+x_svd_rd <- function(A, b, tol = 1e-8) {
+  sv <- svd(A)
+  # 只保留大于 tol 的奇异值
+  keep <- sv$d > tol * max(sv$d)
+  cat("  保留的奇异值:", sum(keep), "/", length(sv$d), "\n")
+  Utb <- t(sv$u) %*% b
+  coeffs <- ifelse(keep, Utb[1:length(sv$d)] / sv$d, 0)
+  sv$v %*% coeffs
+}
+
+cat("\nSVD 方法（精确秩亏）:\n")
+x_rd <- x_svd_rd(A_rd, b_rd)
+cat("  ||x|| =", round(vnorm(x_rd), 4), "（最小范数解）\n")
+cat("  残差 ||Ax - b|| =", round(vnorm(A_rd %*% x_rd - b_rd), 4), "\n")
+```
+
+SVD 在秩亏情况下给出的是**最小范数解**：在所有使残差最小的解中，选择 $\|\mathbf{x}\|$ 最小的那个。这在实际应用中非常有意义——它是最"简洁"的解。
+
+## 三种方法对比
+
+```{r}
+#| label: method-comparison
+#| fig-width: 10
+#| fig-height: 5
+
+# 综合对比：速度 vs 精度
+library(microbenchmark)
+
+set.seed(42)
+sizes <- c(50, 100, 200, 500, 1000)
+n_cols <- 10
+
+speed_results <- data.frame()
+
+for (m_s in sizes) {
+  A_s <- matrix(rnorm(m_s * n_cols), m_s, n_cols)
+  b_s <- rnorm(m_s)
+
+  # 预热
+  invisible(solve(crossprod(A_s), crossprod(A_s, b_s)))
+  invisible(qr.solve(A_s, b_s))
+  invisible({sv <- svd(A_s); sv$v %*% ((t(sv$u) %*% b_s) / sv$d)})
+
+  mb <- microbenchmark(
+    Cholesky = solve(crossprod(A_s), crossprod(A_s, b_s)),
+    QR = qr.solve(A_s, b_s),
+    SVD = {sv <- svd(A_s); sv$v %*% ((t(sv$u) %*% b_s)[1:n_cols] / sv$d)},
+    times = 50
+  )
+
+  smry <- summary(mb)
+  for (j in 1:3) {
+    speed_results <- rbind(speed_results, data.frame(
+      m = m_s, method = smry$expr[j],
+      time_us = smry$median[j] / 1000  # 转为微秒
+    ))
+  }
+}
+
+# 绘图
+par(mar = c(4, 4, 3, 1))
+methods <- c("Cholesky", "QR", "SVD")
+cols <- c("tomato", "steelblue", "darkgreen")
+
+plot(NULL, xlim = range(sizes), ylim = range(speed_results$time_us),
+     log = "xy", xlab = "行数 m (n = 10 固定)", ylab = "计算时间 (微秒)",
+     main = "三种方法的计算速度对比")
+grid()
+
+for (j in seq_along(methods)) {
+  idx <- speed_results$method == methods[j]
+  lines(speed_results$m[idx], speed_results$time_us[idx],
+        type = "b", pch = c(17, 19, 15)[j], col = cols[j], lwd = 2)
+}
+legend("topleft", methods, col = cols, pch = c(17, 19, 15), lwd = 2)
+```
+
+| 方法 | 条件数依赖 | 稳定性 | 相对速度 | 适用场景 |
+|------|-----------|--------|---------|---------|
+| Cholesky (正规方程) | $O(\kappa^2)$ | 可能不稳定 | 最快 | $\mathbf{A}$ 良态，追求速度 |
+| QR 分解 (Householder) | $O(\kappa)$ | 稳定 | 中等 | **一般情况首选** |
+| SVD | $O(\kappa)$ | 最稳定 | 最慢 | $\mathbf{A}$ 病态或秩亏 |
+
+# 综合案例
+
+## 案例 1：多项式拟合与过拟合
+
+```{r}
+#| label: polynomial-fitting
+#| fig-width: 10
+#| fig-height: 8
+
+# 用最小二乘拟合不同阶数的多项式
+set.seed(42)
+n_pts <- 20
+x_data <- seq(0, 1, length.out = n_pts)
+y_true <- sin(2 * pi * x_data)
+y_data <- y_true + rnorm(n_pts, sd = 0.3)
+
+x_fine <- seq(0, 1, length.out = 200)
+
+# 稳健的 SVD 求解器（处理病态/秩亏矩阵）
+solve_ls_svd <- function(A, b, tol = 1e-10) {
+  sv <- svd(A)
+  keep <- sv$d > tol * max(sv$d)
+  Utb <- drop(t(sv$u) %*% b)
+  coeffs <- ifelse(keep, Utb[1:length(sv$d)] / sv$d, 0)
+  sv$v %*% coeffs
+}
+
+par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+degrees <- c(1, 3, 9, 18)
+for (d in degrees) {
+  # 构造 Vandermonde 矩阵
+  A_poly <- outer(x_data, 0:d, "^")
+
+  # 用 SVD 求解（对病态矩阵也稳健）
+  beta_poly <- solve_ls_svd(A_poly, y_data)
+
+  # 预测
+  A_fine <- outer(x_fine, 0:d, "^")
+  y_pred <- A_fine %*% beta_poly
+
+  # 条件数
+  sv_poly <- svd(A_poly)
+  kk <- max(sv_poly$d) / min(sv_poly$d)
+
+  plot(x_data, y_data, pch = 19, col = "steelblue",
+       xlab = "x", ylab = "y",
+       main = paste0("阶数 = ", d, "，κ(A) = ", format(kk, digits = 3)),
+       ylim = c(-2, 2))
+  lines(x_fine, sin(2 * pi * x_fine), col = "grey50", lwd = 1, lty = 2)
+  lines(x_fine, y_pred, col = "tomato", lwd = 2)
+
+  # 残差
+  resid_poly <- y_data - A_poly %*% beta_poly
+  mtext(paste("残差 =", round(vnorm(resid_poly), 3)), side = 1, line = -1.5, cex = 0.8)
+}
+```
+
+```{r}
+#| label: polynomial-condition
+#| fig-width: 8
+#| fig-height: 5
+
+# 多项式阶数 vs 条件数
+degrees_all <- 1:18
+kappas <- numeric(length(degrees_all))
+
+for (d in degrees_all) {
+  A_p <- outer(x_data, 0:d, "^")
+  sv_p <- svd(A_p)
+  kappas[d] <- max(sv_p$d) / min(sv_p$d)
+}
+
+plot(degrees_all, kappas, type = "b", log = "y",
+     pch = 19, col = "steelblue", lwd = 2,
+     xlab = "多项式阶数", ylab = expression(kappa[2](A)),
+     main = "Vandermonde 矩阵条件数随阶数指数增长")
+grid()
+abline(h = 1/.Machine$double.eps, col = "red", lty = 2)
+text(5, 1/.Machine$double.eps / 5, "1/ε ≈ 10¹⁶（精度完全丢失）", col = "red", cex = 0.8)
+```
+
+**观察**：
+
+- **阶数 1**：欠拟合，残差大，但 $\kappa$ 很小
+- **阶数 3**：拟合良好
+- **阶数 9**：开始过拟合，$\kappa$ 显著增大
+- **阶数 18**：严重过拟合，$\kappa$ 极大——Vandermonde 矩阵的条件数随阶数指数增长
+
+**这正是条件数的实际意义**：高阶多项式拟合的条件数极大，意味着参数估计极不稳定——数据的微小变化会导致拟合曲线剧烈波动。
+
+
+## 案例 2：共线性与岭回归
+
+```{r}
+#| label: ridge-regression
+#| fig-width: 9
+#| fig-height: 5
+
+# 特征共线性导致条件数大 → 岭回归的作用
+set.seed(42)
+n_obs <- 100; n_feat <- 5
+
+# 生成特征，最后一个与第一个高度相关
+X <- matrix(rnorm(n_obs * n_feat), n_obs)
+corr_level <- 0.9999
+X[, n_feat] <- corr_level * X[, 1] + sqrt(1 - corr_level^2) * rnorm(n_obs)
+
+beta_true_ridge <- c(1, -2, 0.5, 0, 3)
+y_ridge <- X %*% beta_true_ridge + rnorm(n_obs, sd = 0.5)
+
+cat("原始 κ(X^T X) =", format(kappa(crossprod(X), exact = TRUE), digits = 3), "\n\n")
+
+# 不同 λ 的岭回归
+lambdas <- c(0, 0.001, 0.01, 0.1, 1, 10)
+results_ridge <- data.frame()
+
+for (lam in lambdas) {
+  XtX_reg <- crossprod(X) + lam * diag(n_feat)
+  beta_ridge <- solve(XtX_reg, crossprod(X, y_ridge))
+  err <- vnorm(beta_ridge - beta_true_ridge) / vnorm(beta_true_ridge)
+
+  results_ridge <- rbind(results_ridge, data.frame(
+    lambda = lam,
+    kappa = kappa(XtX_reg, exact = TRUE),
+    rel_err = err
+  ))
+}
+
+cat(sprintf("%-10s  %-15s  %-15s\n", "λ", "κ(X'X + λI)", "||β̂ - β||/||β||"))
+cat(strrep("-", 45), "\n")
+for (i in seq_len(nrow(results_ridge))) {
+  cat(sprintf("%-10.3f  %-15.1f  %-15.6f\n",
+              results_ridge$lambda[i], results_ridge$kappa[i], results_ridge$rel_err[i]))
+}
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+# 条件数 vs λ
+plot(results_ridge$lambda[-1], results_ridge$kappa[-1], type = "b",
+     log = "xy", pch = 19, col = "steelblue", lwd = 2,
+     xlab = expression(lambda), ylab = expression(kappa),
+     main = expression("岭回归降低条件数"))
+grid()
+
+# 参数误差 vs λ
+plot(results_ridge$lambda, results_ridge$rel_err, type = "b",
+     log = "x", pch = 19, col = "tomato", lwd = 2,
+     xlab = expression(lambda), ylab = expression("||"*hat(beta) - beta*"||/||"*beta*"||"),
+     main = "参数估计误差 vs λ")
+grid()
+```
+
+**理解岭回归**：$\lambda$ 太小——条件数大，不稳定；$\lambda$ 太大——引入过多偏差。最优的 $\lambda$ 在两者之间取得平衡。
+
+## 案例 3：R 中 lm() 的底层实现
+
+R 的 `lm()` 函数就是用 QR 分解实现的！
+
+```{r}
+#| label: lm-qr
+# lm() 底层使用 QR 分解
+fit <- lm(price ~ area)
+
+cat("lm() 的系数:\n")
+print(coef(fit))
+
+cat("\nlm() 使用 QR 分解吗？\n")
+cat("  fit$qr 存在:", !is.null(fit$qr), "\n\n")
+
+# 手动用 QR 验证
+A_lm <- model.matrix(fit)
+qr_lm <- qr(A_lm)
+x_manual <- qr.solve(A_lm, price)
+
+cat("手动 QR 结果:", round(x_manual, 6), "\n")
+cat("lm() 结果:   ", round(coef(fit), 6), "\n")
+cat("完全一致 ✓\n\n")
+
+cat("这就是为什么 R 帮助文档说 lm() '内部使用 QR 分解'\n")
+cat("现在你知道为什么了——它比正规方程更稳定！\n")
+```
+
+# 小测验
+
+## 测验 1：几何理解
+
+在最小二乘问题中，残差向量 $\mathbf{r} = \mathbf{b} - \mathbf{A}\hat{\mathbf{x}}$ 与什么垂直？为什么这保证了 $\|\mathbf{r}\|$ 最小？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+cat("残差 r 垂直于 col(A)，即 A 的列空间。\n\n")
+cat("为什么这保证最小？\n")
+cat("这就像从空间中一个点到一个平面的距离：\n")
+cat("垂线段是最短的。从 b 到 col(A) 的最短距离\n")
+cat("就是 b 到其在 col(A) 上的正交投影的距离。\n\n")
+cat("数学上：对任意 x，\n")
+cat("  ||Ax - b||² = ||A(x - x̂) + (Ax̂ - b)||²\n")
+cat("              = ||A(x - x̂)||² + ||r||²    (因为 r ⊥ col(A))\n")
+cat("              ≥ ||r||²\n")
+cat("等号当且仅当 x = x̂ 时成立。\n")
+```
+
+## 测验 2：条件数理解
+
+为什么"Cholesky 方法会使条件数平方化"？从公式 $\kappa(\mathbf{A}^T\mathbf{A}) = \kappa(\mathbf{A})^2$ 的角度解释。
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+cat("A^T A 的奇异值是 A 的奇异值的平方：\n\n")
+cat("设 A 的奇异值为 σ₁ ≥ σ₂ ≥ ... ≥ σₙ > 0\n")
+cat("则 A^T A 的特征值为 σ₁² ≥ σ₂² ≥ ... ≥ σₙ²\n\n")
+cat("κ(A^T A) = σ₁² / σₙ² = (σ₁/σₙ)² = κ(A)²\n\n")
+cat("具体例子：\n")
+cat("  如果 κ(A) = 10⁴：\n")
+cat("    正规方程看到的条件数 = 10⁸\n")
+cat("    QR 方法看到的条件数  = 10⁴\n")
+cat("  双精度（16位）下：\n")
+cat("    正规方程：16 - 8 = 8 位有效数字\n")
+cat("    QR 方法：  16 - 4 = 12 位有效数字\n")
+```
+
+## 测验 3：方法选择
+
+在以下场景中，你会选择哪种方法？
+
+A. $\mathbf{A}$ 是 $10^6 \times 10$ 的矩阵，$\kappa(\mathbf{A}) = 5$，需要多次求解不同的 $\mathbf{b}$
+
+B. $\mathbf{A}$ 是 $100 \times 50$ 的矩阵，有些列几乎共线
+
+C. 需要在嵌入式系统上实时运行，$\mathbf{A}$ 良态
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+cat("A. Cholesky 方法\n")
+cat("   理由：κ 很小（良态），A^T A 只需算一次（10×10 矩阵），\n")
+cat("   然后对每个 b 做 Cholesky 前代/回代（极快）。\n")
+cat("   QR 每次都要对大矩阵操作，不划算。\n\n")
+
+cat("B. SVD 方法\n")
+cat("   理由：列几乎共线 → 几乎秩亏 → κ 很大。\n")
+cat("   SVD 可以识别哪些方向是'可靠的'，忽略近零奇异值。\n")
+cat("   正规方程和 QR 可能失败或给出不稳定的解。\n\n")
+
+cat("C. Cholesky 方法\n")
+cat("   理由：良态 + 速度要求 → Cholesky 是最快的方法。\n")
+cat("   嵌入式系统资源有限，条件数好时不需要更复杂的方法。\n")
+```
+
+# 总结
+
+## 知识地图
+
+```
+最小二乘法
+├── 问题定义
+│   ├── min ||Ax - b||₂（超定系统的最佳近似）
+│   ├── 几何本质：将 b 投影到 col(A)
+│   └── 正规方程：A^T A x̂ = A^T b
+│
+├── 条件数分析
+│   ├── 关于 b：κ₂(A) · ||b|| / ||proj b||
+│   ├── 关于 A：κ₂(A) + κ₂(A)² · ||r|| / ||proj b||
+│   ├── 精确解时：κ₂(A)（与方程组相同）
+│   └── 一般情况：O(κ₂(A)²)（条件数平方化！）
+│
+├── 三种求解算法
+│   ├── Cholesky（正规方程）
+│   │   ├── 最快
+│   │   └── 风险：κ² 平方化
+│   ├── QR 分解 ← 首选
+│   │   ├── 利用正交不变性
+│   │   ├── Householder 反射构造 Q
+│   │   └── 条件数不平方化
+│   └── SVD
+│       ├── 最稳定，最慢
+│       ├── 处理秩亏矩阵
+│       └── 给出最小范数解
+│
+└── 实际联系
+    ├── R 的 lm() 使用 QR 分解
+    ├── 多项式拟合 → Vandermonde 矩阵条件数指数增长
+    └── 岭回归 → 降低条件数，稳定参数估计
+```
+
+## 核心公式卡
+
+| 概念 | 公式 |
+|------|------|
+| 最小二乘问题 | $\hat{\mathbf{x}} = \arg\min_{\mathbf{x}} \|\mathbf{Ax} - \mathbf{b}\|_2$ |
+| 正规方程 | $\mathbf{A}^T\mathbf{A}\hat{\mathbf{x}} = \mathbf{A}^T\mathbf{b}$ |
+| 伪逆 | $\mathbf{A}^+ = (\mathbf{A}^T\mathbf{A})^{-1}\mathbf{A}^T$ |
+| 条件数平方化 | $\kappa(\mathbf{A}^T\mathbf{A}) = \kappa(\mathbf{A})^2$ |
+| QR 分解求解 | $\hat{\mathbf{x}} = \mathbf{R}^{-1}\mathbf{c}_1$，其中 $\mathbf{Q}^T\mathbf{b} = (\mathbf{c}_1, \mathbf{c}_2)^T$ |
+| SVD 求解 | $\hat{\mathbf{x}} = \mathbf{V}\boldsymbol{\Sigma}^+\mathbf{U}^T\mathbf{b}$ |
+
+## 实践指南
+
+| 你遇到了什么 | 怎么做 |
+|--------------|--------|
+| 一般线性回归 | 用 `lm()` 或 `qr.solve()`（QR 分解） |
+| 特征共线性 | 用岭回归或 SVD，检查 $\kappa(\mathbf{X}^T\mathbf{X})$ |
+| 高阶多项式拟合不稳定 | 降低阶数，或用正交多项式基 |
+| 需要最快速度且 $\mathbf{A}$ 良态 | 用 Cholesky |
+| $\mathbf{A}$ 可能秩亏 | 用 SVD，检查奇异值分布 |
+| `solve()` 报错 | 检查 $\kappa(\mathbf{A})$，考虑正则化 |
+```
