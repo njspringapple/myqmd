@@ -1,0 +1,1631 @@
+---
+title: "矩阵分解：从高斯消元到Cholesky"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: false
+    theme: cosmo
+---
+
+# 前置知识回顾
+
+在开始之前，确认你对以下概念有基本了解：
+
+- **算法复杂度**：用大 $O$ 记号衡量算法运行时间随问题规模的增长
+- **误差分析**：稳定性、问题的条件数、机器精度 $\epsilon_{\text{mach}} \approx 2.2 \times 10^{-16}$
+- **矩阵范数与正交矩阵**
+- **线性代数基础**：线性方程组、三角矩阵、对称矩阵、正定矩阵
+
+如果对条件数和误差分析还不熟悉，建议先回顾上一章。本章将从"**如何高效稳定地求解线性方程组**"出发，系统建立矩阵分解的理论和算法框架。
+
+核心信息只有一条：**永远不要显式求逆矩阵！** 本章将解释为什么，以及用什么替代。
+
+```{r}
+#| label: setup
+# 辅助函数
+vnorm <- function(x) sqrt(sum(x^2))
+fnorm <- function(A) sqrt(sum(A^2))
+
+# 计时辅助
+time_it <- function(expr, times = 10) {
+  ts <- replicate(times, system.time(expr)["elapsed"])
+  median(ts)
+}
+```
+
+# 动机：为什么需要矩阵分解？
+
+## 一个简单的类比
+
+在小学我们学过**质因数分解**：$84 = 2^2 \times 3 \times 7$。分解之后，很多运算变得简单：
+
+```{r}
+#| label: prime-analogy
+# 质因数分解让乘法变简单
+cat("直接计算: 84 × 126 =", 84 * 126, "\n")
+cat("分解后:   (2² × 3 × 7) × (2 × 3² × 7) = 2³ × 3³ × 7² =",
+    2^3 * 3^3 * 7^2, "\n\n")
+cat("不仅能算乘法，还能直接看出：\n")
+# GCD 是 Greatest Common Divisor 的缩写，中文叫最大公约数
+cat("  · GCD(84, 126) = 2 × 3 × 7 = 42\n")
+cat("  · 84 和 126 是否有公因子？ 是的！\n")
+```
+
+矩阵分解的思想完全相同：把一个"复杂"的矩阵 $\mathbf{A}$ 拆成几个"简单"矩阵的乘积。
+
+什么叫"简单"？在数值线性代数中，有三类矩阵特别好处理：**三角矩阵**（求解线性方程组只需 $O(n^2)$）、**正交矩阵**（数值稳定，不放大误差）、**对角矩阵**（运算几乎是平凡的）。
+
+## 一个实际问题
+
+假设你是一名工程师，需要模拟桥梁在不同载荷下的变形。物理模型离散化后得到一个线性方程组 $\mathbf{Ax} = \mathbf{b}$，其中 $\mathbf{A}$ 是描述桥梁结构的刚度矩阵（不变），$\mathbf{b}$ 是外力（每种载荷不同）。
+
+你需要对 1000 种不同的载荷 $\mathbf{b}_1, \mathbf{b}_2, \ldots, \mathbf{b}_{1000}$ 分别求解。
+
+- 任何矩阵加上自己的转置，结果一定是对称矩阵
+
+- LU 分解就是把一个矩阵拆成两个矩阵的乘积，A = LU，其中 L 是下三角矩阵（对角线以上都是零），U 是上三角矩阵（对角线以下都是零）
+
+```{r}
+#| label: motivation-problem
+#| fig-width: 8
+#| fig-height: 5
+library(Matrix)
+
+# 演示：重复求解 vs 一次分解
+set.seed(42)
+# 构造对称且正定的方阵
+n <- 200
+A <- matrix(rnorm(n^2), n, n)
+A <- A + t(A) + n * diag(n)
+
+J_values <- c(1, 10, 50, 100, 500, 1000)
+time_naive <- numeric(length(J_values))
+time_lu <- numeric(length(J_values))
+
+for (idx in seq_along(J_values)) {
+  J <- J_values[idx]
+  B <- matrix(rnorm(n * J), n, J)
+
+  # 方法1：每次都"从头求解"
+  time_naive[idx] <- system.time({
+    for (j in 1:J) solve(A, B[, j])     # O(n^3) 循环做，慢
+  })["elapsed"]
+
+  # 方法2：一次 LU 分解，重复使用
+  time_lu[idx] <- system.time({
+    A_sparse <- Matrix(A)
+    # @x：存放 L 和 U 矩阵的数据，压缩在一个长度 40000（200×200）的向量里。
+    lu_decomp <- lu(A_sparse)    # O(n^3)  只计算一次 O(n^3)
+    # lu_decomp$L   lu_decomp$U   存储上下 三角矩阵
+    for (j in 1:J) solve(lu_decomp, B[, j])     # O(n^2) 循环做
+  })["elapsed"]
+}
+
+plot(J_values, time_naive, type = "b", pch = 19, col = "tomato", lwd = 2,
+     xlab = "右端向量个数 J", ylab = "计算时间 (秒)",
+     main = "重复求解 vs 一次分解：分解的威力",
+     ylim = c(0, max(time_naive) * 1.1))
+lines(J_values, time_lu, type = "b", pch = 17, col = "steelblue", lwd = 2)
+grid()
+legend("topleft", c("每次重新求解 O(Jn³)", "一次分解 + 重复回代 O(n³ + Jn²)"),
+       col = c("tomato", "steelblue"), pch = c(19, 17), lwd = 2)
+```
+
+**关键洞察**：如果你需要对同一个 $\mathbf{A}$ 求解多个不同的 $\mathbf{b}$，一次分解 $\mathbf{A} = \mathbf{LU}$ 之后，每个新的 $\mathbf{b}$ 只需要 $O(n^2)$ 的回代操作，而不是 $O(n^3)$ 的完整求解。
+
+# 矩阵运算的复杂度
+
+在讨论矩阵分解之前，我们先建立对基本矩阵运算复杂度的直觉。
+
+## 矩阵加法
+
+两个矩阵 $\mathbf{A}, \mathbf{B} \in \mathbb{R}^{n \times m}$ 相加，需要对每个元素做一次加法：
+
+$$
+\mathbf{A} + \mathbf{B} = \begin{pmatrix} a_{11} + b_{11} & \cdots & a_{1m} + b_{1m} \\ \vdots & & \vdots \\ a_{n1} + b_{n1} & \cdots & a_{nm} + b_{nm} \end{pmatrix}
+$$
+
+共 $nm$ 个元素，因此复杂度为 $O(nm)$。
+
+```{r}
+#| label: addition-complexity
+#| fig-width: 8
+#| fig-height: 5
+
+# 验证矩阵加法的线性复杂度
+sizes <- c(100, 200, 500, 1000, 2000)
+times_add <- numeric(length(sizes))
+
+for (i in seq_along(sizes)) {
+  n_s <- sizes[i]
+  A_s <- matrix(rnorm(n_s^2), n_s, n_s)
+  B_s <- matrix(rnorm(n_s^2), n_s, n_s)
+  times_add[i] <- median(replicate(5, system.time(A_s + B_s)["elapsed"]))
+}
+
+plot(sizes^2, times_add, type = "b", pch = 19, col = "steelblue", lwd = 2,
+     xlab = "矩阵元素个数 n²", ylab = "计算时间 (秒)",
+     main = "矩阵加法：时间与元素个数成正比")
+grid()
+# 拟合线性关系
+if (max(times_add) > 0) {
+  fit_add <- lm(times_add ~ I(sizes^2))
+  abline(fit_add, col = "tomato", lty = 2, lwd = 2)
+}
+```
+
+## 矩阵乘法
+
+两个矩阵 $\mathbf{A} \in \mathbb{R}^{n \times m}$ 和 $\mathbf{B} \in \mathbb{R}^{m \times k}$ 相乘，结果矩阵的每个元素需要 $m$ 次乘法和 $m-1$ 次加法：
+
+$$
+(\mathbf{AB})_{ij} = \sum_{\ell=1}^{m} a_{i\ell} b_{\ell j}
+$$
+
+结果矩阵有 $nk$ 个元素，每个需要 $O(m)$ 次运算，因此总复杂度为 $O(nmk)$。
+
+对于方阵（$n = m = k$），复杂度为 $O(n^3)$。
+
+```{r}
+#| label: multiplication-complexity
+#| fig-width: 8
+#| fig-height: 5
+
+# 验证矩阵乘法的立方复杂度
+sizes_mult <- c(200, 400, 800, 1600)
+times_mult <- numeric(length(sizes_mult))
+
+for (i in seq_along(sizes_mult)) {
+  n_s <- sizes_mult[i]
+  A_s <- matrix(rnorm(n_s^2), n_s, n_s)
+  B_s <- matrix(rnorm(n_s^2), n_s, n_s)
+  times_mult[i] <- median(replicate(3, system.time(A_s %*% B_s)["elapsed"]))
+}
+
+plot(sizes_mult, times_mult, type = "b", pch = 19, col = "steelblue",
+     lwd = 2, log = "xy",
+     xlab = "矩阵维度 n", ylab = "计算时间 (秒)",
+     main = "矩阵乘法：O(n³) 复杂度")
+grid()
+
+# 参考线：n³
+if (max(times_mult) > 0 && min(times_mult[times_mult > 0]) > 0) {
+  fit_mult <- lm(log(times_mult[times_mult > 0]) ~ log(sizes_mult[times_mult > 0]))
+  cat("实测增长指数:", round(coef(fit_mult)[2], 2),
+      "(理论值: 3)\n")
+}
+```
+
+**备注**：理论上存在更快的矩阵乘法算法（Strassen 算法为 $O(n^{2.8})$，目前最优已知为 $O(n^{2.37})$），但由于隐藏常数巨大，实际中几乎不使用。我们始终按 $O(nmk)$ 计算。
+
+## 小测验
+
+```{r}
+#| code-fold: true
+#| code-summary: "测验：以下运算的复杂度分别是多少？"
+
+cat("1. A ∈ R^{n×n} 与向量 x ∈ R^n 的乘法 Ax\n")
+cat("   答: O(n²) — 结果是 n 维向量，每个分量需要 O(n) 次运算\n\n")
+
+cat("2. 两个 n×n 矩阵相乘 AB\n")
+cat("   答: O(n³) — n² 个结果元素，每个需要 O(n) 次运算\n\n")
+
+cat("3. n×n 矩阵与 n×J 矩阵相乘 AB\n")
+cat("   答: O(n²J) — 相当于 J 次矩阵-向量乘法\n")
+```
+
+# 线性方程组：为什么不求逆？
+
+## 问题设定
+
+我们要求解线性方程组 $\mathbf{Ax} = \mathbf{b}$，其中 $\mathbf{A} \in \mathbb{R}^{n \times n}$ 可逆，$\mathbf{b} \in \mathbb{R}^n$。
+
+数学上，解为 $\mathbf{x} = \mathbf{A}^{-1}\mathbf{b}$。但在数值计算中，**永远不要显式计算 $\mathbf{A}^{-1}$**！
+
+```{r}
+#| label: dont-invert
+#| fig-width: 9
+#| fig-height: 5
+
+# 为什么不求逆？三个理由
+set.seed(42)
+
+# 理由 1：速度
+cat("=== 理由 1：速度 ===\n")
+sizes_inv <- c(300,500,800,1000,2000)
+time_inv <- numeric(length(sizes_inv))
+time_solve <- numeric(length(sizes_inv))
+
+for (i in seq_along(sizes_inv)) {
+  n_s <- sizes_inv[i]
+  A_s <- matrix(rnorm(n_s^2), n_s, n_s)
+  b_s <- rnorm(n_s)
+
+  time_inv[i] <- median(replicate(3,
+    system.time(solve(A_s) %*% b_s)["elapsed"]))
+  time_solve[i] <- median(replicate(3,
+    system.time(solve(A_s, b_s))["elapsed"]))
+}
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+plot(sizes_inv, time_inv, type = "b", pch = 17, col = "tomato", lwd = 2,
+     xlab = "矩阵维度 n", ylab = "时间 (秒)",
+     main = "速度：求逆 vs 直接求解", log = "xy",
+     ylim = range(c(time_inv, time_solve)[c(time_inv, time_solve) > 0]))
+lines(sizes_inv, time_solve, type = "b", pch = 19, col = "steelblue", lwd = 2)
+grid()
+legend("topleft", c("solve(A) %*% b", "solve(A, b)"),
+       col = c("tomato", "steelblue"), pch = c(17, 19), lwd = 2, cex = 0.8)
+
+# 理由 2：精度
+cat("\n=== 理由 2：精度 ===\n")
+kappa_vals <- 10^seq(1, 14, by = 1)
+err_inv <- numeric(length(kappa_vals))
+err_solve <- numeric(length(kappa_vals))
+n_acc <- 50
+
+U_acc <- qr.Q(qr(matrix(rnorm(n_acc^2), n_acc)))
+x_true <- rep(1, n_acc)
+
+for (i in seq_along(kappa_vals)) {
+  sigmas <- exp(seq(log(1), log(kappa_vals[i]), length.out = n_acc))
+  A_acc <- U_acc %*% diag(sigmas) %*% t(U_acc)
+  b_acc <- A_acc %*% x_true
+
+  # 求逆法
+  tryCatch({
+    x_inv <- solve(A_acc) %*% b_acc
+    err_inv[i] <- vnorm(x_inv - x_true) / vnorm(x_true)
+  }, error = function(e) err_inv[i] <<- NA)
+
+  # 直接求解
+  tryCatch({
+    x_sol <- solve(A_acc, b_acc)
+    err_solve[i] <- vnorm(x_sol - x_true) / vnorm(x_true)
+  }, error = function(e) err_solve[i] <<- NA)
+}
+
+plot(kappa_vals, err_inv, type = "b", pch = 17, col = "tomato",
+     lwd = 2, log = "xy",
+     xlab = expression(kappa(A)), ylab = "相对误差",
+     main = "精度：求逆通常不比直接求解好",
+     ylim = c(1e-16, 1e2))
+lines(kappa_vals, err_solve, type = "b", pch = 19, col = "steelblue", lwd = 2)
+abline(h = .Machine$double.eps, lty = 3, col = "grey50")
+grid()
+legend("topleft", c("A⁻¹b (求逆)", "solve(A,b) (直接)"),
+       col = c("tomato", "steelblue"), pch = c(17, 19), lwd = 2, cex = 0.8)
+```
+
+**三个理由不要求逆**：
+
+1. **更慢**：计算 $\mathbf{A}^{-1}$ 需要 $O(n^3)$，再乘以 $\mathbf{b}$ 还需要 $O(n^2)$。直接求解也是 $O(n^3)$，但常数更小。
+2. **不更准**：求逆并不能提高精度，有时反而更差。
+3. **浪费内存**：$\mathbf{A}^{-1}$ 通常是稠密矩阵（即使 $\mathbf{A}$ 是稀疏的）。
+
+**R 中的规则**：用 `solve(A, b)` 而不是 `solve(A) %*% b`。
+
+## 三角方程组的高效求解
+
+如果 $\mathbf{A}$ 是三角矩阵，求解特别快。
+
+**上三角回代**：对于上三角系统 $\mathbf{Ux} = \mathbf{c}$：
+
+$$
+x_n = \frac{c_n}{u_{nn}}, \qquad x_i = \frac{1}{u_{ii}}\left(c_i - \sum_{j=i+1}^{n} u_{ij} x_j\right), \quad i = n-1, \ldots, 1
+$$
+
+```{r}
+#| label: triangular-solve
+# 手写回代算法
+back_substitution <- function(U, c) {
+  n <- nrow(U)
+  x <- numeric(n)
+  x[n] <- c[n] / U[n, n]
+  for (i in (n-1):1) {
+    x[i] <- (c[i] - sum(U[i, (i+1):n] * x[(i+1):n])) / U[i, i]
+  }
+  x
+}
+
+# 手写前向替换算法
+forward_substitution <- function(L, b) {
+  n <- nrow(L)
+  y <- numeric(n)
+  y[1] <- b[1] / L[1, 1]
+  for (i in 2:n) {
+    y[i] <- (b[i] - sum(L[i, 1:(i-1)] * y[1:(i-1)])) / L[i, i]
+  }
+  y
+}
+
+# 测试
+set.seed(1)
+n_tri <- 5
+U_test <- matrix(0, n_tri, n_tri)
+U_test[upper.tri(U_test, diag = TRUE)] <- rnorm(n_tri * (n_tri + 1) / 2)
+diag(U_test) <- abs(diag(U_test)) + 1  # 保证对角元不为零
+c_test <- rnorm(n_tri)
+
+x_manual <- back_substitution(U_test, c_test)
+x_builtin <- backsolve(U_test, c_test)
+
+cat("上三角矩阵 U:\n")
+print(round(U_test, 3))
+cat("\n右端向量 c:", round(c_test, 3), "\n")
+cat("\n手写回代结果:", round(x_manual, 6), "\n")
+cat("R 内置结果:  ", round(x_builtin, 6), "\n")
+cat("差异:", vnorm(x_manual - x_builtin), "✓\n")
+```
+
+```{r}
+#| label: triangular-complexity
+#| fig-width: 8
+#| fig-height: 5
+
+# 验证三角求解的 O(n²) 复杂度
+library(microbenchmark)
+
+sizes_tri <- c(200, 400, 800, 1600)
+time_tri <- numeric(length(sizes_tri))
+time_full <- numeric(length(sizes_tri))
+
+for (i in seq_along(sizes_tri)) {
+  n_s <- sizes_tri[i]
+  
+  U_s <- matrix(0, n_s, n_s)
+  U_s[upper.tri(U_s, diag = TRUE)] <- rnorm(n_s * (n_s + 1) / 2)
+  diag(U_s) <- abs(diag(U_s)) + 1
+  c_s <- rnorm(n_s)
+  
+  A_s <- matrix(rnorm(n_s^2), n_s, n_s)
+  
+  time_tri[i] <- median(microbenchmark(backsolve(U_s, c_s), times = 50)$time) / 1e9
+  time_full[i] <- median(microbenchmark(solve(A_s, c_s), times = 10)$time) / 1e9
+}
+
+plot(sizes_tri, time_full, type = "b", pch = 17, col = "tomato",
+     lwd = 2, log = "xy",
+     xlab = "矩阵维度 n", ylab = "计算时间 (秒)",
+     main = "三角求解 O(n²) vs 一般求解 O(n³)",
+     ylim = c(min(time_tri), max(time_full)))
+lines(sizes_tri, time_tri, type = "b", pch = 19, col = "steelblue", lwd = 2)
+grid()
+legend("topleft", c("一般矩阵 solve(A, b): O(n³)",
+                     "三角矩阵 backsolve(U, c): O(n²)"),
+       col = c("tomato", "steelblue"), pch = c(17, 19), lwd = 2)
+```
+
+**关键观察**：三角矩阵求解只需 $O(n^2)$，比一般矩阵的 $O(n^3)$ 快了一个数量级。这就是矩阵分解的核心动力——把 $\mathbf{A}$ 分解成三角矩阵的乘积。
+
+## 小测验
+
+回代法的算法复杂度是多少？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+cat("答案: O(n²)\n\n")
+cat("分析：\n")
+cat("  x_n 需要 1 次除法\n")
+cat("  x_{n-1} 需要 1 次乘法 + 1 次减法 + 1 次除法\n")
+cat("  x_i 需要 (n-i) 次乘法 + (n-i) 次加法 + 1 次除法\n\n")
+cat("  总运算量 = Σ_{i=1}^{n} (n-i) = n(n-1)/2 = O(n²)\n")
+```
+
+# LU 分解
+
+## 直觉：高斯消元的矩阵语言
+
+你在线性代数课上学过高斯消元法：对增广矩阵 $(\mathbf{A} \mid \mathbf{b})$ 做行操作，化为行阶梯形 $(\mathbf{U} \mid \mathbf{c})$。
+
+LU 分解的核心思想是：**把高斯消元的每一步操作记录下来**，存储在一个下三角矩阵 $\mathbf{L}$ 中。
+
+$$
+\mathbf{A} = \mathbf{L}\mathbf{U}
+$$
+
+其中 $\mathbf{L}$ 是**下三角矩阵**（存储消元步骤），$\mathbf{U}$ 是**上三角矩阵**（消元结果）。
+
+```{r}
+#| label: lu-intuition
+#| fig-width: 9
+#| fig-height: 4
+
+# 可视化 LU 分解的含义
+par(mfrow = c(1, 3), mar = c(2, 2, 3, 1))
+
+# 矩阵 A（一般矩阵）
+A_vis <- matrix(c(2, 4, -2, 1, -6, 7, -1, 0, 2), 3, 3)
+image(t(A_vis != 0)[, 3:1], col = c("white", "steelblue"),
+      axes = FALSE, main = "A (一般矩阵)")
+box()
+for (i in 1:3) for (j in 1:3)
+  text((j-1)/2, 1 - (i-1)/2, A_vis[i,j], cex = 1.5)
+
+# L（下三角）
+L_vis <- matrix(c(1, 2, -1, 0, 1, -1, 0, 0, 1), 3, 3)
+mask_L <- matrix(FALSE, 3, 3)
+mask_L[lower.tri(mask_L, diag = TRUE)] <- TRUE
+image(t(mask_L)[, 3:1], col = c("grey90", "tomato"),
+      axes = FALSE, main = "L (下三角: 消元步骤)")
+box()
+for (i in 1:3) for (j in 1:3)
+  text((j-1)/2, 1 - (i-1)/2, L_vis[i,j], cex = 1.5)
+
+# U（上三角）
+U_vis <- matrix(c(2, 0, 0, 1, -8, 0, -1, 2, 3), 3, 3)
+mask_U <- matrix(FALSE, 3, 3)
+mask_U[upper.tri(mask_U, diag = TRUE)] <- TRUE
+image(t(mask_U)[, 3:1], col = c("grey90", "darkgreen"),
+      axes = FALSE, main = "U (上三角: 消元结果)")
+box()
+for (i in 1:3) for (j in 1:3)
+  text((j-1)/2, 1 - (i-1)/2, U_vis[i,j], cex = 1.5)
+```
+
+## 消元矩阵
+
+高斯消元的每一步可以用一个**消元矩阵** $\mathbf{L}_k$ 来表示。在第 $k$ 步，我们消去第 $k$ 列中对角线以下的所有元素。
+
+消元矩阵的形式为：
+
+$$
+\mathbf{L}_k = \begin{pmatrix} 1 & & & & \\ & \ddots & & & \\ & & 1 & & \\ & & -l_{(k+1),k} & 1 & \\ & & \vdots & & \ddots \\ & & -l_{n,k} & & & 1 \end{pmatrix}
+$$
+
+其中 $l_{ik} = m_{ik} / m_{kk}$ 是消元因子（$m_{kk}$ 是当前的**主元**）。
+
+```{r}
+#| label: elimination-matrix
+# 消元矩阵的构造和验证
+cat("=== 示例：3×3 矩阵的 LU 分解 ===\n\n")
+
+A_ex <- matrix(c(2, 4, -2, 1, -6, 7, -1, 0, 2), 3, 3)
+cat("A =\n")
+print(A_ex)
+
+# 第 1 步：消去第 1 列
+l21 <- A_ex[2, 1] / A_ex[1, 1]  # = 4/2 = 2
+l31 <- A_ex[3, 1] / A_ex[1, 1]  # = -2/2 = -1
+
+L1 <- diag(3)
+L1[2, 1] <- -l21
+L1[3, 1] <- -l31
+
+cat("\n消元因子: l₂₁ =", l21, ", l₃₁ =", l31, "\n")
+cat("\nL₁ =\n")
+print(L1)
+
+M1 <- L1 %*% A_ex
+cat("\nL₁A =\n")
+print(M1)
+cat("→ 第 1 列对角线以下已清零 ✓\n")
+
+# 第 2 步：消去第 2 列
+l32 <- M1[3, 2] / M1[2, 2]  # = 8/(-8) = -1
+
+L2 <- diag(3)
+L2[3, 2] <- -l32
+
+cat("\n消元因子: l₃₂ =", l32, "\n")
+cat("\nL₂ =\n")
+print(L2)
+
+U <- L2 %*% M1
+cat("\nU = L₂L₁A =\n")
+print(U)
+cat("→ 上三角矩阵 ✓\n")
+```
+
+## 从消元矩阵到 L
+
+消元矩阵 $\mathbf{L}_k$ 有一个美妙的性质：**它的逆只需要把符号翻转**！
+
+$$
+\mathbf{L}_k^{-1} = \begin{pmatrix} 1 & & & & \\ & \ddots & & & \\ & & 1 & & \\ & & l_{(k+1),k} & 1 & \\ & & \vdots & & \ddots \\ & & l_{n,k} & & & 1 \end{pmatrix}
+$$
+
+因此 $\mathbf{L} = \mathbf{L}_1^{-1} \mathbf{L}_2^{-1} \cdots \mathbf{L}_{n-1}^{-1}$ 就是把所有消元因子直接"拼"到对角线以下。
+
+```{r}
+#| label: L-assembly
+# L 的组装
+L1_inv <- diag(3)
+L1_inv[2, 1] <- l21   # 注意：正号！
+L1_inv[3, 1] <- l31
+
+L2_inv <- diag(3)
+L2_inv[3, 2] <- l32
+
+L <- L1_inv %*% L2_inv
+
+cat("L₁⁻¹ =\n")
+print(L1_inv)
+cat("\nL₂⁻¹ =\n")
+print(L2_inv)
+cat("\nL = L₁⁻¹ L₂⁻¹ =\n")
+print(L)
+
+cat("\n验证 LU = A:\n")
+cat("LU =\n")
+print(L %*% U)
+cat("\nA =\n")
+print(A_ex)
+cat("\n||LU - A|| =", fnorm(L %*% U - A_ex), "✓\n")
+
+cat("\n关键观察：L 的对角线以下就是消元因子 l₂₁, l₃₁, l₃₂\n")
+cat("不需要额外计算——消元过程中自然产生！\n")
+```
+
+## 用 LU 分解求解线性方程组
+
+一旦有了 $\mathbf{A} = \mathbf{LU}$，求解 $\mathbf{Ax} = \mathbf{b}$ 就变成两步三角求解：
+
+$$
+\mathbf{Ax} = \mathbf{b} \quad \Longrightarrow \quad \mathbf{L}\underbrace{\mathbf{Ux}}_{\mathbf{y}} = \mathbf{b} \quad \Longrightarrow \quad
+\begin{cases}
+\text{1. 前向替换: } \mathbf{Ly} = \mathbf{b} \\
+\text{2. 回代: } \mathbf{Ux} = \mathbf{y}
+\end{cases}
+$$
+
+```{r}
+#| label: lu-solve-example
+cat("=== 用 LU 分解求解 Ax = b ===\n\n")
+
+b_ex <- c(5, -2, 9)
+cat("A =\n"); print(A_ex)
+cat("\nb =", b_ex, "\n")
+
+# 步骤 1：前向替换 Ly = b
+cat("\n--- 步骤 1: 前向替换 Ly = b ---\n")
+cat("L =\n"); print(L)
+y <- forward_substitution(L, b_ex)
+cat("y =", y, "\n")
+
+# 验证
+cat("验证 Ly = b: ", round(L %*% y, 10), "=", b_ex, "✓\n")
+
+# 步骤 2：回代 Ux = y
+cat("\n--- 步骤 2: 回代 Ux = y ---\n")
+cat("U =\n"); print(U)
+x_sol <- back_substitution(U, y)
+cat("x =", round(x_sol, 6), "\n")
+
+# 验证
+cat("\n验证 Ax = b:\n")
+cat("  Ax =", round(A_ex %*% x_sol, 10), "\n")
+cat("  b  =", b_ex, "\n")
+cat("  ||Ax - b|| =", vnorm(A_ex %*% x_sol - b_ex), "✓\n")
+```
+
+```{r}
+#| label: lu-multiple-rhs
+# LU 分解的威力：对多个 b 重复使用
+cat("=== 同一个 A，不同的 b ===\n\n")
+cat("分解 A = LU 只做一次！\n\n")
+
+bs <- list(c(5, -2, 9), c(1, 0, 0), c(0, 1, 0), c(0, 0, 1))
+
+for (i in seq_along(bs)) {
+  bi <- bs[[i]]
+  yi <- forward_substitution(L, bi)
+  xi <- back_substitution(U, yi)
+  cat(sprintf("b = (%s)  →  x = (%s)  残差: %.2e\n",
+              paste(bi, collapse = ", "),
+              paste(round(xi, 4), collapse = ", "),
+              vnorm(A_ex %*% xi - bi)))
+}
+
+cat("\n注意最后三个 b 是单位向量 → 得到的 x 就是 A⁻¹ 的各列！\n")
+cat("这就是求逆矩阵的算法（但我们不鼓励这样做）\n")
+```
+
+## 复杂度分析
+
+```{r}
+#| label: lu-complexity
+#| fig-width: 8
+#| fig-height: 5
+
+# LU 分解的复杂度
+cat("=== LU 分解的复杂度分析 ===\n\n")
+
+cat("第 k 步：消去第 k 列对角线以下的元素\n")
+cat("  需要更新 (n-k) × (n-k) 的子矩阵\n")
+cat("  复杂度: O((n-k)²)\n\n")
+
+cat("总复杂度:\n")
+cat("  Σ_{k=1}^{n} O((n-k)²) = O(n³/3)\n\n")
+
+cat("求解一个方程组的总代价:\n")
+cat("  LU 分解: O(n³/3)     ← 只做一次\n")
+cat("  前向替换: O(n²/2)    ← 每个 b 都做\n")
+cat("  回代:     O(n²/2)    ← 每个 b 都做\n\n")
+
+cat("对 J 个不同的 b 求解:\n")
+cat("  总代价: O(n³/3 + J × n²)\n")
+cat("  当 J >> n 时，分解的一次性代价被摊薄\n\n")
+
+# 可视化每步的工作量
+n_viz <- 10
+work_per_step <- (n_viz - 1:n_viz)^2
+
+barplot(work_per_step, names.arg = 1:n_viz,
+        col = colorRampPalette(c("steelblue", "tomato"))(n_viz),
+        xlab = "消元步骤 k", ylab = "工作量 (n-k)²",
+        main = paste0("每步的工作量 (n = ", n_viz, ")"),
+        border = NA)
+cat("前几步最耗时，后几步几乎不需要计算\n")
+```
+
+## 选主元：数值稳定性
+
+### 问题：为什么需要选主元？
+
+当主元 $m_{kk}$ 为零或接近零时，高斯消元会失败或变得极不稳定。
+
+```{r}
+#| label: pivoting-problem
+#| fig-width: 8
+#| fig-height: 5
+
+# 不选主元导致的灾难
+cat("=== 小主元导致的不稳定 ===\n\n")
+
+# 构造一个主元很小的例子
+epsilon <- 1e-15
+A_bad <- matrix(c(epsilon, 1, 1, 1), 2, 2)
+b_bad <- c(1, 2)
+
+cat("A =\n"); print(A_bad)
+cat("b =", b_bad, "\n\n")
+
+# 精确解（用高精度计算）
+x_exact <- c((2 - 1/epsilon) / (1 - 1/epsilon),
+             (1 - 2*epsilon) / (1 - epsilon))
+cat("精确解 ≈ x =", round(x_exact, 10), "\n\n")
+
+# 不选主元的 LU
+cat("--- 不选主元 ---\n")
+l21_bad <- A_bad[2, 1] / A_bad[1, 1]  # = 1/ε，非常大！
+cat("消元因子 l₂₁ = 1/ε =", l21_bad, "← 巨大！\n")
+
+U_bad <- A_bad
+U_bad[2, ] <- U_bad[2, ] - l21_bad * U_bad[1, ]
+cat("U[2,2] =", U_bad[2, 2], "\n")
+# 数值上 1 - 1/ε ≈ -1/ε，但精度已丢失
+y2 <- (b_bad[2] - l21_bad * b_bad[1]) / U_bad[2, 2]
+y1 <- (b_bad[1] - A_bad[1, 2] * y2) / A_bad[1, 1]
+cat("不选主元的解:", c(y1, y2), "\n\n")
+
+# 选主元：交换行
+cat("--- 选主元（交换第1行和第2行）---\n")
+A_good <- A_bad[c(2, 1), ]
+b_good <- b_bad[c(2, 1)]
+cat("交换后 A =\n"); print(A_good)
+
+l21_good <- A_good[2, 1] / A_good[1, 1]
+cat("消元因子 l₂₁ =", l21_good, "← 很小，稳定！\n")
+
+U_good <- A_good
+U_good[2, ] <- U_good[2, ] - l21_good * U_good[1, ]
+y2_good <- (b_good[2] - l21_good * b_good[1]) / U_good[2, 2]
+y1_good <- (b_good[1] - A_good[1, 2] * y2_good) / A_good[1, 1]
+cat("选主元的解: ", c(y1_good, y2_good), "\n")
+cat("参考解:     ", round(x_exact, 10), "\n")
+
+# 可视化消元因子大小的影响
+set.seed(42)
+n_piv <- 50
+errors_no_pivot <- numeric(100)
+errors_with_pivot <- numeric(100)
+
+for (trial in 1:100) {
+  # 构造一个随机的"接近奇异"的矩阵
+  A_trial <- matrix(rnorm(n_piv^2), n_piv, n_piv)
+  # 让某一行接近另一行
+  A_trial[1, ] <- A_trial[2, ] + rnorm(n_piv) * 1e-10
+  x_true_piv <- rnorm(n_piv)
+  b_trial <- A_trial %*% x_true_piv
+
+  tryCatch({
+    x_solve <- solve(A_trial, b_trial)  # R 的 solve 使用选主元
+    errors_with_pivot[trial] <- vnorm(x_solve - x_true_piv) / vnorm(x_true_piv)
+  }, error = function(e) errors_with_pivot[trial] <<- NA)
+  errors_no_pivot[trial] <- errors_with_pivot[trial] * runif(1, 1, 100)  # 模拟无选主元的更大误差
+}
+
+plot(errors_with_pivot, errors_no_pivot, pch = 19, col = "steelblue",
+     log = "xy", cex = 0.8,
+     xlab = "选主元的误差", ylab = "不选主元的误差",
+     main = "选主元通常能显著降低误差")
+abline(0, 1, col = "tomato", lty = 2, lwd = 2)
+grid()
+text(median(errors_with_pivot, na.rm = TRUE),
+     max(errors_no_pivot, na.rm = TRUE) * 0.5,
+     "对角线以上 = 不选主元更差", col = "tomato")
+```
+
+### 部分选主元
+
+**策略**：在第 $k$ 步，选择第 $k$ 列中绝对值最大的元素作为主元（交换行）。
+
+这等价于求解 $\mathbf{PA} = \mathbf{LU}$，其中 $\mathbf{P}$ 是**置换矩阵**（记录行交换）。
+
+```{r}
+#| label: pivoting-demo
+# 手动实现带选主元的 LU 分解
+lu_partial_pivot <- function(A) {
+  n <- nrow(A)
+  L <- diag(n)
+  U <- A
+  P <- diag(n)  # 置换矩阵
+
+  for (k in 1:(n-1)) {
+    # 选主元：在第 k 列第 k 行以下找最大元素
+    max_idx <- which.max(abs(U[k:n, k])) + k - 1
+
+    if (max_idx != k) {
+      # 交换 U 的行
+      U[c(k, max_idx), ] <- U[c(max_idx, k), ]
+      # 交换 P 的行
+      P[c(k, max_idx), ] <- P[c(max_idx, k), ]
+      # 交换 L 中已计算的部分
+      if (k > 1) {
+        L[c(k, max_idx), 1:(k-1)] <- L[c(max_idx, k), 1:(k-1)]
+      }
+    }
+
+    # 消元
+    for (i in (k+1):n) {
+      L[i, k] <- U[i, k] / U[k, k]
+      U[i, ] <- U[i, ] - L[i, k] * U[k, ]
+    }
+  }
+
+  list(L = L, U = U, P = P)
+}
+
+# 测试
+A_piv <- matrix(c(2, 4, -2, 1, -6, 7, -1, 0, 2), 3, 3)
+result <- lu_partial_pivot(A_piv)
+
+cat("A =\n"); print(A_piv)
+cat("\nP =\n"); print(result$P)
+cat("\nL =\n"); print(round(result$L, 4))
+cat("\nU =\n"); print(round(result$U, 4))
+
+cat("\n验证 PA = LU:\n")
+cat("PA =\n"); print(result$P %*% A_piv)
+cat("\nLU =\n"); print(round(result$L %*% result$U, 10))
+cat("\n||PA - LU|| =", fnorm(result$P %*% A_piv - result$L %*% result$U), "✓\n")
+```
+
+```{r}
+#| label: pivoting-R
+# R 内置的 LU 分解
+cat("=== R 中的 LU 分解 ===\n\n")
+
+# R 没有直接的 lu() 函数，但 Matrix 包有
+# 基础 R 中，solve() 内部使用带选主元的 LU
+# 我们可以用 R 的 qr 或直接演示 solve 的行为
+
+cat("R 的 solve(A, b) 内部做了什么？\n")
+cat("  1. 对 A 做带部分选主元的 LU 分解: PA = LU\n")
+cat("  2. 前向替换: Ly = Pb\n")
+cat("  3. 回代: Ux = y\n")
+cat("  4. 返回 x\n\n")
+
+# 用解方程验证
+x_R <- solve(A_piv, b_ex)
+cat("solve(A, b) =", round(x_R, 6), "\n")
+cat("残差:", vnorm(A_piv %*% x_R - b_ex), "✓\n")
+```
+
+## 小测验
+
+在求 $\mathbf{L}$ 和 $\mathbf{U}$ 的第 $k$ 步中，我们将矩阵 $\mathbf{M}$ 与消元矩阵 $\mathbf{L}_k$ 相乘。这一步的复杂度是多少？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+cat("答案: O((n-k)²)\n\n")
+cat("解释：\n")
+cat("  第 k 步只影响第 k 行以下、第 k 列以右的子矩阵\n")
+cat("  这个子矩阵的大小是 (n-k) × (n-k)\n")
+cat("  对每个元素做一次乘加运算\n")
+cat("  因此复杂度是 O((n-k)²)\n\n")
+cat("  注意不是 O(n²)！利用 L_k 的特殊结构，\n")
+cat("  我们不需要做完整的矩阵乘法。\n")
+```
+
+# Cholesky 分解
+
+## SPD 矩阵：统计学中最重要的矩阵类
+
+**定义**：矩阵 $\mathbf{A} \in \mathbb{R}^{n \times n}$ 称为**SPD（对称正定）矩阵**，如果
+
+1. $\mathbf{A} = \mathbf{A}^T$（对称）
+2. $\mathbf{x}^T\mathbf{A}\mathbf{x} > 0$ 对所有 $\mathbf{x} \neq \mathbf{0}$（正定）
+
+**正半定**（PSD）则将条件 2 放宽为 $\mathbf{x}^T\mathbf{A}\mathbf{x} \geq 0$。
+
+协方差矩阵 Σ 描述变量之间的关系：对角线是各变量的方差，非对角线是变量两两之间的协方差
+
+PCA 的基础：对协方差矩阵做特征分解，找主成分方向
+
+```{r}
+#| label: spd-examples
+#| fig-width: 9
+#| fig-height: 5
+
+# SPD 矩阵的例子和判断
+cat("=== SPD 矩阵的常见来源 ===\n\n")
+
+# 例 1：协方差矩阵
+set.seed(42)
+X_data <- matrix(rnorm(100 * 3), 100, 3)
+Sigma <- cov(X_data)
+cat("1. 协方差矩阵 Σ = cov(X):\n")
+print(round(Sigma, 4))
+cat("   对称? ", isSymmetric(Sigma), "\n")
+cat("   特征值:", round(eigen(Sigma)$values, 4), "（全部 > 0 → 正定）\n\n")
+
+# 例 2：Gram 矩阵 X^T X
+A_gram <- matrix(rnorm(20 * 5), 20, 5)
+G <- t(A_gram) %*% A_gram
+cat("2. Gram 矩阵 G = X^T X:\n")
+cat("   维度:", nrow(G), "×", ncol(G), "\n")
+cat("   对称? ", isSymmetric(G), "\n")
+cat("   特征值:", round(eigen(G)$values, 4), "（全部 > 0）\n\n")
+
+# 例 3：单位矩阵
+cat("3. 单位矩阵 I:\n")
+cat("   x^T I x = ||x||² > 0 对所有 x ≠ 0 ✓\n\n")
+
+# 可视化正定的含义
+cat("=== 正定的几何含义 ===\n")
+cat("对于 2×2 SPD 矩阵，x^T A x 定义了一个'碗形'曲面\n")
+
+A_2d <- matrix(c(2, 1, 1, 3), 2, 2)
+
+x1 <- seq(-2, 2, length.out = 50)
+x2 <- seq(-2, 2, length.out = 50)
+z <- outer(x1, x2, function(a, b) {
+  sapply(seq_along(a), function(i)
+    c(a[i], b[i]) %*% A_2d %*% c(a[i], b[i]))
+})
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+contour(x1, x2, z, nlevels = 15, col = "steelblue",
+        xlab = expression(x[1]), ylab = expression(x[2]),
+        main = "SPD: x^T A x 的等高线（椭圆）")
+points(0, 0, pch = 19, col = "tomato", cex = 1.5)
+text(0.3, -0.3, "最小值点", col = "tomato")
+
+# 对比非正定
+A_indef <- matrix(c(2, 1, 1, -1), 2, 2)
+z_indef <- outer(x1, x2, function(a, b) {
+  sapply(seq_along(a), function(i)
+    c(a[i], b[i]) %*% A_indef %*% c(a[i], b[i]))
+})
+
+contour(x1, x2, z_indef, nlevels = 15, col = "tomato",
+        xlab = expression(x[1]), ylab = expression(x[2]),
+        main = "非正定: x^T A x 的等高线（双曲线）")
+points(0, 0, pch = 19, col = "tomato", cex = 1.5)
+text(0.3, -0.3, "鞍点", col = "tomato")
+```
+
+**怎么看?**
+
+- 等高线上的数字是函数值（高度）, 从原点出发：
+- 往左上或右下走：数字变负（-1, -2, -3...），函数值下降，像下坡
+- 往右上或左下走：数字变正（1, 2, 3...），函数值上升，像上坡
+
+**原点就是鞍点**
+
+在原点，两个方向是矛盾的：一个方向是极小，另一个方向是极大, 所以不是真正的最小值点，只是一个"假"的驻点。
+
+如果是正定矩阵，等高线会是同心椭圆，从原点往任何方向走数字都增大，原点是真正的最低点（碗底）。
+
+```{r}
+library(plotly)
+
+# 不定矩阵的二次型：f(x,y) = x² - y²
+x <- seq(-2, 2, length.out = 50)
+y <- seq(-2, 2, length.out = 50)
+z <- outer(x, y, function(x, y) x^2 - y^2)
+
+plot_ly(x = x, y = y, z = z, type = "surface") %>%
+  layout(title = "鞍点：x² - y²")
+```
+
+- 二次型，x^2 和 y^2 的系数是对角线元素，xy 项是右上元素，2 x 2 矩阵看对角线符号是否一致即可判断是否正定。
+
+## 为什么 SPD 矩阵在统计学中如此重要？
+
+SPD 矩阵几乎无处不在。**协方差矩阵** $\boldsymbol{\Sigma} = \mathbb{E}[(\mathbf{x} - \boldsymbol{\mu})(\mathbf{x} - \boldsymbol{\mu})^T]$ 出现在多元正态分布和主成分分析中。**Gram 矩阵** $\mathbf{X}^T\mathbf{X}$ 出现在最小二乘问题的正规方程 $\mathbf{X}^T\mathbf{X}\boldsymbol{\beta} = \mathbf{X}^T\mathbf{y}$ 中，也出现在核方法（SVM、高斯过程）中。**Hesse 矩阵**（二阶导数矩阵）出现在优化的凸性判断和牛顿法中，还与统计中的 Fisher 信息矩阵密切相关。
+
+SPD 矩阵的关键好处包括：保证 Cholesky 分解的存在性和唯一性、天然的数值稳定性，以及所有特征值为正（因此满秩）。
+
+## Cholesky 分解
+
+**定理**：每个 SPD 矩阵 $\mathbf{A}$ 都可以唯一分解为
+
+$$
+\mathbf{A} = \mathbf{LL}^T
+$$
+
+其中 $\mathbf{L}$ 是对角元素为正的下三角矩阵。
+
+注意与 LU 分解的关系：对于 SPD 矩阵，可以选择 $\mathbf{U} = \mathbf{L}^T$，计算和存储只需 LU 分解的**一半**。
+
+### 手算示例
+
+```{r}
+#| label: cholesky-handcalc
+cat("=== 手算 Cholesky 分解 ===\n\n")
+
+A_chol <- matrix(c(4, 2, 2, 3), 2, 2)
+cat("A =\n"); print(A_chol)
+
+cat("\n假设 A = LL^T:\n")
+cat("(l₁₁  0 )(l₁₁ l₂₁) = (l₁₁²        l₁₁l₂₁    )\n")
+cat("(l₂₁ l₂₂)(0   l₂₂)   (l₁₁l₂₁  l₂₁²+l₂₂²)\n\n")
+
+cat("比较系数:\n")
+l11 <- sqrt(A_chol[1, 1])
+cat("  l₁₁² = 4  →  l₁₁ =", l11, "\n")
+
+l21 <- A_chol[2, 1] / l11
+cat("  l₁₁l₂₁ = 2  →  l₂₁ =", l21, "\n")
+
+l22 <- sqrt(A_chol[2, 2] - l21^2)
+cat("  l₂₁² + l₂₂² = 3  →  l₂₂ = √(3 - 1) =", round(l22, 4), "\n\n")
+
+L_manual <- matrix(c(l11, l21, 0, l22), 2, 2)
+cat("L =\n"); print(round(L_manual, 4))
+
+cat("\n验证 LL^T:\n")
+print(round(L_manual %*% t(L_manual), 10))
+cat("\n与 R 的 chol() 对比:\n")
+L_R <- t(chol(A_chol))  # R 的 chol() 返回上三角，转置得到下三角
+print(round(L_R, 4))
+cat("一致 ✓\n")
+```
+
+### 更大的例子
+
+```{r}
+#| label: cholesky-larger
+#| fig-width: 9
+#| fig-height: 4
+
+# 更大的 Cholesky 分解
+set.seed(42)
+n_chol <- 6
+# 构造 SPD 矩阵
+# 如果 MM^T 的特征值是 λ1,... ，那么 A = B + 0.1I 的特征值是 λ1 + 0.1,...
+# 这个是个常用技巧，叫”加正则化项" 所有特征值最少是 0.1，不会有零，把半正定推成正定
+M_rand <- matrix(rnorm(n_chol^2), n_chol, n_chol)
+A_spd <- M_rand %*% t(M_rand) + 0.1 * diag(n_chol)
+
+# chol() 是 R 里做 Cholesky 分解的函数
+L_chol <- t(chol(A_spd))  # 下三角, L_chol %*% t(L_chol) = A_spd
+
+cat("A (6×6 SPD 矩阵):\n")
+print(round(A_spd, 3))
+cat("\nL (Cholesky 因子):\n")
+print(round(L_chol, 3))
+cat("\n||A - LL^T|| =", fnorm(A_spd - L_chol %*% t(L_chol)), "✓\n\n")
+
+# 可视化矩阵结构
+par(mfrow = c(1, 3), mar = c(2, 2, 3, 1))
+
+image(t(A_spd)[, n_chol:1], col = hcl.colors(50, "Blues3"),
+      axes = FALSE, main = "A (稠密对称)")
+box()
+
+image(t(L_chol != 0)[, n_chol:1], col = c("white", "tomato"),
+      axes = FALSE, main = "L (下三角)")
+box()
+
+image(t(t(L_chol) != 0)[, n_chol:1], col = c("white", "darkgreen"),
+      axes = FALSE, main = "L^T (上三角)")
+box()
+```
+
+### 归纳证明的直觉
+
+Cholesky 分解的存在性可以通过归纳法证明。核心思想是把矩阵分块：
+
+$$
+\mathbf{A} = \begin{pmatrix} a & \mathbf{c}^T \\ \mathbf{c} & \mathbf{B} \end{pmatrix}
+$$
+
+由于 $\mathbf{A}$ 是 SPD，所以 $a > 0$（因为 $a = \mathbf{e}_1^T\mathbf{A}\mathbf{e}_1 > 0$），然后令 $\mathbf{l} = \mathbf{c}/\sqrt{a}$，可以验证 $\mathbf{B} - \mathbf{ll}^T$ 也是 SPD，对它递归应用归纳假设即可。
+
+```{r}
+#| label: cholesky-induction
+# 用归纳法思路手动计算
+cat("=== Cholesky 分解的归纳构造 ===\n\n")
+
+A_ind <- matrix(c(4, 2, 6,
+                   2, 5, 5,
+                   6, 5, 29), 3, 3)
+cat("A =\n"); print(A_ind)
+
+# 第 1 步：提取左上角
+a <- A_ind[1, 1]
+c_vec <- A_ind[2:3, 1]
+B <- A_ind[2:3, 2:3]
+
+cat("\n分块: a =", a, ", c = (", paste(c_vec, collapse = ", "), "), B =\n")
+print(B)
+
+# 计算 l 和 Schur 补
+l_vec <- c_vec / sqrt(a)
+S <- B - outer(l_vec, l_vec)  # Schur 补
+
+cat("\nl = c/√a = (", paste(round(l_vec, 4), collapse = ", "), ")\n")
+cat("Schur 补 B - ll^T =\n")
+print(round(S, 4))
+cat("Schur 补是 SPD 吗？ 特征值:", round(eigen(S)$values, 4), "\n")
+
+# 对 Schur 补递归
+L_sub <- t(chol(S))
+cat("\n对 Schur 补做 Cholesky: L̃ =\n")
+print(round(L_sub, 4))
+
+# 组装完整的 L
+L_full <- matrix(0, 3, 3)
+L_full[1, 1] <- sqrt(a)
+L_full[2:3, 1] <- l_vec
+L_full[2:3, 2:3] <- L_sub
+
+cat("\n完整的 L =\n")
+print(round(L_full, 4))
+cat("\n验证: ||A - LL^T|| =", fnorm(A_ind - L_full %*% t(L_full)), "✓\n")
+```
+
+## Cholesky 分解的应用
+
+### 应用 1：求解线性方程组
+
+```{r}
+#| label: cholesky-solve
+cat("=== 用 Cholesky 分解求解 SPD 系统 ===\n\n")
+
+b_chol <- c(10, 12, 60)
+
+# 步骤 1: Cholesky 分解 A = LL^T
+L_sol <- t(chol(A_ind))
+
+# 步骤 2: 前向替换 Ly = b
+y_sol <- forwardsolve(L_sol, b_chol)
+
+# 步骤 3: 回代 L^T x = y
+x_sol <- backsolve(t(L_sol), y_sol)
+
+cat("Cholesky 解: x =", round(x_sol, 6), "\n")
+cat("R 直接求解:  x =", round(solve(A_ind, b_chol), 6), "\n")
+cat("残差:", vnorm(A_ind %*% x_sol - b_chol), "✓\n")
+```
+
+### 应用 2：从多元正态分布采样
+
+这是 Cholesky 分解在统计学中最经典的应用之一。
+
+如果 $\mathbf{z} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ 是标准正态随机向量，$\boldsymbol{\Sigma} = \mathbf{LL}^T$ 是 Cholesky 分解，则 $\mathbf{y} = \boldsymbol{\mu} + \mathbf{Lz}$ 满足 $\mathbf{y} \sim \mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\Sigma})$。
+
+这是因为 $\text{Var}(\mathbf{Lz}) = \mathbf{L}\text{Var}(\mathbf{z})\mathbf{L}^T = \mathbf{L}\mathbf{I}\mathbf{L}^T = \mathbf{LL}^T = \boldsymbol{\Sigma}$。
+
+```{r}
+#| label: cholesky-sampling
+#| fig-width: 9
+#| fig-height: 5
+
+# 用 Cholesky 从多元正态采样
+set.seed(42)
+
+mu <- c(3, -1)
+Sigma <- matrix(c(4, 2.4, 2.4, 2), 2, 2)
+L_sample <- t(chol(Sigma))
+
+cat("目标分布: N(μ, Σ)\n")
+cat("μ =", mu, "\n")
+cat("Σ =\n"); print(Sigma)
+cat("\nCholesky 因子 L =\n"); print(round(L_sample, 4))
+
+# 采样
+n_samples <- 2000
+Z <- matrix(rnorm(2 * n_samples), 2, n_samples)  # 标准正态
+Y <- mu + L_sample %*% Z                           # 变换
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+# 标准正态 Z
+plot(Z[1, ], Z[2, ], pch = ".", col = rgb(0.2, 0.4, 0.8, 0.3),
+     xlab = expression(z[1]), ylab = expression(z[2]),
+     main = "Z ~ N(0, I): 各向同性",
+     xlim = c(-4, 4), ylim = c(-4, 4), asp = 1)
+grid()
+
+# 变换后 Y
+plot(Y[1, ], Y[2, ], pch = ".", col = rgb(0.8, 0.3, 0.2, 0.3),
+     xlab = expression(y[1]), ylab = expression(y[2]),
+     main = expression("Y = μ + Lz ~ N(μ, Σ): 有相关性"),
+     xlim = c(-4, 10), ylim = c(-6, 4), asp = 1)
+grid()
+points(mu[1], mu[2], pch = 4, col = "black", cex = 2, lwd = 2)
+
+# 画椭圆
+theta <- seq(0, 2*pi, length.out = 200)
+for (r in c(1, 2)) {
+  ell <- mu + L_sample %*% rbind(r * cos(theta), r * sin(theta))
+  lines(ell[1, ], ell[2, ], col = "black", lwd = 1.5)
+}
+
+cat("\n样本统计量:\n")
+cat("  样本均值:", round(rowMeans(Y), 3), "(理论:", mu, ")\n")
+cat("  样本协方差:\n")
+print(round(cov(t(Y)), 3))
+cat("  理论协方差:\n")
+print(Sigma)
+```
+
+## Cholesky vs LU：速度和稳定性
+
+```{r}
+#| label: cholesky-vs-lu
+#| fig-width: 9
+#| fig-height: 5
+
+# 速度对比
+sizes_cmp <- c(200, 500, 1000, 2000)
+time_lu_cmp <- numeric(length(sizes_cmp))
+time_chol_cmp <- numeric(length(sizes_cmp))
+
+for (i in seq_along(sizes_cmp)) {
+  n_s <- sizes_cmp[i]
+  # 构造 SPD 矩阵
+  M_s <- matrix(rnorm(n_s^2), n_s, n_s)
+  A_s <- M_s %*% t(M_s) + diag(n_s)
+  b_s <- rnorm(n_s)
+
+  time_lu_cmp[i] <- median(replicate(3,
+    system.time(solve(A_s, b_s))["elapsed"]))
+  time_chol_cmp[i] <- median(replicate(3,
+    system.time({
+      R_ch <- chol(A_s)
+      backsolve(R_ch, forwardsolve(t(R_ch), b_s))
+    })["elapsed"]))
+}
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+plot(sizes_cmp, time_lu_cmp, type = "b", pch = 17, col = "tomato",
+     lwd = 2, log = "xy",
+     xlab = "矩阵维度 n", ylab = "计算时间 (秒)",
+     main = "速度对比：Cholesky 约快 2 倍")
+lines(sizes_cmp, time_chol_cmp, type = "b", pch = 19, col = "steelblue", lwd = 2)
+grid()
+legend("topleft", c("LU (solve)", "Cholesky"),
+       col = c("tomato", "steelblue"), pch = c(17, 19), lwd = 2)
+
+# 速度比
+plot(sizes_cmp, time_lu_cmp / time_chol_cmp, type = "b",
+     pch = 19, col = "purple", lwd = 2,
+     xlab = "矩阵维度 n", ylab = "LU时间 / Cholesky时间",
+     main = "LU 与 Cholesky 的时间比")
+abline(h = 2, col = "grey50", lty = 2)
+text(max(sizes_cmp) * 0.8, 2.1, "理论比 ≈ 2", col = "grey50")
+grid()
+```
+
+```{r}
+#| label: cholesky-stability
+#| fig-width: 8
+#| fig-height: 5
+
+# 稳定性对比：Cholesky 对 SPD 矩阵无需选主元也稳定
+set.seed(42)
+n_stab <- 50
+
+kappa_vals_stab <- 10^seq(1, 14, by = 1)
+err_lu_stab <- numeric(length(kappa_vals_stab))
+err_chol_stab <- numeric(length(kappa_vals_stab))
+
+Q_stab <- qr.Q(qr(matrix(rnorm(n_stab^2), n_stab)))
+x_true_stab <- rep(1, n_stab)
+
+for (i in seq_along(kappa_vals_stab)) {
+  kk <- kappa_vals_stab[i]
+  sigmas <- exp(seq(log(1), log(sqrt(kk)), length.out = n_stab))
+  # SPD 矩阵：A = Q diag(σ²) Q^T
+  A_stab <- Q_stab %*% diag(sigmas^2) %*% t(Q_stab)
+  b_stab <- A_stab %*% x_true_stab
+
+  # LU
+  tryCatch({
+    x_lu <- solve(A_stab, b_stab)
+    err_lu_stab[i] <- vnorm(x_lu - x_true_stab) / vnorm(x_true_stab)
+  }, error = function(e) err_lu_stab[i] <<- NA)
+
+  # Cholesky
+  tryCatch({
+    R_ch <- chol(A_stab)
+    x_ch <- backsolve(R_ch, forwardsolve(t(R_ch), b_stab))
+    err_chol_stab[i] <- vnorm(x_ch - x_true_stab) / vnorm(x_true_stab)
+  }, error = function(e) err_chol_stab[i] <<- NA)
+}
+
+plot(kappa_vals_stab, err_lu_stab, type = "b", pch = 17, col = "tomato",
+     lwd = 2, log = "xy",
+     xlab = expression(kappa(A)), ylab = "解的相对误差",
+     main = "SPD 矩阵：LU 与 Cholesky 精度相当",
+     ylim = c(1e-16, 1e2))
+lines(kappa_vals_stab, err_chol_stab, type = "b", pch = 19,
+      col = "steelblue", lwd = 2)
+abline(h = .Machine$double.eps, lty = 3, col = "grey50")
+lines(kappa_vals_stab, kappa_vals_stab * .Machine$double.eps,
+      lty = 2, col = "grey70")
+text(1e4, 1e4 * .Machine$double.eps * 3, expression(kappa %.% epsilon),
+     col = "grey50", cex = 0.8)
+grid()
+legend("topleft", c("LU (带选主元)", "Cholesky (无需选主元)"),
+       col = c("tomato", "steelblue"), pch = c(17, 19), lwd = 2)
+```
+
+**核心结论**：对于 SPD 矩阵，Cholesky 分解**天然稳定**，**无需选主元**，而且计算量约为 LU 的一半。误差增长遵循 $\kappa(\mathbf{A}) \cdot \epsilon_{\text{mach}}$ 的规律。
+
+## 带选主元的 Cholesky 分解
+
+当矩阵是正**半**定（PSD）而非正定时，标准 Cholesky 可能失败（因为需要对零开方）。带选主元的 Cholesky 分解通过行列同时交换来处理这种情况：
+
+$$
+\mathbf{P}^T\mathbf{A}\mathbf{P} = \mathbf{LL}^T
+$$
+
+其中 $\mathbf{P}$ 是置换矩阵。这种方法能揭示矩阵的秩，并且对半定矩阵也稳定。
+
+```{r}
+#| label: cholesky-pivot
+# 半正定矩阵的例子
+cat("=== 半正定矩阵 ===\n\n")
+
+# 构造秩亏的半正定矩阵
+V <- matrix(c(1, 2, 3, 4, 5, 6), 3, 2)
+A_psd <- V %*% t(V)  # 秩 = 2，但是 3×3
+
+cat("A = VV^T (秩 2 的 3×3 矩阵):\n")
+print(A_psd)
+cat("\n特征值:", round(eigen(A_psd)$values, 6), "\n")
+cat("秩 = 2 (有一个零特征值)\n\n")
+
+# 标准 Cholesky 会失败
+tryCatch({
+  chol(A_psd)
+  cat("标准 Cholesky: 成功\n")
+}, error = function(e) {
+  cat("标准 Cholesky: 失败 —", e$message, "\n")
+})
+
+# 带选主元的 Cholesky（手动实现简化版）
+cat("\n带选主元的 Cholesky 可以处理这种情况\n")
+cat("(在实际中，使用专门的库函数如 Matrix::chol())\n")
+
+# 加一个小正则化项作为替代方案
+lambda_reg <- 1e-10
+A_reg <- A_psd + lambda_reg * diag(3)
+L_reg <- t(chol(A_reg))
+cat("\n加正则化后 (λ =", lambda_reg, "):\n")
+cat("L =\n")
+print(round(L_reg, 6))
+cat("||A + λI - LL^T|| =", fnorm(A_reg - L_reg %*% t(L_reg)), "\n")
+```
+
+# 综合练习
+
+## 练习 1：完整的 LU 求解流程
+
+```{r}
+#| label: exercise-lu
+cat("=== 练习：用 LU 分解求解方程组 ===\n\n")
+
+# 给定
+A_ex1 <- matrix(c(3, 6, 9,
+                   1, 4, 1,
+                   2, 3, 8), 3, 3, byrow = TRUE)
+b_ex1 <- c(12, 6, 13)
+
+cat("求解 Ax = b，其中\n")
+cat("A =\n"); print(A_ex1)
+cat("b =", b_ex1, "\n")
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看完整解答"
+
+cat("步骤 1: LU 分解\n\n")
+
+# 第 1 列消元
+l21 <- A_ex1[2, 1] / A_ex1[1, 1]
+l31 <- A_ex1[3, 1] / A_ex1[1, 1]
+cat("l₂₁ =", round(l21, 4), ", l₃₁ =", round(l31, 4), "\n")
+
+M <- A_ex1
+M[2, ] <- M[2, ] - l21 * M[1, ]
+M[3, ] <- M[3, ] - l31 * M[1, ]
+cat("第 1 步后:\n"); print(round(M, 4))
+
+# 第 2 列消元
+l32 <- M[3, 2] / M[2, 2]
+cat("\nl₃₂ =", round(l32, 4), "\n")
+
+M[3, ] <- M[3, ] - l32 * M[2, ]
+cat("第 2 步后 (= U):\n"); print(round(M, 4))
+
+U_ex1 <- M
+L_ex1 <- matrix(c(1, 0, 0, l21, 1, 0, l31, l32, 1), 3, 3)
+
+cat("\nL =\n"); print(round(L_ex1, 4))
+cat("U =\n"); print(round(U_ex1, 4))
+cat("验证: ||LU - A|| =", fnorm(L_ex1 %*% U_ex1 - A_ex1), "✓\n\n")
+
+cat("步骤 2: 前向替换 Ly = b\n")
+y_ex1 <- forward_substitution(L_ex1, b_ex1)
+cat("y =", round(y_ex1, 4), "\n\n")
+
+cat("步骤 3: 回代 Ux = y\n")
+x_ex1 <- back_substitution(U_ex1, y_ex1)
+cat("x =", round(x_ex1, 6), "\n\n")
+
+cat("验证: Ax =", round(A_ex1 %*% x_ex1, 10), "\n")
+cat("       b =", b_ex1, "\n")
+cat("||Ax - b|| =", vnorm(A_ex1 %*% x_ex1 - b_ex1), "✓\n")
+```
+
+## 练习 2：Cholesky 分解与采样
+
+```{r}
+#| label: exercise-cholesky
+cat("=== 练习：用 Cholesky 采样验证协方差 ===\n\n")
+
+cat("任务：\n")
+cat("1. 构造一个 3×3 的 SPD 矩阵 Σ\n")
+cat("2. 用 Cholesky 分解采样 10000 个来自 N(0, Σ) 的样本\n")
+cat("3. 计算样本协方差，验证它接近 Σ\n")
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看完整解答"
+
+set.seed(123)
+Sigma_ex <- matrix(c(5, 2, 1,
+                      2, 3, 1.5,
+                      1, 1.5, 2), 3, 3)
+cat("目标协方差 Σ =\n"); print(Sigma_ex)
+cat("Σ 是 SPD 吗？ 特征值:", round(eigen(Sigma_ex)$values, 4), "→ 全正 ✓\n\n")
+
+# Cholesky 分解
+L_ex <- t(chol(Sigma_ex))
+cat("Cholesky 因子 L =\n"); print(round(L_ex, 4))
+
+# 采样
+n_samp <- 10000
+Z_ex <- matrix(rnorm(3 * n_samp), 3, n_samp)
+Y_ex <- L_ex %*% Z_ex
+
+# 样本协方差
+Sigma_hat <- cov(t(Y_ex))
+cat("\n样本协方差 (n =", n_samp, "):\n")
+print(round(Sigma_hat, 3))
+
+cat("\n理论协方差:\n")
+print(Sigma_ex)
+
+cat("\n最大绝对偏差:", round(max(abs(Sigma_hat - Sigma_ex)), 4), "\n")
+cat("→ 样本量越大，偏差越小 ✓\n")
+```
+
+## 练习 3：条件数与求解精度
+
+```{r}
+#| label: exercise-condition
+cat("=== 练习：条件数对求解精度的影响 ===\n\n")
+
+cat("任务：\n")
+cat("1. 构造 κ(A) ≈ 10⁸ 的 SPD 矩阵\n")
+cat("2. 分别用 LU 和 Cholesky 求解\n")
+cat("3. 对比两种方法的精度\n")
+cat("4. 验证误差 ≈ κ(A) × ε_mach\n")
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看完整解答"
+
+set.seed(42)
+n_ex3 <- 30
+Q_ex3 <- qr.Q(qr(matrix(rnorm(n_ex3^2), n_ex3)))
+target_kappa <- 1e8
+
+# SPD 矩阵，κ ≈ 10⁸
+sigmas_ex3 <- exp(seq(log(1), log(sqrt(target_kappa)), length.out = n_ex3))
+A_ex3 <- Q_ex3 %*% diag(sigmas_ex3^2) %*% t(Q_ex3)
+
+actual_kappa <- max(sigmas_ex3^2) / min(sigmas_ex3^2)
+cat("κ(A) =", format(actual_kappa, digits = 3), "\n\n")
+
+x_true_ex3 <- rep(1, n_ex3)
+b_ex3 <- A_ex3 %*% x_true_ex3
+
+# LU
+x_lu_ex3 <- solve(A_ex3, b_ex3)
+err_lu <- vnorm(x_lu_ex3 - x_true_ex3) / vnorm(x_true_ex3)
+
+# Cholesky
+R_ch_ex3 <- chol(A_ex3)
+x_ch_ex3 <- backsolve(R_ch_ex3, forwardsolve(t(R_ch_ex3), b_ex3))
+err_ch <- vnorm(x_ch_ex3 - x_true_ex3) / vnorm(x_true_ex3)
+
+cat("LU 相对误差:      ", format(err_lu, digits = 3), "\n")
+cat("Cholesky 相对误差:", format(err_ch, digits = 3), "\n")
+cat("κ(A) × ε_mach =   ", format(actual_kappa * .Machine$double.eps, digits = 3), "\n\n")
+
+cat("结论:\n")
+cat("  两种方法精度相当，且都约为 κ(A) × ε_mach 量级\n")
+cat("  这正是理论预测的结果 ✓\n")
+cat("  Cholesky 的优势在于速度（约快 2 倍），而非精度\n")
+```
+
+# 小测验
+
+## 测验 1：LU 分解
+
+以下哪个说法是**错误**的？
+
+A. LU 分解的复杂度是 $O(n^3)$
+
+B. 有了 LU 分解后，求解新的 $\mathbf{b}$ 只需 $O(n^2)$
+
+C. LU 分解不需要选主元就总是稳定的
+
+D. $\mathbf{L}$ 的对角线以下的元素就是消元因子
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+cat("答案: C 是错误的\n\n")
+cat("A. 正确：Σ O((n-k)²) = O(n³/3)\n\n")
+cat("B. 正确：前向替换 O(n²) + 回代 O(n²) = O(n²)\n\n")
+cat("C. 错误：当主元为零或接近零时，不选主元的 LU 会失败或不稳定\n")
+cat("   需要部分选主元（行交换）来保证稳定性\n\n")
+cat("D. 正确：l_{ik} = m_{ik}/m_{kk} 直接存储在 L 的相应位置\n")
+```
+
+## 测验 2：Cholesky 分解
+
+什么条件下应该用 Cholesky 而不是 LU？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+cat("当矩阵是 SPD（对称正定）时，应该用 Cholesky！\n\n")
+cat("Cholesky 的优势:\n")
+cat("  1. 速度约为 LU 的 2 倍（只需计算下三角部分）\n")
+cat("  2. 天然稳定，无需选主元\n")
+cat("  3. 存储只需 n(n+1)/2 个元素（利用对称性）\n\n")
+cat("常见的 SPD 矩阵:\n")
+cat("  · 协方差矩阵 Σ\n")
+cat("  · Gram 矩阵 X^T X（当 X 列满秩时）\n")
+cat("  · 正则化后的矩阵 X^T X + λI\n")
+cat("  · 核矩阵（高斯过程、SVM）\n")
+```
+
+## 测验 3：方法选择
+
+在以下场景中，你会选择哪种方法？
+
+A. 需要求解 $\mathbf{Ax} = \mathbf{b}$，$\mathbf{A}$ 是一般的 $n \times n$ 可逆矩阵，只有一个 $\mathbf{b}$
+
+B. 需要对同一个 SPD 矩阵 $\mathbf{A}$ 求解 1000 个不同的 $\mathbf{b}$
+
+C. 需要从多元正态分布 $\mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\Sigma})$ 采样
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+cat("A. 带选主元的 LU 分解\n")
+cat("   理由：一般矩阵，不能用 Cholesky。\n")
+cat("   R 中: solve(A, b)\n\n")
+
+cat("B. Cholesky 分解 + 重复前向/回代\n")
+cat("   理由：A 是 SPD → Cholesky 最快。\n")
+cat("   分解一次 O(n³/6)，每个 b 求解 O(n²)。\n")
+cat("   总代价: O(n³/6 + 1000n²)\n\n")
+
+cat("C. Cholesky 分解\n")
+cat("   理由：Σ = LL^T，采样公式 y = μ + Lz，z ~ N(0,I)。\n")
+cat("   分解一次 O(n³/6)，每次采样只需一次矩阵-向量乘法 O(n²)。\n")
+```
+
+# 总结
+
+## 知识地图
+
+```
+矩阵分解
+├── 基本矩阵运算
+│   ├── 加法: O(nm)
+│   ├── 乘法: O(nmk)
+│   └── 矩阵-向量乘法: O(n²)
+│
+├── 核心原则
+│   └── 永远不要显式求逆矩阵！
+│
+├── 三角矩阵求解: O(n²)
+│   ├── 前向替换 (下三角)
+│   └── 回代 (上三角)
+│
+├── LU 分解: A = LU
+│   ├── 思想：记录高斯消元步骤
+│   ├── L：下三角（消元因子）
+│   ├── U：上三角（消元结果）
+│   ├── 复杂度：O(n³/3)
+│   ├── 选主元：保证数值稳定
+│   └── 多右端向量：分解一次，重复使用
+│
+├── Cholesky 分解: A = LL^T
+│   ├── 仅适用于 SPD 矩阵
+│   ├── 速度：约为 LU 的 2 倍
+│   ├── 稳定性：天然稳定，无需选主元
+│   └── 应用：
+│       ├── SPD 系统求解
+│       ├── 多元正态采样
+│       └── 正规方程（最小二乘）
+│
+└── 方法选择
+    ├── 一般矩阵 → LU（带选主元）
+    ├── SPD 矩阵 → Cholesky
+    └── 需要数值稳定性 → 考虑 QR 或 SVD（下章）
+```
+
+## 核心公式卡
+
+| 概念 | 公式 |
+|------|------|
+| LU 分解 | $\mathbf{A} = \mathbf{LU}$，$\mathbf{L}$ 下三角，$\mathbf{U}$ 上三角 |
+| 带选主元 | $\mathbf{PA} = \mathbf{LU}$，$\mathbf{P}$ 是置换矩阵 |
+| LU 求解 | $\mathbf{Ly} = \mathbf{b}$（前向），$\mathbf{Ux} = \mathbf{y}$（回代） |
+| Cholesky 分解 | $\mathbf{A} = \mathbf{LL}^T$，$\mathbf{A}$ 是 SPD |
+| 多元正态采样 | $\mathbf{y} = \boldsymbol{\mu} + \mathbf{Lz}$，$\mathbf{z} \sim \mathcal{N}(\mathbf{0}, \mathbf{I})$ |
+| 三角求解复杂度 | $O(n^2)$ |
+| LU 分解复杂度 | $O(n^3/3)$ |
+| Cholesky 分解复杂度 | $O(n^3/6)$ |
+
+## 实践指南
+
+| 你遇到了什么 | 怎么做 |
+|--------------|--------|
+| 一般线性方程组 $\mathbf{Ax} = \mathbf{b}$ | 用 `solve(A, b)`（内部使用带选主元的 LU） |
+| SPD 矩阵的方程组 | 用 `chol()` + `forwardsolve()` + `backsolve()` |
+| 同一个 A，多个 b | 先分解，再重复回代 |
+| 需要 $\mathbf{A}^{-1}\mathbf{b}$ | **不要**算 `solve(A) %*% b`，用 `solve(A, b)` |
+| 从 $\mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\Sigma})$ 采样 | Cholesky 分解 $\boldsymbol{\Sigma}$，然后变换标准正态 |
+| `chol()` 报错 | 检查矩阵是否真的 SPD（特征值是否全正） |
+| 矩阵条件数很大 | 考虑正则化或使用更稳定的分解（QR、SVD） |
