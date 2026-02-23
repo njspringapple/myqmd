@@ -1,0 +1,1487 @@
+---
+title: "迭代方法与概率方法：从特征值到矩阵草图"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-fold: false
+    theme: cosmo
+---
+
+# 前置知识回顾
+
+在开始之前，确认你对以下概念有基本了解：
+
+- **算法复杂度**：大 $O$ 记号衡量运行时间随问题规模的增长
+- **稳定性与条件数**：数值求解的误差分析
+- **正交矩阵**：$\mathbf{Q}^\top\mathbf{Q} = \mathbf{I}$，不放大误差
+- **谱范数** $\|\mathbf{A}\|_2$：矩阵的最大奇异值
+- **线性方程组**：LU 分解、Cholesky 分解（上一章）
+- **线性代数**：特征值与特征向量，相似变换 $\mathbf{B} = \mathbf{Q}\mathbf{A}\mathbf{Q}^{-1}$
+- **概率论**：随机向量、期望、方差
+- **分析**：数列收敛性，几何级数 $\sum_k p^k$（当 $|p| < 1$ 时收敛）
+
+上一章建立了矩阵分解（LU、Cholesky）的框架，可以**精确**求解线性方程组。本章介绍两类补充方法：
+
+- **迭代方法**：以牺牲精度换取更短的运行时间
+- **概率方法**：用随机的小问题替代大问题，高概率得到近似解
+
+这两个方向在现代数值线性代数和大规模机器学习中都极为重要。
+
+```{r}
+#| label: setup
+# 辅助函数
+vnorm <- function(x) sqrt(sum(x^2))
+fnorm <- function(A) sqrt(sum(A^2))
+
+# 向量夹角（角度）
+vec_angle <- function(x, y) {
+  cos_val <- sum(x * y) / (vnorm(x) * vnorm(y))
+  cos_val <- pmax(-1, pmin(1, cos_val))  # 防止数值误差超出 [-1,1]
+  acos(cos_val) * 180 / pi
+}
+
+# 前向替换（下三角系统 Ly = b）
+forward_substitution <- function(L, b) {
+  n <- nrow(L)
+  y <- numeric(n)
+  y[1] <- b[1] / L[1, 1]
+  for (i in 2:n) {
+    y[i] <- (b[i] - sum(L[i, 1:(i-1)] * y[1:(i-1)])) / L[i, i]
+  }
+  y
+}
+```
+
+# 动机：直接方法的局限性
+
+## 规模的瓶颈
+
+上一章的 LU 和 Cholesky 分解都是 $O(n^3)$ 的算法。对于 $n = 1000$，这意味着约 $10^9$ 次运算——可以接受。但现实问题的规模往往大得多：
+
+- **Google PageRank**：$n \approx 10^{10}$ 个网页
+- **基因表达分析**：$p = 10^4$ 到 $10^6$ 个基因
+- **图像处理**：每张图片有数百万像素
+- **偏微分方程离散化**：得到 $n > 10^6$ 的大型稀疏矩阵
+
+对这些问题，$O(n^3)$ 的直接方法**根本不可能**。迭代方法则可以利用矩阵的**稀疏性**——只需做矩阵-向量乘法，复杂度降至 $O(\text{nnz}(\mathbf{A}))$（非零元素数量）。
+
+```{r}
+#| label: motivation-scale
+#| fig-width: 8
+#| fig-height: 5
+
+n_values <- c(100, 500, 1000, 2000, 5000)
+ops_n3 <- n_values^3
+
+par(mar = c(5, 6, 3, 2))
+bp <- barplot(ops_n3 / 1e9,
+        names.arg = paste0("n=", n_values),
+        col = colorRampPalette(c("steelblue", "tomato"))(length(n_values)),
+        ylab = "运算次数 (×10⁹)", xlab = "矩阵维度",
+        main = "O(n³) 直接方法的运算量",
+        border = NA, las = 2)
+abline(h = c(1, 10, 100), lty = 2, col = "grey60")
+text(bp[3], 12, "约 10 秒", col = "grey30", cex = 0.8)
+```
+
+## 只需少数特征值
+
+在 PCA 中，我们通常只关心最大的 $k \ll p$ 个主成分。Lanczos 迭代只需 $O(kp^2)$ 而非 $O(p^3)$——当 $p = 100\,000$, $k = 10$ 时，快约 **10,000 倍**！
+
+**本章的核心信息**：直接方法精确但昂贵，迭代方法和概率方法用**少量误差**换取**巨大的速度提升**。
+
+# 特征值问题
+
+## 为什么特征值没有直接方法？
+
+求特征值的直接思路是求**特征多项式** $\det(\mathbf{A} - \lambda\mathbf{I}) = 0$ 的根。但这遇到了数学上的根本性障碍：
+
+**Abel-Ruffini 定理**：5 次及以上的多项式方程没有一般的代数解公式。因此对于 $n \geq 5$，不存在基于特征多项式的封闭形式算法。即使不用特征多项式，直接方法也不稳定、代价高昂（$O(n^4)$ 或更差）。
+
+```{r}
+#| label: eigenvalue-direct-issue
+cat("=== 特征多项式方法的问题 ===\n\n")
+
+A_small <- matrix(c(5, -2, -2, 8), 2, 2)
+cat("2×2 矩阵 A:\n"); print(A_small)
+cat("\n特征多项式：\n")
+cat("  det(A - λI) = (5-λ)(8-λ) - (-2)(-2)\n")
+cat("             = λ² - 13λ + 36\n")
+cat("             = (λ - 4)(λ - 9)\n")
+cat("\n特征值：λ₁ = 9, λ₂ = 4\n\n")
+
+eig <- eigen(A_small)
+cat("R 的 eigen() 使用迭代算法，结果：\n")
+cat("特征值：", round(eig$values, 8), "\n")
+cat("\n对于 n ≥ 5，Abel-Ruffini 定理保证没有代数直接法。\n")
+cat("→ 必须用迭代方法！\n")
+```
+
+## 幂方法
+
+**幂方法**（von Mises 迭代）通过反复用矩阵 $\mathbf{A}$ 乘以一个向量，提取最大（绝对值意义下分离的！）特征值 $\lambda_1$ 及对应特征向量 $\mathbf{v}_1$。
+
+### 算法
+
+从随机初始向量 $\mathbf{x}^{(0)}$ 出发，迭代：
+
+$$
+\mathbf{x}^{(k)} = \frac{\mathbf{A}\mathbf{x}^{(k-1)}}{\|\mathbf{A}\mathbf{x}^{(k-1)}\|}
+$$
+
+则 $\lambda^{(k)} = \|\mathbf{A}\mathbf{x}^{(k)}\| \xrightarrow{k \to \infty} \lambda_1$，$\mathbf{x}^{(k)} \xrightarrow{k \to \infty} \pm\mathbf{v}_1$。
+
+### 为什么有效？代数推导
+
+任何初始向量都可以写成特征向量的线性组合：$\mathbf{x}^{(0)} = \sum_{i=1}^n c_i \mathbf{v}_i$。
+
+利用 $\mathbf{A}^k\mathbf{v}_i = \lambda_i^k\mathbf{v}_i$，可得：
+
+$$
+\mathbf{A}^k\mathbf{x}^{(0)} = \lambda_1^k\left(c_1\mathbf{v}_1 + \sum_{i=2}^n c_i\left(\frac{\lambda_i}{\lambda_1}\right)^k\mathbf{v}_i\right)
+$$
+
+当 $k \to \infty$ 时，由于 $|\lambda_i/\lambda_1| < 1$（对所有 $i \geq 2$），其他分量趋于零：
+
+$$
+\frac{\mathbf{A}^k\mathbf{x}^{(0)}}{\|\mathbf{A}^k\mathbf{x}^{(0)}\|} \approx \frac{\lambda_1^k c_1 \mathbf{v}_1}{|\lambda_1^k c_1|\|\mathbf{v}_1\|} = \pm\mathbf{v}_1
+$$
+
+```{r}
+#| label: power-method-impl
+# 幂方法实现
+power_method <- function(A, x0 = NULL, max_iter = 100, tol = 1e-12) {
+  n <- nrow(A)
+  if (is.null(x0)) { set.seed(42); x0 <- rnorm(n) }
+  x <- x0 / vnorm(x0)
+
+  lambda_hist <- numeric(max_iter)
+  x_hist      <- matrix(0, n, max_iter)
+
+  for (k in 1:max_iter) {
+    Ax <- A %*% x
+    lambda_new <- as.numeric(t(x) %*% Ax)   # Rayleigh 商
+    x_new <- Ax / vnorm(Ax)
+
+    lambda_hist[k] <- lambda_new
+    x_hist[, k]    <- as.numeric(x_new)
+
+    if (k > 1 && abs(lambda_new - lambda_hist[k-1]) < tol) {
+      return(list(lambda = lambda_new, vector = as.numeric(x_new),
+                  lambda_hist = lambda_hist[1:k],
+                  x_hist = x_hist[, 1:k, drop = FALSE],
+                  iterations = k))
+    }
+    x <- x_new
+  }
+  list(lambda = lambda_hist[max_iter], vector = as.numeric(x),
+       lambda_hist = lambda_hist, x_hist = x_hist, iterations = max_iter)
+}
+
+# 测试
+A_pm <- matrix(c(5, -2, -2, 8), 2, 2)
+cat("测试矩阵 A:\n"); print(A_pm)
+
+true_eigs <- sort(eigen(A_pm)$values, decreasing = TRUE)
+cat("\n真实特征值:", true_eigs, "\n")
+
+res_pm <- power_method(A_pm, x0 = c(2, 1.3))
+cat("\n幂方法结果:\n")
+cat("  λ₁  =", round(res_pm$lambda, 8), "\n")
+cat("  v₁  =", round(res_pm$vector, 6), "\n")
+cat("  迭代次数:", res_pm$iterations, "\n")
+```
+
+```{r}
+#| label: power-method-convergence
+#| fig-width: 10
+#| fig-height: 5
+
+# 可视化收敛过程
+eig_true <- eigen(A_pm)
+v1_true  <- eig_true$vectors[, 1]   # 最大特征向量
+
+res_vis <- power_method(A_pm, x0 = c(2, 1.3), max_iter = 20, tol = 1e-14)
+iters_vis <- res_vis$iterations
+
+# 计算每步到 v₁ 的角度（取和 v₁ 及 -v₁ 中更小的那个）
+angles_pm <- sapply(1:iters_vis, function(k) {
+  v <- res_vis$x_hist[, k]
+  min(vec_angle(v, v1_true), vec_angle(v, -v1_true))
+})
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+plot(1:iters_vis, res_vis$lambda_hist,
+     type = "b", pch = 19, col = "steelblue", lwd = 2,
+     xlab = "迭代次数 k", ylab = "λ 估计值",
+     main = "幂方法：特征值收敛")
+abline(h = true_eigs[1], col = "tomato", lty = 2, lwd = 2)
+legend("bottomright",
+       c("迭代估计", paste0("真实值 λ₁ = ", true_eigs[1])),
+       col = c("steelblue", "tomato"), pch = c(19, NA), lty = c(1, 2), lwd = 2)
+grid()
+
+plot(1:iters_vis, angles_pm,
+     type = "b", pch = 19, col = "darkorange", lwd = 2,
+     xlab = "迭代次数 k", ylab = "与 v₁ 的夹角（度）",
+     main = "幂方法：特征向量收敛",
+     ylim = c(0, max(angles_pm) * 1.1))
+abline(h = 0, col = "grey50", lty = 2)
+grid()
+
+cat("收敛率理论值 |λ₂/λ₁| =",
+    round(abs(true_eigs[2]/true_eigs[1]), 4), "\n")
+cat("角度序列（度）:", round(angles_pm, 2), "\n")
+```
+
+### 收敛速度与特征值分离度
+
+幂方法的收敛率由比值 $|\lambda_2/\lambda_1|$ 决定。特征值分离度大（比值小）时收敛快；特征值接近（比值趋于 1）时收敛慢。
+
+```{r}
+#| label: power-method-rate
+#| fig-width: 8
+#| fig-height: 5
+
+set.seed(42)
+n_rate <- 5
+Q_rate <- qr.Q(qr(matrix(rnorm(n_rate^2), n_rate)))
+ratios <- c(0.1, 0.3, 0.5, 0.7, 0.9)
+all_errors <- list()
+
+for (r in ratios) {
+  lambda_vals <- c(10, 10 * r, 9 * r^2, 8 * r^3, 7 * r^4)
+  A_rate <- Q_rate %*% diag(lambda_vals) %*% t(Q_rate)
+  v1_rate <- Q_rate[, 1]
+  res_rate <- power_method(A_rate, max_iter = 60, tol = 1e-14)
+
+  angles_r <- sapply(1:res_rate$iterations, function(k) {
+    v <- res_rate$x_hist[, k]
+    min(vec_angle(v, v1_rate), vec_angle(v, -v1_rate))
+  })
+  all_errors[[as.character(r)]] <- pmax(angles_r, 1e-10)
+}
+
+cols_rate <- colorRampPalette(c("steelblue", "tomato"))(length(ratios))
+plot(NA, xlim = c(1, 60), ylim = c(1e-9, 100), log = "y",
+     xlab = "迭代次数 k",
+     ylab = "与 v₁ 的夹角（度，对数刻度）",
+     main = "不同特征值分离度下的收敛速度")
+
+for (i in seq_along(ratios)) {
+  errs <- all_errors[[as.character(ratios[i])]]
+  lines(1:length(errs), errs, col = cols_rate[i], lwd = 2)
+}
+legend("bottomleft", paste0("|λ₂/λ₁| = ", ratios),
+       col = cols_rate, lwd = 2, cex = 0.85)
+grid()
+```
+
+## 小测验：幂方法失效情况
+
+对于哪个初始向量 $\mathbf{x}^{(0)}$ 幂方法会失效？
+
+(a) $\mathbf{x}^{(0)} = c\mathbf{v}_1$　　(b) $\mathbf{x}^{(0)} = c\mathbf{v}_2$　　(c) $\mathbf{x}^{(0)} = c(\mathbf{v}_1 + \mathbf{v}_2)$
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+cat("答案：(b) x⁰ = c·v₂\n\n")
+cat("原因：\n")
+cat("  若 x⁰ = c₂v₂（即 c₁ = 0），则 A^k x⁰ = λ₂^k c₂ v₂\n")
+cat("  幂方法收敛到次要特征向量 v₂，而非主要特征向量 v₁\n\n")
+cat("注意：数值上由于浮点误差，c₁ 通常不会严格为零，\n")
+cat("实际中极少出现这个问题。\n")
+```
+
+## 相似变换与迭代特征值方法
+
+### 核心定理
+
+**定理**：若 $\mathbf{B} = \mathbf{Q}\mathbf{A}\mathbf{Q}^{-1}$（相似变换），则：
+
+1. $\mathbf{A}$ 和 $\mathbf{B}$ 有完全相同的特征值（行列式、迹）
+2. 若 $\mathbf{y}$ 是 $\mathbf{B}$ 的特征向量，则 $\mathbf{x} = \mathbf{Q}^{-1}\mathbf{y}$ 是 $\mathbf{A}$ 对应同一特征值的特征向量
+
+**证明**：
+
+$$
+\mathbf{B}\mathbf{y} = \lambda\mathbf{y} \implies \mathbf{Q}\mathbf{A}\mathbf{Q}^{-1}\mathbf{y} = \lambda\mathbf{y} \implies \mathbf{A}\underbrace{\mathbf{Q}^{-1}\mathbf{y}}_{\mathbf{x}} = \lambda\underbrace{\mathbf{Q}^{-1}\mathbf{y}}_{\mathbf{x}}
+$$
+
+因此，如果我们能通过相似变换把 $\mathbf{A}$ 变为一个"简单"矩阵（对角或三角矩阵），就可以直接读出特征值！
+
+```{r}
+#| label: similarity-demo
+cat("=== 相似变换示例：手动对角化 ===\n\n")
+
+A_sim <- matrix(c(5, -2, -2, 8), 2, 2)
+eig_sim <- eigen(A_sim)
+V_sim <- eig_sim$vectors   # 列是特征向量
+
+cat("A =\n"); print(A_sim)
+cat("\n特征向量矩阵 V（列）=\n"); print(round(V_sim, 4))
+
+# B = V⁻¹ A V（对称矩阵，正交特征向量，V⁻¹ = Vᵀ）
+B_sim <- t(V_sim) %*% A_sim %*% V_sim
+cat("\nB = V⁻¹AV =\n"); print(round(B_sim, 8))
+cat("\n→ B 是对角矩阵！对角线上就是特征值：",
+    round(diag(B_sim), 4), "\n")
+```
+
+## QR 迭代
+
+QR 迭代是计算**所有**特征值/特征向量的主流方法。其思路是：利用 QR 分解进行相似变换，使矩阵逐渐收敛到上三角矩阵（Schur 分解）。
+
+### 算法定义
+
+$$
+\begin{aligned}
+&\mathbf{A}^{(0)} = \mathbf{A} \\
+&\text{对于 } k = 1, 2, \ldots: \\
+&\quad \mathbf{A}^{(k-1)} = \mathbf{Q}^{(k)}\mathbf{R}^{(k)} \quad \text{（QR 分解）} \\
+&\quad \mathbf{A}^{(k)} = \mathbf{R}^{(k)}\mathbf{Q}^{(k)} = \left(\mathbf{Q}^{(k)}\right)^\top \mathbf{A}^{(k-1)}\mathbf{Q}^{(k)} \quad \text{（相似变换！）}
+\end{aligned}
+$$
+
+关键点：$\mathbf{A}^{(k)}$ 始终与 $\mathbf{A}$ 相似，故特征值不变。当 $k \to \infty$ 时，$\mathbf{A}^{(k)}$ 收敛到上三角矩阵，**对角线上即为特征值**。
+
+```{r}
+#| label: qr-iteration-impl
+# QR 迭代实现
+qr_iteration <- function(A, max_iter = 200, tol = 1e-12) {
+  n <- nrow(A)
+  Ak <- A
+  Q_total <- diag(n)
+  eig_hist <- matrix(0, max_iter, n)
+
+  for (k in 1:max_iter) {
+    qr_k <- qr(Ak)
+    Q_k  <- qr.Q(qr_k)
+    R_k  <- qr.R(qr_k)
+
+    Ak      <- R_k %*% Q_k           # 相似变换
+    Q_total <- Q_total %*% Q_k       # 累积正交变换
+    eig_hist[k, ] <- diag(Ak)
+
+    # 收敛：下三角部分趋于零
+    if (fnorm(Ak[lower.tri(Ak)]) < tol) {
+      return(list(
+        eigenvalues  = sort(diag(Ak), decreasing = TRUE),
+        eigenvectors = Q_total,
+        A_final      = Ak,
+        history      = eig_hist[1:k, , drop = FALSE],
+        iterations   = k
+      ))
+    }
+  }
+  list(eigenvalues = sort(diag(Ak), decreasing = TRUE),
+       eigenvectors = Q_total, A_final = Ak,
+       history = eig_hist, iterations = max_iter)
+}
+
+# 测试（2×2 矩阵）
+A_qr2 <- matrix(c(5, -2, -2, 8), 2, 2)
+res_qr2 <- qr_iteration(A_qr2)
+
+cat("=== QR 迭代测试 (2×2) ===\n\n")
+cat("A =\n"); print(A_qr2)
+cat("\n收敛后 A(k) =\n"); print(round(res_qr2$A_final, 8))
+cat("\nQR 迭代特征值:", round(res_qr2$eigenvalues, 8), "\n")
+cat("eigen() 特征值:", round(sort(eigen(A_qr2)$values, decreasing = TRUE), 8), "\n")
+cat("迭代次数:", res_qr2$iterations, "\n")
+```
+
+```{r}
+#| label: qr-iteration-larger
+#| fig-width: 10
+#| fig-height: 5
+
+# 5×5 对称矩阵，可视化收敛
+set.seed(42)
+n_qr5 <- 5
+M5 <- matrix(rnorm(n_qr5^2), n_qr5)
+A_qr5 <- M5 + t(M5)   # 对称矩阵
+true_eigs5 <- sort(eigen(A_qr5)$values, decreasing = TRUE)
+
+res_qr5 <- qr_iteration(A_qr5, max_iter = 200, tol = 1e-12)
+cat("=== QR 迭代（5×5 对称矩阵）===\n\n")
+cat("真实特征值:   ", round(true_eigs5, 6), "\n")
+cat("QR 迭代特征值:", round(res_qr5$eigenvalues, 6), "\n")
+cat("迭代次数:", res_qr5$iterations, "\n")
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+# 对角线元素收敛
+iters5 <- res_qr5$iterations
+cols5 <- rainbow(n_qr5)
+matplot(1:iters5, res_qr5$history[1:iters5, ],
+        type = "l", lwd = 2, lty = 1, col = cols5,
+        xlab = "迭代次数 k",
+        ylab = "对角线元素（特征值估计）",
+        main = "QR 迭代：特征值收敛过程")
+for (i in 1:n_qr5) abline(h = true_eigs5[i], col = cols5[i], lty = 2)
+legend("topright", paste0("λ", 1:n_qr5), col = cols5, lwd = 2, cex = 0.7)
+grid()
+
+# 收敛后矩阵的结构
+image(t(abs(res_qr5$A_final))[n_qr5:1, ],
+      col = hcl.colors(50, "Reds"),
+      axes = FALSE, main = "收敛后 A(k)：接近对角矩阵")
+box()
+for (i in 1:n_qr5) for (j in 1:n_qr5)
+  text((j-1)/(n_qr5-1), 1-(i-1)/(n_qr5-1),
+       round(res_qr5$A_final[i, j], 2), cex = 0.75)
+```
+
+### QR 迭代的数学本质
+
+**定理**：定义 $\mathbf{Q}_k = \mathbf{Q}^{(1)}\mathbf{Q}^{(2)}\cdots\mathbf{Q}^{(k)}$，$\mathbf{R}_k = \mathbf{R}^{(k)}\cdots\mathbf{R}^{(1)}$，则
+
+$$
+\mathbf{A}^k = \mathbf{Q}_k\mathbf{R}_k
+$$
+
+**证明**（归纳法）：
+
+- **基础** $(k=1)$：$\mathbf{A} = \mathbf{Q}^{(1)}\mathbf{R}^{(1)} = \mathbf{Q}_1\mathbf{R}_1$ ✓
+- **归纳步骤**：利用关键关系 $\mathbf{R}^{(i)}\mathbf{Q}^{(i)} = \mathbf{Q}^{(i+1)}\mathbf{R}^{(i+1)}$（即 $\mathbf{A}^{(i)} = \mathbf{A}^{(i)}$），可推得 $\mathbf{A}^{k+1} = \mathbf{Q}_{k+1}\mathbf{R}_{k+1}$ ✓
+
+这说明 **QR 迭代就是在迭代计算 $\mathbf{A}^k$ 的 QR 分解**，$\mathbf{Q}_k$ 的各列相当于对**所有**单位向量同时做幂方法，因此 $\mathbf{Q}_k \to \mathbf{V}$（特征向量矩阵），从而：
+
+$$
+\mathbf{A}^{(k)} = \mathbf{Q}_k^\top\mathbf{A}\mathbf{Q}_k \xrightarrow{k\to\infty} \mathbf{V}^\top\mathbf{A}\mathbf{V} = \mathbf{V}^\top\mathbf{V}\mathbf{\Lambda}\mathbf{V}^\top\mathbf{V} = \mathbf{\Lambda}
+$$
+
+## 应用：Google PageRank
+
+```{r}
+#| label: pagerank-demo
+#| fig-width: 9
+#| fig-height: 5
+
+cat("=== PageRank：幂方法的经典应用 ===\n\n")
+cat("模型：x_i = Σ_{j→i} x_j/d_j  →  Ax = x（特征值 λ=1！）\n\n")
+
+# 5 页面的小型网络
+n_pr <- 5
+adj <- matrix(0, n_pr, n_pr)
+# 链接结构：(行=目标, 列=来源)
+adj[2,1] <- adj[3,1] <- 1   # 页面1 → {2,3}
+adj[1,2] <- adj[4,2] <- 1   # 页面2 → {1,4}
+adj[1,3] <- 1                # 页面3 → {1}
+adj[2,4] <- adj[3,4] <- adj[5,4] <- 1  # 页面4 → {2,3,5}
+adj[3,5] <- adj[4,5] <- 1   # 页面5 → {3,4}
+
+out_degree <- colSums(adj)
+A_pr <- sweep(adj, 2, out_degree, "/")  # 列归一化
+
+# 幂方法
+x_pr <- rep(1/n_pr, n_pr)
+pr_hist <- matrix(0, 30, n_pr)
+pr_hist[1, ] <- x_pr
+for (k in 2:30) {
+  x_pr <- A_pr %*% x_pr
+  x_pr <- x_pr / sum(x_pr)
+  pr_hist[k, ] <- as.numeric(x_pr)
+}
+pr_final <- x_pr
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+matplot(1:30, pr_hist, type = "l", lwd = 2, lty = 1, col = rainbow(n_pr),
+        xlab = "迭代次数", ylab = "PageRank 分数",
+        main = "PageRank 收敛过程")
+legend("right", paste0("页面", 1:n_pr),
+       col = rainbow(n_pr), lwd = 2, cex = 0.8)
+grid()
+
+barplot(sort(as.numeric(pr_final), decreasing = TRUE),
+        names.arg = paste0("页面", order(pr_final, decreasing = TRUE)),
+        col = "steelblue", ylab = "PageRank 分数",
+        main = "页面重要性排名", border = NA)
+
+cat("最终 PageRank 分数:\n")
+for (i in 1:n_pr)
+  cat(sprintf("  页面 %d: %.4f\n", i, pr_final[i]))
+
+cat("\n为什么用幂方法（而非直接法）？\n")
+cat("  · 真实网络 n ≈ 10¹⁰，直接法完全不可能\n")
+cat("  · A 极度稀疏（每页约 10 个链接）\n")
+cat("  · 每次迭代 O(n)，约 50 次收敛\n")
+cat("  · 总计 O(n) 而非 O(n³)！\n")
+```
+
+## 应用：主成分分析 (PCA)
+
+```{r}
+#| label: pca-eigenvalue
+#| fig-width: 9
+#| fig-height: 5
+
+set.seed(42)
+n_pca <- 300; p_pca <- 8
+
+# 构造有相关性的数据
+Q_pca <- qr.Q(qr(matrix(rnorm(p_pca^2), p_pca)))
+lambda_pca <- c(10, 6, 3, 1.5, 0.5, 0.3, 0.15, 0.05)
+X_pca <- matrix(rnorm(n_pca * p_pca), n_pca, p_pca) %*%
+  diag(sqrt(lambda_pca)) %*% t(Q_pca)
+
+Sigma_pca <- cov(X_pca)
+eig_pca   <- eigen(Sigma_pca)
+pve       <- eig_pca$values / sum(eig_pca$values) * 100
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+# 碎石图
+barplot(pve, names.arg = paste0("PC", 1:p_pca),
+        col = c("tomato", "tomato", rep("steelblue", p_pca-2)),
+        ylab = "解释方差比例 (%)",
+        main = "碎石图 (Scree Plot)", border = NA,
+        ylim = c(0, max(pve) * 1.1))
+lines((1:p_pca) * 1.2 - 0.4, pve, type = "b", pch = 19, lwd = 2)
+
+# 前两主成分投影
+scores_pca <- X_pca %*% eig_pca$vectors[, 1:2]
+plot(scores_pca[, 1], scores_pca[, 2],
+     pch = 19, col = rgb(0.2, 0.4, 0.8, 0.4), cex = 0.7,
+     xlab = paste0("PC1 (", round(pve[1], 1), "%)"),
+     ylab = paste0("PC2 (", round(pve[2], 1), "%)"),
+     main = "前两个主成分投影")
+grid()
+
+cat("前 3 个主成分累计解释:", round(sum(pve[1:3]), 1), "% 的方差\n\n")
+cat("实践提示：\n")
+cat("  · 对于大型数据（p = 10⁵），只需前 k 个主成分\n")
+cat("  · Lanczos 迭代：O(kp²) 而非 O(p³) 计算 k 个主成分\n")
+cat("  · k = 10, p = 100,000 → 快约 10,000 倍！\n")
+cat("  · R 包 irlba：irlba::irlba(X, nv = k)（截断 SVD）\n")
+```
+
+## 迭代特征值方法比较
+
+```{r}
+#| label: eigenvalue-comparison
+cat("=== 迭代特征值方法对比 ===\n\n")
+
+df_methods <- data.frame(
+  方法         = c("幂方法", "(shifted) QR 迭代", "Lanczos 迭代"),
+  每次迭代代价  = c("O(nnz(A))", "O(nnz(A)) ~ O(n³)", "O(m·nnz(A) + m²)"),
+  适用场景     = c("最大特征值/向量", "所有特征值", "少数极端特征值，稀疏 A"),
+  输出        = c("1 个特征对", "n 个特征值", "m << n 个特征对"),
+  收敛率       = c("|λ₂/λ₁|", "通常二次（快）", "取决于谱间隔")
+)
+print(df_methods, row.names = FALSE)
+cat("\nnnz(A) = 非零元素数量；稀疏矩阵 nnz ≪ n²\n")
+```
+
+# 线性方程组的迭代求解
+
+## 不动点迭代的直觉
+
+我们要求解 $\mathbf{Ax} = \mathbf{b}$。直接法（LU）精确但需要 $O(n^3)$。迭代法的思路是**逐步改进近似解**。
+
+**残差**：$\mathbf{r}^{(k)} = \mathbf{b} - \mathbf{A}\mathbf{x}^{(k)}$ 衡量当前估计有多差。当 $\mathbf{r}^{(k)} = \mathbf{0}$ 时找到了精确解。
+
+**不动点迭代**（校正步）：
+
+$$
+\mathbf{x}^{(k)} = \mathbf{x}^{(k-1)} + \underbrace{\mathbf{C}\mathbf{r}^{(k-1)}}_{\text{校正步}} = \mathbf{x}^{(k-1)} + \mathbf{C}(\mathbf{b} - \mathbf{A}\mathbf{x}^{(k-1)})
+$$
+
+矩阵 $\mathbf{C}$ 决定校正方式和强度。理想情况下 $\mathbf{C} \approx \mathbf{A}^{-1}$——但计算 $\mathbf{A}^{-1}$ 正是我们想避免的！
+
+**类比**：这与梯度下降完全相同的结构：每步沿残差（负梯度）方向走一步。
+
+```{r}
+#| label: iterative-intuition
+#| fig-width: 9
+#| fig-height: 5
+
+A_iter <- matrix(c(4, 1, 1, 3), 2, 2)
+b_iter <- c(1, 2)
+x_true_iter <- solve(A_iter, b_iter)
+cat("A =\n"); print(A_iter)
+cat("b =", b_iter, "  精确解 x* =", round(x_true_iter, 6), "\n\n")
+
+# Richardson 迭代路径（γ = 0.2）
+gamma_vis <- 0.2
+x_curr <- c(0, 0)
+path <- matrix(x_curr, 1, 2)
+for (k in 1:25) {
+  r_k <- b_iter - A_iter %*% x_curr
+  x_curr <- x_curr + gamma_vis * r_k
+  path <- rbind(path, as.numeric(x_curr))
+}
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+# 迭代路径（等高线是残差范数）
+x1g <- seq(-0.3, 0.8, length.out = 80)
+x2g <- seq(0.0, 1.2, length.out = 80)
+res_norm_grid <- outer(x1g, x2g, function(a, b)
+  sapply(seq_along(a), function(i)
+    vnorm(b_iter - A_iter %*% c(a[i], b[i]))))
+
+contour(x1g, x2g, res_norm_grid, nlevels = 20, col = "grey75",
+        xlab = expression(x[1]), ylab = expression(x[2]),
+        main = "Richardson 迭代路径")
+lines(path[, 1], path[, 2], col = "steelblue", lwd = 2)
+points(path[, 1], path[, 2], pch = 19, col = "steelblue", cex = 0.7)
+points(x_true_iter[1], x_true_iter[2],
+       pch = 4, col = "tomato", cex = 2.5, lwd = 3)
+legend("topright", c("迭代路径", "精确解"),
+       col = c("steelblue", "tomato"), pch = c(19, 4), lwd = 2, cex = 0.8)
+grid()
+
+# 误差收敛
+errs_vis <- sapply(1:nrow(path), function(k)
+  vnorm(path[k, ] - x_true_iter))
+plot(0:(length(errs_vis)-1), errs_vis, type = "b", pch = 19,
+     col = "steelblue", lwd = 2, log = "y",
+     xlab = "迭代次数 k", ylab = "||x(k) - x*||",
+     main = "误差指数级衰减")
+grid()
+```
+
+## 收敛定理
+
+**定理**：设 $\mathbf{x}$ 是 $\mathbf{Ax} = \mathbf{b}$ 的唯一解，令 $\rho := \|\mathbf{I} - \mathbf{CA}\|_2$。若 $\rho < 1$，则对所有 $k \geq 1$：
+
+$$
+\|\mathbf{x}^{(k)} - \mathbf{x}\|_2 \leq \rho^k\|\mathbf{x}^{(0)} - \mathbf{x}\|_2
+$$
+
+特别地，$\lim_{k\to\infty}\mathbf{x}^{(k)} = \mathbf{x}$。
+
+**证明**：令 $\mathbf{B} = \mathbf{I} - \mathbf{CA}$，则迭代写为 $\mathbf{x}^{(k)} = \mathbf{B}\mathbf{x}^{(k-1)} + \mathbf{Cb}$。
+
+首先验证 $\mathbf{x}$ 是不动点：
+
+$$
+\mathbf{Bx} + \mathbf{Cb} = (\mathbf{I} - \mathbf{CA})\mathbf{x} + \mathbf{Cb} = \mathbf{x} - \mathbf{C}\underbrace{(\mathbf{Ax} - \mathbf{b})}_{=\,\mathbf{0}} = \mathbf{x}
+$$
+
+因此：
+
+$$
+\|\mathbf{x}^{(k)} - \mathbf{x}\|_2 = \|\mathbf{B}(\mathbf{x}^{(k-1)} - \mathbf{x})\|_2 \leq \|\mathbf{B}\|_2\|\mathbf{x}^{(k-1)} - \mathbf{x}\|_2 = \rho\|\mathbf{x}^{(k-1)} - \mathbf{x}\|_2
+$$
+
+迭代此不等式即得结论。
+
+### 需要多少次迭代？
+
+求解 $\rho^k \|\mathbf{x}^{(0)} - \mathbf{x}\| \leq \epsilon$：
+
+$$
+k \geq \frac{\log(e_0/\epsilon)}{-\log(\rho)}, \quad e_0 = \|\mathbf{x}^{(0)} - \mathbf{x}\|
+$$
+
+因此 $k = O(\log(1/\epsilon))$——误差级数收敛，精度每提高一个数量级只需约 $\log(10)/(-\log\rho)$ 步。
+
+```{r}
+#| code-fold: true
+#| code-summary: "测验：ρ = 0.5，初始误差 = 100，精度 ε = 10⁻⁶，需要多少步？"
+
+rho_q <- 0.5; e0_q <- 100; eps_q <- 1e-6
+k_min <- ceiling(log(e0_q/eps_q) / (-log(rho_q)))
+cat("k ≥ log(100/10⁻⁶) / log(2)\n")
+cat("  = log₂(10⁸)\n")
+cat(" ≈", round(log(e0_q/eps_q, base = 2), 2), "\n\n")
+cat("→ 最少需要 k =", k_min, "次迭代\n")
+cat("验证：0.5^", k_min, "× 100 =", round(0.5^k_min * 100, 2e-15), "\n")
+```
+
+```{r}
+#| label: rho-convergence-plot
+#| fig-width: 8
+#| fig-height: 5
+
+rho_vals <- c(0.1, 0.3, 0.5, 0.7, 0.9)
+cols_rho  <- colorRampPalette(c("steelblue", "tomato"))(length(rho_vals))
+
+plot(NA, xlim = c(0, 100), ylim = c(1e-15, 10), log = "y",
+     xlab = "迭代次数 k",
+     ylab = "误差上界 ρᵏ（对数刻度）",
+     main = "收敛速度与 ρ = ||I − CA||₂ 的关系")
+
+for (i in seq_along(rho_vals)) {
+  lines(0:100, rho_vals[i]^(0:100), col = cols_rho[i], lwd = 2)
+}
+abline(h = .Machine$double.eps, lty = 3, col = "grey50")
+text(90, .Machine$double.eps * 2.5, "机器精度", col = "grey50", cex = 0.8)
+legend("topright", paste0("ρ = ", rho_vals),
+       col = cols_rho, lwd = 2)
+grid()
+```
+
+## 常用迭代方法
+
+### Richardson 迭代
+
+**选择** $\mathbf{C} = \gamma\mathbf{I}_n$（步长最简单）：
+
+$$
+\mathbf{x}^{(k)} = \mathbf{x}^{(k-1)} + \gamma(\mathbf{b} - \mathbf{A}\mathbf{x}^{(k-1)})
+$$
+
+**最优步长**（当 $\mathbf{A}$ 的特征值已知）：
+
+$$
+\gamma^* = \frac{2}{\lambda_{\min} + \lambda_{\max}}, \qquad \rho^* = \frac{\kappa - 1}{\kappa + 1}
+$$
+
+其中 $\kappa = \lambda_{\max}/\lambda_{\min}$ 是条件数。条件数越大，$\rho^*$ 越接近 1，收敛越慢。
+
+```{r}
+#| label: richardson-demo
+# Richardson 迭代的手动演示（与笔记对应）
+cat("=== Richardson 迭代：逐步演示 ===\n\n")
+
+A_rich <- matrix(c(4, 1, 1, 3), 2, 2)
+b_rich <- c(1, 2)
+gamma_rich <- 0.25
+x_rich <- c(0, 0)
+x_true_rich <- solve(A_rich, b_rich)
+
+cat("A =\n"); print(A_rich)
+cat("b =", b_rich, "\n")
+cat("γ =", gamma_rich, "\n")
+cat("精确解 x* =", round(x_true_rich, 6), "\n\n")
+
+for (k in 1:4) {
+  r_k <- b_rich - A_rich %*% x_rich
+  x_rich <- x_rich + gamma_rich * r_k
+  cat(sprintf("迭代 %d:  Ax = (%.3f, %.3f),  r = (%.3f, %.3f),  x = (%.4f, %.4f),  ||误差|| = %.4f\n",
+              k,
+              (A_rich %*% (x_rich - gamma_rich * (b_rich - A_rich %*% x_rich)))[1],
+              (A_rich %*% (x_rich - gamma_rich * (b_rich - A_rich %*% x_rich)))[2],
+              (b_rich - A_rich %*% x_rich)[1],
+              (b_rich - A_rich %*% x_rich)[2],
+              x_rich[1], x_rich[2],
+              vnorm(x_rich - x_true_rich)))
+}
+
+# 计算实际收敛率
+B_rich <- diag(2) - gamma_rich * A_rich
+rho_rich <- max(abs(eigen(B_rich, only.values = TRUE)$values))
+cat(sprintf("\nρ = ||I - γA||₂ = %.4f  （每步误差约缩小 %.1f 倍）\n",
+            rho_rich, 1/rho_rich))
+```
+
+### Jacobi 迭代与 Gauss-Seidel 迭代
+
+```{r}
+#| label: jacobi-gs-comparison
+#| fig-width: 9
+#| fig-height: 5
+
+# 三种方法的统一对比
+run_iterative <- function(A, b, method = "richardson",
+                          gamma = NULL, max_iter = 300, tol = 1e-11) {
+  n <- length(b)
+  x <- rep(0, n)
+  x_true <- solve(A, b)
+  errors <- numeric(max_iter)
+
+  for (k in 1:max_iter) {
+    r <- b - A %*% x
+    if (method == "richardson") {
+      x <- x + gamma * r
+    } else if (method == "jacobi") {
+      x <- x + (1 / diag(A)) * r
+    } else if (method == "gauss-seidel") {
+      L_lower <- A; L_lower[upper.tri(L_lower)] <- 0
+      x <- forwardsolve(L_lower, b - (A - L_lower) %*% x)
+    }
+    errors[k] <- vnorm(x - x_true) / vnorm(x_true)
+    if (errors[k] < tol) return(list(x = x, errors = errors[1:k]))
+  }
+  list(x = x, errors = errors)
+}
+
+set.seed(42)
+n_cmp <- 12
+M_cmp <- matrix(rnorm(n_cmp^2), n_cmp)
+A_cmp <- M_cmp + t(M_cmp) + n_cmp * diag(n_cmp)  # 对角占优 → 收敛
+b_cmp <- rnorm(n_cmp)
+
+eig_cmp <- eigen(A_cmp, only.values = TRUE)$values
+gamma_opt_cmp <- 2 / (max(eig_cmp) + min(eig_cmp))
+
+cat("最优 Richardson 步长 γ* =", round(gamma_opt_cmp, 6), "\n")
+
+res_rich3 <- run_iterative(A_cmp, b_cmp, "richardson", gamma = gamma_opt_cmp)
+res_jac3  <- run_iterative(A_cmp, b_cmp, "jacobi")
+res_gs3   <- run_iterative(A_cmp, b_cmp, "gauss-seidel")
+
+cat("收敛迭代次数:\n")
+cat("  Richardson (γ*): ", length(res_rich3$errors), "\n")
+cat("  Jacobi:          ", length(res_jac3$errors),  "\n")
+cat("  Gauss-Seidel:    ", length(res_gs3$errors),   "\n\n")
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+n_max_plot <- max(length(res_rich3$errors),
+                  length(res_jac3$errors),
+                  length(res_gs3$errors))
+plot(NA, xlim = c(1, n_max_plot), ylim = c(1e-12, 10), log = "y",
+     xlab = "迭代次数", ylab = "相对误差（对数刻度）",
+     main = "三种迭代方法收敛比较")
+lines(res_rich3$errors, col = "tomato",    lwd = 2)
+lines(res_jac3$errors,  col = "steelblue", lwd = 2)
+lines(res_gs3$errors,   col = "darkgreen", lwd = 2)
+abline(h = .Machine$double.eps, lty = 3, col = "grey50")
+legend("topright",
+       c(paste0("Richardson (γ*=", round(gamma_opt_cmp, 3), ")"),
+         "Jacobi", "Gauss-Seidel"),
+       col = c("tomato", "steelblue", "darkgreen"), lwd = 2, cex = 0.8)
+grid()
+
+# 直接法 vs 迭代法的时间对比
+n_time_vals <- c(50, 100, 200, 500, 1000)
+t_lu  <- numeric(length(n_time_vals))
+t_jac <- numeric(length(n_time_vals))
+
+for (i in seq_along(n_time_vals)) {
+  ns <- n_time_vals[i]
+  Ms <- matrix(rnorm(ns^2), ns); As <- Ms + t(Ms) + ns * diag(ns)
+  bs <- rnorm(ns)
+  t_lu[i]  <- system.time(solve(As, bs))["elapsed"]
+  t_jac[i] <- system.time(
+    run_iterative(As, bs, "jacobi", max_iter = 50, tol = 1e-4)
+  )["elapsed"]
+}
+
+plot(n_time_vals, t_lu, type = "b", pch = 17, col = "tomato",
+     lwd = 2, log = "xy",
+     xlab = "矩阵维度 n", ylab = "时间（秒）",
+     main = "直接法 vs 迭代法（50步近似）")
+lines(n_time_vals, t_jac, type = "b", pch = 19, col = "steelblue", lwd = 2)
+legend("topleft",
+       c("直接法 LU: O(n³)", "Jacobi（50步）: O(50n²)"),
+       col = c("tomato", "steelblue"), pch = c(17, 19), lwd = 2, cex = 0.8)
+grid()
+```
+
+## 小测验：迭代求解
+
+```{r}
+#| code-fold: true
+#| code-summary: "测验：Richardson 迭代单步的时间复杂度是多少？"
+
+cat("问：当 C = γI，单步迭代 x(k) = x(k-1) + γ(b - Ax(k-1)) 的复杂度？\n\n")
+cat("答：O(n²)\n\n")
+cat("分析：\n")
+cat("  主要计算：矩阵-向量乘法 A x(k-1)  →  O(n²)\n")
+cat("  向量加减：O(n)\n")
+cat("  标量乘法：O(n)\n")
+cat("  总计：O(n²)\n\n")
+cat("关键：若 A 稀疏（nnz 个非零元），单步是 O(nnz) ≪ O(n²)！\n")
+cat("总代价：O(nnz · log(1/ε))  vs  直接法 O(n³)\n")
+```
+
+# 概率方法：矩阵草图
+
+## 高维空间中的几何
+
+数值线性代数中越来越重要的一个思想是**用随机方法替代确定性方法**。核心洞见来自高维几何：
+
+> 在高维空间 $\mathbb{R}^n$（$n \gg 1$）中，两个随机向量以高概率几乎正交。
+
+```{r}
+#| label: high-dim-geometry
+#| fig-width: 9
+#| fig-height: 5
+
+# 验证：随机向量在高维中趋于正交
+dims   <- c(2, 5, 10, 50, 100, 500, 1000, 5000)
+n_trials_hd <- 500
+mean_angles_hd <- sd_angles_hd <- numeric(length(dims))
+
+for (i in seq_along(dims)) {
+  angles_i <- sapply(1:n_trials_hd, function(t) {
+    x1 <- rnorm(dims[i]); x2 <- rnorm(dims[i])
+    vec_angle(x1, x2)
+  })
+  mean_angles_hd[i] <- mean(angles_i)
+  sd_angles_hd[i]   <- sd(angles_i)
+}
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+plot(dims, mean_angles_hd, type = "b", pch = 19, col = "steelblue",
+     lwd = 2, log = "x", ylim = c(55, 105),
+     xlab = "维度 n（对数刻度）",
+     ylab = "随机向量夹角（度）",
+     main = "高维中随机向量趋于正交")
+polygon(c(dims, rev(dims)),
+        c(mean_angles_hd + sd_angles_hd, rev(mean_angles_hd - sd_angles_hd)),
+        col = rgb(0.2, 0.4, 0.8, 0.15), border = NA)
+abline(h = 90, col = "tomato", lty = 2, lwd = 2)
+text(100, 91.5, "90°（正交）", col = "tomato")
+grid()
+
+# 随机矩阵保持距离
+set.seed(1312)
+n_sk_demo <- 5000
+x1_sk <- runif(n_sk_demo); x2_sk <- runif(n_sk_demo)
+dist_true_sk <- vnorm(x1_sk - x2_sk)
+
+m_demo_vals <- c(5, 20, 50, 100, 200, 500)
+dist_err_pct <- sapply(m_demo_vals, function(m) {
+  S <- matrix(rnorm(m * n_sk_demo, sd = sqrt(1/m)), m, n_sk_demo)
+  d_sk <- vnorm(S %*% x1_sk - S %*% x2_sk)
+  abs(d_sk / dist_true_sk - 1) * 100
+})
+
+barplot(dist_err_pct, names.arg = paste0("m=", m_demo_vals),
+        col = ifelse(dist_err_pct < 5, "steelblue", "tomato"),
+        ylab = "距离相对误差 (%)",
+        main = paste0("草图保持距离 (n=", n_sk_demo, ")"),
+        border = NA)
+abline(h = 5, lty = 2, col = "grey50")
+```
+
+这意味着：一个适当构造的随机矩阵 $\mathbf{S} \in \mathbb{R}^{m \times n}$（$m \ll n$）以高概率保持向量之间的距离和夹角！
+
+## 核心思想：矩阵草图
+
+**矩阵草图**（Matrix Sketching）：用随机矩阵 $\mathbf{S}$ 把 $n$ 维问题投影到 $m$ 维（$m \ll n$），再求解小问题：
+
+$$
+\underbrace{\min\|\mathbf{Ax} - \mathbf{b}\|_2}_{n \text{ 维，代价 } O(n^2p)} \approx \underbrace{\min\|\mathbf{SAx} - \mathbf{Sb}\|_2}_{m \text{ 维，代价 } O(m^2p)}
+$$
+
+```{r}
+#| label: sketching-demo
+#| fig-width: 8
+#| fig-height: 5
+
+set.seed(42)
+n_sk2 <- 2000; m_sk2 <- 150
+x1_d <- rnorm(n_sk2); x2_d <- rnorm(n_sk2)
+
+cat("=== 矩阵草图演示（n =", n_sk2, ", m =", m_sk2, "）===\n\n")
+
+# 高斯草图
+S_g <- matrix(rnorm(m_sk2 * n_sk2, sd = sqrt(1/m_sk2)), m_sk2, n_sk2)
+d_orig <- vnorm(x1_d - x2_d)
+d_sk_g <- vnorm(S_g %*% x1_d - S_g %*% x2_d)
+a_orig <- vec_angle(x1_d, x2_d)
+a_sk_g <- vec_angle(S_g %*% x1_d, S_g %*% x2_d)
+
+cat("高斯草图：\n")
+cat(sprintf("  距离：原始 = %.4f，草图 = %.4f（误差 %.2f%%）\n",
+            d_orig, d_sk_g, abs(d_sk_g/d_orig - 1) * 100))
+cat(sprintf("  夹角：原始 = %.2f°，草图 = %.2f°（差 %.2f°）\n\n",
+            a_orig, a_sk_g, abs(a_sk_g - a_orig)))
+
+# Rademacher 草图
+S_r <- matrix(sample(c(-1,1), m_sk2*n_sk2, replace=TRUE),
+              m_sk2, n_sk2) / sqrt(m_sk2)
+d_sk_r <- vnorm(S_r %*% x1_d - S_r %*% x2_d)
+cat("Rademacher 草图：\n")
+cat(sprintf("  距离误差 %.2f%%，夹角差 %.2f°\n\n",
+            abs(d_sk_r/d_orig - 1) * 100,
+            abs(vec_angle(S_r %*% x1_d, S_r %*% x2_d) - a_orig)))
+
+# 子采样草图
+idx_s <- sample(1:n_sk2, m_sk2)
+S_s   <- matrix(0, m_sk2, n_sk2)
+for (i in 1:m_sk2) S_s[i, idx_s[i]] <- sqrt(n_sk2/m_sk2)
+d_sk_s <- vnorm(S_s %*% x1_d - S_s %*% x2_d)
+cat("子采样草图：\n")
+cat(sprintf("  距离误差 %.2f%%，夹角差 %.2f°\n",
+            abs(d_sk_s/d_orig - 1) * 100,
+            abs(vec_angle(S_s %*% x1_d, S_s %*% x2_d) - a_orig)))
+```
+
+## 随机嵌入定理
+
+**定理**：设 $\mathbf{S} \in \mathbb{R}^{m \times n}$ 的行向量 $\mathbf{s}_i$ 独立同分布，满足 $\mathbb{E}[\mathbf{s}_i\mathbf{s}_i^\top] = \mathbf{I}_n/m$ 且 $\mathbb{E}[\|\mathbf{s}_i\|^4] \leq K/m^2$，则以至少 $1 - \delta$ 的概率：
+
+$$
+(1 - \epsilon)\|\mathbf{x}\|^2 \leq \|\mathbf{Sx}\|^2 \leq (1 + \epsilon)\|\mathbf{x}\|^2 \quad \text{对所有 } \mathbf{x} \in \mathbb{R}^n
+$$
+
+其中 $\epsilon = \sqrt{K/(\delta m)}$。
+
+**证明思路**（用 Markov 不等式）：
+
+1. 不失一般性设 $\|\mathbf{x}\| = 1$
+2. 计算期望：$\mathbb{E}[\|\mathbf{Sx}\|^2] = m \cdot \mathbf{x}^\top\mathbb{E}[\mathbf{s}_1\mathbf{s}_1^\top]\mathbf{x} = \|\mathbf{x}\|^2 = 1$
+3. 估计方差：$\text{Var}[\|\mathbf{Sx}\|^2] \leq m\mathbb{E}[\|\mathbf{s}_1\|^4] \leq K/m$
+4. 由 Markov 不等式：$\mathbb{P}(|\|\mathbf{Sx}\|^2 - 1| > \epsilon) \leq K/(\epsilon^2 m)$
+5. 令右端等于 $\delta$，解出 $\epsilon = \sqrt{K/(\delta m)}$
+
+**三种典型草图矩阵**：
+
+- **高斯**：$\mathbf{s}_i \sim \mathcal{N}(\mathbf{0}, \mathbf{I}_n/m)$，理论最优，$K = 3$
+- **Rademacher**：$s_{ij} = \pm 1/\sqrt{m}$ 各以 $1/2$ 概率取值，$K = 1$，与高斯同样好
+- **子采样**：$\mathbf{s}_i = \sqrt{n/m}\,\mathbf{e}_{K_i}$，$K_i \sim \text{Unif}\{1,\ldots,n\}$，极快 $O(m)$
+
+```{r}
+#| label: embedding-theorem-verify
+#| fig-width: 9
+#| fig-height: 5
+
+set.seed(42)
+n_emb <- 800; m_emb <- 60; K_emb <- 3; delta_emb <- 0.05
+epsilon_theory_emb <- sqrt(K_emb / (delta_emb * m_emb))
+cat("理论参数：n =", n_emb, ", m =", m_emb, "\n")
+cat("  δ =", delta_emb, "  →  ε_theory =",
+    round(epsilon_theory_emb, 3), "\n\n")
+
+S_emb <- matrix(rnorm(m_emb * n_emb, sd = sqrt(1/m_emb)), m_emb, n_emb)
+n_dirs <- 400
+ratios_emb <- sapply(1:n_dirs, function(t) {
+  x_t <- rnorm(n_emb); x_t <- x_t / vnorm(x_t)
+  sum((S_emb %*% x_t)^2)
+})
+
+cat("实验结果（", n_dirs, "个随机方向）：\n")
+cat("  ||Sx||² 范围：[", round(min(ratios_emb), 4),
+    ",", round(max(ratios_emb), 4), "]\n")
+cat("  理论界：[", round(1 - epsilon_theory_emb, 4),
+    ",", round(1 + epsilon_theory_emb, 4), "]\n")
+cat("  超界比例：", round(mean(abs(ratios_emb - 1) > epsilon_theory_emb), 3),
+    "（理论最大 δ =", delta_emb, "）\n\n")
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+hist(ratios_emb, breaks = 30, col = "steelblue", border = "white",
+     xlab = expression(paste("||Sx||"^2)),
+     main = paste0("草图保持范数 (m=", m_emb, ", n=", n_emb, ")"),
+     freq = FALSE)
+abline(v = c(1 - epsilon_theory_emb, 1, 1 + epsilon_theory_emb),
+       col = c("tomato", "darkgreen", "tomato"),
+       lty = c(2, 1, 2), lwd = 2)
+legend("topright", c("理论界 1±ε", "期望值 1"),
+       col = c("tomato", "darkgreen"), lty = c(2, 1), lwd = 2, cex = 0.8)
+
+# 草图维度 m 与精度的关系
+m_q_vals <- c(5, 10, 20, 50, 100, 200)
+eps_emp <- eps_th <- numeric(length(m_q_vals))
+
+for (i in seq_along(m_q_vals)) {
+  m_i <- m_q_vals[i]
+  S_i <- matrix(rnorm(m_i * n_emb, sd = sqrt(1/m_i)), m_i, n_emb)
+  r_i <- sapply(1:200, function(t) {
+    x_t <- rnorm(n_emb); x_t <- x_t / vnorm(x_t)
+    sum((S_i %*% x_t)^2)
+  })
+  eps_emp[i] <- max(abs(r_i - 1))
+  eps_th[i]  <- sqrt(K_emb / (delta_emb * m_i))
+}
+
+plot(m_q_vals, eps_emp, type = "b", pch = 19, col = "steelblue",
+     lwd = 2, log = "xy",
+     xlab = "草图维度 m", ylab = "最大失真 ε",
+     main = "草图质量随 m 的改善",
+     ylim = range(c(eps_emp, eps_th)))
+lines(m_q_vals, eps_th, type = "b", pch = 17,
+      col = "tomato", lwd = 2, lty = 2)
+legend("topright", c("实验最大误差", "理论界 √(K/δm)"),
+       col = c("steelblue", "tomato"), pch = c(19, 17), lwd = 2, cex = 0.8)
+grid()
+```
+
+## 应用：降维参数计算
+
+**例题**：给定 $n = 10000$，要求以 95% 置信度（$\delta = 0.05$）保持距离误差 $\epsilon \leq 0.1$。高斯草图（$K = 3$）最小需要 $m = ?$
+
+$$
+m = \frac{K}{\delta\epsilon^2} = \frac{3}{0.05 \times 0.01} = 600
+$$
+
+仅用 600 维就能表示 10000 维，以 95% 概率距离失真不超过 10%！
+
+```{r}
+#| label: sketch-applications
+#| fig-width: 9
+#| fig-height: 5
+
+cat("=== 草图降维参数 ===\n\n")
+
+K_app <- 3; delta_app <- 0.05; epsilon_app <- 0.1; n_app <- 10000
+m_app <- K_app / (delta_app * epsilon_app^2)
+cat(sprintf("n = %.0f, δ = %.2f, ε = %.2f, K = %.0f\n",
+            n_app, delta_app, epsilon_app, K_app))
+cat(sprintf("m = K/(δε²) = %.0f\n\n", m_app))
+cat(sprintf("压缩比 n/m = %.0f 倍\n", n_app/m_app))
+cat(sprintf("距离计算加速：O(n²)/O(m²) ≈ %.0f 倍\n\n", (n_app/m_app)^2))
+
+# 草图矩阵类型对比
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+n_cmp3 <- 1000; m_cmp3 <- 80; n_t3 <- 300
+
+make_sketch <- function(type, m, n) {
+  if (type == "高斯")
+    matrix(rnorm(m*n, sd=sqrt(1/m)), m, n)
+  else if (type == "Rademacher")
+    matrix(sample(c(-1,1), m*n, replace=TRUE), m, n) / sqrt(m)
+  else {
+    idx <- sample(1:n, m); S <- matrix(0, m, n)
+    for (i in 1:m) S[i, idx[i]] <- sqrt(n/m); S
+  }
+}
+
+sk_types <- c("高斯", "Rademacher", "子采样")
+sk_errs  <- lapply(sk_types, function(tp) {
+  S_tp <- make_sketch(tp, m_cmp3, n_cmp3)
+  sapply(1:n_t3, function(t) {
+    x_t <- rnorm(n_cmp3); x_t <- x_t / vnorm(x_t)
+    abs(sum((S_tp %*% x_t)^2) - 1)
+  })
+})
+
+boxplot(sk_errs, names = sk_types,
+        col = c("steelblue", "tomato", "darkgreen"),
+        ylab = "失真 | ||Sx||² − 1 |",
+        main = paste0("三种草图类型对比 (m=", m_cmp3, ", n=", n_cmp3, ")"))
+grid()
+
+# m 对各类草图的影响
+m_range <- c(10, 20, 50, 100, 200)
+err_med <- matrix(0, length(sk_types), length(m_range))
+
+for (ti in seq_along(sk_types)) for (mi in seq_along(m_range)) {
+  m_i <- m_range[mi]
+  S_i <- make_sketch(sk_types[ti], m_i, n_cmp3)
+  err_med[ti, mi] <- median(sapply(1:150, function(t) {
+    x_t <- rnorm(n_cmp3); x_t <- x_t / vnorm(x_t)
+    abs(sum((S_i %*% x_t)^2) - 1)
+  }))
+}
+
+cols_sk <- c("steelblue", "tomato", "darkgreen")
+plot(NA, xlim = range(m_range), ylim = range(err_med),
+     log = "xy", xlab = "草图维度 m", ylab = "中位失真",
+     main = "草图精度随 m 改善")
+for (ti in seq_along(sk_types))
+  lines(m_range, err_med[ti, ], type = "b", pch = 14 + ti,
+        col = cols_sk[ti], lwd = 2)
+legend("topright", sk_types, col = cols_sk,
+       pch = 15:17, lwd = 2, cex = 0.85)
+grid()
+```
+
+# 综合练习
+
+## 练习 1：幂方法的收敛率验证
+
+```{r}
+#| label: exercise-power
+cat("=== 练习：验证幂方法的收敛率 ===\n\n")
+cat("任务：\n")
+cat("  1. 构造 10×10 对称矩阵，使 |λ₂/λ₁| = 0.6\n")
+cat("  2. 运行幂方法 50 步\n")
+cat("  3. 验证实验收敛率是否确实约为 0.6\n")
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看完整解答"
+#| fig-width: 8
+#| fig-height: 5
+
+set.seed(42)
+n_e1 <- 10
+Q_e1 <- qr.Q(qr(matrix(rnorm(n_e1^2), n_e1)))
+# λ₁ = 10, λ₂ = 6 → 比率 = 0.6
+lambdas_e1 <- c(10, 6, 5, 4, 3, 2.5, 2, 1.5, 1, 0.5)
+A_e1 <- Q_e1 %*% diag(lambdas_e1) %*% t(Q_e1)
+v1_e1 <- Q_e1[, 1]
+
+cat("特征值:", lambdas_e1, "\n")
+cat("|λ₂/λ₁| =", lambdas_e1[2]/lambdas_e1[1], "\n\n")
+
+res_e1 <- power_method(A_e1, max_iter = 50, tol = 1e-14)
+angles_e1 <- sapply(1:res_e1$iterations, function(k) {
+  v <- res_e1$x_hist[, k]
+  min(vec_angle(v, v1_e1), vec_angle(v, -v1_e1))
+})
+angles_e1 <- pmax(angles_e1, 1e-10)
+
+# 实验收敛率（相邻步误差之比）
+exp_rates <- angles_e1[-1] / angles_e1[-length(angles_e1)]
+cat("实验收敛率（前 10 步）:\n")
+cat(" ", round(exp_rates[1:10], 3), "\n")
+cat("理论值:", lambdas_e1[2]/lambdas_e1[1], "\n\n")
+
+plot(1:length(angles_e1), angles_e1, type = "b", pch = 19,
+     col = "steelblue", lwd = 2, log = "y",
+     xlab = "迭代次数 k", ylab = "误差（度，对数）",
+     main = "幂方法收敛（|λ₂/λ₁| = 0.6）")
+# 理论斜率（从第 1 步出发）
+abline(a = log10(angles_e1[1]) - log10(0.6) * 0,
+       b = log10(0.6), col = "tomato", lty = 2, lwd = 2)
+legend("bottomleft", c("实际误差", "理论斜率 0.6ᵏ"),
+       col = c("steelblue", "tomato"), pch = c(19, NA),
+       lty = c(1, 2), lwd = 2)
+grid()
+
+cat("结论：实验收敛率与理论值 0.6 高度一致 ✓\n")
+```
+
+## 练习 2：Richardson 迭代的步长敏感性
+
+```{r}
+#| label: exercise-richardson
+cat("=== 练习：步长选择的重要性 ===\n\n")
+cat("任务：\n")
+cat("  1. 构造条件数 κ = 20 的 SPD 矩阵\n")
+cat("  2. 比较 γ = γ*/4, γ*, 1.9/λ_max（接近发散）三种步长\n")
+cat("  3. 解释为什么 γ > 2/λ_max 会发散\n")
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看完整解答"
+#| fig-width: 8
+#| fig-height: 5
+
+set.seed(42)
+n_e2 <- 10
+Q_e2 <- qr.Q(qr(matrix(rnorm(n_e2^2), n_e2)))
+lambdas_e2 <- seq(1, 20, length.out = n_e2)  # κ = 20
+A_e2 <- Q_e2 %*% diag(lambdas_e2) %*% t(Q_e2)
+b_e2 <- rnorm(n_e2)
+x_true_e2 <- solve(A_e2, b_e2)
+
+lmin_e2 <- min(lambdas_e2); lmax_e2 <- max(lambdas_e2)
+gamma_opt_e2 <- 2 / (lmin_e2 + lmax_e2)
+rho_opt_e2   <- (lmax_e2 - lmin_e2) / (lmax_e2 + lmin_e2)
+cat("λ_min =", lmin_e2, ", λ_max =", lmax_e2, "\n")
+cat("γ* =", round(gamma_opt_e2, 4), "\n")
+cat("ρ* =", round(rho_opt_e2, 4), "\n\n")
+
+gamma_tests <- c(gamma_opt_e2/4, gamma_opt_e2, 1.9/lmax_e2)
+labels_e2   <- c("γ*/4 (太小)", "γ* (最优)", "1.9/λ_max (危险)")
+cols_e2     <- c("steelblue", "tomato", "darkorange")
+
+plot(NA, xlim = c(1, 150), ylim = c(1e-12, 100), log = "y",
+     xlab = "迭代次数", ylab = "相对误差",
+     main = "Richardson 迭代：步长的影响")
+
+for (i in seq_along(gamma_tests)) {
+  x_curr <- rep(0, n_e2)
+  errs_e2 <- numeric(150)
+  for (k in 1:150) {
+    x_curr <- x_curr + gamma_tests[i] * (b_e2 - A_e2 %*% x_curr)
+    errs_e2[k] <- vnorm(x_curr - x_true_e2) / vnorm(x_true_e2)
+    if (!is.finite(errs_e2[k])) { errs_e2[k:150] <- Inf; break }
+    if (errs_e2[k] < 1e-12)     { errs_e2[k:150] <- errs_e2[k]; break }
+  }
+  errs_plot <- pmax(pmin(errs_e2, 100), 1e-12)
+  lines(1:150, errs_plot, col = cols_e2[i], lwd = 2)
+}
+legend("bottomleft", labels_e2, col = cols_e2, lwd = 2)
+abline(h = 1e-10, lty = 3, col = "grey50")
+grid()
+
+cat("为什么 γ > 2/λ_max 发散？\n")
+cat("  ρ = ||I - γA||₂ = max|1 - γλᵢ|\n")
+cat("  当 γλ_max > 2 时，|1 - γλ_max| > 1 → ρ > 1 → 发散！\n")
+cat("  必须 γ < 2/λ_max 才能保证收敛。\n")
+```
+
+## 练习 3：矩阵草图维度计算
+
+```{r}
+#| label: exercise-sketch-param
+cat("=== 练习：草图参数计算 ===\n\n")
+cat("任务：\n")
+cat("  给定 n = 20000，δ = 0.01，ε = 0.05，高斯草图（K = 3）\n")
+cat("  (a) 计算最小需要的 m\n")
+cat("  (b) 计算压缩比和距离计算加速倍数\n")
+cat("  (c) 数值验证失败率约为 δ\n")
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看完整解答"
+
+K_e3 <- 3; delta_e3 <- 0.01; epsilon_e3 <- 0.05; n_e3 <- 20000
+
+m_e3 <- ceiling(K_e3 / (delta_e3 * epsilon_e3^2))
+cat("(a) m = K/(δε²) = 3 / (0.01 × 0.0025) =", m_e3, "\n\n")
+
+cat("(b) 压缩比：n/m =", round(n_e3/m_e3, 1), "倍\n")
+cat("    距离计算加速：(n/m)² ≈", round((n_e3/m_e3)^2), "倍\n\n")
+
+# (c) 数值验证（用较小的 n_ver 节省时间）
+set.seed(42)
+n_ver <- 2000  # 用小一点的 n 验证
+S_ver <- matrix(rnorm(m_e3 * n_ver, sd = sqrt(1/m_e3)), m_e3, n_ver)
+
+n_test_e3 <- 500
+fails <- sum(sapply(1:n_test_e3, function(t) {
+  x_t <- rnorm(n_ver); x_t <- x_t / vnorm(x_t)
+  abs(sum((S_ver %*% x_t)^2) - 1) > epsilon_e3
+}))
+
+cat("(c) 数值验证（n =", n_ver, ",", n_test_e3, "次试验）：\n")
+cat("    实际失败率:", round(fails/n_test_e3, 4),
+    "（理论上界 δ =", delta_e3, "）✓\n")
+```
+
+# 小测验
+
+## 测验 1：方法选择
+
+在以下场景中，选择最合适的算法：
+
+A. $n = 10^7$ 的极稀疏矩阵，只需最大的 10 个特征值
+
+B. $n = 300$ 的稠密矩阵，需要全部特征值
+
+C. $n = 5000$ 的 SPD 矩阵，精度要求仅 $\epsilon = 10^{-4}$
+
+D. 高维最近邻搜索（$n = 10^6$ 维向量）
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+cat("A. Lanczos 迭代（R 包 irlba：irlba::irlba(A, nv = 10)）\n")
+cat("   理由：稀疏矩阵，只需少数极端特征值。\n")
+cat("   每步 O(nnz) ≪ O(n²)，快出几个数量级。\n\n")
+
+cat("B. (shifted) QR 迭代，即 R 的 eigen(A)\n")
+cat("   理由：n = 300 较小，O(n³) 可接受；需要全部特征值。\n\n")
+
+cat("C. 迭代法（如 Jacobi 或共轭梯度 CG）\n")
+cat("   理由：精度要求低 → 少量迭代就够，每步 O(n²)。\n")
+cat("   比 Cholesky 的 O(n³) 快得多。\n\n")
+
+cat("D. 矩阵草图降维\n")
+cat("   理由：随机投影 S ∈ R^{m×n}（m ≪ n）保持距离。\n")
+cat("   压缩后在 m 维做最近邻，速度提升 (n/m)² 倍。\n")
+```
+
+## 测验 2：QR 迭代的本质
+
+QR 迭代为什么等价于对所有方向同时做幂方法？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+cat("答：因为 A^k = Q_k R_k（定理）\n\n")
+cat("  Q_k = Q(1) Q(2) ... Q(k) 的各列\n")
+cat("  = A^k e₁, A^k e₂, ..., A^k eₙ 的正交化版本\n")
+cat("  （Gram-Schmidt 正交化）\n\n")
+cat("  对 e₁ 做幂方法 → 收敛到 v₁（最大特征向量）\n")
+cat("  对 e₂ 做幂方法（在 v₁ 的正交补上）→ 收敛到 v₂\n")
+cat("  ...\n\n")
+cat("  因此 Q_k → V（特征向量矩阵），\n")
+cat("  A(k) = Q_k^T A Q_k → V^T A V = Λ（对角矩阵）\n")
+```
+
+## 测验 3：草图参数权衡
+
+若将草图维度 $m$ 增大 4 倍，$\epsilon$ 如何变化？
+
+```{r}
+#| code-fold: true
+#| code-summary: "点击查看答案"
+
+cat("由 ε = √(K/(δm))，当 m → 4m：\n\n")
+cat("  ε_new = √(K/(δ·4m)) = (1/2)√(K/(δm)) = ε/2\n\n")
+cat("→ m 增大 4 倍，ε 减半（缩小为 1/2）\n\n")
+cat("一般规律：ε ∝ 1/√m\n")
+cat("  精度提高 k 倍，需要 m 增大 k² 倍\n\n")
+cat("实际意义：\n")
+cat("  草图维度增大不那么高效（平方根关系）\n")
+cat("  但从 n = 10000 压缩到 m = 600（16倍压缩）\n")
+cat("  仅需 ε ≤ 0.1（10%失真）——工程上非常实用！\n")
+```
+
+# 总结
+
+## 知识地图
+
+```
+数值线性代数（迭代方法 & 概率方法）
+│
+├── 特征值问题
+│   ├── 为什么没有直接法？
+│   │   └── Abel-Ruffini 定理：n≥5 时无代数公式
+│   │
+│   ├── 幂方法（von Mises）
+│   │   ├── 思想：A^k x → 主特征向量方向
+│   │   ├── 每步：O(nnz(A))（仅矩阵-向量乘法）
+│   │   ├── 收敛率：|λ₂/λ₁|
+│   │   └── 适用：最大 1 个特征对
+│   │
+│   ├── QR 迭代
+│   │   ├── 思想：相似变换收敛到 Schur 分解（上三角）
+│   │   ├── 等价：对所有方向同时做幂方法
+│   │   ├── 定理：A^k = Q_k R_k
+│   │   └── 适用：所有特征值（n 不太大）
+│   │
+│   ├── Lanczos 迭代（提及）
+│   │   └── 稀疏大矩阵的少数极端特征值，O(m·nnz)
+│   │
+│   └── 应用：PageRank（幂方法），PCA（特征分解/SVD）
+│
+├── 线性方程组的迭代求解
+│   ├── 不动点迭代：x(k) = x(k-1) + C(b - Ax(k-1))
+│   ├── 收敛条件：ρ = ||I - CA||₂ < 1
+│   ├── 误差界：||x(k) - x|| ≤ ρᵏ ||x(0) - x||
+│   ├── 收敛步数：k = O(log(1/ε))
+│   ├── 单步代价：O(n²)，总代价 O(n² log(1/ε))
+│   │              vs 直接法 O(n³)
+│   │
+│   ├── Richardson：C = γI，最优 γ* = 2/(λ_min + λ_max)
+│   ├── Jacobi：   C = diag(A)⁻¹
+│   └── Gauss-Seidel：C⁻¹ = 下三角(A)
+│
+└── 概率方法：矩阵草图
+    ├── 思想：S ∈ R^{m×n}（m ≪ n）随机投影降维
+    ├── 定理：(1-ε)||x||² ≤ ||Sx||² ≤ (1+ε)||x||²
+    ├── 维度：m = K/(δε²)
+    │
+    ├── 高斯：K=3，理论最优
+    ├── Rademacher：K=1，与高斯同样好，更快生成
+    ├── 子采样：O(m)，对结构化矩阵最快
+    └── SRHT：O(n log m)，最先进
+```
+
+## 核心公式卡
+
+| 概念 | 公式 |
+|------|------|
+| 幂方法迭代 | $\mathbf{x}^{(k)} = \mathbf{A}\mathbf{x}^{(k-1)}/\|\mathbf{A}\mathbf{x}^{(k-1)}\|$ |
+| 幂方法收敛率 | $|\lambda_2/\lambda_1|$ |
+| QR 迭代 | $\mathbf{A}^{(k-1)} = \mathbf{Q}^{(k)}\mathbf{R}^{(k)}$，$\mathbf{A}^{(k)} = \mathbf{R}^{(k)}\mathbf{Q}^{(k)}$ |
+| QR 本质 | $\mathbf{A}^k = \mathbf{Q}_k\mathbf{R}_k$ |
+| 不动点迭代 | $\mathbf{x}^{(k)} = \mathbf{x}^{(k-1)} + \mathbf{C}(\mathbf{b} - \mathbf{A}\mathbf{x}^{(k-1)})$ |
+| 收敛条件 | $\rho = \|\mathbf{I} - \mathbf{CA}\|_2 < 1$ |
+| 误差衰减 | $\|\mathbf{x}^{(k)} - \mathbf{x}\| \leq \rho^k\|\mathbf{x}^{(0)} - \mathbf{x}\|$ |
+| Richardson 最优步长 | $\gamma^* = 2/(\lambda_{\min} + \lambda_{\max})$ |
+| 草图维度 | $m = K/(\delta\epsilon^2)$ |
+| 随机嵌入 | $(1-\epsilon)\|\mathbf{x}\|^2 \leq \|\mathbf{Sx}\|^2 \leq (1+\epsilon)\|\mathbf{x}\|^2$ |
+
+## 实践指南
+
+| 你遇到了什么 | 怎么做 |
+|--------------|--------|
+| 大稠密矩阵的全部特征值 | `eigen(A)`（内置 QR 迭代） |
+| 大稀疏矩阵的少数最大特征值 | `irlba::irlba(A, nv = k)` |
+| 大稀疏矩阵的最大 1 个特征值 | 幂方法：`A %*% x` 反复迭代 |
+| 大型方程组（精度要求不高） | Jacobi/Gauss-Seidel 迭代 |
+| 迭代不收敛 | 检查 $\rho = \|\mathbf{I} - \mathbf{CA}\|_2 < 1$，调整 $\mathbf{C}$ |
+| 高维最近邻/聚类 | 矩阵草图：随机投影到 $m \ll n$ 维 |
+| 近似大规模最小二乘 | 草图化：$\min\|\mathbf{SAx} - \mathbf{Sb}\|_2$ |
+| 草图失真太大 | 增大 $m$（注意 $\epsilon \propto 1/\sqrt{m}$） |
+| 计算 $n$ 维 PCA（大 $n$） | `irlba::irlba(X, nv = k)` 截断 SVD |
