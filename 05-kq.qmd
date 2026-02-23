@@ -160,6 +160,11 @@ $$
 
 注意两种特殊情况：如果 $\mathbf{Ax} = \mathbf{b}$ 恰好有精确解 $\mathbf{x}^*$，那么 $\|\mathbf{Ax}^* - \mathbf{b}\| = 0$，此时精确解也是最小二乘解。最小二乘方法特别适用于**没有精确解**的超定系统 $\mathbf{Ax} \approx \mathbf{b}$（$m > n$）。
 
+**备注**：矩阵 A(mxn)，其中 m > n, 即 有 n 个变量，m 个方程，此时，方程通常无解（除非 Ax = b 这个 b 正好落在 A 的列空间）。由列空间 1到n 维的一个空间， 构成一个“平面”，在 m 维 空间上向量 b 在列空间的投影是残差最小的近似解。这种 m > n 的矩阵也叫“超定”系统。
+
+通常假设 A 的列空间 “满秩”，即 **有n个线性无关向量或者有n个非零奇异值**
+ 
+
 ## 几何解释：投影
 
 最小二乘的核心思想是**投影**。理解了投影，就理解了最小二乘。
@@ -372,6 +377,13 @@ cat("  (AA⁺)^T ≈ AA⁺ ?", max(abs(t(P) - P)) < 1e-10, "(对称)\n")
 cat("  → AA⁺ 是到 col(A) 的正交投影矩阵 ✓\n")
 ```
 
+投影矩阵的定义：一个矩阵如果是投影矩阵，必须满足两个条件：
+
+- 幂等性：P^2 = PP
+- 对称性：P^T = P
+
+**结论**：$AA^T$ 是投影到col(A)的正交投影矩阵。
+
 ## 小测验
 
 以下哪些陈述是正确的？
@@ -431,6 +443,12 @@ $$
 \frac{\|f(\tilde{\mathbf{b}}) - f(\mathbf{b})\|}{\|f(\mathbf{b})\|} \leq \kappa \cdot \frac{\|\tilde{\mathbf{b}} - \mathbf{b}\|}{\|\mathbf{b}\|}, \quad \text{其中} \quad \kappa = \kappa_2(\mathbf{A}) \cdot \frac{\|\mathbf{b}\|}{\|\text{proj}_{\text{col}(\mathbf{A})}\mathbf{b}\|}
 $$
 
+- 左侧：输出（求解的近似x）的相对扰动
+- 右侧：输入b的相对扰动
+- k ：放大倍数，表示输入的相对误差最多被放大多少倍
+
+这个不等式说的是：解的相对误差最多是输入相对误差的 κ 倍，κ 越大，问题越敏感，越不稳定。
+
 **证明思路**：
 
 $$
@@ -454,6 +472,7 @@ cat("κ₂(A) =", round(kappa_A, 2), "\n\n")
 
 # 构造不同"投影比例"的 b
 # b = b_col + b_perp，其中 b_col ∈ col(A)，b_perp ⊥ col(A)
+# P_A = AA+ 即投影矩阵
 P_A <- A_cond %*% solve(t(A_cond) %*% A_cond) %*% t(A_cond)
 
 b_col <- P_A %*% rnorm(m)        # 列空间中的分量
