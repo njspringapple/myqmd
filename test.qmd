@@ -14,7 +14,6 @@ engine: knitr
 
 ```{r setup, include=FALSE}
 library(reticulate)
-use_python("C:/Users/ASUS/miniforge3/python.exe", required = TRUE)
 ```
 
 # 引言
@@ -107,9 +106,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # 设置中文字体
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'SimSun']
+# plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'SimSun']
 plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-
+plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti']
 
 # 从 R 环境中获取数据（reticulate 自动桥接）
 x_r = r.x
