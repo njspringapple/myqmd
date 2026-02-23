@@ -1310,7 +1310,7 @@ cat("  (c) 数值验证失败率约为 δ\n")
 #| code-fold: true
 #| code-summary: "点击查看完整解答"
 
-K_e3 <- 3; delta_e3 <- 0.01; epsilon_e3 <- 0.05; n_e3 <- 20000
+K_e3 <- 3; delta_e3 <- 0.01; epsilon_e3 <- 0.05; n_e3 <- 2000
 
 m_e3 <- ceiling(K_e3 / (delta_e3 * epsilon_e3^2))
 cat("(a) m = K/(δε²) = 3 / (0.01 × 0.0025) =", m_e3, "\n\n")
@@ -1323,7 +1323,7 @@ set.seed(42)
 n_ver <- 2000  # 用小一点的 n 验证
 S_ver <- matrix(rnorm(m_e3 * n_ver, sd = sqrt(1/m_e3)), m_e3, n_ver)
 
-n_test_e3 <- 500
+n_test_e3 <- 50
 fails <- sum(sapply(1:n_test_e3, function(t) {
   x_t <- rnorm(n_ver); x_t <- x_t / vnorm(x_t)
   abs(sum((S_ver %*% x_t)^2) - 1) > epsilon_e3
