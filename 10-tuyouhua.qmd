@@ -1,0 +1,1446 @@
+---
+title: "凸性：优化的基石"
+subtitle: "为什么凸性让机器学习成为可能？| Warum Konvexität maschinelles Lernen möglich macht"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+# 全局配色方案 | Globales Farbschema
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  indigo   = "#6366F1",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+回顾上一章，我们用梯度下降训练了一个线性模型。你可能注意到了一个令人欣慰的事实：损失函数长得像一个 **碗**，碗底就是唯一的最优解。但你有没有想过——
+
+*为什么碗一定只有一个底？如果碗的形状歪歪扭扭、有多个凹陷怎么办？梯度下降还能找到最优解吗？*
+
+*Warum hat die Schüssel nur einen Boden? Was passiert, wenn sie mehrere Mulden hat? Kann der Gradientenabstieg dann noch das Optimum finden?*
+
+这些问题的答案，都藏在一个数学概念里——**凸性（Konvexität / Convexity）**。它是优化理论的基石，是机器学习中许多算法"能保证找到最优解"的根本原因。
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图：从直觉到理论再到应用 | Lernroadmap: Von der Intuition über die Theorie zur Anwendung"
+#| code-fold: true
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 10), ylim = c(0, 7), axes = FALSE, 
+     xlab = "", ylab = "", main = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# 画路径 | Pfad zeichnen
+steps_x <- c(1, 3, 5, 7, 9)
+steps_y <- c(5.5, 5.5, 5.5, 5.5, 5.5)
+arrows(steps_x[-5] + 0.7, steps_y[-5], steps_x[-1] - 0.7, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+# 步骤方块 | Schrittblöcke
+labels_cn <- c("凸组合\n加权平均", "凸集\n没有凹陷", 
+               "凸函数\n碗形曲面", "Jensen不等式\n核心工具", 
+               "优化应用\n全局最优")
+labels_de <- c("Konvexe\nKombination", "Konvexe\nMengen", 
+               "Konvexe\nFunktionen", "Jensen-\nUngleichung", 
+               "Optimierung\n& ML")
+colors <- c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#E0E7FF", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DC2626", "#6366F1", "#16A34A")
+
+for (i in 1:5) {
+  rect(steps_x[i] - 0.7, steps_y[i] - 0.9, steps_x[i] + 0.7, steps_y[i] + 0.9,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.2, labels_cn[i], cex = 0.72, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.52, col = "#64748B", font = 3)
+}
+
+# 难度箭头 | Schwierigkeitspfeil
+arrows(0.5, 1.5, 9.5, 1.5, col = "#DC2626", lwd = 2, length = 0.15)
+text(5, 1.9, "抽象度递增 | Zunehmende Abstraktion  >>>", cex = 0.85, col = "#DC2626")
+
+# 触发标签 | Auslöser
+triggers <- c("", "推广!", "上方图!", "期望!", "全局!")
+for (i in 2:5) {
+  text(steps_x[i] - 1, steps_y[i] + 1.3, triggers[i],
+       cex = 0.7, col = "#EA580C", font = 2)
+}
+
+# 编号 | Nummerierung
+for (i in 1:5) {
+  text(steps_x[i] - 0.5, steps_y[i] + 0.75, paste0("§", i), 
+       cex = 0.6, col = borders[i], font = 2)
+}
+```
+
+**最终目标 \| Endziel**：深刻理解为什么以下命题成立——
+
+$$
+f \text{ 凸} \;\wedge\; \nabla f(\mathbf{x}^\star) = \mathbf{0} \quad \Longrightarrow \quad \mathbf{x}^\star \text{ 是全局最小值点}
+$$
+
+以及它对机器学习意味着什么。
+
+::: {.callout-tip icon="false"}
+## 📋 所需预备知识 \| Voraussetzungen
+
+本章假设你已经熟悉以下概念：范数与内积空间、梯度、线性代数中的向量空间和线性组合、正定矩阵、分析中的极限和闭集、概率论中的期望值 $\mathbb{E}[X]$ 以及基本不等式。
+
+*Vorausgesetzt werden: Normen & Skalarprodukt, Gradient, Vektorräume, Linearkombinationen, positiv definite Matrizen, Grenzwerte, abgeschlossene Mengen, Erwartungswert.*
+:::
+
+{{< pagebreak >}}
+
+# 凸组合：一切的起点 {#sec-convex-combination}
+
+> **Konvexe Kombination: Der Ausgangspunkt von allem**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie in diesem Abschnitt lernen
+
+-   什么是凸组合——一种"受限的"线性组合
+-   凸组合与**加权平均**的关系
+-   凸包的定义与几何意义
+:::
+
+## 从线性组合到凸组合
+
+> **Von der Linearkombination zur konvexen Kombination**
+
+你已经熟悉了**线性组合**的概念：给定向量 $\mathbf{x}_1, \ldots, \mathbf{x}_k$，任意系数 $w_1, \ldots, w_k \in \mathbb{R}$ 下的组合 $\sum_{i=1}^k w_i \mathbf{x}_i$ 就是一个线性组合。
+
+现在我们加上两个限制条件，就得到了**凸组合（konvexe Kombination / convex combination）**：
+
+$$
+\mathbf{x} = \sum_{i=1}^{k} w_i \mathbf{x}_i, \quad \text{其中 } w_i \geq 0 \;\;\text{且}\;\; \sum_{i=1}^{k} w_i = 1
+$$
+
+这两个限制意味着什么？所有权重非负且总和为 1——这不就是**加权平均**吗！
+
+想想离散随机变量 $X$ 的期望值 $\mathbb{E}(X) = \sum_{x_j \in T_X} \mathbb{P}(X = x_j) \, x_j$，其中每个概率 $\mathbb{P}(X = x_j) \geq 0$ 且所有概率之和为 1。期望值就是支撑集中各取值的凸组合。
+
+## 两点的凸组合 = 线段
+
+> **Konvexe Kombination zweier Punkte = Strecke**
+
+最简单的情况：两个向量 $\mathbf{x}_1, \mathbf{x}_2$ 的所有凸组合构成什么？
+
+$$
+\mathbf{x} = w \,\mathbf{x}_1 + (1-w)\, \mathbf{x}_2, \quad w \in [0, 1]
+$$
+
+当 $w$ 从 0 连续变到 1 时，$\mathbf{x}$ 从 $\mathbf{x}_2$ "滑动"到 $\mathbf{x}_1$——这正是连接两点的**线段**！
+
+```{r}
+#| label: fig-convex-combination-line
+#| fig-cap: "两点的凸组合构成一条线段：w 从 0 变到 1，点从 x₂ 滑向 x₁ | Konvexe Kombinationen zweier Punkte bilden eine Strecke"
+
+par(bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+plot(NULL, xlim = c(-0.5, 5), ylim = c(-0.5, 4), axes = FALSE,
+     xlab = "", ylab = "", asp = 1,
+     main = "两点的凸组合 = 线段 | Konvexe Kombination = Strecke")
+axis(1, col = "#CBD5E1"); axis(2, col = "#CBD5E1"); grid(col = "#E2E8F0")
+
+x1 <- c(1, 3); x2 <- c(4, 1)
+
+# 画线段 | Strecke zeichnen
+segments(x1[1], x1[2], x2[1], x2[2], col = "#2563EB", lwd = 3)
+
+# 端点 | Endpunkte
+points(x1[1], x1[2], pch = 21, bg = "#DC2626", col = "white", cex = 3, lwd = 2)
+points(x2[1], x2[2], pch = 21, bg = "#16A34A", col = "white", cex = 3, lwd = 2)
+text(x1[1] - 0.3, x1[2] + 0.3, expression(bold(x)[1] ~ "(w=1)"), col = "#DC2626", cex = 0.9, font = 2)
+text(x2[1] + 0.3, x2[2] - 0.3, expression(bold(x)[2] ~ "(w=0)"), col = "#16A34A", cex = 0.9, font = 2)
+
+# 中间的点 | Zwischenpunkte
+w_vals <- c(0.25, 0.5, 0.75)
+for (w in w_vals) {
+  xm <- w * x1 + (1 - w) * x2
+  points(xm[1], xm[2], pch = 16, col = "#6366F1", cex = 1.8)
+  text(xm[1], xm[2] + 0.3, paste0("w=", w), col = "#6366F1", cex = 0.75)
+}
+
+legend("topright",
+       legend = c(expression(bold(x)[1]), expression(bold(x)[2]), "凸组合点"),
+       col = c("#DC2626", "#16A34A", "#6366F1"),
+       pch = c(16, 16, 16), bty = "n", cex = 0.95)
+```
+
+## 凸包：所有凸组合的集合
+
+> **Konvexe Hülle: Die Menge aller konvexen Kombinationen**
+
+给定一组点 $\mathcal{X} = \{\mathbf{x}_1, \ldots, \mathbf{x}_k\}$，它们所有可能的凸组合构成的集合叫做**凸包（konvexe Hülle / convex hull）**：
+
+$$
+\operatorname{conv}(\mathcal{X}) = \left\{\sum_{i=1}^{N} w_i \mathbf{x}_i \;:\; N \in \mathbb{N},\; \mathbf{x}_i \in \mathcal{X},\; w_i \geq 0,\; \sum_{i=1}^{N} w_i = 1\right\}
+$$
+
+那些**只能**通过某个 $w_i = 1$（其余权重为 0）才能到达的点称为**极值点（Extrempunkt）**——它们是凸包的"骨架"。
+
+```{r}
+#| label: fig-convex-hull-triangle
+#| fig-cap: "三个点的凸包是一个三角形，三个顶点是极值点 | Die konvexe Hülle von drei Punkten ist ein Dreieck"
+
+par(bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+plot(NULL, xlim = c(-0.5, 3), ylim = c(-0.5, 2.8), axes = FALSE,
+     xlab = "", ylab = "", asp = 1,
+     main = expression("凸包示例: " * bold(X) * " = {(0,0), (2,0), (1,2)} | Konvexe Hülle"))
+axis(1, col = "#CBD5E1"); axis(2, col = "#CBD5E1"); grid(col = "#E2E8F0")
+
+# 三角形顶点 | Dreieck-Eckpunkte
+vx <- c(0, 2, 1); vy <- c(0, 0, 2)
+
+# 填充三角形 | Dreieck füllen
+polygon(vx, vy, col = adjustcolor("#2563EB", 0.15), border = "#2563EB", lwd = 2.5)
+
+# 顶点 | Eckpunkte
+points(vx, vy, pch = 21, bg = "#DC2626", col = "white", cex = 3, lwd = 2)
+text(vx[1] - 0.25, vy[1] - 0.2, "(0,0)", col = "#DC2626", font = 2, cex = 0.9)
+text(vx[2] + 0.25, vy[2] - 0.2, "(2,0)", col = "#DC2626", font = 2, cex = 0.9)
+text(vx[3], vy[3] + 0.2, "(1,2)", col = "#DC2626", font = 2, cex = 0.9)
+
+# 重心 | Schwerpunkt
+cx <- mean(vx); cy <- mean(vy)
+points(cx, cy, pch = 23, bg = "#EA580C", col = "white", cex = 2.5, lwd = 2)
+text(cx + 0.35, cy, expression("重心" ~ group("(", list(1, frac(2,3)), ")")), col = "#EA580C", cex = 0.85, font = 2)
+text(cx + 0.35, cy - 0.25, expression(w[1] * "=" * w[2] * "=" * w[3] * "=" * frac(1,3)), 
+     col = "#EA580C", cex = 0.7)
+
+# 标注 | Beschriftung
+text(1, -0.4, expression("蓝色区域 = conv(" * bold(X) * ") | Blaue Fläche = konvexe Hülle"),
+     col = "#2563EB", cex = 0.85)
+text(1, 2.6, "红色点 = 极值点 | Rote Punkte = Extrempunkte", col = "#DC2626", cex = 0.85)
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 \| Schlüsselerkenntnis
+
+**凸组合 = 加权平均**。凸包是包含一组点的**最小凸集**，它的"角"就是极值点。
+
+*Konvexe Kombination = gewichteter Durchschnitt. Die konvexe Hülle ist die kleinste konvexe Menge, die alle Punkte enthält.*
+
+凸包还有一个等价定义：它是包含 $\mathcal{X}$ 的所有凸集的交集：$\operatorname{conv}(\mathcal{X}) = \bigcap_{\mathcal{X} \subseteq \mathcal{Y},\, \mathcal{Y}\text{ 凸}} \mathcal{Y}$。
+:::
+
+{{< pagebreak >}}
+
+# 凸集：没有"凹陷"的集合 {#sec-convex-sets}
+
+> **Konvexe Mengen: Mengen ohne „Einbuchtungen"**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   凸集的定义与**直觉**：任意两点的线段都在集合内
+-   重要的凸集实例：球、半空间、单纯形、半正定矩阵集合
+-   凸性在哪些运算下**保持不变**
+-   **投影定理**：凸集上的最近点唯一
+:::
+
+## 定义：线段检验
+
+> **Definition: Der Streckentest**
+
+一个集合 $\mathcal{X} \subset V$（向量空间 $V$ 的子集）是**凸集（konvexe Menge / convex set）**，当且仅当对所有 $\mathbf{x}, \mathbf{y} \in \mathcal{X}$ 及所有 $\lambda \in [0, 1]$，有
+
+$$
+\lambda \mathbf{x} + (1 - \lambda)\mathbf{y} \in \mathcal{X}
+$$
+
+用一句话概括：**任取集合中的两个点，连接它们的线段完全落在集合内部**。换言之，凸集没有"凹陷"或"孔洞"。
+
+```{r}
+#| label: fig-convex-vs-nonconvex
+#| fig-cap: "凸集 vs 非凸集：连接两点的线段是否始终在集合内？| Konvex vs. nicht konvex: Liegt die Verbindungsstrecke immer innerhalb?"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(2, 2, 3, 1))
+
+# 凸集示例：椭圆 | Konvexe Menge: Ellipse
+theta <- seq(0, 2 * pi, length.out = 200)
+ex <- 2.5 * cos(theta); ey <- 1.5 * sin(theta)
+
+plot(NULL, xlim = c(-3.5, 3.5), ylim = c(-2.5, 2.5), axes = FALSE,
+     xlab = "", ylab = "", asp = 1,
+     main = "✅ 凸集 | Konvexe Menge", col.main = "#16A34A")
+polygon(ex, ey, col = adjustcolor("#16A34A", 0.15), border = "#16A34A", lwd = 2.5)
+
+# 线段在内部 | Strecke innerhalb
+p1 <- c(-1.5, 0.8); p2 <- c(1.8, -0.5)
+segments(p1[1], p1[2], p2[1], p2[2], col = "#2563EB", lwd = 2.5)
+points(c(p1[1], p2[1]), c(p1[2], p2[2]), pch = 16, col = "#2563EB", cex = 2)
+text(0, -2.2, "线段始终在集合内 ✓", col = "#16A34A", cex = 0.9, font = 2)
+
+# 非凸集示例：月牙形 | Nicht konvexe Menge: Mondform
+plot(NULL, xlim = c(-3.5, 3.5), ylim = c(-2.5, 2.5), axes = FALSE,
+     xlab = "", ylab = "", asp = 1,
+     main = "❌ 非凸集 | Nicht konvexe Menge", col.main = "#DC2626")
+
+# 画月牙形 | Mondform zeichnen
+t1 <- seq(0, 2 * pi, length.out = 200)
+ox <- 2 * cos(t1); oy <- 2 * sin(t1)
+ix <- 1.5 * cos(t1) + 0.8; iy <- 1.5 * sin(t1)
+polygon(ox, oy, col = adjustcolor("#DC2626", 0.15), border = "#DC2626", lwd = 2)
+polygon(ix, iy, col = "#F8FAFC", border = "#DC2626", lwd = 1.5, lty = 2)
+
+# 线段穿出 | Strecke geht heraus
+p3 <- c(-1.5, 0.8); p4 <- c(0, -1.5)
+segments(p3[1], p3[2], p4[1], p4[2], col = "#EA580C", lwd = 2.5, lty = 2)
+points(c(p3[1], p4[1]), c(p3[2], p4[2]), pch = 16, col = "#EA580C", cex = 2)
+
+# 标注穿出部分 | Markierung des herausgehenden Teils
+text(-0.5, 0.2, "穿出!", col = "#DC2626", cex = 0.9, font = 2)
+text(0, -2.2, "线段穿出了集合 ✗", col = "#DC2626", cex = 0.9, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+## 小测验：哪些集合是凸的？
+
+> **Quiz: Welche Mengen sind konvex?**
+
+::: {.callout-tip icon="false"}
+## 🤔 想一想 \| Denken Sie nach
+
+判断以下集合是否为凸集：
+
+1.  空集 $\emptyset$
+2.  整个向量空间 $V$
+3.  单位球面 $\{\mathbf{x} \in V : \|\mathbf{x}\| = 1\}$
+4.  闭球 $\{\mathbf{x} \in V : \|\mathbf{x}\| \leq r\}$
+5.  集合 $\{(x, y) \in \mathbb{R}^2 : y \leq x^2\}$
+:::
+
+::: {.callout-tip collapse="true"}
+## 🔍 答案（点击展开）
+
+1. **凸** ✅ — 空集平凡地满足定义（没有两个点可以选）
+2. **凸** ✅ — $V$ 对线性组合封闭，当然对凸组合也封闭
+3. **不凸** ❌ — 取球面上两个对径点 $\mathbf{x}$ 和 $-\mathbf{x}$，它们的中点 $\mathbf{0}$ 不在球面上
+4. **凸** ✅ — 由三角不等式可证
+5. **不凸** ❌ — 取 $(-1, 1)$ 和 $(1, 1)$（都满足 $y \leq x^2$），它们的中点 $(0, 1)$ 不满足 $1 \leq 0^2$
+:::
+
+## 重要凸集实例
+
+> **Wichtige Beispiele konvexer Mengen**
+
+### 闭球与开球
+
+闭球 $\{\mathbf{x} : \|\mathbf{x}\| \leq r\}$ 和开球 $\{\mathbf{x} : \|\mathbf{x}\| < r\}$ 都是凸集。直觉很清晰：球没有任何"凹陷"。
+
+### 半空间
+
+$\{\mathbf{x} \in \mathbb{R}^n : \mathbf{a}^\top \mathbf{x} \leq b\}$ 是凸集。多个半空间的交集形成**多面体（Polytop / Polyhedron）**——这对线性规划至关重要。
+
+### 单纯形 $\Delta^N$
+
+$$
+\Delta^N = \left\{\mathbf{x} \in \mathbb{R}^N : x_i \geq 0,\; \sum_{i=1}^{N} x_i = 1\right\}
+$$
+
+单纯形就是"所有概率分布"的集合！它的极值点是标准基向量 $\mathbf{e}_1, \ldots, \mathbf{e}_N$（对应"确定性"的概率分布，即某事件概率为 1）。
+
+```{r}
+#| label: fig-simplex
+#| fig-cap: "Δ³ 单纯形：R³ 中的三角形，每个点代表一个三类别概率分布 | Das Simplex Δ³: Jeder Punkt ist eine Wahrscheinlichkeitsverteilung über 3 Klassen"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(1, 1, 3, 1))
+plot(NULL, xlim = c(-0.5, 3.5), ylim = c(-0.5, 3.2), axes = FALSE,
+     xlab = "", ylab = "", asp = 1,
+     main = expression("单纯形 " * Delta^3 * " | Simplex " * Delta^3))
+
+# 三角形顶点（投影到2D）| Eckpunkte (2D-Projektion)
+# e1 = (1,0,0), e2 = (0,1,0), e3 = (0,0,1)
+px <- c(0, 3, 1.5); py <- c(0, 0, 2.6)
+
+# 填充 | Füllen
+polygon(px, py, col = adjustcolor("#6366F1", 0.12), border = "#6366F1", lwd = 2.5)
+
+# 极值点 | Extrempunkte
+points(px, py, pch = 21, bg = "#DC2626", col = "white", cex = 3, lwd = 2)
+text(px[1] - 0.3, py[1] - 0.2, expression(bold(e)[1] * " = (1,0,0)"), 
+     col = "#DC2626", cex = 0.8, font = 2)
+text(px[2] + 0.3, py[2] - 0.2, expression(bold(e)[2] * " = (0,1,0)"), 
+     col = "#DC2626", cex = 0.8, font = 2)
+text(px[3], py[3] + 0.25, expression(bold(e)[3] * " = (0,0,1)"), 
+     col = "#DC2626", cex = 0.8, font = 2)
+
+# 内部的点：均匀分布 | Innerer Punkt: Gleichverteilung
+cx <- mean(px); cy <- mean(py)
+points(cx, cy, pch = 23, bg = "#EA580C", col = "white", cex = 2.5, lwd = 2)
+text(cx + 0.6, cy, expression("(" * frac(1,3) * "," * frac(1,3) * "," * frac(1,3) * ")"),
+     col = "#EA580C", cex = 0.85, font = 2)
+
+# 另一个点 | Ein weiterer Punkt
+p_ex <- 0.2 * c(px[1], py[1]) + 0.5 * c(px[2], py[2]) + 0.3 * c(px[3], py[3])
+points(p_ex[1], p_ex[2], pch = 16, col = "#16A34A", cex = 2)
+text(p_ex[1] + 0.45, p_ex[2], "(0.2, 0.5, 0.3)", col = "#16A34A", cex = 0.75, font = 2)
+
+# 说明 | Erklärung
+text(1.5, -0.4, "每个点 = 一个概率分布 | Jeder Punkt = eine Wahrscheinlichkeitsverteilung",
+     col = "#475569", cex = 0.85)
+```
+
+单纯形在机器学习中无处不在：Softmax 回归的输出就是单纯形上的点，Dirichlet 分布定义在单纯形上。
+
+### 半正定矩阵集合
+
+$\mathbb{R}^{n \times n}$ 中所有半正定矩阵（PSD, $\mathbf{A} \succeq 0$，即 $\mathbf{x}^\top \mathbf{A} \mathbf{x} \geq 0$ 对所有 $\mathbf{x}$ 成立）的集合是凸集。
+
+::: {.callout-tip collapse="true"}
+## 🔍 证明（点击展开）
+
+设 $\mathbf{A}_1, \mathbf{A}_2 \succeq 0$，$\lambda \in [0, 1]$。令 $\mathbf{A}_\lambda = \lambda \mathbf{A}_1 + (1 - \lambda)\mathbf{A}_2$。
+
+对任意 $\mathbf{x} \in \mathbb{R}^n$：
+
+$$
+\mathbf{x}^\top \mathbf{A}_\lambda \mathbf{x} = \lambda \underbrace{\mathbf{x}^\top \mathbf{A}_1 \mathbf{x}}_{\geq 0} + (1 - \lambda)\underbrace{\mathbf{x}^\top \mathbf{A}_2 \mathbf{x}}_{\geq 0} \geq 0 \quad \square
+$$
+
+**应用**：协方差矩阵是对称半正定的，所以所有合法的协方差矩阵构成一个凸集。
+:::
+
+## 凸性在运算下的保持
+
+> **Erhaltung der Konvexität unter Operationen**
+
+许多重要运算都保持凸性——这使得我们可以通过简单集合"搭建"复杂的凸集。
+
+::: {.callout-important icon="false"}
+## 💡 凸性保持定理 \| Erhaltungssatz der Konvexität
+
+设 $\mathcal{X}, \mathcal{X}_1, \mathcal{X}_2, \ldots$ 为凸集，则以下集合也是凸的：
+
+-   **交集**：$\mathcal{S} = \bigcap_{i=1}^{\infty} \mathcal{X}_i$
+-   **笛卡尔积**：$\mathcal{X}_1 \times \cdots \times \mathcal{X}_k$
+-   **线性映射的像**：若 $f(\mathbf{x}) = \mathbf{A}\mathbf{x} + \mathbf{b}$，则 $f(\mathcal{X})$ 是凸的
+-   **Minkowski 和**：$\mathcal{X}_1 \oplus \mathcal{X}_2 := \{\mathbf{x}_1 + \mathbf{x}_2 : \mathbf{x}_1 \in \mathcal{X}_1,\, \mathbf{x}_2 \in \mathcal{X}_2\}$
+:::
+
+::: {.callout-tip collapse="true"}
+## 🔍 证明概要（点击展开）
+
+**交集**：设 $\mathbf{x}, \mathbf{y} \in \mathcal{S}$，则 $\mathbf{x}, \mathbf{y}$ 属于每个 $\mathcal{X}_i$。每个 $\mathcal{X}_i$ 是凸的，所以 $\lambda \mathbf{x} + (1-\lambda)\mathbf{y} \in \mathcal{X}_i$ 对所有 $i$ 成立，从而它属于 $\mathcal{S}$。
+
+**笛卡尔积**：逐分量使用凸性即可。
+
+**线性映射**：设 $\mathbf{y}_1 = f(\mathbf{x}_1), \mathbf{y}_2 = f(\mathbf{x}_2) \in f(\mathcal{X})$，由 $f$ 的线性性得 $\lambda \mathbf{y}_1 + (1-\lambda)\mathbf{y}_2 = f(\lambda\mathbf{x}_1 + (1-\lambda)\mathbf{x}_2) \in f(\mathcal{X})$。
+
+**Minkowski 和**：由笛卡尔积的凸性加上求和映射的线性性得出。
+:::
+
+**一个重要的应用**：多面体是半空间的交集。每个半空间是凸的，交集保持凸性，所以多面体是凸的——这是线性规划的理论基础。
+
+```{r}
+#| label: fig-intersection-convex
+#| fig-cap: "三个半空间的交集 = 凸多面体（三角形） | Schnitt dreier Halbräume = konvexes Polytop (Dreieck)"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+plot(NULL, xlim = c(-0.3, 1.5), ylim = c(-0.3, 1.3), axes = FALSE,
+     xlab = "x", ylab = "y", asp = 1,
+     main = "半空间的交集 | Schnitt von Halbräumen")
+axis(1, col = "#CBD5E1"); axis(2, col = "#CBD5E1"); grid(col = "#E2E8F0")
+
+# 三角形 x + y <= 1, x >= 0, y >= 0
+polygon(c(0, 1, 0), c(0, 0, 1), 
+        col = adjustcolor("#6366F1", 0.2), border = "#6366F1", lwd = 2.5)
+
+# 半空间边界线 | Halbraum-Grenzen
+abline(a = 1, b = -1, col = "#DC2626", lwd = 2, lty = 2)
+abline(v = 0, col = "#16A34A", lwd = 2, lty = 2)
+abline(h = 0, col = "#2563EB", lwd = 2, lty = 2)
+
+# 标注 | Beschriftungen
+text(0.8, 0.9, "x + y ≤ 1", col = "#DC2626", cex = 0.85, srt = -45, font = 2)
+text(-0.15, 0.6, "x ≥ 0", col = "#16A34A", cex = 0.85, srt = 90, font = 2)
+text(0.6, -0.15, "y ≥ 0", col = "#2563EB", cex = 0.85, font = 2)
+
+# 顶点 | Eckpunkte
+points(c(0, 1, 0), c(0, 0, 1), pch = 21, bg = "#EA580C", col = "white", cex = 2, lwd = 2)
+```
+
+## 投影定理：凸集上的最近点唯一
+
+> **Projektionssatz: Der nächste Punkt auf einer konvexen Menge ist eindeutig**
+
+**定理（投影定理）**：设 $\mathcal{X} \neq \emptyset$ 是内积空间 $V$ 中的非空闭凸子集。则对每个点 $\mathbf{x} \in V$，存在**唯一**的点 $\hat{\mathbf{x}} \in \mathcal{X}$，使得
+
+$$
+\|\mathbf{x} - \hat{\mathbf{x}}\| = \min_{\mathbf{y} \in \mathcal{X}} \|\mathbf{x} - \mathbf{y}\|
+$$
+
+这个点 $\hat{\mathbf{x}}$ 称为 $\mathbf{x}$ 在 $\mathcal{X}$ 上的**投影（Projektion）**。
+
+```{r}
+#| label: fig-projection-theorem
+#| fig-cap: "投影定理：凸集保证最近点唯一；非凸集可能有多个最近点 | Projektionssatz: Konvexe Menge → eindeutige Projektion; nicht konvex → möglicherweise mehrere"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(2, 2, 3, 1))
+
+# 凸集 | Konvexe Menge
+plot(NULL, xlim = c(-1, 5), ylim = c(-1, 4.5), axes = FALSE,
+     xlab = "", ylab = "", asp = 1,
+     main = "✅ 凸集: 唯一投影", col.main = "#16A34A")
+
+theta <- seq(0, 2*pi, length.out = 200)
+cx_e <- 2; cy_e <- 1.5; rx <- 1.8; ry <- 1.2
+polygon(cx_e + rx*cos(theta), cy_e + ry*sin(theta),
+        col = adjustcolor("#16A34A", 0.15), border = "#16A34A", lwd = 2)
+
+# 外部点 | Äußerer Punkt
+px <- 4; py <- 3.5
+points(px, py, pch = 16, col = "#DC2626", cex = 2.5)
+text(px + 0.2, py + 0.3, expression(bold(x)), col = "#DC2626", cex = 1.1, font = 2)
+
+# 投影点 | Projektionspunkt
+t_proj <- atan2(py - cy_e, px - cx_e)
+proj_x <- cx_e + rx * cos(t_proj)
+proj_y <- cy_e + ry * sin(t_proj)
+points(proj_x, proj_y, pch = 21, bg = "#2563EB", col = "white", cex = 2, lwd = 2)
+segments(px, py, proj_x, proj_y, col = "#2563EB", lwd = 2, lty = 2)
+text(proj_x - 0.3, proj_y - 0.3, expression(hat(bold(x))), col = "#2563EB", cex = 1, font = 2)
+
+# 非凸集 | Nicht konvexe Menge
+plot(NULL, xlim = c(-1, 5), ylim = c(-1, 4.5), axes = FALSE,
+     xlab = "", ylab = "", asp = 1,
+     main = "❌ 非凸集: 多个最近点", col.main = "#DC2626")
+
+# 画 U 形 | U-Form zeichnen
+u_t <- seq(-pi/2, 3*pi/2, length.out = 200)
+u_outer_x <- 2 + 2*cos(u_t); u_outer_y <- 1.5 + 2*sin(u_t)
+u_inner_x <- 2 + 1*cos(rev(u_t)); u_inner_y <- 1.5 + 1*sin(rev(u_t))
+
+# 只取下半部分 | Nur unterer Teil
+idx_o <- u_outer_y <= 1.5; idx_i <- u_inner_y <= 1.5
+ux <- c(u_outer_x[idx_o], rev(u_inner_x[idx_i]))
+uy <- c(u_outer_y[idx_o], rev(u_inner_y[idx_i]))
+# 加上顶部封闭 | Oben schließen
+ux <- c(0, ux, 4, 4, 3, 3, 1, 1, 0)
+uy <- c(1.5, uy, 1.5, 3.5, 3.5, 1.5, 1.5, 3.5, 3.5)
+
+polygon(ux, uy, col = adjustcolor("#DC2626", 0.12), border = "#DC2626", lwd = 2)
+
+# 外部点在U的开口内 | Äußerer Punkt in der U-Öffnung
+px2 <- 2; py2 <- 2.2
+points(px2, py2, pch = 16, col = "#DC2626", cex = 2.5)
+text(px2, py2 + 0.3, expression(bold(x)), col = "#DC2626", cex = 1.1, font = 2)
+
+# 两个等距最近点 | Zwei äquidistante nächste Punkte
+points(c(1, 3), c(2.2, 2.2), pch = 21, bg = "#2563EB", col = "white", cex = 2, lwd = 2)
+segments(px2, py2, 1, 2.2, col = "#2563EB", lwd = 2, lty = 2)
+segments(px2, py2, 3, 2.2, col = "#2563EB", lwd = 2, lty = 2)
+text(0.7, 2.5, expression(hat(bold(x))[1]), col = "#2563EB", cex = 0.9, font = 2)
+text(3.3, 2.5, expression(hat(bold(x))[2]), col = "#2563EB", cex = 0.9, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+::: {.callout-tip collapse="true"}
+## 🔍 投影定理证明概要（点击展开）
+
+**存在性**：$\mathcal{X}$ 是闭集，所以距离的下确界可以被 $\mathcal{X}$ 中的某个极小化序列逼近，其极限点仍在 $\mathcal{X}$ 中。
+
+**唯一性**（反证法）：假设存在 $\hat{\mathbf{x}}_1 \neq \hat{\mathbf{x}}_2$，两者距 $\mathbf{x}$ 等距为 $d$。由凸性，中点 $\mathbf{z} = (\hat{\mathbf{x}}_1 + \hat{\mathbf{x}}_2)/2 \in \mathcal{X}$。利用平行四边形等式可得 $\|\mathbf{x} - \mathbf{z}\|^2 < d^2$，这与 $d$ 是最小距离矛盾。 $\square$
+:::
+
+{{< pagebreak >}}
+
+# 凸函数：碗形的秘密 {#sec-convex-functions}
+
+> **Konvexe Funktionen: Das Geheimnis der Schüsselform**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   凸函数的定义：通过 **弦在图像上方** 的直觉
+-   **上方图（Epigraph）** 与凸函数的等价关系
+-   重要凸函数实例与**判断方法**
+-   凸函数在运算下的保持性质
+:::
+
+## 定义：弦不低于弧
+
+> **Definition: Die Sehne liegt nie unter dem Bogen**
+
+设 $\mathcal{X}$ 是凸集，$f : \mathcal{X} \to \mathbb{R}$。若对所有 $\mathbf{x}, \mathbf{y} \in \mathcal{X}$ 及所有 $\lambda \in [0, 1]$，有
+
+$$
+f\bigl(\lambda \mathbf{x} + (1 - \lambda)\mathbf{y}\bigr) \leq \lambda\, f(\mathbf{x}) + (1 - \lambda)\, f(\mathbf{y})
+$$
+
+则称 $f$ 是**凸函数（konvexe Funktion / convex function）**。
+
+直觉：连接函数图像上任意两点的**弦**（右边）永远不会低于函数的**弧**（左边）。凸函数是"向上开口"的。若 $-f$ 是凸的，则称 $f$ 是**凹函数（konkave Funktion）**。
+
+```{r}
+#| label: fig-convex-function-def
+#| fig-cap: "凸函数的定义：弦（虚线）始终不低于弧（实线）| Definition: Die Sehne (gestrichelt) liegt nie unter dem Bogen (durchgezogen)"
+
+par(bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+# f(x) = x^2
+xr <- seq(-2, 2.5, length.out = 300)
+yr <- xr^2
+
+plot(xr, yr, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "x", ylab = "f(x)",
+     main = expression("凸函数示例: f(x) = x"^2 * " | Konvexe Funktion"),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B",
+     xlim = c(-2.2, 2.7), ylim = c(-0.5, 6.5))
+grid(col = "#E2E8F0")
+
+# 选两个点 | Zwei Punkte wählen
+xa <- -1.5; xb <- 2
+ya <- xa^2; yb <- xb^2
+
+# 弦 | Sehne
+segments(xa, ya, xb, yb, col = "#DC2626", lwd = 2.5, lty = 2)
+
+# 端点 | Endpunkte
+points(c(xa, xb), c(ya, yb), pch = 21, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+text(xa - 0.2, ya + 0.5, expression(bold(x)), col = "#DC2626", cex = 1, font = 2)
+text(xb + 0.2, yb + 0.3, expression(bold(y)), col = "#DC2626", cex = 1, font = 2)
+
+# 标注 lambda 点 | Lambda-Punkt markieren
+lam <- 0.6
+xm <- lam * xa + (1 - lam) * xb
+ym_chord <- lam * ya + (1 - lam) * yb  # 弦上的值
+ym_func <- xm^2                          # 函数值
+
+segments(xm, ym_func, xm, ym_chord, col = "#EA580C", lwd = 2, lty = 3)
+points(xm, ym_func, pch = 16, col = "#2563EB", cex = 2)
+points(xm, ym_chord, pch = 17, col = "#DC2626", cex = 2)
+
+# 标注 | Beschriftung
+text(xm + 0.5, (ym_func + ym_chord)/2, 
+     expression(lambda * f(bold(x)) + (1-lambda) * f(bold(y)) >= f(lambda * bold(x) + (1-lambda) * bold(y))),
+     col = "#EA580C", cex = 0.7, font = 2)
+
+arrows(xm + 0.15, ym_chord + 0.1, xm + 0.02, ym_chord, col = "#DC2626", length = 0.08)
+text(xm + 0.55, ym_chord + 0.15, "弦上 | Auf Sehne", col = "#DC2626", cex = 0.7)
+
+arrows(xm - 0.35, ym_func - 0.1, xm - 0.02, ym_func, col = "#2563EB", length = 0.08)
+text(xm - 0.75, ym_func - 0.15, "弧上 | Auf Bogen", col = "#2563EB", cex = 0.7)
+
+legend("topleft",
+       legend = c("f(x) 函数曲线", "弦 (Sehne)"),
+       col = c("#2563EB", "#DC2626"), lwd = c(3, 2.5), lty = c(1, 2),
+       bty = "n", cex = 0.95)
+```
+
+## 上方图视角
+
+> **Die Epigraph-Perspektive**
+
+函数 $f : \mathcal{X} \to \mathbb{R}$ 的**上方图（Epigraph）**是 $\mathcal{X} \times \mathbb{R}$ 中位于函数图像上方及图像上的所有点：
+
+$$
+\operatorname{epi}(f) = \{(\mathbf{x}, t) \in \mathcal{X} \times \mathbb{R} : t \geq f(\mathbf{x})\}
+$$
+
+**关键等价**：$f$ 是凸函数 $\Longleftrightarrow$ $\operatorname{epi}(f)$ 是凸集。
+
+```{r}
+#| label: fig-epigraph
+#| fig-cap: "上方图：凸函数的上方图是凸集（左），非凸函数的上方图不是凸集（右）| Epigraph: konvex (links) vs. nicht konvex (rechts)"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+
+# 凸函数 | Konvexe Funktion
+xr <- seq(-2, 2, length.out = 300)
+plot(xr, xr^2, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "x", ylab = "t",
+     main = expression("凸: f(x) = x"^2), col.main = "#16A34A",
+     ylim = c(-0.5, 5))
+# 上方图着色 | Epigraph einfärben
+polygon(c(xr, rev(xr)), c(xr^2, rep(5, length(xr))),
+        col = adjustcolor("#16A34A", 0.12), border = NA)
+lines(xr, xr^2, col = "#2563EB", lwd = 3)
+text(0, 3.5, "epi(f) 是凸集 ✓", col = "#16A34A", cex = 0.9, font = 2)
+
+# 非凸函数 | Nicht konvexe Funktion
+yr <- sin(2 * xr) + 0.3 * xr^2
+plot(xr, yr, type = "l", col = "#DC2626", lwd = 3,
+     xlab = "x", ylab = "t",
+     main = "非凸: f(x) = sin(2x) + 0.3x²", col.main = "#DC2626",
+     ylim = c(-1.5, 3))
+polygon(c(xr, rev(xr)), c(yr, rep(3, length(xr))),
+        col = adjustcolor("#DC2626", 0.12), border = NA)
+lines(xr, yr, col = "#DC2626", lwd = 3)
+text(0, 2, "epi(f) 不是凸集 ✗", col = "#DC2626", cex = 0.9, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+## 小测验：哪些函数是凸的？
+
+> **Quiz: Welche Funktionen sind konvex?**
+
+::: {.callout-tip icon="false"}
+## 🤔 想一想 \| Denken Sie nach
+
+1. $f(x) = ax + b$，$a, b \in \mathbb{R}$
+2. $f(x) = x^4$
+3. $f(x) = \sqrt{x}$，$x \geq 0$
+4. $f(x) = e^x$
+5. $f(x) = \ln x$，$x > 0$
+:::
+
+::: {.callout-tip collapse="true"}
+## 🔍 答案（点击展开）
+
+1. **凸（且凹）** ✅ — 仿射函数同时是凸的和凹的（$f'' = 0$）
+2. **凸** ✅ — $f''(x) = 12x^2 \geq 0$
+3. **凹** ❌ — $f''(x) = -\frac{1}{4}x^{-3/2} < 0$，不是凸的而是凹的
+4. **凸** ✅ — $f''(x) = e^x > 0$
+5. **凹** ❌ — $f''(x) = -1/x^2 < 0$，是凹函数
+:::
+
+## 凸函数的四个"全家福"
+
+> **Vier „Familienporträts" konvexer Funktionen**
+
+```{r}
+#| label: fig-four-convex-examples
+#| fig-cap: "四种典型的凸函数 | Vier typische konvexe Funktionen"
+#| fig-height: 6
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+
+# x^2
+xr <- seq(-2, 2, length.out = 300)
+plot(xr, xr^2, type = "l", col = "#2563EB", lwd = 3,
+     main = expression("凸: f(x) = x"^2), xlab = "x", ylab = "f(x)",
+     col.main = "#2563EB")
+grid(col = "#E2E8F0")
+
+# -x^2 (凹)
+plot(xr, -xr^2, type = "l", col = "#DC2626", lwd = 3,
+     main = expression("凹: f(x) = -x"^2), xlab = "x", ylab = "f(x)",
+     col.main = "#DC2626")
+grid(col = "#E2E8F0")
+
+# |x| (凸但不可微)
+plot(xr, abs(xr), type = "l", col = "#16A34A", lwd = 3,
+     main = expression("凸(不可微): f(x) = |x|"), xlab = "x", ylab = "f(x)",
+     col.main = "#16A34A")
+grid(col = "#E2E8F0")
+points(0, 0, pch = 16, col = "#EA580C", cex = 2)
+text(0.5, 0.3, "尖点!", col = "#EA580C", cex = 0.85, font = 2)
+
+# x^3 (既非凸也非凹)
+plot(xr, xr^3, type = "l", col = "#9333EA", lwd = 3,
+     main = expression("既非凸也非凹: f(x) = x"^3), xlab = "x", ylab = "f(x)",
+     col.main = "#9333EA")
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+## 重要的多元凸函数
+
+> **Wichtige multivariate konvexe Funktionen**
+
+以下多元函数都是凸的：
+
+**仿射函数** $f(\mathbf{x}) = \mathbf{b}^\top\mathbf{x} + a$ 同时是凸的和凹的——它是凸函数和凹函数的"交界"。
+
+**二次函数** $f(\mathbf{x}) = \mathbf{x}^\top\mathbf{Q}\mathbf{x} + \mathbf{b}^\top\mathbf{x} + a$，若 $\mathbf{Q} \succeq 0$（半正定）则为凸函数。
+
+**任意范数** $f(\mathbf{x}) = \|\mathbf{x}\|$，无论是 $L^1$、$L^2$ 还是 $L^\infty$，都是凸函数（由三角不等式可证，方法与证明 $|x|$ 凸性完全类似）。
+
+::: {.callout-important icon="false"}
+## 💡 机器学习中的关键应用 \| Schlüsselanwendung im ML
+
+**最小二乘损失是凸的**！因为 $f(\mathbf{w}) = \|\mathbf{A}\mathbf{w} - \mathbf{y}\|^2 = \mathbf{w}^\top(\mathbf{A}^\top\mathbf{A})\mathbf{w} - 2\mathbf{y}^\top\mathbf{A}\mathbf{w} + \|\mathbf{y}\|^2$，其中 $\mathbf{Q} = \mathbf{A}^\top\mathbf{A}$ 始终半正定。
+
+这就是上一章损失函数呈"碗形"的根本原因！
+
+**岭回归**的损失 $f(\mathbf{w}) = \|\mathbf{A}\mathbf{w} - \mathbf{y}\|^2 + \lambda\|\mathbf{w}\|^2$（$\lambda > 0$）更进一步——它是**严格凸**的，保证解**唯一**。
+
+*Das ist der fundamentale Grund, warum die Verlustfunktion im letzten Kapitel „schüsselförmig" war!*
+:::
+
+## 凸函数的运算保持性
+
+> **Erhaltung der Konvexität bei Operationen**
+
+设 $f_1, f_2, \ldots$ 是凸函数，则以下函数也是凸的：
+
+**(i)** 非负加权和：$f(\mathbf{x}) = c_1 f_1(\mathbf{x}) + c_2 f_2(\mathbf{x})$，其中 $c_1, c_2 \geq 0$
+
+**(ii)** 逐点最大值：$f(\mathbf{x}) = \max_i f_i(\mathbf{x})$
+
+**(iii)** 逐点极限：$f(\mathbf{x}) = \lim_{n \to \infty} f_n(\mathbf{x})$（若极限存在）
+
+::: {.callout-tip collapse="true"}
+## 🔍 证明 (ii) 逐点最大值（点击展开）
+
+设 $\mathbf{x}, \mathbf{y} \in \mathcal{X}$，$\lambda \in [0, 1]$。对每个 $i$：
+
+$$
+f_i\bigl(\lambda\mathbf{x} + (1-\lambda)\mathbf{y}\bigr) \leq \lambda f_i(\mathbf{x}) + (1-\lambda) f_i(\mathbf{y}) \leq \lambda \max_j f_j(\mathbf{x}) + (1-\lambda) \max_j f_j(\mathbf{y})
+$$
+
+对所有 $i$ 取最大值，得到
+
+$$
+\max_i f_i\bigl(\lambda\mathbf{x} + (1-\lambda)\mathbf{y}\bigr) \leq \lambda f(\mathbf{x}) + (1-\lambda)f(\mathbf{y}) \quad \square
+$$
+:::
+
+{{< pagebreak >}}
+
+# 如何判断凸性：三个等价条件 {#sec-characterization}
+
+> **Wie erkennt man Konvexität: Drei äquivalente Bedingungen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   判断凸性的三个等价条件：弦条件、切线条件、Hesse 矩阵条件
+-   它们之间的**逻辑关系**和**几何直觉**
+-   **次梯度**：不可微凸函数的梯度替代品
+:::
+
+## 二阶可微凸函数的三重刻画
+
+> **Dreifache Charakterisierung zweimal differenzierbarer konvexer Funktionen**
+
+设 $\mathcal{X} \subseteq \mathbb{R}^n$ 是开凸集，$f : \mathcal{X} \to \mathbb{R}$ 二阶连续可微。则以下三个命题**等价**：
+
+**(i) 弦条件**（定义本身）
+
+$$
+f\bigl(\lambda\mathbf{x} + (1-\lambda)\mathbf{y}\bigr) \leq \lambda f(\mathbf{x}) + (1-\lambda) f(\mathbf{y}) \quad \forall\, \mathbf{x}, \mathbf{y},\; \lambda \in [0,1]
+$$
+
+**(ii) 切线条件**（一阶条件）
+
+$$
+f(\mathbf{y}) \geq f(\mathbf{x}) + \nabla f(\mathbf{x})^\top (\mathbf{y} - \mathbf{x}) \quad \forall\, \mathbf{x}, \mathbf{y}
+$$
+
+**(iii) Hesse 矩阵条件**（二阶条件）
+
+$$
+\mathbf{H}_f(\mathbf{x}) \succeq 0 \quad \forall\, \mathbf{x} \in \mathcal{X}
+$$
+
+```{r}
+#| label: fig-three-conditions
+#| fig-cap: "凸函数的三重刻画：弦在上方、切线在下方、曲率非负 | Drei Sichtweisen auf Konvexität"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(4, 4, 3.5, 1))
+
+xr <- seq(-2, 2.5, length.out = 300)
+fx <- xr^2
+
+# (i) 弦条件 | Sehnenbedingung
+plot(xr, fx, type = "l", col = "#2563EB", lwd = 3,
+     main = "(i) 弦在图像上方\nSehne über Graph", col.main = "#2563EB",
+     xlab = "x", ylab = "f(x)", cex.main = 1)
+grid(col = "#E2E8F0")
+xa <- -1.2; xb <- 2
+segments(xa, xa^2, xb, xb^2, col = "#DC2626", lwd = 2.5, lty = 2)
+points(c(xa, xb), c(xa^2, xb^2), pch = 16, col = "#DC2626", cex = 1.5)
+
+# (ii) 切线条件 | Tangentenbedingung
+plot(xr, fx, type = "l", col = "#2563EB", lwd = 3,
+     main = "(ii) 切线在图像下方\nTangente unter Graph", col.main = "#16A34A",
+     xlab = "x", ylab = "f(x)", cex.main = 1)
+grid(col = "#E2E8F0")
+x0 <- 0.8
+tangent <- x0^2 + 2*x0*(xr - x0)
+lines(xr, tangent, col = "#16A34A", lwd = 2.5, lty = 2)
+points(x0, x0^2, pch = 16, col = "#16A34A", cex = 1.5)
+
+# (iii) Hesse 条件 | Hesse-Bedingung
+x_curv <- seq(-2, 2.5, length.out = 50)
+f_curv <- 2 * rep(1, length(x_curv))  # f''(x) = 2 >= 0
+
+plot(x_curv, f_curv, type = "l", col = "#9333EA", lwd = 3,
+     main = "(iii) 曲率处处非负\nKrümmung ≥ 0 überall", col.main = "#9333EA",
+     xlab = "x", ylab = "f''(x)", ylim = c(-0.5, 3.5), cex.main = 1)
+grid(col = "#E2E8F0")
+abline(h = 0, col = "#6B7280", lty = 2)
+polygon(c(x_curv, rev(x_curv)), c(f_curv, rep(0, length(x_curv))),
+        col = adjustcolor("#9333EA", 0.15), border = NA)
+text(0, 1, expression("f''(x) = 2 ≥ 0  ✓"), col = "#9333EA", cex = 1, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+::: {.callout-tip collapse="true"}
+## 🔍 证明概要（点击展开）
+
+**(i)⟹(ii)：** 令 $t = 1 - \lambda$，重写弦条件得 $f(\mathbf{y}) - f(\mathbf{x}) \geq \frac{f(\mathbf{x} + t(\mathbf{y}-\mathbf{x})) - f(\mathbf{x})}{t}$。令 $t \to 0$，右边趋向方向导数 $\nabla f(\mathbf{x})^\top(\mathbf{y} - \mathbf{x})$。
+
+**(ii)⟹(i)：** 令 $\mathbf{z} = \lambda\mathbf{x} + (1-\lambda)\mathbf{y}$，对 $(\mathbf{x}, \mathbf{z})$ 和 $(\mathbf{y}, \mathbf{z})$ 分别用切线条件，加权求和后右边恰好消为零。
+
+**(ii)⟹(iii)：** 利用二阶导数的定义，令 $\mathbf{y} = \mathbf{x} + t\mathbf{h}$，代入切线条件，令 $t \to 0$ 后得 $\mathbf{h}^\top \mathbf{H}_f(\mathbf{x})\mathbf{h} \geq 0$。
+
+**(iii)⟹(ii)：** 由 Taylor 定理，$f(\mathbf{y}) = f(\mathbf{x}) + \nabla f(\mathbf{x})^\top(\mathbf{y}-\mathbf{x}) + \frac{1}{2}(\mathbf{y}-\mathbf{x})^\top\mathbf{H}_f(\mathbf{z})(\mathbf{y}-\mathbf{x})$ 对某中间点 $\mathbf{z}$ 成立。半正定性保证最后一项 $\geq 0$。
+:::
+
+```{r}
+#| label: fig-hessian-spectrum
+#| fig-cap: "Hesse 矩阵的特征值与局部曲面形状的关系 | Zusammenhang zwischen Hesse-Eigenwerten und lokaler Flächenform"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(1, 1, 3, 1))
+
+# 生成网格 | Gitter generieren
+n <- 40
+u <- seq(-2, 2, length.out = n)
+v <- seq(-2, 2, length.out = n)
+
+# (1) 所有特征值 > 0：碗形 | Alle Eigenwerte > 0: Schüssel
+z1 <- outer(u, v, function(x, y) x^2 + y^2)
+persp(u, v, z1, theta = 30, phi = 25, col = adjustcolor("#16A34A", 0.4),
+      border = adjustcolor("#16A34A", 0.3), shade = 0.3,
+      main = expression(lambda[1] > 0 * "," ~ lambda[2] > 0),
+      xlab = "", ylab = "", zlab = "", cex.main = 1.1, col.main = "#16A34A")
+mtext("凸 (碗形) | Konvex", side = 1, col = "#16A34A", font = 2, cex = 0.8)
+
+# (2) 特征值一正一负：鞍点 | Ein positiv, ein negativ: Sattel
+z2 <- outer(u, v, function(x, y) x^2 - y^2)
+persp(u, v, z2, theta = 30, phi = 25, col = adjustcolor("#EA580C", 0.4),
+      border = adjustcolor("#EA580C", 0.3), shade = 0.3,
+      main = expression(lambda[1] > 0 * "," ~ lambda[2] < 0),
+      xlab = "", ylab = "", zlab = "", cex.main = 1.1, col.main = "#EA580C")
+mtext("非凸 (鞍点) | Nicht konvex", side = 1, col = "#EA580C", font = 2, cex = 0.8)
+
+# (3) 所有特征值 < 0：倒碗 | Alle Eigenwerte < 0: Umgedrehte Schüssel
+z3 <- outer(u, v, function(x, y) -(x^2 + y^2))
+persp(u, v, z3, theta = 30, phi = 25, col = adjustcolor("#DC2626", 0.4),
+      border = adjustcolor("#DC2626", 0.3), shade = 0.3,
+      main = expression(lambda[1] < 0 * "," ~ lambda[2] < 0),
+      xlab = "", ylab = "", zlab = "", cex.main = 1.1, col.main = "#DC2626")
+mtext("凹 (倒碗) | Konkav", side = 1, col = "#DC2626", font = 2, cex = 0.8)
+
+par(mfrow = c(1, 1))
+```
+
+Hesse 矩阵 $\mathbf{H}_f(\mathbf{x})$ 是对称的，其特征值 $\lambda_i$ 和正交归一特征向量 $\mathbf{v}_i$ 决定了函数在 $\mathbf{x}$ 附近的局部形状。在 $\mathbf{x}$ 点附近，函数可以用二阶 Taylor 展开近似为 $f(\mathbf{x} + \mathbf{h}) \approx f(\mathbf{x}) + \frac{1}{2}\sum_{i=1}^n \lambda_i (\mathbf{v}_i^\top \mathbf{h})^2$。若 $\lambda_i > 0$，函数沿 $\mathbf{v}_i$ 方向呈碗形；若 $\lambda_i < 0$，则呈倒碗形；$|\lambda_i|$ 衡量该方向上的曲率强度。
+
+## 次梯度：不可微时的替代方案
+
+> **Subgradient: Die Alternative bei Nicht-Differenzierbarkeit**
+
+像 $f(x) = |x|$ 这样的凸函数在 $x = 0$ 处不可微。但凸性保证了一个更一般的性质：对每个 $\mathbf{x}$，存在向量 $\mathbf{v}$，使得
+
+$$
+f(\mathbf{y}) \geq f(\mathbf{x}) + \mathbf{v}^\top(\mathbf{y} - \mathbf{x}) \quad \forall\, \mathbf{y} \in \mathcal{X}
+$$
+
+满足此条件的 $\mathbf{v}$ 称为**次梯度（Subgradient / Subgradient）**。在可微点，次梯度就是梯度；在不可微点，可能有多个次梯度。次梯度对于 LASSO 回归、分位数回归等不可微优化问题至关重要。
+
+{{< pagebreak >}}
+
+# Jensen 不等式：凸性的核心工具 {#sec-jensen}
+
+> **Jensen-Ungleichung: Das zentrale Werkzeug der Konvexität**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   Jensen 不等式的陈述和**几何意义**
+-   **方差非负性**作为 Jensen 不等式的直接推论
+-   Jensen 不等式在概率论和统计学中的广泛应用
+:::
+
+## 定理陈述
+
+> **Formulierung des Satzes**
+
+Jensen 不等式把凸性的定义从 2 个点推广到了**任意多个点**：
+
+设 $f : \mathcal{X} \to \mathbb{R}$ 是凸函数，$\mathbf{x}_1, \ldots, \mathbf{x}_N \in \mathcal{X}$，$w_1, \ldots, w_N \geq 0$，$\sum w_i = 1$，则
+
+$$
+\boxed{f\!\left(\sum_{i=1}^{N} w_i \mathbf{x}_i\right) \leq \sum_{i=1}^{N} w_i \, f(\mathbf{x}_i)}
+$$
+
+用一句话概括：**"先平均再求函数值" $\leq$ "先求函数值再平均"**。
+
+用期望的语言重写（取 $w_i = \mathbb{P}(X = x_i)$）：
+
+$$
+f\bigl(\mathbb{E}[X]\bigr) \leq \mathbb{E}\bigl[f(X)\bigr]
+$$
+
+```{r}
+#| label: fig-jensen
+#| fig-cap: "Jensen 不等式的几何意义：凸函数在期望处的值 ≤ 函数值的期望 | Geometrische Bedeutung der Jensen-Ungleichung"
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+xr <- seq(-1, 3, length.out = 300)
+fx <- function(x) 0.5 * x^2
+
+plot(xr, fx(xr), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "x", ylab = "f(x)",
+     main = "Jensen 不等式 | Jensen-Ungleichung",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B",
+     ylim = c(-0.3, 4.5))
+grid(col = "#E2E8F0")
+
+# 三个点和权重 | Drei Punkte und Gewichte
+pts <- c(0, 1, 2.5)
+ws <- c(0.3, 0.5, 0.2)
+fpts <- fx(pts)
+ex <- sum(ws * pts)      # E[X]
+f_ex <- fx(ex)           # f(E[X])
+ef_x <- sum(ws * fpts)   # E[f(X)]
+
+# 弦 | Sehnen
+segments(pts[1], fpts[1], pts[3], fpts[3], col = "#DC2626", lwd = 2, lty = 2)
+
+# 点 | Punkte
+points(pts, fpts, pch = 21, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+for (i in 1:3) {
+  text(pts[i], fpts[i] + 0.3, paste0("w", i, "=", ws[i]), col = "#DC2626", cex = 0.75)
+}
+
+# f(E[X]) | f(E[X])
+points(ex, f_ex, pch = 23, bg = "#16A34A", col = "white", cex = 3, lwd = 2)
+segments(ex, 0, ex, f_ex, col = "#16A34A", lty = 3, lwd = 1.5)
+text(ex - 0.05, f_ex - 0.35, expression(f(E[X])), col = "#16A34A", cex = 0.9, font = 2, pos = 2)
+
+# E[f(X)] | E[f(X)]
+points(ex, ef_x, pch = 24, bg = "#EA580C", col = "white", cex = 2.5, lwd = 2)
+segments(ex, f_ex, ex, ef_x, col = "#EA580C", lwd = 2.5)
+text(ex + 0.15, ef_x + 0.2, expression(E[f(X)]), col = "#EA580C", cex = 0.9, font = 2, pos = 4)
+
+# 差距标注 | Abstandsmarkierung
+arrows(ex + 0.6, f_ex, ex + 0.6, ef_x, code = 3, length = 0.08, col = "#9333EA", lwd = 2)
+text(ex + 0.8, (f_ex + ef_x)/2, "差距\nDifferenz", col = "#9333EA", cex = 0.75, font = 2)
+
+legend("topleft",
+       legend = c(expression(f(x) == 0.5*x^2), 
+                  expression(f(E[X]) ~ "(函数在期望处的值)"),
+                  expression(E[f(X)] ~ "(函数值的期望)")),
+       col = c("#2563EB", "#16A34A", "#EA580C"),
+       lwd = c(3, NA, NA), pch = c(NA, 23, 24),
+       pt.bg = c(NA, "#16A34A", "#EA580C"), pt.cex = c(NA, 1.5, 1.5),
+       bty = "n", cex = 0.85)
+```
+
+## 经典应用：方差非负
+
+> **Klassische Anwendung: Varianz ist nicht-negativ**
+
+因为 $f(x) = x^2$ 是凸函数，由 Jensen 不等式：
+
+$$
+\bigl(\mathbb{E}[X]\bigr)^2 = f\bigl(\mathbb{E}[X]\bigr) \leq \mathbb{E}\bigl[f(X)\bigr] = \mathbb{E}[X^2]
+$$
+
+整理后得到：
+
+$$
+\operatorname{Var}(X) = \mathbb{E}[X^2] - \bigl(\mathbb{E}[X]\bigr)^2 \geq 0
+$$
+
+方差非负这个"显然"的事实，其实是凸性的直接推论！
+
+```{r}
+#| label: fig-variance-jensen
+#| fig-cap: "方差非负性是 Jensen 不等式对 f(x) = x² 的特殊情况 | Var(X) ≥ 0 ist ein Spezialfall der Jensen-Ungleichung"
+#| fig-height: 4.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+set.seed(42)
+samp <- rnorm(500, mean = 2, sd = 1.2)
+
+xr <- seq(-2, 6, length.out = 300)
+plot(xr, xr^2, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "x", ylab = expression(x^2),
+     main = expression("Jensen: " * (E[X])^2 <= E[X^2] * " → Var(X) ≥ 0"),
+     cex.main = 1.1, col.main = "#1E293B", ylim = c(-1, 30))
+grid(col = "#E2E8F0")
+
+# 直方图叠加 | Histogramm überlagern
+hist_data <- hist(samp, breaks = 30, plot = FALSE)
+# 归一化到图中 | Normalisierung
+hist_scaled <- hist_data$density / max(hist_data$density) * 5
+rect(hist_data$breaks[-length(hist_data$breaks)], 0,
+     hist_data$breaks[-1], hist_scaled,
+     col = adjustcolor("#6366F1", 0.3), border = adjustcolor("#6366F1", 0.5))
+
+# E[X] 和 E[X^2] | E[X] und E[X²]
+ex <- mean(samp)
+ex2 <- mean(samp^2)
+ex_sq <- ex^2
+
+points(ex, ex_sq, pch = 23, bg = "#16A34A", col = "white", cex = 3, lwd = 2)
+text(ex + 0.2, ex_sq + 1.5, expression((E[X])^2), col = "#16A34A", cex = 1, font = 2, pos = 4)
+
+points(ex, ex2, pch = 24, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+text(ex + 0.2, ex2 + 1.2, expression(E[X^2]), col = "#DC2626", cex = 1, font = 2, pos = 4)
+
+arrows(ex - 0.3, ex_sq, ex - 0.3, ex2, code = 3, length = 0.08, col = "#9333EA", lwd = 2.5)
+text(ex - 0.8, (ex_sq + ex2)/2, expression(Var(X)), col = "#9333EA", cex = 1, font = 2)
+```
+
+{{< pagebreak >}}
+
+# 凸函数与优化 {#sec-optimization}
+
+> **Konvexe Funktionen und Optimierung**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+-   凸优化的**黄金定理**：每个局部最小值都是全局最小值
+-   **严格凸**函数保证最优解唯一
+-   凸性/非凸性对机器学习算法的实际影响
+:::
+
+## 黄金定理：局部即全局
+
+> **Der goldene Satz: Lokal ist global**
+
+这是凸优化中最重要的定理，也是凸性对机器学习最核心的贡献。
+
+**定理**：设 $f : \mathbb{R}^n \to \mathbb{R}$ 是可微凸函数，则以下命题等价：
+
+**(i)** $\mathbf{x}^\star$ 是 $f$ 的全局最小值点
+
+**(ii)** $\nabla f(\mathbf{x}^\star) = \mathbf{0}$
+
+这意味着两个惊人的推论：(1) 每个临界点都是全局最小值点（不存在"假的"局部极小值）；(2) 梯度下降只要找到 $\nabla f = \mathbf{0}$ 的点，就一定是全局最优。
+
+::: {.callout-tip collapse="true"}
+## 🔍 证明（点击展开）
+
+**(i)⟹(ii)**：若 $\mathbf{x}^\star$ 是全局最小值点，它一定是局部最小值点，故 $\nabla f(\mathbf{x}^\star) = \mathbf{0}$（微积分的必要条件）。
+
+**(ii)⟹(i)**：若 $\nabla f(\mathbf{x}^\star) = \mathbf{0}$，由切线条件（凸函数的一阶条件），对任意 $\mathbf{y}$：
+
+$$
+f(\mathbf{y}) \geq f(\mathbf{x}^\star) + \underbrace{\nabla f(\mathbf{x}^\star)^\top}_{= \mathbf{0}^\top}(\mathbf{y} - \mathbf{x}^\star) = f(\mathbf{x}^\star) \quad \square
+$$
+:::
+
+```{r}
+#| label: fig-convex-vs-nonconvex-optimization
+#| fig-cap: "凸 vs 非凸优化地形：凸函数只有一个'碗底'，非凸函数充满陷阱 | Konvex vs. nicht konvex: Nur ein Minimum vs. viele Fallen"
+#| fig-height: 5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+
+# 凸函数 | Konvexe Funktion
+xr <- seq(-3, 3, length.out = 300)
+plot(xr, 0.5*xr^2 - 0.5, type = "l", col = "#16A34A", lwd = 3,
+     main = "凸函数：唯一全局最小值\nKonvex: Eindeutiges globales Min.",
+     xlab = "w", ylab = "L(w)",
+     cex.main = 0.95, col.main = "#16A34A")
+grid(col = "#E2E8F0")
+points(0, -0.5, pch = 23, bg = "#16A34A", col = "white", cex = 3, lwd = 2)
+text(0.5, -0.2, "全局最优!\nGlobal optimal!", col = "#16A34A", cex = 0.8, font = 2)
+
+# 非凸函数 | Nicht konvexe Funktion
+yr <- 0.3*xr^4 - 2*xr^2 + 0.5*sin(5*xr) + 2
+plot(xr, yr, type = "l", col = "#DC2626", lwd = 3,
+     main = "非凸函数：多个局部最小值\nNicht konvex: Mehrere lokale Min.",
+     xlab = "w", ylab = "L(w)",
+     cex.main = 0.95, col.main = "#DC2626")
+grid(col = "#E2E8F0")
+
+# 标注局部最小值 | Lokale Minima markieren
+local_mins_x <- c(-1.65, 1.65)
+local_mins_y <- 0.3*local_mins_x^4 - 2*local_mins_x^2 + 0.5*sin(5*local_mins_x) + 2
+points(local_mins_x, local_mins_y, pch = 4, col = "#EA580C", cex = 2.5, lwd = 2.5)
+text(local_mins_x[1] - 0.3, local_mins_y[1] + 0.5, "局部\nLokal", col = "#EA580C", cex = 0.7, font = 2)
+text(local_mins_x[2] + 0.3, local_mins_y[2] + 0.5, "局部\nLokal", col = "#EA580C", cex = 0.7, font = 2)
+
+# 全局最小值 | Globales Minimum
+glob_idx <- which.min(yr)
+points(xr[glob_idx], yr[glob_idx], pch = 23, bg = "#16A34A", col = "white", cex = 2, lwd = 2)
+text(xr[glob_idx], yr[glob_idx] - 0.4, "全局\nGlobal", col = "#16A34A", cex = 0.7, font = 2)
+
+# 鞍点 | Sattelpunkt
+points(0, 2, pch = 8, col = "#9333EA", cex = 2, lwd = 2)
+text(0, 2.6, "鞍点\nSattel", col = "#9333EA", cex = 0.7, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+## 严格凸性：保证唯一解
+
+> **Strikte Konvexität: Eindeutigkeit der Lösung garantiert**
+
+**定义**：若对所有 $\mathbf{x} \neq \mathbf{y}$ 及所有 $\lambda \in (0, 1)$，**严格**不等式
+
+$$
+f\bigl(\lambda\mathbf{x} + (1-\lambda)\mathbf{y}\bigr) < \lambda f(\mathbf{x}) + (1-\lambda) f(\mathbf{y})
+$$
+
+成立，则称 $f$ 是**严格凸的（strikt konvex / strictly convex）**。
+
+**命题**：若 $f$ 是严格凸的，则 $f$ **至多**有一个最小值点。
+
+凸性保证"局部即全局"，严格凸性进一步保证"解是唯一的"。
+
+| 凸性类型 / Konvexitätstyp | 最小值点 / Minimumstelle | 例子 / Beispiel |
+|:---:|:---|:---|
+| 凸（非严格）| 可能有多个（甚至一个"平底"） | $f(x) = \max(0, x-1)$ 在 $(-\infty, 1]$ 上 |
+| **严格凸** | **至多一个** | $f(x) = x^2$，岭回归 |
+
+## 凸性与机器学习：全景图
+
+> **Konvexität und ML: Das Gesamtbild**
+
+::: {.callout-important icon="false"}
+## 💡 关键总结 \| Schlüsselzusammenfassung
+
+**严格凸问题**（唯一解，梯度下降保证收敛到全局最优）：满秩设计矩阵的最小二乘、带正则化的 GLM 最大似然估计、SVM、岭回归、弹性网。
+
+**凸但非严格**（有解集但不一定唯一）：LASSO（当多个特征高度相关时）、分位数回归、非正则化 GLM。
+
+**非凸问题**（可能有多个局部最小值和鞍点，不同初始化可能得到不同解）：**神经网络**、超参数调优、聚类（k-means 等）、树模型（CART、随机森林、XGBoost）、潜变量模型、$L_0$ 变量选择、降维（t-SNE、UMAP）、矩阵分解（NMF）等。
+:::
+
+```{r}
+#| label: fig-optimization-landscape
+#| fig-cap: "三种优化地形：严格凸 → 唯一碗底；凸 → 平坦碗底；非凸 → 多个山谷 | Drei Optimierungslandschaften"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(1, 1, 3, 1))
+
+n <- 40
+u <- seq(-2, 2, length.out = n)
+v <- seq(-2, 2, length.out = n)
+
+# 严格凸 | Strikt konvex
+z1 <- outer(u, v, function(x, y) x^2 + y^2)
+persp(u, v, z1, theta = 30, phi = 25, col = adjustcolor("#16A34A", 0.4),
+      border = adjustcolor("#16A34A", 0.2), shade = 0.4,
+      main = "严格凸 | Strikt konvex\n唯一最优解 ✓", col.main = "#16A34A",
+      xlab = "", ylab = "", zlab = "", cex.main = 0.95)
+
+# 凸但有平坦区域 | Konvex mit flachem Bereich
+z2 <- outer(u, v, function(x, y) pmax(0, sqrt(x^2 + y^2) - 0.8)^2)
+persp(u, v, z2, theta = 30, phi = 25, col = adjustcolor("#D97706", 0.4),
+      border = adjustcolor("#D97706", 0.2), shade = 0.4,
+      main = "凸(非严格) | Konvex\n有解集 ≈", col.main = "#D97706",
+      xlab = "", ylab = "", zlab = "", cex.main = 0.95)
+
+# 非凸 | Nicht konvex
+z3 <- outer(u, v, function(x, y) sin(2*x)*cos(2*y) + 0.15*(x^2 + y^2))
+persp(u, v, z3, theta = 30, phi = 25, col = adjustcolor("#DC2626", 0.4),
+      border = adjustcolor("#DC2626", 0.2), shade = 0.4,
+      main = "非凸 | Nicht konvex\n多个局部最小值 ✗", col.main = "#DC2626",
+      xlab = "", ylab = "", zlab = "", cex.main = 0.95)
+
+par(mfrow = c(1, 1))
+```
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心定理回顾
+
+让我们回到开篇的目标公式——现在每个符号你都理解了：
+
+$$
+f \text{ 凸} \;\wedge\; \nabla f(\mathbf{x}^\star) = \mathbf{0} \quad \Longrightarrow \quad \mathbf{x}^\star \text{ 是全局最小值点}
+$$
+
+| 符号 / Symbol | 含义 / Bedeutung | 第一次遇到 / Wo eingeführt |
+|:--:|:---|:---|
+| 凸函数 | 弦不低于弧 | §3 凸函数 |
+| $\nabla f$ | 梯度（切线的斜率推广） | §4 三重刻画 |
+| $= \mathbf{0}$ | 临界点 | §5 优化应用 |
+| 全局最小值 | 不存在更好的点 | §5 黄金定理 |
+
+## 概念逻辑链
+
+```{r}
+#| label: fig-concept-chain
+#| fig-cap: "知识逻辑链：每个概念都为下一个做准备 | Logikkette: Jedes Konzept bereitet das nächste vor"
+#| fig-width: 12
+#| fig-height: 8
+
+library(ggplot2)
+library(showtext)
+font_add_google("Noto Sans SC", "noto")
+showtext_auto()
+
+nodes <- data.frame(
+  x = c(1, 1, 2, 2, 3, 3),
+  y = c(3, 2, 3, 2, 3, 2),
+  label = c("凸组合\n加权平均", "凸集\n线段检验",
+            "凸函数\n弦≥弧", "三重刻画\n梯度/Hesse",
+            "Jensen不等式\n推广到N点", "凸优化\n局部=全局"),
+  fill = c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#FCE7F3", "#E0E7FF", "#D1FAE5"),
+  color = c("#2563EB", "#D97706", "#DC2626", "#DB2777", "#6366F1", "#16A34A")
+)
+
+arrows_df <- data.frame(
+  x    = c(1,    1.4,  2,    2,    2.4,  2.4),
+  y    = c(2.7,  2.15, 2.7,  1.7,  2.15, 2.85),
+  xend = c(1,    1.6,  2,    2,    2.6,  2.6),
+  yend = c(2.3,  2.85, 2.3,  1.3,  1.85, 3.15)
+)
+
+arrow_labels <- data.frame(
+  x = c(1.15, 1.5, 2.15, 2.15, 2.5, 2.5),
+  y = c(2.5, 2.5, 2.5, 1.5, 1.5, 3.5),
+  label = c("集合化", "上方图!", "如何判断?", "判据!", "推广!", "应用!")
+)
+
+ggplot() +
+  geom_segment(data = arrows_df,
+               aes(x = x, y = y, xend = xend, yend = yend),
+               arrow = arrow(length = unit(0.3, "cm")),
+               color = "#64748B", linewidth = 1.2) +
+  geom_tile(data = nodes, aes(x, y, fill = I(fill), color = I(color)),
+            width = 0.7, height = 0.5, linewidth = 2) +
+  geom_text(data = nodes, aes(x, y, label = label),
+            family = "noto", size = 6, color = "#1E293B", lineheight = 0.9) +
+  geom_text(data = arrow_labels, aes(x, y, label = label),
+            family = "noto", size = 4, color = "#EA580C", fontface = "italic") +
+  annotate("text", x = 2, y = 0.5,
+           label = "凸性是优化理论的基石，让机器学习的'训练'有了数学保证！",
+           family = "noto", size = 6, color = "#DC2626", fontface = "bold") +
+  annotate("text", x = 2, y = 0.2,
+           label = "Konvexität ist das Fundament der Optimierung — die mathematische Garantie für ML-Training!",
+           family = "noto", size = 4.5, color = "#64748B", fontface = "italic") +
+  theme_void() +
+  theme(text = element_text(family = "noto"),
+        plot.title = element_text(hjust = 0.5, size = 18, face = "bold")) +
+  labs(title = "概念逻辑链 | Logikkette der Konzepte") +
+  coord_fixed(ratio = 0.8, xlim = c(0.4, 3.6), ylim = c(0.0, 3.8))
+```
+
+## 方法总结
+
+| 概念 / Konzept | 一句话总结 / Zusammenfassung |
+|:---:|:---|
+| 凸组合 | 非负权重、总和为1的线性组合——就是加权平均 |
+| 凸集 | 任意两点的线段都在集合内——没有凹陷 |
+| 凸函数 | 弦不低于弧——碗形 |
+| Jensen 不等式 | $f(\mathbb{E}[X]) \leq \mathbb{E}[f(X)]$——凸性定义推广到期望 |
+| 凸优化 | 临界点 = 全局最优——梯度下降的理论保障 |
+| 严格凸 | 全局最优解唯一——岭回归等的理论基础 |
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 凸性核心概念
+
+| Deutsch | 中文 | English |
+|:--|:--|:--|
+| die konvexe Kombination | 凸组合 | convex combination |
+| die konvexe Hülle | 凸包 | convex hull |
+| die konvexe Menge | 凸集 | convex set |
+| die konvexe Funktion | 凸函数 | convex function |
+| die konkave Funktion | 凹函数 | concave function |
+| die strikt konvexe Funktion | 严格凸函数 | strictly convex function |
+| der Extrempunkt | 极值点 | extreme point |
+| das Epigraph / der Epigraph | 上方图 | epigraph |
+| der Subgradient | 次梯度 | subgradient |
+
+## 集合与空间
+
+| Deutsch | 中文 | English |
+|:--|:--|:--|
+| der Halbraum | 半空间 | half-space |
+| das Polytop | 多面体 | polytope |
+| das Simplex (Pl: die Simplizes) | 单纯形 | simplex |
+| die positiv semidefinite Matrix (PSD) | 半正定矩阵 | positive semi-definite matrix |
+| die Projektion | 投影 | projection |
+| der Spaltenraum | 列空间 | column space |
+| die Minkowski-Summe | Minkowski 和 | Minkowski sum |
+| das kartesische Produkt | 笛卡尔积 | Cartesian product |
+
+## 分析与优化
+
+| Deutsch | 中文 | English |
+|:--|:--|:--|
+| die Hesse-Matrix | Hesse 矩阵 | Hessian matrix |
+| der Eigenwert | 特征值 | eigenvalue |
+| die Krümmung | 曲率 | curvature |
+| die Jensen-Ungleichung | Jensen 不等式 | Jensen's inequality |
+| das globale Minimum | 全局最小值 | global minimum |
+| das lokale Minimum | 局部最小值 | local minimum |
+| der Sattelpunkt | 鞍点 | saddle point |
+| der kritische Punkt | 临界点 | critical point |
+
+## 机器学习应用
+
+| Deutsch | 中文 | English |
+|:--|:--|:--|
+| die Ridge-Regression | 岭回归 | ridge regression |
+| das LASSO | LASSO | LASSO |
+| die Stützvektormaschine (SVM) | 支持向量机 | support vector machine |
+| die Verlustfunktion | 损失函数 | loss function |
+| die Regularisierung | 正则化 | regularization |
+| das verallgemeinerte lineare Modell (GLM) | 广义线性模型 | generalized linear model |
+| die Varianzanalyse | 方差分析 | analysis of variance |
+:::

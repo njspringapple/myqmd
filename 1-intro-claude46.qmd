@@ -1603,7 +1603,7 @@ $$
 
 library(ggplot2)
 library(showtext)
-font_add_google("Noto Sans SC", "noto")
+# font_add_google("Noto Sans SC", "noto")
 showtext_auto()
 
 nodes <- data.frame(

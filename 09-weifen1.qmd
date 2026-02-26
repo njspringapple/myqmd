@@ -1,0 +1,1437 @@
+---
+title: "第二章：一般导数概念"
+subtitle: "从标量到矩阵的微分统一框架 | Allgemeines Ableitungskonzept: Ein einheitlicher Rahmen von Skalaren bis Matrizen"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+# 全局配色方案 | Globales Farbschema
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+上一章我们学会了梯度下降——用梯度 $\nabla L(\mathbf{w})$ 指引模型走向"碗底"。但当时我们只处理了一种简单情况：**输入是向量、输出是标量**。
+
+*Im letzten Kapitel haben wir den Gradientenabstieg gelernt. Aber wir haben nur einen einfachen Fall behandelt: Eingabe = Vektor, Ausgabe = Skalar.*
+
+现实中，机器学习的函数远不止这一种——神经网络的每一层可能是 **向量到向量** 的变换，损失函数可能依赖于整个 **矩阵** 的参数。我们需要一个统一的导数概念来应对所有这些情况。
+
+本章的核心问题是：**当函数的输入和输出不再是简单的实数时，"导数"该怎么定义？**
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图：从一元导数走向矩阵微积分 | Lernroadmap: Von der skalaren Ableitung zur Matrixanalysis"
+#| code-fold: true
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 10), ylim = c(0, 7), axes = FALSE, 
+     xlab = "", ylab = "", main = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# Draw path / 画路径
+steps_x <- c(1, 3, 5, 7, 9)
+steps_y <- c(5.5, 5.5, 5.5, 5.5, 5.5)
+arrows(steps_x[-5] + 0.7, steps_y[-5], steps_x[-1] - 0.7, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+# Step boxes / 步骤方块
+labels_cn <- c("一元导数\n回顾", "Fréchet导数\n统一定义",
+               "梯度\n&Jacobi矩阵", "标量↔矩阵\n导数",
+               "ML应用\n反向传播")
+labels_de <- c("Skalare\nAbleitung", "Fréchet-\nAbleitung",
+               "Gradient &\nJacobi-Matrix", "Skalar-Matrix\nAbleitung",
+               "ML-Anwendung\nBackprop")
+colors <- c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#E0E7FF", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DC2626", "#6366F1", "#16A34A")
+
+for (i in 1:5) {
+  rect(steps_x[i] - 0.7, steps_y[i] - 0.9, steps_x[i] + 0.7, steps_y[i] + 0.9,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.2, labels_cn[i], cex = 0.72, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.52, col = "#64748B", font = 3)
+}
+
+# Difficulty arrow / 难度箭头
+arrows(0.5, 1.5, 9.5, 1.5, col = "#DC2626", lwd = 2, length = 0.15)
+text(5, 1.9, "抽象程度递增 | Zunehmende Abstraktion  >>>", cex = 0.85, col = "#DC2626")
+
+# Trigger labels / 触发标签
+triggers <- c("", "推广!", "特殊情况!", "更多情况!", "应用!")
+for (i in 2:5) {
+  text(steps_x[i] - 1, steps_y[i] + 1.3, triggers[i],
+       cex = 0.7, col = "#EA580C", font = 2)
+}
+
+# Numbering / 编号
+for (i in 1:5) {
+  text(steps_x[i] - 0.5, steps_y[i] + 0.75, paste0("§", i), 
+       cex = 0.6, col = borders[i], font = 2)
+}
+```
+
+**最终目标 | Endziel**：理解 **Fréchet 导数** 的统一框架，掌握以下所有特殊情况的导数计算——
+
+$$
+\underbrace{D_{\mathbf{x}} f(\mathbf{h})}_{\text{线性近似}} = f(\mathbf{x} + \mathbf{h}) - f(\mathbf{x}) - o(\|\mathbf{h}\|)
+$$
+
+现在看不懂？**完全没关系**——读完本章，你将理解"导数 = 最佳线性近似"这个深刻思想在各个维度下的体现。
+
+{{< pagebreak >}}
+
+# 预备知识速查 {#sec-prerequisites .unnumbered}
+
+> **Voraussetzungen: Schnellübersicht**
+
+::: {.callout-note icon="false"}
+## 📋 阅读本章前，请确保熟悉以下内容 | Voraussetzungen für dieses Kapitel
+
+- **分析基础**：导数 $f'(x) = \lim_{h \to 0} \frac{f(x+h) - f(x)}{h}$，偏导数 $\frac{\partial f}{\partial x_i}$，线性近似与泰勒展开
+- **线性代数**：矩阵求逆与行列式、赋范（向量）空间、有界线性算子
+- **矩阵迹**：$\text{tr}(\mathbf{A}) = \sum_{i} a_{ii}$，及其循环性质 $\text{tr}(\mathbf{AB}) = \text{tr}(\mathbf{BA})$
+- **Landau 记号**：$g(h) = o(h) \Leftrightarrow \lim_{h \to 0} \frac{g(h)}{h} = 0$（"$g$ 比 $h$ 趋于零更快"）
+:::
+
+{{< pagebreak >}}
+
+# 回顾：一元函数的导数 {#sec-scalar}
+
+> **Rückblick: Ableitung skalarer Funktionen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie in diesem Abschnitt lernen
+
+- 从"极限商"的定义中**提炼出导数的本质**：线性近似
+- 为什么要换一种视角看导数？这将为推广到高维铺路
+:::
+
+## 经典定义：极限商
+
+> **Klassische Definition: Differenzenquotient**
+
+设 $f: S \subseteq \mathbb{R} \to \mathbb{R}$。如果以下极限存在，我们称 $f$ 在点 $x \in S$ 处 **可微**，导数为 $f'(x)$：
+
+$$
+f'(x) = \lim_{h \to 0} \frac{f(x+h) - f(x)}{h}
+$$
+
+几何含义很直观：$f'(x)$ 是函数图像在 $x$ 处的 **切线斜率**。
+
+```{r}
+#| label: fig-tangent-line
+#| fig-cap: "导数 = 切线斜率：红色虚线是 f 在 x₀ 处的切线 | Ableitung = Tangentensteigung"
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x_plot <- seq(-1, 3, length.out = 300)
+f_plot <- function(x) x^2
+
+plot(x_plot, f_plot(x_plot), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "x", ylab = "f(x)",
+     main = expression(paste("导数的几何含义 | Geometrische Bedeutung: ", f(x) == x^2)),
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+x0 <- 1
+fprime <- 2 * x0  # f'(1) = 2
+tangent <- f_plot(x0) + fprime * (x_plot - x0)
+lines(x_plot, tangent, col = "#DC2626", lwd = 2.5, lty = 2)
+points(x0, f_plot(x0), pch = 21, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+
+# 标注割线逼近过程
+for (h_val in c(1.5, 0.8, 0.3)) {
+  x1 <- x0 + h_val
+  slope <- (f_plot(x1) - f_plot(x0)) / h_val
+  secant <- f_plot(x0) + slope * (x_plot - x0)
+  lines(x_plot, secant, col = adjustcolor("#EA580C", 0.3), lwd = 1, lty = 3)
+  points(x1, f_plot(x1), pch = 16, col = adjustcolor("#EA580C", 0.5), cex = 1.2)
+}
+
+legend("topleft",
+       legend = c(expression(f(x) == x^2), 
+                  expression(paste("切线: ", f(x[0]) + f * "'" * (x[0]) * (x - x[0]))),
+                  "割线逼近 | Sekanten"),
+       col = c("#2563EB", "#DC2626", "#EA580C"),
+       lwd = c(3, 2.5, 1), lty = c(1, 2, 3), bty = "n", cex = 0.9)
+
+text(x0, f_plot(x0) - 0.3, expression(paste(x[0], " = 1,  ", f * "'" * (1), " = 2")),
+     col = "#DC2626", cex = 0.9, font = 2)
+```
+
+## 换一种视角：导数 = 线性近似
+
+> **Perspektivwechsel: Ableitung = lineare Approximation**
+
+把极限定义稍作变形：
+
+$$
+f(x+h) - f(x) - f'(x) \cdot h = o(h)
+$$
+
+也就是说：
+
+$$
+\boxed{f(x + h) = f(x) + \underbrace{f'(x) \cdot h}_{\text{线性近似}} + \underbrace{o(h)}_{\text{比 } h \text{ 趋于零更快的误差}}}
+$$
+
+这个视角的关键转变是：**不要把导数看成一个"数"，而要看成一个"线性映射"** $h \mapsto f'(x) \cdot h$。
+
+```{r}
+#| label: fig-linear-approx
+#| fig-cap: "蓝色 = 真实函数值，红色 = 线性近似。h 越小，近似越精确 | Blau = wahrer Wert, Rot = lineare Approximation"
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+h_vals <- seq(-1.5, 1.5, length.out = 300)
+x0 <- 1
+f_val <- function(h) (x0 + h)^2
+linear_approx <- function(h) x0^2 + 2 * x0 * h
+error_term <- function(h) f_val(h) - linear_approx(h)
+
+plot(h_vals, f_val(h_vals), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "h（扰动量 | Störung）", 
+     ylab = expression(f(x[0] + h)),
+     main = expression(paste("线性近似的精度 | Genauigkeit der linearen Approximation bei ", x[0], " = 1")),
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B",
+     ylim = c(-0.5, 7))
+grid(col = "#E2E8F0")
+lines(h_vals, linear_approx(h_vals), col = "#DC2626", lwd = 2.5, lty = 2)
+lines(h_vals, error_term(h_vals), col = "#16A34A", lwd = 2, lty = 3)
+abline(h = 0, col = "#94A3B8", lty = 1, lwd = 0.5)
+abline(v = 0, col = "#94A3B8", lty = 1, lwd = 0.5)
+
+legend("topleft",
+       legend = c(expression(f(x[0] + h) == (1 + h)^2),
+                  expression(paste("线性近似: ", f(x[0]) + f * "'" * (x[0]) * h)),
+                  expression(paste("误差 = ", o(h) == h^2))),
+       col = c("#2563EB", "#DC2626", "#16A34A"),
+       lwd = c(3, 2.5, 2), lty = c(1, 2, 3), bty = "n", cex = 0.9)
+```
+
+::: {.callout-tip icon="false"}
+## 🤔 想一想 | Denken Sie nach
+
+**问题**：设 $f$ 在 $x$ 处可微，导数为 $f'(x)$。以下哪些陈述是正确的？
+
+1. $f'$ 本身是线性函数
+2. 映射 $h \mapsto f'(x) \cdot h$ 是线性函数（对固定的 $x$）
+3. $\lim_{h \to 0} \frac{|f(x+h) - f(x) - f'(x)h|}{h} = 0$
+4. $f(x + h) = f(x) + f'(x)h + o(h)$
+
+**答案**：2、3、4 正确。陈述 1 不一定成立——例如 $f(x) = x^2$ 的导数 $f'(x) = 2x$ 虽然碰巧是线性的，但 $f(x) = x^3$ 的导数 $f'(x) = 3x^2$ 就不是线性的。关键在于：导数 $f'(x)$ 对 $x$ 可以是任意依赖关系，但对 **扰动 $h$** 必须是线性的。
+:::
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+**导数的本质不是"斜率"，而是"最佳线性近似"。**
+
+这个视角才是推广到高维的钥匙——在高维中没有"斜率"的说法，但"线性近似"的概念可以完美推广。
+
+*Das Wesen der Ableitung ist nicht die „Steigung", sondern die „beste lineare Approximation". Diese Perspektive ist der Schlüssel zur Verallgemeinerung.*
+:::
+
+{{< pagebreak >}}
+
+# 一般导数概念：Fréchet 导数 {#sec-frechet}
+
+> **Allgemeines Ableitungskonzept: Die Fréchet-Ableitung**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **Fréchet 导数**的定义：适用于所有赋范空间的统一导数概念
+- 定义中的 **三个关键要素**：线性性、有界性、误差条件
+- 为什么它能统一标量、向量、矩阵的各种导数
+:::
+
+## 从一维到一般：核心思想不变
+
+> **Von 1D zum Allgemeinen: Die Kernidee bleibt**
+
+上一节我们发现，一元导数的本质是：
+
+$$
+f(x + h) = f(x) + \underbrace{f'(x) \cdot h}_{\text{线性映射}} + o(|h|)
+$$
+
+现在，如果 $f$ 的输入和输出不再是实数，而是向量、矩阵，甚至更一般的赋范空间中的元素呢？
+
+**Fréchet 的天才想法**：把 $f'(x) \cdot h$ 替换为一个一般的 **有界线性映射** $D_x f(h)$，其余结构完全保持不变！
+
+## 定义：Fréchet 可微
+
+> **Definition: Fréchet-Differenzierbarkeit**
+
+::: {.callout-warning icon="false"}
+## 📐 定义（Fréchet 可微） | Definition (Fréchet-differenzierbar)
+
+设 $\mathbb{D}$ 和 $\mathbb{E}$ 是两个 **赋范空间**，$f: \mathbb{D} \to \mathbb{E}$。
+
+如果存在一个 **有界线性映射** $D_x f: \mathbb{D} \to \mathbb{E}$，使得
+
+$$
+\boxed{f(x + h) = f(x) + D_x f(h) + o(\|h\|) \quad \text{当 } h \to 0}
+$$
+
+则称 $f$ 在点 $x \in \mathbb{D}$ 处 **Fréchet 可微**。$D_x f$ 称为 $f$ 在 $x$ 处的 **Fréchet 导数**。
+:::
+
+这个定义里有三个关键要素，让我们逐一解读：
+
+```{r}
+#| label: fig-frechet-anatomy
+#| fig-cap: "Fréchet 导数定义的三个关键要素 | Die drei Schlüsselelemente der Fréchet-Ableitung"
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2, 0.5))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 7), axes = FALSE, xlab = "", ylab = "")
+title("Fréchet 导数：三个关键要素 | Drei Schlüsselelemente", 
+      cex.main = 1.3, col.main = "#1E293B")
+
+# Central formula
+rect(1, 4.2, 11, 5.8, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(6, 5, expression(f(x + h) == f(x) + D[x] * f(h) + o(paste("||", h, "||"))),
+     cex = 1.2, col = "#1E293B", font = 2)
+
+# Three elements
+# 1. Linear
+rect(0.5, 1.5, 4, 3.5, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(2.25, 3.1, "① 线性性 | Linearität", cex = 0.85, font = 2, col = "#2563EB")
+text(2.25, 2.5, expression(D[x] * f(alpha * h[1] + h[2])), cex = 0.7, col = "#1E293B")
+text(2.25, 2.0, expression(paste("= ", alpha * D[x] * f(h[1]) + D[x] * f(h[2]))),
+     cex = 0.7, col = "#1E293B")
+
+# 2. Bounded
+rect(4.5, 1.5, 8, 3.5, col = "#FEE2E2", border = "#DC2626", lwd = 2)
+text(6.25, 3.1, "② 有界性 | Beschränktheit", cex = 0.85, font = 2, col = "#DC2626")
+text(6.25, 2.5, expression(paste("||", D[x] * f(h), "||")), cex = 0.7, col = "#1E293B")
+text(6.25, 2.0, expression(paste(""<= M * "||" * h * "||", ",  M < ", infinity)),
+     cex = 0.7, col = "#1E293B")
+
+# 3. Error condition
+rect(8.5, 1.5, 12, 3.5, col = "#D1FAE5", border = "#16A34A", lwd = 2)
+text(10.25, 3.1, "③ 误差条件 | Fehlerbedingung", cex = 0.85, font = 2, col = "#16A34A")
+text(10.25, 2.5, expression(lim(frac(paste("||", r(h), "||"), paste("||", h, "||")), h %->% 0) == 0),
+     cex = 0.7, col = "#1E293B")
+text(10.25, 1.8, "误差比 ||h|| 衰减更快", cex = 0.65, col = "#64748B")
+
+# Arrows from formula to elements
+arrows(3, 4.2, 2.25, 3.6, col = "#2563EB", lwd = 1.5, length = 0.1)
+arrows(6, 4.2, 6.25, 3.6, col = "#DC2626", lwd = 1.5, length = 0.1)
+arrows(9, 4.2, 10.25, 3.6, col = "#16A34A", lwd = 1.5, length = 0.1)
+
+# Bottom annotation
+text(6, 0.8, "三者缺一不可——共同保证 D_x f 是'最佳线性近似'",
+     cex = 0.85, col = "#475569", font = 2)
+text(6, 0.3, "Alle drei zusammen garantieren, dass D_x f die 'beste lineare Approximation' ist",
+     cex = 0.7, col = "#94A3B8", font = 3)
+```
+
+逐一解读这三个要素：
+
+**① 线性性**：映射 $h \mapsto D_x f(h)$ 关于扰动 $h$ 是线性的——但它可以以任意方式依赖于 $x$。
+
+**② 有界性**：存在常数 $M < \infty$，使得 $\|D_x f(h)\| \le M\|h\|$ 对所有 $h$ 成立。这保证线性映射是"温和的"，不会把小扰动放大到无穷大。
+
+**③ 误差条件**：$o(\|h\|)$ 表示误差 $r(h) = f(x+h) - f(x) - D_x f(h)$ 满足 $\lim_{h \to 0} \frac{\|r(h)\|}{\|h\|} = 0$，即误差相对于 $\|h\|$ 消失得更快。这保证线性近似在 $h$ 足够小时"真的很准"。
+
+## 具体例子：验证 $f(x) = x^2$ 的 Fréchet 导数
+
+> **Konkretes Beispiel: Verifikation für $f(x) = x^2$**
+
+让我们用最简单的例子来验证定义的每一条。
+
+设 $f: \mathbb{R} \to \mathbb{R}$，$f(x) = x^2$。**待证**：$D_x f(h) = 2xh$。
+
+$$
+f(x + h) = (x + h)^2 = x^2 + 2xh + h^2 = f(x) + \underbrace{2xh}_{D_x f(h)} + \underbrace{h^2}_{o(|h|)?}
+$$
+
+逐条验证：
+
+- **线性性**：$D_x f(h) = 2xh$，对 $h$ 显然是线性的 ✓
+- **有界性**：$|D_x f(h)| = |2xh| = 2|x| \cdot |h| \le M|h|$，取 $M = 2|x| < \infty$ ✓
+- **误差条件**：$\lim_{h \to 0} \frac{|h^2|}{|h|} = \lim_{h \to 0} |h| = 0$，所以 $h^2 = o(|h|)$ ✓
+
+这与我们熟悉的 $f'(x) = 2x$ 完全一致，因为 $D_x f(h) = f'(x) \cdot h = 2x \cdot h$。
+
+```{r}
+#| label: fig-frechet-verification
+#| fig-cap: "验证误差条件：|误差|/|h| 在 h→0 时趋于 0 | Verifikation: |Fehler|/|h| → 0 wenn h → 0"
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+h_vals <- seq(-2, 2, length.out = 500)
+h_vals <- h_vals[h_vals != 0]
+error_ratio <- abs(h_vals^2) / abs(h_vals)  # |h^2|/|h| = |h|
+
+plot(h_vals, error_ratio, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "h", ylab = "|误差| / |h|  =  |h|",
+     main = expression(paste("误差条件验证 | Fehlerbedingung: ", frac("|" * h^2 * "|", "|h|"), " = |h| " %->% " 0")),
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = 0, col = "#DC2626", lwd = 2, lty = 2)
+points(0, 0, pch = 21, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+text(0.3, 0.3, expression(paste("|h| " %->% " 0  ✓")), col = "#DC2626", cex = 1, font = 2)
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+**Fréchet 导数是一个"线性映射"，不是一个"数"。**
+
+在一元情况下，$D_x f(h) = f'(x) \cdot h$ 中的"导数" $f'(x)$ 恰好是一个数字。但在高维情况下，$D_x f$ 是一个矩阵甚至更一般的线性算子。
+
+*Die Fréchet-Ableitung ist eine „lineare Abbildung", keine „Zahl".*
+:::
+
+## Fréchet 导数如何统一所有情况
+
+> **Wie die Fréchet-Ableitung alles vereinheitlicht**
+
+下面这张表展示了 Fréchet 导数在不同输入/输出类型下的特殊表现形式——它们都是 $D_x f(h)$ 的"具体身份"：
+
+| 输入 $\to$ 输出 | $D_x f(h)$ 的形式 | 对应的导数名称 | 章节 |
+|:---:|:---:|:---:|:---:|
+| $\mathbb{R} \to \mathbb{R}$ | $f'(x) \cdot h$ | 普通导数 | §1 |
+| $\mathbb{R}^n \to \mathbb{R}$ | $\nabla f(\mathbf{x}) \cdot \mathbf{h}$ | **梯度** | §3 |
+| $\mathbb{R}^n \to \mathbb{R}^m$ | $\mathbf{J}_f(\mathbf{x}) \cdot \mathbf{h}$ | **Jacobi 矩阵** | §4 |
+| $\mathbb{R} \to \mathbb{R}^{m \times n}$ | $\frac{\partial \mathbf{F}(x)}{\partial x} \cdot h$ | 标量到矩阵导数 | §5 |
+| $\mathbb{R}^{m \times n} \to \mathbb{R}$ | $\text{tr}\!\left(\left(\frac{\partial f}{\partial \mathbf{X}}\right)^T \mathbf{H}\right)$ | 矩阵到标量导数 | §6 |
+
+接下来我们将逐一展开每种特殊情况。
+
+{{< pagebreak >}}
+
+# 特殊情况I：向量到标量——梯度 {#sec-gradient}
+
+> **Spezialfall I: Vektor → Skalar — der Gradient**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **梯度**的正式定义及其与 Fréchet 导数的关系
+- 梯度的**几何含义**：最陡上升方向
+- 为什么梯度下降用 **负梯度**
+- 二次型梯度的计算——机器学习中最重要的公式之一
+:::
+
+## 定义：梯度
+
+> **Definition: Gradient**
+
+设 $f: \mathbb{R}^n \to \mathbb{R}$ 是可微函数。$f$ 在 $\mathbf{x} \in \mathbb{R}^n$ 处的 **梯度** 定义为行向量：
+
+$$
+\frac{\partial f(\mathbf{x})}{\partial \mathbf{x}} = \nabla f(\mathbf{x}) = \left(\frac{\partial f(\mathbf{x})}{\partial x_1}, \cdots, \frac{\partial f(\mathbf{x})}{\partial x_n}\right) \in \mathbb{R}^{1 \times n}
+$$
+
+此时 Fréchet 导数为：
+
+$$
+D_{\mathbf{x}} f(\mathbf{h}) = \nabla f(\mathbf{x}) \, \mathbf{h} = \sum_{j=1}^{n} \frac{\partial f}{\partial x_j} h_j
+$$
+
+::: {.callout-tip icon="false"}
+## 📌 关于行向量 vs 列向量 | Über Zeilen- vs. Spaltenvektoren
+
+在很多教材中，$\nabla f$ 被定义为 **列向量**。在本课程中，为了让 $D_{\mathbf{x}} f(\mathbf{h}) = \nabla f(\mathbf{x}) \, \mathbf{h}$ 成为自然的矩阵乘法（$\mathbb{R}^{1 \times n} \cdot \mathbb{R}^{n \times 1} = \mathbb{R}$），我们把梯度定义为 **行向量** $\in \mathbb{R}^{1 \times n}$。
+
+*In vielen Lehrbüchern ist $\nabla f$ ein Spaltenvektor. Hier definieren wir ihn als Zeilenvektor $\in \mathbb{R}^{1 \times n}$, damit $D_\mathbf{x} f(\mathbf{h}) = \nabla f(\mathbf{x})\mathbf{h}$ eine natürliche Matrixmultiplikation ist.*
+:::
+
+## 几何含义：最陡上升方向
+
+> **Geometrische Bedeutung: Richtung des steilsten Anstiegs**
+
+梯度 $\nabla f(\mathbf{x})$ 指向函数在 $\mathbf{x}$ 处 **上升最快** 的方向。这就解释了为什么梯度下降使用 **负梯度** $-\nabla f(\mathbf{x})$：它指向下降最快的方向。
+
+```{r}
+#| label: fig-gradient-field
+#| fig-cap: "二维函数的梯度场：红色箭头指向上升最快的方向 | Gradientenfeld: Rote Pfeile zeigen die Richtung des steilsten Anstiegs"
+
+# 定义二维函数 f(x1, x2) = x1^2 + 2*x2^2
+f_2d <- function(x1, x2) x1^2 + 2 * x2^2
+
+x1_seq <- seq(-3, 3, length.out = 80)
+x2_seq <- seq(-3, 3, length.out = 80)
+z_mat <- outer(x1_seq, x2_seq, f_2d)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+contour(x1_seq, x2_seq, z_mat, nlevels = 15, col = "#2563EB",
+        xlab = expression(x[1]), ylab = expression(x[2]),
+        main = expression(paste("梯度场 | Gradientenfeld: ", f(x) == x[1]^2 + 2 * x[2]^2)),
+        cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+
+# 画梯度箭头
+grid_pts <- expand.grid(
+  x1 = seq(-2.5, 2.5, by = 1),
+  x2 = seq(-2.5, 2.5, by = 1)
+)
+for (i in 1:nrow(grid_pts)) {
+  gx <- grid_pts$x1[i]
+  gy <- grid_pts$x2[i]
+  if (abs(gx) < 0.01 & abs(gy) < 0.01) next
+  grad1 <- 2 * gx
+  grad2 <- 4 * gy
+  grad_len <- sqrt(grad1^2 + grad2^2)
+  scale <- 0.35
+  arrows(gx, gy, gx + scale * grad1 / grad_len, gy + scale * grad2 / grad_len,
+         col = "#DC2626", lwd = 1.5, length = 0.08)
+}
+
+# 标注最低点
+points(0, 0, pch = 23, bg = "#16A34A", col = "white", cex = 2.5, lwd = 2)
+text(0.3, -0.4, "最小值 | Minimum", col = "#16A34A", cex = 0.9, font = 2)
+```
+
+## 例：二次函数的梯度
+
+> **Beispiel: Gradient einer quadratischen Funktion**
+
+设 $f: \mathbb{R}^2 \to \mathbb{R}$，$f(\mathbf{x}) = x_1^2 + 3x_1 x_2 + 2x_2^2$。
+
+**步骤 1：计算偏导数**
+
+$$
+\frac{\partial f}{\partial x_1} = 2x_1 + 3x_2, \qquad \frac{\partial f}{\partial x_2} = 3x_1 + 4x_2
+$$
+
+**步骤 2：梯度作为行向量**
+
+$$
+\nabla f(\mathbf{x}) = \big(2x_1 + 3x_2, \;\; 3x_1 + 4x_2\big) \in \mathbb{R}^{1 \times 2}
+$$
+
+```{r}
+#| label: gradient-quadratic-verify
+#| code-fold: false
+
+# 验证梯度计算 | Gradientenberechnung verifizieren
+f_quad <- function(x) x[1]^2 + 3*x[1]*x[2] + 2*x[2]^2
+grad_analytical <- function(x) c(2*x[1] + 3*x[2], 3*x[1] + 4*x[2])
+
+# 数值验证 | Numerische Verifikation
+x_test <- c(2, -1)
+eps <- 1e-7
+grad_num <- c(
+  (f_quad(x_test + c(eps, 0)) - f_quad(x_test - c(eps, 0))) / (2 * eps),
+  (f_quad(x_test + c(0, eps)) - f_quad(x_test - c(0, eps))) / (2 * eps)
+)
+
+cat("在 x = (2, -1) 处:\n")
+cat("  解析梯度 | Analytischer Gradient:", grad_analytical(x_test), "\n")
+cat("  数值梯度 | Numerischer Gradient: ", round(grad_num, 6), "\n")
+cat("  最大差异 | Max. Differenz:        ", format(max(abs(grad_analytical(x_test) - grad_num)), scientific = TRUE), "\n")
+```
+
+## 练习：线性函数的梯度
+
+> **Übung: Gradient einer linearen Funktion**
+
+::: {.callout-tip collapse="true"}
+## 🔍 练习：设 $\mathbf{a}, \mathbf{x} \in \mathbb{R}^n$，$f(\mathbf{x}) = \mathbf{a}^\top \mathbf{x}$。求 $\nabla f(\mathbf{x})$。（点击展开解答）
+
+$$
+f(\mathbf{x}) = \mathbf{a}^\top \mathbf{x} = \sum_{i=1}^{n} a_i x_i
+$$
+
+$$
+\frac{\partial f}{\partial x_k} = a_k
+$$
+
+$$
+\Rightarrow \nabla f(\mathbf{x}) = (a_1, a_2, \ldots, a_n) = \mathbf{a}^\top
+$$
+
+注意：$f(\mathbf{x}) = \mathbf{a}^\top \mathbf{x}$ 本身已经是关于 $\mathbf{x}$ 的线性函数，所以它的导数（梯度）是**常数**——这正是线性函数的特征！
+
+*Da $f$ selbst linear in $\mathbf{x}$ ist, ist der Gradient eine Konstante — typisch für lineare Funktionen!*
+:::
+
+## 最重要的公式：二次型的梯度
+
+> **Die wichtigste Formel: Gradient der quadratischen Form**
+
+设 $\mathbf{A} \in \mathbb{R}^{n \times n}$ 是**对称矩阵**，$f(\mathbf{x}) = \mathbf{x}^\top \mathbf{A} \mathbf{x}$。
+
+::: {.callout-tip collapse="true"}
+## 🔍 推导过程（点击展开）| Herleitung (zum Aufklappen)
+
+首先展开为分量形式：
+
+$$
+f(\mathbf{x}) = \sum_{i=1}^{n} \sum_{j=1}^{n} x_i \, a_{ij} \, x_j
+$$
+
+对 $x_k$ 求偏导数时，只有 $i = k$ 或 $j = k$ 的项有贡献：
+
+$$
+\frac{\partial f}{\partial x_k} = \sum_{i=1}^{n} x_i \, a_{ik} + \sum_{j=1}^{n} a_{kj} \, x_j
+$$
+
+由于 $\mathbf{A}$ 对称（$a_{ik} = a_{ki}$），两个求和相同：
+
+$$
+\frac{\partial f}{\partial x_k} = \sum_{i=1}^{n} a_{ki} x_i + \sum_{j=1}^{n} a_{kj} x_j = 2 \sum_{i=1}^{n} a_{ki} x_i = 2(\mathbf{A}\mathbf{x})_k
+$$
+:::
+
+因此：
+
+$$
+\boxed{\nabla f(\mathbf{x}) = 2\mathbf{x}^\top \mathbf{A}}
+$$
+
+**特殊情况**：若 $\mathbf{A} = \mathbf{I}$（单位矩阵），则 $f(\mathbf{x}) = \mathbf{x}^\top \mathbf{x} = \|\mathbf{x}\|_2^2$，$\nabla f(\mathbf{x}) = 2\mathbf{x}^\top$。
+
+```{r}
+#| label: quadratic-form-gradient
+#| code-fold: false
+
+# 验证二次型的梯度公式 | Quadratische-Form-Gradient verifizieren
+n <- 4
+set.seed(42)
+A <- matrix(rnorm(n*n), n, n)
+A <- (A + t(A)) / 2  # 对称化 | symmetrisieren
+
+f_quad_form <- function(x) as.numeric(t(x) %*% A %*% x)
+grad_quad_analytical <- function(x) 2 * t(x) %*% A  # 1 x n 行向量
+
+x_test <- rnorm(n)
+
+# 数值梯度
+grad_num <- numeric(n)
+eps <- 1e-7
+for (k in 1:n) {
+  e_k <- rep(0, n); e_k[k] <- eps
+  grad_num[k] <- (f_quad_form(x_test + e_k) - f_quad_form(x_test - e_k)) / (2 * eps)
+}
+
+cat("二次型 x^T A x 的梯度验证 (n =", n, "):\n")
+cat("  解析梯度:", round(grad_quad_analytical(x_test), 6), "\n")
+cat("  数值梯度:", round(grad_num, 6), "\n")
+cat("  最大差异:", format(max(abs(grad_quad_analytical(x_test) - grad_num)), scientific = TRUE), "\n")
+```
+
+::: {.callout-important icon="false"}
+## 💡 这个公式为什么重要？| Warum ist diese Formel so wichtig?
+
+回忆上一章的 MSE 损失函数 $L(\mathbf{w}) = \frac{1}{N}\|X\mathbf{w} - \mathbf{y}\|_2^2$，展开后正是一个关于 $\mathbf{w}$ 的二次型！用这个公式就能直接写出它的梯度：
+
+$$
+\nabla_{\mathbf{w}} L = \frac{2}{N}(X\mathbf{w} - \mathbf{y})^\top X = \frac{2}{N}\mathbf{w}^\top X^\top X - \frac{2}{N}\mathbf{y}^\top X
+$$
+
+这正是上一章梯度下降中使用的梯度公式！现在你知道它是怎么来的了。
+
+*Erinnern Sie sich an die MSE-Verlustfunktion aus dem letzten Kapitel? Sie ist eine quadratische Form in $\mathbf{w}$!*
+:::
+
+{{< pagebreak >}}
+
+# 特殊情况II：向量到向量——Jacobi 矩阵 {#sec-jacobian}
+
+> **Spezialfall II: Vektor → Vektor — die Jacobi-Matrix**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **Jacobi 矩阵**的定义：梯度的推广
+- Jacobi 矩阵的**行** = 各分量函数的梯度
+- 线性函数的 Jacobi 矩阵 = **常数矩阵**
+- 几何含义：**局部线性变换**
+- **应用预告**：神经网络中的反向传播
+:::
+
+## 定义：Jacobi 矩阵
+
+> **Definition: Jacobi-Matrix**
+
+设 $f: \mathbb{R}^n \to \mathbb{R}^m$ 是可微函数，$f(\mathbf{x}) = (f_1(\mathbf{x}), \ldots, f_m(\mathbf{x}))^\top$。
+
+$f$ 在 $\mathbf{x}$ 处的 **Jacobi 矩阵** $\mathbf{J}_f(\mathbf{x}) \in \mathbb{R}^{m \times n}$ 为：
+
+$$
+\mathbf{J}_f(\mathbf{x}) := \frac{\partial f(\mathbf{x})}{\partial \mathbf{x}} = \begin{pmatrix} \frac{\partial f_1}{\partial x_1} & \cdots & \frac{\partial f_1}{\partial x_n} \\[6pt] \vdots & \ddots & \vdots \\[6pt] \frac{\partial f_m}{\partial x_1} & \cdots & \frac{\partial f_m}{\partial x_n} \end{pmatrix}
+$$
+
+Fréchet 导数为 $D_{\mathbf{x}} f(\mathbf{h}) = \mathbf{J}_f(\mathbf{x}) \, \mathbf{h}$。
+
+```{r}
+#| label: fig-jacobian-structure
+#| fig-cap: "Jacobi 矩阵的结构：第 i 行是第 i 个分量函数的梯度 | Struktur: Die i-te Zeile ist der Gradient der i-ten Komponentenfunktion"
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 7), axes = FALSE, xlab = "", ylab = "")
+title("Jacobi 矩阵的结构 | Struktur der Jacobi-Matrix",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# Main matrix box
+rect(2, 1.5, 10, 6, col = "#F8FAFC", border = "#2563EB", lwd = 2)
+
+# Row labels
+row_colors <- c("#DC2626", "#D97706", "#16A34A")
+row_labels <- c(expression(nabla * f[1](x)), expression(nabla * f[2](x)), expression(nabla * f[m](x)))
+y_rows <- c(5.2, 4.0, 2.3)
+
+for (i in 1:3) {
+  rect(2.2, y_rows[i] - 0.4, 9.8, y_rows[i] + 0.4,
+       col = adjustcolor(row_colors[i], 0.15), border = NA)
+  text(1.2, y_rows[i], row_labels[i], cex = 0.85, col = row_colors[i], font = 2)
+  arrows(1.7, y_rows[i], 2.1, y_rows[i], col = row_colors[i], lwd = 1.5, length = 0.08)
+}
+
+# Dots for omission
+text(6, 3.15, "...", cex = 1.5, col = "#94A3B8")
+
+# Column headers
+col_labels <- c(expression(frac(partialdiff, partialdiff * x[1])),
+                expression(frac(partialdiff, partialdiff * x[2])),
+                expression(frac(partialdiff, partialdiff * x[n])))
+x_cols <- c(3.5, 6, 8.5)
+for (j in 1:3) {
+  text(x_cols[j], 6.5, col_labels[j], cex = 0.8, col = "#6366F1")
+}
+text(7.25, 6.5, "...", cex = 1, col = "#94A3B8")
+
+# Entries
+entry_labels <- c(
+  expression(frac(partialdiff * f[1], partialdiff * x[1])),
+  expression(frac(partialdiff * f[1], partialdiff * x[2])),
+  expression(frac(partialdiff * f[1], partialdiff * x[n])),
+  expression(frac(partialdiff * f[2], partialdiff * x[1])),
+  expression(frac(partialdiff * f[2], partialdiff * x[2])),
+  expression(frac(partialdiff * f[2], partialdiff * x[n])),
+  expression(frac(partialdiff * f[m], partialdiff * x[1])),
+  expression(frac(partialdiff * f[m], partialdiff * x[2])),
+  expression(frac(partialdiff * f[m], partialdiff * x[n]))
+)
+idx <- 1
+for (i in c(1, 2, 3)) {
+  for (j in 1:3) {
+    text(x_cols[j], y_rows[i], entry_labels[idx], cex = 0.65, col = "#1E293B")
+    idx <- idx + 1
+  }
+}
+
+# Dimension annotation
+text(11, 3.5, expression(paste(J[f], " " %in% " ", R^{m %*% n})), 
+     cex = 1, col = "#2563EB", font = 2)
+
+# Bottom note
+text(6, 0.7, "关键：Jacobi 矩阵的第 i 行 = 第 i 个分量函数的梯度",
+     cex = 0.85, col = "#EA580C", font = 2)
+```
+
+## 最重要的特殊情况：线性函数
+
+> **Wichtigster Spezialfall: Lineare Funktion**
+
+设 $f(\mathbf{x}) = \mathbf{A}\mathbf{x}$，其中 $\mathbf{A} \in \mathbb{R}^{m \times n}$。
+
+逐分量写出：$f_i(\mathbf{x}) = \sum_{j=1}^{n} a_{ij} x_j$，所以
+
+$$
+\frac{\partial f_i}{\partial x_k} = a_{ik}
+$$
+
+因此 $\mathbf{J}_f(\mathbf{x}) = \mathbf{A}$——**线性函数的 Jacobi 矩阵就是系数矩阵本身，与 $\mathbf{x}$ 无关！**
+
+```{r}
+#| label: jacobian-linear-verify
+#| code-fold: false
+
+# 验证：线性函数 f(x) = Ax 的 Jacobi 矩阵 = A
+# Verifikation: Jacobi-Matrix von f(x) = Ax ist A
+m <- 3; n <- 4
+set.seed(42)
+A <- matrix(rnorm(m * n), m, n)
+x0 <- rnorm(n)
+
+# 数值 Jacobi 矩阵
+J_num <- matrix(0, m, n)
+eps <- 1e-7
+for (k in 1:n) {
+  e_k <- rep(0, n); e_k[k] <- eps
+  J_num[, k] <- (A %*% (x0 + e_k) - A %*% (x0 - e_k)) / (2 * eps)
+}
+
+cat("矩阵 A:\n"); print(round(A, 4))
+cat("\n数值 Jacobi 矩阵:\n"); print(round(J_num, 4))
+cat("\n最大差异:", format(max(abs(A - J_num)), scientific = TRUE), "\n")
+cat("结论：J_f = A  ✓")
+```
+
+由此立刻得到几个重要恒等式：
+
+| 函数 $f(\mathbf{x})$ | Jacobi 矩阵 $\mathbf{J}_f(\mathbf{x})$ |
+|:---:|:---:|
+| $\mathbf{c}$（常向量） | $\mathbf{0}_{m \times n}$ |
+| $\mathbf{x}$ | $\mathbf{I}_n$ |
+| $\mathbf{A}\mathbf{x}$ | $\mathbf{A}$ |
+| $\mathbf{x}^\top \mathbf{A}$ | $\mathbf{A}^\top$ |
+
+**对线性函数，Fréchet 近似是精确的**——没有 $o(\|\mathbf{h}\|)$ 误差项：
+
+$$
+f(\mathbf{x} + \mathbf{h}) = \mathbf{A}(\mathbf{x} + \mathbf{h}) = \mathbf{A}\mathbf{x} + \mathbf{A}\mathbf{h} = f(\mathbf{x}) + \mathbf{J}_f \, \mathbf{h}
+$$
+
+## 几何直觉：Jacobi 矩阵 = 局部线性变换
+
+> **Geometrische Intuition: Jacobi-Matrix = lokale lineare Transformation**
+
+```{r}
+#| label: fig-jacobian-geometry
+#| fig-cap: "Jacobi 矩阵的几何含义：在局部将空间进行线性变换（拉伸、旋转、剪切）| Geometrische Bedeutung: Lokale lineare Transformation des Raums"
+#| fig-height: 5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+
+# 左图：原始空间中的单位圆
+theta <- seq(0, 2 * pi, length.out = 100)
+circle_x <- cos(theta)
+circle_y <- sin(theta)
+
+plot(circle_x, circle_y, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(h[1]), ylab = expression(h[2]),
+     main = "扰动空间 | Störungsraum h",
+     xlim = c(-2, 2), ylim = c(-2, 2), asp = 1,
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+# 画几个方向
+arrows(0, 0, 1, 0, col = "#DC2626", lwd = 2, length = 0.1)
+arrows(0, 0, 0, 1, col = "#16A34A", lwd = 2, length = 0.1)
+text(1.3, 0.15, expression(e[1]), col = "#DC2626", cex = 0.9)
+text(0.15, 1.3, expression(e[2]), col = "#16A34A", cex = 0.9)
+polygon(circle_x, circle_y, border = "#2563EB", col = adjustcolor("#2563EB", 0.1))
+
+# 右图：经过 Jacobi 变换后
+J_demo <- matrix(c(2, 0.5, 1, 1.5), 2, 2)  # 一个 2x2 Jacobi 矩阵
+transformed <- J_demo %*% rbind(circle_x, circle_y)
+
+plot(transformed[1,], transformed[2,], type = "l", col = "#DC2626", lwd = 3,
+     xlab = expression(paste(J[f], " ", h)[1]), ylab = expression(paste(J[f], " ", h)[2]),
+     main = expression(paste("变换后 | Nach ", J[f], " h")),
+     xlim = c(-4, 4), ylim = c(-3, 3), asp = 1,
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+Je1 <- J_demo %*% c(1, 0)
+Je2 <- J_demo %*% c(0, 1)
+arrows(0, 0, Je1[1], Je1[2], col = "#DC2626", lwd = 2, length = 0.1)
+arrows(0, 0, Je2[1], Je2[2], col = "#16A34A", lwd = 2, length = 0.1)
+text(Je1[1] + 0.3, Je1[2] + 0.15, expression(J * e[1]), col = "#DC2626", cex = 0.9)
+text(Je2[1] + 0.3, Je2[2] + 0.15, expression(J * e[2]), col = "#16A34A", cex = 0.9)
+polygon(transformed[1,], transformed[2,], border = "#DC2626", col = adjustcolor("#DC2626", 0.1))
+
+par(mfrow = c(1, 1))
+```
+
+Jacobi 矩阵在每个点描述了 $f$ 如何**局部地**拉伸、旋转、剪切空间。非线性函数在不同点的 Jacobi 矩阵不同——这意味着变换在空间各处不一样，导致了弯曲和变形。
+
+## 应用：神经网络中的反向传播
+
+> **Anwendung: Backpropagation in neuronalen Netzen**
+
+一个神经网络本质上是多个函数的复合：
+
+$$
+\mathbf{x} \xrightarrow{f_1} \mathbf{z}_1 \xrightarrow{f_2} \mathbf{z}_2 \xrightarrow{\cdots} \cdots \xrightarrow{f_K} \hat{\mathbf{y}}
+$$
+
+每一层 $f_k$ 有参数 $\boldsymbol{\theta}_k$（权重、偏置），计算 $f_k(\mathbf{z}_{k-1}) = \sigma_k(\mathbf{W}_k \mathbf{z}_{k-1})$，其中 $\sigma_k$ 是激活函数。
+
+损失函数 $L(\hat{\mathbf{y}}; \boldsymbol{\theta})$ 衡量输出质量。要用梯度下降优化，我们需要 $\frac{\partial L}{\partial \boldsymbol{\theta}_k}$。通过 **链式法则**，这变成了一连串 Jacobi 矩阵的乘积：
+
+$$
+\frac{\partial L}{\partial \boldsymbol{\theta}_k} = \underbrace{\frac{\partial L}{\partial \hat{\mathbf{y}}}}_{\text{标量→向量}} \cdot \underbrace{\mathbf{J}_{f_K}(\mathbf{z}_{K-1})}_{\text{第 K 层}} \cdot \mathbf{J}_{f_{K-1}}(\mathbf{z}_{K-2}) \cdots \mathbf{J}_{f_{k+1}}(\mathbf{z}_k) \cdot \frac{\partial f_k}{\partial \boldsymbol{\theta}_k}
+$$
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+**反向传播 = 高效地从右往左计算这条 Jacobi 矩阵链！** 这就是为什么 Jacobi 矩阵在深度学习中如此核心。
+
+*Backpropagation = effizientes Berechnen dieser Jacobi-Matrix-Kette von rechts nach links!*
+:::
+
+```{r}
+#| label: fig-backprop-chain
+#| fig-cap: "反向传播 = Jacobi 矩阵链的高效计算 | Backpropagation = effiziente Berechnung der Jacobi-Kette"
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2, 0.5))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 5), axes = FALSE, xlab = "", ylab = "")
+title("反向传播中的 Jacobi 矩阵链 | Jacobi-Kette in der Backpropagation",
+      cex.main = 1.2, col.main = "#1E293B")
+
+# Forward path
+layer_x <- c(1, 3.5, 6, 8.5, 11)
+layer_y <- rep(3.5, 5)
+layer_labels <- c(expression(x), expression(z[1]), expression(z[2]), 
+                  expression(z[3]), expression(hat(y)))
+layer_colors <- c("#2563EB", "#6366F1", "#9333EA", "#DB2777", "#DC2626")
+
+for (i in 1:5) {
+  points(layer_x[i], layer_y[i], pch = 21, bg = adjustcolor(layer_colors[i], 0.3),
+         col = layer_colors[i], cex = 4, lwd = 2)
+  text(layer_x[i], layer_y[i], layer_labels[i], cex = 0.9, col = layer_colors[i], font = 2)
+}
+
+# Forward arrows
+for (i in 1:4) {
+  arrows(layer_x[i] + 0.4, layer_y[i], layer_x[i+1] - 0.4, layer_y[i],
+         col = "#94A3B8", lwd = 2, length = 0.1)
+  text((layer_x[i] + layer_x[i+1]) / 2, layer_y[i] + 0.5,
+       substitute(f[k], list(k = i)), cex = 0.8, col = "#64748B")
+}
+
+# Loss
+text(11, 4.5, expression(L(hat(y))), col = "#DC2626", cex = 1, font = 2)
+arrows(11, 4.2, 11, 3.9, col = "#DC2626", lwd = 1.5, length = 0.08)
+
+# Backward arrows (Jacobian chain)
+for (i in 4:1) {
+  arrows(layer_x[i+1] - 0.4, layer_y[i] - 0.8, layer_x[i] + 0.4, layer_y[i] - 0.8,
+         col = "#EA580C", lwd = 2.5, length = 0.1)
+  text((layer_x[i] + layer_x[i+1]) / 2, layer_y[i] - 1.3,
+       substitute(J[f[k]], list(k = i)), cex = 0.75, col = "#EA580C", font = 2)
+}
+
+# Labels
+text(1, 1.5, "反向传播方向 <<<", col = "#EA580C", cex = 0.85, font = 2)
+text(11, 1.5, "前向传播方向 >>>", col = "#94A3B8", cex = 0.85, font = 2)
+```
+
+{{< pagebreak >}}
+
+# 特殊情况III：标量到矩阵 {#sec-scalar-to-matrix}
+
+> **Spezialfall III: Skalar → Matrix**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 当函数输出是 **矩阵** 时，导数如何定义
+- 三个重要恒等式：**矩阵逆、行列式、迹** 对标量的导数
+- 这些公式在统计学中的应用（似然函数的导数）
+:::
+
+## 定义：标量到矩阵的导数
+
+> **Definition: Ableitung Skalar → Matrix**
+
+设 $\mathbf{F}: \mathbb{R} \to \mathbb{R}^{m \times n}$，$\mathbf{F}(x) = (f_{ij}(x))$。定义：
+
+$$
+\frac{\partial \mathbf{F}(x)}{\partial x} = \left(\frac{\partial f_{ij}(x)}{\partial x}\right) \in \mathbb{R}^{m \times n}
+$$
+
+也就是说：**逐元素求导**。Fréchet 导数为 $D_x \mathbf{F}(h) = \frac{\partial \mathbf{F}(x)}{\partial x} \cdot h$。
+
+::: {.callout-tip collapse="true"}
+## 🔍 练习：求以下矩阵函数的导数（点击展开解答）
+
+$$
+\mathbf{F}(x) = \begin{pmatrix} x^2 & 2e^x & 0 \\ 0 & x & \ln(x) \end{pmatrix}
+$$
+
+**解答**：
+
+$$
+\frac{\partial \mathbf{F}(x)}{\partial x} = \begin{pmatrix} 2x & 2e^x & 0 \\ 0 & 1 & \frac{1}{x} \end{pmatrix}
+$$
+:::
+
+## 三个重要恒等式
+
+> **Drei wichtige Identitäten**
+
+在统计学和机器学习中，以下三个恒等式极为常用。假设 $\mathbf{F}(x)$ 是可逆的方阵。
+
+### 恒等式 1：矩阵逆的导数
+
+$$
+\frac{\partial \mathbf{F}(x)^{-1}}{\partial x} = -\mathbf{F}(x)^{-1} \frac{\partial \mathbf{F}(x)}{\partial x} \, \mathbf{F}(x)^{-1}
+$$
+
+### 恒等式 2：行列式的导数
+
+$$
+\frac{\partial \det(\mathbf{F}(x))}{\partial x} = \det(\mathbf{F}(x)) \; \text{tr}\!\left[\mathbf{F}(x)^{-1} \frac{\partial \mathbf{F}(x)}{\partial x}\right]
+$$
+
+### 恒等式 3：迹的导数
+
+$$
+\frac{\partial \, \text{tr}(\mathbf{F}(x))}{\partial x} = \text{tr}\!\left(\frac{\partial \mathbf{F}(x)}{\partial x}\right)
+$$
+
+::: {.callout-tip collapse="true"}
+## 🔍 恒等式 3 的证明（点击展开）| Beweis von Identität 3
+
+$$
+\text{tr}(\mathbf{F}(x)) = \sum_{i=1}^{n} f_{ii}(x)
+$$
+
+$$
+\frac{\partial}{\partial x} \text{tr}(\mathbf{F}(x)) = \frac{\partial}{\partial x} \sum_{i=1}^{n} f_{ii}(x) = \sum_{i=1}^{n} \frac{\partial f_{ii}(x)}{\partial x} = \text{tr}\!\left(\frac{\partial \mathbf{F}(x)}{\partial x}\right) \quad \checkmark
+$$
+
+这个证明非常简洁——迹只涉及对角线元素，而求导和求和可以交换。
+:::
+
+## 例：验证行列式的导数
+
+> **Beispiel: Verifikation der Determinanten-Ableitung**
+
+设 $\mathbf{F}(x) = \begin{pmatrix} x & 0 \\ 0 & 2x \end{pmatrix}$。
+
+**直接计算**：$\det(\mathbf{F}(x)) = 2x^2$，所以 $\frac{\partial}{\partial x} \det(\mathbf{F}(x)) = 4x$。
+
+**用恒等式 2 验证**：
+
+$$
+\frac{\partial \mathbf{F}}{\partial x} = \begin{pmatrix} 1 & 0 \\ 0 & 2 \end{pmatrix}, \qquad
+\mathbf{F}^{-1} = \begin{pmatrix} 1/x & 0 \\ 0 & 1/(2x) \end{pmatrix}
+$$
+
+$$
+\mathbf{F}^{-1} \frac{\partial \mathbf{F}}{\partial x} = \begin{pmatrix} 1/x & 0 \\ 0 & 1/x \end{pmatrix}, \qquad
+\text{tr}\!\left[\mathbf{F}^{-1} \frac{\partial \mathbf{F}}{\partial x}\right] = \frac{2}{x}
+$$
+
+$$
+\det(\mathbf{F}) \cdot \text{tr}\!\left[\mathbf{F}^{-1} \frac{\partial \mathbf{F}}{\partial x}\right] = 2x^2 \cdot \frac{2}{x} = 4x \quad \checkmark
+$$
+
+```{r}
+#| label: det-derivative-verify
+#| code-fold: false
+
+# 数值验证行列式导数公式 | Numerische Verifikation der Determinantenableitung
+F_mat <- function(x) matrix(c(x, 0, 0, 2*x), 2, 2)
+det_F <- function(x) det(F_mat(x))
+
+x0 <- 3
+eps <- 1e-7
+
+# 数值导数
+det_deriv_num <- (det_F(x0 + eps) - det_F(x0 - eps)) / (2 * eps)
+
+# 解析导数（直接）
+det_deriv_direct <- 4 * x0
+
+# 用恒等式 2
+dF_dx <- matrix(c(1, 0, 0, 2), 2, 2)
+F_inv <- solve(F_mat(x0))
+det_deriv_formula <- det_F(x0) * sum(diag(F_inv %*% dF_dx))
+
+cat("在 x =", x0, "处验证行列式导数:\n")
+cat("  数值导数:       ", round(det_deriv_num, 6), "\n")
+cat("  直接计算 (4x):  ", det_deriv_direct, "\n")
+cat("  恒等式 2:       ", det_deriv_formula, "\n")
+cat("  三者一致 ✓\n")
+```
+
+::: {.callout-important icon="false"}
+## 💡 这些公式为什么重要？| Warum sind diese Formeln wichtig?
+
+在统计学中，最大似然估计常常涉及对含有矩阵行列式和矩阵逆的表达式求导。例如，多元正态分布的对数似然函数包含 $\ln \det(\boldsymbol{\Sigma})$ 和 $\boldsymbol{\Sigma}^{-1}$ 项，对协方差矩阵 $\boldsymbol{\Sigma}$ 求导时就需要这些恒等式。
+
+*In der Statistik enthalten Log-Likelihood-Funktionen oft $\ln\det(\boldsymbol{\Sigma})$ und $\boldsymbol{\Sigma}^{-1}$ — dort braucht man genau diese Identitäten.*
+:::
+
+{{< pagebreak >}}
+
+# 特殊情况IV：矩阵到标量 {#sec-matrix-to-scalar}
+
+> **Spezialfall IV: Matrix → Skalar**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 当函数的 **输入是矩阵** 时，导数如何定义
+- Fréchet 导数中 **迹** 扮演的角色
+- 三个核心恒等式：**迹-乘积、Frobenius 范数、矩阵二次型**
+- **应用**：矩阵分解与推荐系统
+:::
+
+## 定义：矩阵到标量的导数
+
+> **Definition: Ableitung Matrix → Skalar**
+
+设 $f: \mathbb{R}^{m \times n} \to \mathbb{R}$。定义 $f$ 对矩阵 $\mathbf{X}$ 的导数为：
+
+$$
+\frac{\partial f(\mathbf{X})}{\partial \mathbf{X}} = \left(\frac{\partial f(\mathbf{X})}{\partial x_{ij}}\right) \in \mathbb{R}^{m \times n}
+$$
+
+**注意维度**：输入是 $m \times n$ 矩阵，导数也是 $m \times n$ 矩阵——对每个元素求偏导。
+
+Fréchet 导数的表达形式比较特别——它通过 **迹** 来实现线性映射：
+
+$$
+D_{\mathbf{X}} f(\mathbf{H}) = \text{tr}\!\left(\left(\frac{\partial f(\mathbf{X})}{\partial \mathbf{X}}\right)^\top \mathbf{H}\right)
+$$
+
+::: {.callout-tip collapse="true"}
+## 🤔 为什么需要迹？（点击展开）| Warum braucht man die Spur?
+
+$D_{\mathbf{X}} f(\mathbf{H})$ 的输出是一个标量（因为 $f$ 的值域是 $\mathbb{R}$），而 $\mathbf{H}$ 是一个矩阵。如何把一个矩阵"映射"成一个标量，并保持线性性？
+
+答案是用迹操作：$\text{tr}(\mathbf{A}^\top \mathbf{B}) = \sum_{i,j} a_{ij} b_{ij}$ 恰好是矩阵的"内积"（Frobenius 内积），它将两个矩阵映射为一个标量，并且是线性的。
+
+*$\text{tr}(\mathbf{A}^\top \mathbf{B})$ ist das Frobenius-Innenprodukt — eine lineare Abbildung von einer Matrix zu einem Skalar.*
+:::
+
+## 例：$f(\mathbf{X}) = \mathbf{a}^\top \mathbf{X} \mathbf{b}$
+
+> **Beispiel: $f(\mathbf{X}) = \mathbf{a}^\top \mathbf{X} \mathbf{b}$**
+
+设 $\mathbf{X} \in \mathbb{R}^{m \times n}$，$\mathbf{a} \in \mathbb{R}^m$，$\mathbf{b} \in \mathbb{R}^n$。
+
+$$
+f(\mathbf{X}) = \mathbf{a}^\top \mathbf{X} \mathbf{b} = \sum_{i=1}^{m} \sum_{j=1}^{n} a_i \, x_{ij} \, b_j
+$$
+
+$$
+\frac{\partial f}{\partial x_{ij}} = a_i b_j
+$$
+
+$$
+\Rightarrow \frac{\partial f(\mathbf{X})}{\partial \mathbf{X}} = \mathbf{a}\mathbf{b}^\top \in \mathbb{R}^{m \times n}
+$$
+
+**验证 Fréchet 导数**：
+
+$$
+D_{\mathbf{X}} f(\mathbf{H}) = \text{tr}((\mathbf{a}\mathbf{b}^\top)^\top \mathbf{H}) = \text{tr}(\mathbf{b}\mathbf{a}^\top \mathbf{H}) = \mathbf{a}^\top \mathbf{H} \mathbf{b}
+$$
+
+确实有 $f(\mathbf{X} + \mathbf{H}) = \mathbf{a}^\top(\mathbf{X} + \mathbf{H})\mathbf{b} = f(\mathbf{X}) + \mathbf{a}^\top \mathbf{H}\mathbf{b} = f(\mathbf{X}) + D_\mathbf{X} f(\mathbf{H})$ ✓
+
+```{r}
+#| label: matrix-scalar-verify
+#| code-fold: false
+
+# 验证 f(X) = a^T X b 的导数 | Verifikation
+m <- 3; n <- 4
+set.seed(42)
+a <- rnorm(m)
+b <- rnorm(n)
+X0 <- matrix(rnorm(m * n), m, n)
+
+f_aXb <- function(X) as.numeric(t(a) %*% X %*% b)
+grad_analytical <- a %*% t(b)  # m x n 矩阵
+
+# 数值梯度
+grad_num <- matrix(0, m, n)
+eps <- 1e-7
+for (i in 1:m) {
+  for (j in 1:n) {
+    E_ij <- matrix(0, m, n); E_ij[i, j] <- eps
+    grad_num[i, j] <- (f_aXb(X0 + E_ij) - f_aXb(X0 - E_ij)) / (2 * eps)
+  }
+}
+
+cat("解析导数 (a b^T):\n"); print(round(grad_analytical, 4))
+cat("\n数值导数:\n"); print(round(grad_num, 4))
+cat("\n最大差异:", format(max(abs(grad_analytical - grad_num)), scientific = TRUE))
+```
+
+## 重要恒等式
+
+> **Wichtige Identitäten**
+
+| 函数 $f(\mathbf{X})$ | 导数 $\frac{\partial f}{\partial \mathbf{X}}$ | 条件 |
+|:---:|:---:|:---:|
+| $\text{tr}(\mathbf{A}^\top \mathbf{X})$ | $\mathbf{A}$ | $\mathbf{A} \in \mathbb{R}^{m \times n}$ |
+| $\|\mathbf{X}\|_F^2 = \text{tr}(\mathbf{X}^\top \mathbf{X})$ | $2\mathbf{X}$ | — |
+| $\text{tr}(\mathbf{X}\mathbf{A}\mathbf{X}^\top)$ | $2\mathbf{X}\mathbf{A}$ | $\mathbf{A}$ 对称 |
+
+## 应用：矩阵分解与推荐系统
+
+> **Anwendung: Matrixfaktorisierung und Empfehlungssysteme**
+
+推荐系统中的一个核心问题：用户对电影的评分矩阵 $\mathbf{Y} \in \mathbb{R}^{m \times n}$ 大部分是缺失的（用户只看了少数电影）。我们想用低秩矩阵 $\mathbf{U}\mathbf{V}^\top$ 来近似它，从而预测缺失评分。
+
+$$
+L(\mathbf{U}, \mathbf{V}) = \frac{1}{2} \sum_{(i,j) \in \Omega} (y_{ij} - [\mathbf{U}\mathbf{V}^\top]_{ij})^2 = \frac{1}{2} \|\mathbf{P}_\Omega \odot (\mathbf{Y} - \mathbf{U}\mathbf{V}^\top)\|_F^2
+$$
+
+其中 $\Omega$ 是观测到的位置集合，$\mathbf{P}_\Omega$ 是对应的掩码矩阵（观测到为 1，否则为 0），$\odot$ 为逐元素乘法。
+
+用本节学到的矩阵导数公式，可以求出：
+
+$$
+\frac{\partial L}{\partial \mathbf{U}} = -(\mathbf{P}_\Omega \odot (\mathbf{Y} - \mathbf{U}\mathbf{V}^\top))\,\mathbf{V}, \qquad
+\frac{\partial L}{\partial \mathbf{V}} = -(\mathbf{P}_\Omega \odot (\mathbf{Y} - \mathbf{U}\mathbf{V}^\top))^\top \mathbf{U}
+$$
+
+有了这两个梯度，就可以用梯度下降来交替优化 $\mathbf{U}$ 和 $\mathbf{V}$。
+
+```{r}
+#| label: fig-matrix-completion
+#| fig-cap: "矩阵补全示意：从稀疏观测恢复完整评分矩阵 | Matrixvervollständigung: Aus spärlichen Beobachtungen die vollständige Matrix rekonstruieren"
+#| code-fold: true
+#| fig-height: 4.5
+
+set.seed(42)
+m_users <- 6; n_items <- 8; k_rank <- 2
+
+U_true <- matrix(rnorm(m_users * k_rank), m_users, k_rank)
+V_true <- matrix(rnorm(n_items * k_rank), n_items, k_rank)
+Y_full <- U_true %*% t(V_true)
+Y_full <- round(pmin(pmax(Y_full, 1), 5))  # 限制在 1-5 分
+
+# 随机掩码
+P_omega <- matrix(rbinom(m_users * n_items, 1, 0.4), m_users, n_items)
+Y_observed <- Y_full * P_omega
+Y_observed[P_omega == 0] <- NA
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(3, 3, 3, 1))
+
+# 完整矩阵
+image(1:n_items, 1:m_users, t(Y_full), col = hcl.colors(5, "YlOrRd", rev = TRUE),
+      xlab = "电影 | Film", ylab = "用户 | User",
+      main = "真实评分 | Wahre Bewertung", axes = FALSE,
+      cex.main = 1, col.main = "#1E293B")
+axis(1, at = 1:n_items, cex.axis = 0.8)
+axis(2, at = 1:m_users, cex.axis = 0.8)
+for (i in 1:m_users) for (j in 1:n_items) {
+  text(j, i, Y_full[i, j], cex = 0.7, col = "white", font = 2)
+}
+
+# 观测矩阵
+Y_display <- Y_full
+Y_display[P_omega == 0] <- 0
+image(1:n_items, 1:m_users, t(Y_display), col = c("gray90", hcl.colors(5, "YlOrRd", rev = TRUE)),
+      xlab = "电影 | Film", ylab = "用户 | User",
+      main = "观测数据（有缺失）| Beobachtet", axes = FALSE,
+      cex.main = 1, col.main = "#D97706")
+axis(1, at = 1:n_items, cex.axis = 0.8)
+axis(2, at = 1:m_users, cex.axis = 0.8)
+for (i in 1:m_users) for (j in 1:n_items) {
+  if (P_omega[i, j] == 1) {
+    text(j, i, Y_full[i, j], cex = 0.7, col = "white", font = 2)
+  } else {
+    text(j, i, "?", cex = 0.7, col = "gray60")
+  }
+}
+
+# 梯度下降优化
+U_hat <- matrix(rnorm(m_users * k_rank, 0, 0.5), m_users, k_rank)
+V_hat <- matrix(rnorm(n_items * k_rank, 0, 0.5), n_items, k_rank)
+lr <- 0.01
+for (iter in 1:500) {
+  Residual <- P_omega * (Y_full * P_omega - U_hat %*% t(V_hat))
+  U_hat <- U_hat + lr * Residual %*% V_hat
+  V_hat <- V_hat + lr * t(Residual) %*% U_hat
+}
+Y_recovered <- round(pmin(pmax(U_hat %*% t(V_hat), 1), 5))
+
+image(1:n_items, 1:m_users, t(Y_recovered), col = hcl.colors(5, "YlOrRd", rev = TRUE),
+      xlab = "电影 | Film", ylab = "用户 | User",
+      main = "恢复结果 | Rekonstruiert", axes = FALSE,
+      cex.main = 1, col.main = "#16A34A")
+axis(1, at = 1:n_items, cex.axis = 0.8)
+axis(2, at = 1:m_users, cex.axis = 0.8)
+for (i in 1:m_users) for (j in 1:n_items) {
+  text(j, i, Y_recovered[i, j], cex = 0.7, col = "white", font = 2)
+}
+
+par(mfrow = c(1, 1))
+```
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心思想回顾
+
+本章的核心只有一句话：
+
+> **导数 = 最佳线性近似。** Fréchet 导数将这个思想统一推广到所有赋范空间。
+>
+> *Ableitung = beste lineare Approximation. Die Fréchet-Ableitung verallgemeinert diese Idee auf alle normierten Räume.*
+
+$$
+\boxed{f(x + h) = f(x) + D_x f(h) + o(\|h\|)}
+$$
+
+这个框架下，所有我们学过的导数概念都找到了自己的位置：
+
+```{r}
+#| label: fig-summary-map
+#| fig-cap: "Fréchet 导数的统一框架：所有特殊情况一览 | Das vereinheitlichende Rahmenwerk der Fréchet-Ableitung"
+#| fig-width: 12
+#| fig-height: 7
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("Fréchet 导数的统一框架 | Einheitliches Rahmenwerk", 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# Central box
+rect(3.5, 5, 8.5, 7, col = "#FEF3C7", border = "#D97706", lwd = 3)
+text(6, 6.4, "Fréchet 导数 | Fréchet-Ableitung", cex = 1.1, font = 2, col = "#D97706")
+text(6, 5.7, expression(f(x + h) == f(x) + D[x] * f(h) + o(paste("||", h, "||"))),
+     cex = 0.9, col = "#1E293B")
+text(6, 5.2, "线性 + 有界 + 小误差", cex = 0.7, col = "#64748B")
+
+# Four special cases
+cases <- data.frame(
+  x = c(1, 4, 8, 11),
+  y = rep(2.5, 4),
+  label = c("普通导数\nf'(x)·h", "梯度\n∇f(x)·h", "Jacobi矩阵\nJ_f(x)·h", "矩阵导数\ntr(G^T H)"),
+  type = c("R→R", "Rⁿ→R", "Rⁿ→Rᵐ", "R^(m×n)→R"),
+  col = c("#2563EB", "#DC2626", "#9333EA", "#16A34A"),
+  bg = c("#DBEAFE", "#FEE2E2", "#F3E8FF", "#D1FAE5")
+)
+
+for (i in 1:4) {
+  rect(cases$x[i] - 1.2, cases$y[i] - 1, cases$x[i] + 1.2, cases$y[i] + 1,
+       col = cases$bg[i], border = cases$col[i], lwd = 2)
+  text(cases$x[i], cases$y[i] + 0.5, cases$label[i], cex = 0.72, font = 2, col = "#1E293B")
+  text(cases$x[i], cases$y[i] - 0.6, cases$type[i], cex = 0.7, col = cases$col[i], font = 2)
+  
+  # Arrow from center to each case
+  arrows(6 + (cases$x[i] - 6) * 0.35, 5, cases$x[i], cases$y[i] + 1.1,
+         col = cases$col[i], lwd = 1.5, length = 0.1)
+}
+
+# Bottom application labels
+apps <- c("上一章\n梯度下降", "梯度下降\n优化", "反向传播\n链式法则", "矩阵分解\n推荐系统")
+for (i in 1:4) {
+  text(cases$x[i], 0.6, apps[i], cex = 0.65, col = "#64748B", font = 3)
+  arrows(cases$x[i], 1.4, cases$x[i], 0.95, col = "#94A3B8", lwd = 1, length = 0.06)
+}
+```
+
+## 各情况导数公式速查表
+
+| 输入 → 输出 | $D_x f(h)$ 形式 | 关键公式 | 应用 |
+|:---:|:---:|:---:|:---:|
+| $\mathbb{R} \to \mathbb{R}$ | $f'(x) \cdot h$ | $f'(x) = \lim \frac{f(x+h)-f(x)}{h}$ | 基础 |
+| $\mathbb{R}^n \to \mathbb{R}$ | $\nabla f \cdot \mathbf{h}$ | $\nabla(\mathbf{x}^\top\!\mathbf{A}\mathbf{x}) = 2\mathbf{x}^\top\!\mathbf{A}$ | 梯度下降 |
+| $\mathbb{R}^n \to \mathbb{R}^m$ | $\mathbf{J}_f \cdot \mathbf{h}$ | $\mathbf{J}(\mathbf{Ax}) = \mathbf{A}$ | 反向传播 |
+| $\mathbb{R} \to \mathbb{R}^{m \times n}$ | $\frac{\partial \mathbf{F}}{\partial x} \cdot h$ | $\frac{\partial \det \mathbf{F}}{\partial x} = \det\mathbf{F} \cdot \text{tr}[\mathbf{F}^{-1}\frac{\partial \mathbf{F}}{\partial x}]$ | 似然函数 |
+| $\mathbb{R}^{m \times n} \to \mathbb{R}$ | $\text{tr}\!\big(\big(\frac{\partial f}{\partial \mathbf{X}}\big)^\top \mathbf{H}\big)$ | $\frac{\partial \|\mathbf{X}\|_F^2}{\partial \mathbf{X}} = 2\mathbf{X}$ | 矩阵分解 |
+
+## 下一章预告
+
+> **Vorschau auf das nächste Kapitel**
+
+本章建立了导数的统一框架和各种计算公式。下一章我们将学习：
+
+- 导数的 **运算法则**（和、积、链式法则的一般版本）
+- **高阶导数** 与 Hessian 矩阵
+- 这些工具如何用于 **优化理论**（凸性判断、二阶优化方法）
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 导数与微分
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Ableitung | 导数 | derivative |
+| die Differenzierbarkeit | 可微性 | differentiability |
+| die Fréchet-Ableitung | Fréchet 导数 | Fréchet derivative |
+| die Gateaux-Ableitung | Gateaux 导数 | Gateaux derivative |
+| die partielle Ableitung | 偏导数 | partial derivative |
+| die lineare Approximation | 线性近似 | linear approximation |
+| die beschränkte lineare Abbildung | 有界线性映射 | bounded linear map |
+| der normierte Raum | 赋范空间 | normed space |
+
+## 梯度与 Jacobi 矩阵
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| der Gradient | 梯度 | gradient |
+| die Jacobi-Matrix | Jacobi 矩阵 | Jacobian matrix |
+| die Kettenregel | 链式法则 | chain rule |
+| die Rückwärtspropagation | 反向传播 | backpropagation |
+| die steilste Abstiegsrichtung | 最陡下降方向 | steepest descent direction |
+| die quadratische Form | 二次型 | quadratic form |
+
+## 矩阵分析
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Spur (einer Matrix) | 迹 | trace |
+| die Determinante | 行列式 | determinant |
+| die Frobenius-Norm | Frobenius 范数 | Frobenius norm |
+| die Matrixfaktorisierung | 矩阵分解 | matrix factorization |
+| die Matrixvervollständigung | 矩阵补全 | matrix completion |
+| die symmetrische Matrix | 对称矩阵 | symmetric matrix |
+| die inverse Matrix | 逆矩阵 | inverse matrix |
+
+## 应用术语
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| das neuronale Netz | 神经网络 | neural network |
+| die Aktivierungsfunktion | 激活函数 | activation function |
+| das Empfehlungssystem | 推荐系统 | recommender system |
+| die kollaborative Filterung | 协同过滤 | collaborative filtering |
+| die Verlustfunktion | 损失函数 | loss function |
+| die automatische Differentiation | 自动微分 | automatic differentiation |
+:::

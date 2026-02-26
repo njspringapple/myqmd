@@ -1,0 +1,1592 @@
+---
+title: "优化方法：从求解方程到约束优化"
+subtitle: "在数学的山谷中寻找最低点 | Optimierungsmethoden: Vom Gleichungslösen zur beschränkten Optimierung"
+author: "数值优化导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+# 全局配色方案 | Globales Farbschema
+pal <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  indigo   = "#6366F1",
+  teal     = "#0D9488",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+想象你站在一片崇山峻岭之间、眼前一片迷雾——你的任务是**找到最低的山谷**。你看不清全貌，只能用脚感知坡度，或者用更巧妙的策略来探路。这就是"优化"的本质。
+
+*Stellen Sie sich vor, Sie stehen in einer nebligen Berglandschaft — Ihre Aufgabe ist es, das tiefste Tal zu finden. Sie können nicht alles sehen, sondern nur die Steigung unter Ihren Füßen spüren.*
+
+本章将带你走过**从方程求解到有约束优化**的完整旅程。下面这张路线图标注了每一站：
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图：从方程求解走向约束优化 | Lernroadmap: Vom Gleichungslösen zur beschränkten Optimierung"
+#| fig-height: 5.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 12), ylim = c(0, 7), axes = FALSE, 
+     xlab = "", ylab = "", main = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+steps_x <- c(1, 3.2, 5.4, 7.6, 9.8)
+steps_y <- rep(5.2, 5)
+arrows(steps_x[-5] + 0.85, steps_y[-5], steps_x[-1] - 0.85, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("非线性方程\n二分/牛顿", "优化基础\n凸性/鞍点",
+               "无约束优化\nGD/牛顿/BFGS", "随机方法\nSGD/动量",
+               "有约束优化\nLagrange/KKT")
+labels_de <- c("Nichtlineare Gl.", "Konvexität\nSattelpunkte",
+               "GD / Newton\nBFGS", "SGD\nMomentum",
+               "Lagrange\nKKT")
+colors <- c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#E0E7FF", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DC2626", "#6366F1", "#16A34A")
+
+for (i in 1:5) {
+  rect(steps_x[i] - 0.85, steps_y[i] - 1, steps_x[i] + 0.85, steps_y[i] + 1,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.25, labels_cn[i], cex = 0.68, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.6, labels_de[i], cex = 0.48, col = "#64748B", font = 3)
+}
+
+arrows(0.5, 1.5, 11.3, 1.5, col = "#DC2626", lwd = 2, length = 0.15)
+text(5.5, 1.9, "抽象程度递增 | Zunehmende Abstraktion  >>>", cex = 0.85, col = "#DC2626")
+
+triggers <- c("", "优化≃解方程!", "如何高效?", "数据太大!", "加限制!")
+for (i in 2:5) {
+  text(steps_x[i] - 1.1, steps_y[i] + 1.4, triggers[i],
+       cex = 0.65, col = "#EA580C", font = 2)
+}
+for (i in 1:5) {
+  text(steps_x[i] - 0.6, steps_y[i] + 0.85, paste0("§", i),
+       cex = 0.6, col = borders[i], font = 2)
+}
+```
+
+**最终目标 | Endziel**：理解并能运用以下核心方法——
+
+$$
+\underbrace{\mathbf{x}^{(k+1)} = \mathbf{x}^{(k)} - \gamma\,\nabla f(\mathbf{x}^{(k)})^\top}_{\text{梯度下降}}\qquad
+\underbrace{\mathbf{x}^{(k+1)} = \mathbf{x}^{(k)} - \mathbf{H}_f^{-1}\,\nabla f(\mathbf{x}^{(k)})^\top}_{\text{牛顿法}}\qquad
+\underbrace{\nabla f + \lambda\nabla g = \mathbf{0}}_{\text{Lagrange 条件}}
+$$
+
+看不懂？**完全没关系**——读完本章，你将知道每个符号从何而来、为何如此。
+
+{{< pagebreak >}}
+
+# 预备知识速览 {#sec-prereq}
+
+> **Voraussetzungen im Überblick**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将回顾 | Was Sie hier wiederholen
+
+- **梯度** $\nabla f(\mathbf{x})$：函数"最陡上升"的方向
+- **黑塞矩阵** $\mathbf{H}_f(\mathbf{x})$：描述曲率的二阶导数矩阵
+- **凸性**：保证"只有一个山谷"的关键性质
+- **正定矩阵**：判断极值类型的工具
+:::
+
+## 梯度：指南针
+
+> **Gradient: Der Kompass**
+
+对于函数 $f: \mathbb{R}^n \to \mathbb{R}$，梯度 $\nabla f(\mathbf{x})$ 是一个 $n$ 维向量，指向函数值**增长最快**的方向。在每个点，它就像一个指南针，告诉你"往哪走会上坡最快"。
+
+$$
+\nabla f(\mathbf{x}) = \left(\frac{\partial f}{\partial x_1},\; \frac{\partial f}{\partial x_2},\;\ldots,\;\frac{\partial f}{\partial x_n}\right)
+$$
+
+反过来，**负梯度** $-\nabla f(\mathbf{x})$ 指向"下坡最快"的方向——这正是梯度下降法的核心思想。
+
+## 黑塞矩阵：地形的曲率
+
+> **Hesse-Matrix: Die Krümmung des Geländes**
+
+黑塞矩阵 $\mathbf{H}_f(\mathbf{x})$ 是二阶偏导数构成的 $n \times n$ 对称矩阵。如果说梯度告诉你"坡度有多陡"，那么黑塞矩阵告诉你"坡度变化得有多快"——也就是地形的**曲率**。
+
+$$
+[\mathbf{H}_f(\mathbf{x})]_{ij} = \frac{\partial^2 f}{\partial x_i \,\partial x_j}
+$$
+
+## 凸性：为什么它如此重要
+
+> **Konvexität: Warum sie so wichtig ist**
+
+一个函数是凸的，直觉上意味着它的图形像一个"碗"——任意两点之间的连线始终在函数曲面之上。
+
+$$
+f\bigl(\lambda\mathbf{x} + (1-\lambda)\mathbf{y}\bigr) \;\le\; \lambda\,f(\mathbf{x}) + (1-\lambda)\,f(\mathbf{y}), \quad \forall\,\lambda \in [0,1]
+$$
+
+```{r}
+#| label: fig-convex-nonconvex
+#| fig-cap: "凸函数 vs 非凸函数：凸函数只有一个'碗底'，非凸函数可能有多个陷阱 | Konvex vs. nicht-konvex"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+
+# 凸函数
+x <- seq(-3, 3, length.out = 300)
+y_convex <- x^2 + 1
+plot(x, y_convex, type = "l", col = pal$blue, lwd = 3,
+     xlab = "x", ylab = "f(x)", 
+     main = "凸函数 | Konvexe Funktion",
+     cex.main = 1.1, col.main = pal$blue)
+grid(col = "#E2E8F0")
+points(0, 1, pch = 23, bg = pal$red, col = "white", cex = 2.5, lwd = 2)
+text(0.3, 1.8, "唯一极小值\nEinziges Minimum", cex = 0.8, col = pal$red, font = 2)
+# 连线始终在曲线上方
+segments(-2, (-2)^2+1, 2, (2)^2+1, col = pal$orange, lwd = 2, lty = 2)
+points(c(-2, 2), c(5, 5), pch = 16, col = pal$orange, cex = 1.5)
+
+# 非凸函数
+y_nonconvex <- sin(2*x) + 0.3*x^2
+plot(x, y_nonconvex, type = "l", col = pal$red, lwd = 3,
+     xlab = "x", ylab = "f(x)",
+     main = "非凸函数 | Nicht-konvexe Funktion",
+     cex.main = 1.1, col.main = pal$red)
+grid(col = "#E2E8F0")
+# 标注多个极小值
+local_mins_x <- c(-2.65, -0.45, 1.75)
+local_mins_y <- sin(2*local_mins_x) + 0.3*local_mins_x^2
+points(local_mins_x, local_mins_y, pch = 23, bg = pal$orange, col = "white", cex = 2, lwd = 2)
+text(-0.45, local_mins_y[2] - 0.6, "全局最优?\nGlobal?", cex = 0.75, col = pal$orange, font = 2)
+text(1.75, local_mins_y[3] + 0.6, "局部最优!\nLokal!", cex = 0.75, col = pal$purple, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+**凸函数**的每个局部极小值都是**全局极小值**——这意味着任何"下山"方法最终都会到达碗底。
+
+**非凸函数**可能有多个局部极小值和鞍点——你可能陷在一个"小坑"里，误以为已经到达了最深的山谷。
+
+*Bei konvexen Funktionen ist jedes lokale Minimum auch ein globales. Bei nicht-konvexen Funktionen kann man in lokalen Minima „stecken bleiben".*
+:::
+
+## 极值判定速查
+
+> **Schnellübersicht: Klassifikation kritischer Punkte**
+
+对二阶连续可微函数 $f: \mathbb{R}^n \to \mathbb{R}$，在驻点 $\mathbf{x}^\star$（即 $\nabla f(\mathbf{x}^\star) = \mathbf{0}^\top$）处：
+
+| $\mathbf{H}_f(\mathbf{x}^\star)$ 的性质 | 点的类型 / Punkttyp | 直觉 / Intuition |
+|:---:|:---:|:---|
+| 正定 $\succ 0$ | 局部极小值 | 碗底——各方向都向上弯 |
+| 负定 $\prec 0$ | 局部极大值 | 山顶——各方向都向下弯 |
+| 不定 | 鞍点 | 马鞍——有些方向上弯、有些下弯 |
+| 半定 | 需进一步分析 | 退化情况 |
+
+{{< pagebreak >}}
+
+# 非线性方程求解 {#sec-equations}
+
+> **Lösung nichtlinearer Gleichungen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 为什么要先学**方程求解**——它是优化的基础
+- **二分法**：简单粗暴但可靠
+- **牛顿-拉弗森法**：用切线逼近，收敛极快
+- **不动点迭代**：一个统一视角
+:::
+
+## 从优化到方程求解
+
+> **Von der Optimierung zum Gleichungslösen**
+
+优化问题和方程求解有着深刻的联系：要找函数 $f$ 的极小值，若 $f$ 可微，则在极小值处必有 $\nabla f(\mathbf{x}^\star) = \mathbf{0}^\top$。也就是说，**求极小值 = 解方程 $\nabla f = \mathbf{0}$**。因此我们先从方程求解讲起。
+
+*Optimierung und Gleichungslösen sind tief miteinander verbunden: Ein Minimum finden = die Gleichung $\nabla f = \mathbf{0}$ lösen.*
+
+## 二分法：最朴素的策略 {#sec-bisection}
+
+> **Bisektionsverfahren: Die einfachste Strategie**
+
+**直觉**：想象你在玩"猜数字"游戏——每次猜中间值，根据"大了"或"小了"缩小范围。
+
+给定连续函数 $f: \mathbb{R} \to \mathbb{R}$，若 $f(a) \cdot f(b) < 0$（即两端异号），则由介值定理知 $[a, b]$ 之间必有零点。
+
+```{r}
+#| label: bisection-impl
+#| code-fold: false
+
+# 二分法实现 | Bisektionsverfahren
+二分法 <- function(f, a, b, eps = 1e-8, max_iter = 100) {
+  history <- data.frame(iter = integer(), a = numeric(), b = numeric(), 
+                        mid = numeric(), f_mid = numeric())
+  for (k in 1:max_iter) {
+    mid <- (a + b) / 2
+    f_mid <- f(mid)
+    history <- rbind(history, data.frame(iter = k, a = a, b = b, 
+                                          mid = mid, f_mid = f_mid))
+    if (b - a < eps) break
+    if (f(a) * f_mid < 0) b <- mid else a <- mid
+  }
+  list(root = mid, history = history)
+}
+```
+
+```{r}
+#| label: fig-bisection-demo
+#| fig-cap: "二分法演示：每一步将搜索区间缩小一半 | Bisektion: Jeder Schritt halbiert das Suchintervall"
+#| fig-height: 5.5
+
+f_demo <- function(x) x^3 - 2*x - 5
+res_bisect <- 二分法(f_demo, 2, 3, eps = 0.01)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x_plot <- seq(1.5, 3.5, length.out = 300)
+plot(x_plot, f_demo(x_plot), type = "l", col = pal$blue, lwd = 3,
+     xlab = "x", ylab = "f(x)",
+     main = expression("二分法求解" ~ x^3 - 2*x - 5 == 0 ~ "| Bisektionsverfahren"),
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = 0, col = pal$gray, lwd = 1, lty = 2)
+
+# 展示前几步 | Erste Schritte zeigen
+n_show <- min(6, nrow(res_bisect$history))
+cols_iter <- colorRampPalette(c(pal$orange, pal$green))(n_show)
+for (i in 1:n_show) {
+  h <- res_bisect$history[i, ]
+  segments(h$a, -0.5 * i, h$b, -0.5 * i, col = cols_iter[i], lwd = 3, lend = 1)
+  points(h$mid, f_demo(h$mid), pch = 16, col = cols_iter[i], cex = 1.5)
+  text(h$b + 0.05, -0.5 * i, paste0("k=", i), cex = 0.65, col = cols_iter[i], pos = 4)
+}
+
+points(res_bisect$root, f_demo(res_bisect$root), pch = 23, bg = pal$red, 
+       col = "white", cex = 2.5, lwd = 2)
+text(res_bisect$root + 0.1, f_demo(res_bisect$root) + 1.5,
+     paste0("根 ≈ ", round(res_bisect$root, 4)), col = pal$red, font = 2, cex = 0.95)
+
+legend("topleft",
+       legend = c("f(x)", "各步中点 | Mittelpunkte", "搜索区间 | Suchintervall"),
+       col = c(pal$blue, pal$orange, pal$orange),
+       lwd = c(3, NA, 3), pch = c(NA, 16, NA), bty = "n", cex = 0.9)
+```
+
+**收敛速度**：每步区间缩小一半，达到精度 $\epsilon$ 需要 $\lceil\log_2\!\left(\frac{b-a}{\epsilon}\right)\rceil$ 步。简单可靠，但**仅适用于单变量**。
+
+## 牛顿-拉弗森法：用切线逼近 {#sec-newton-raphson}
+
+> **Newton-Raphson-Verfahren: Annäherung durch Tangenten**
+
+**直觉**：二分法只知道"零点在左还是在右"，而牛顿法更聪明——它在当前点画切线，用切线与 $x$ 轴的交点作为下一步的猜测。
+
+对 $f(x)$ 在 $x^{(k)}$ 处作一阶泰勒展开：
+
+$$
+f(x) \approx f(x^{(k)}) + f'(x^{(k)})(x - x^{(k)}) \overset{!}{=} 0
+$$
+
+解出下一步：
+
+$$
+\boxed{x^{(k+1)} = x^{(k)} - \frac{f(x^{(k)})}{f'(x^{(k)})}}
+$$
+
+**几何意义**：取函数在当前点切线与 $x$ 轴的交点。
+
+```{r}
+#| label: newton-raphson-impl
+#| code-fold: false
+
+# 牛顿-拉弗森法 | Newton-Raphson-Verfahren
+牛顿法_方程 <- function(f, f_deriv, x0, eps = 1e-10, max_iter = 50) {
+  x <- x0
+  history <- data.frame(iter = 0, x = x, fx = f(x))
+  for (k in 1:max_iter) {
+    fx <- f(x)
+    fpx <- f_deriv(x)
+    if (abs(fpx) < 1e-15) { warning("导数接近零"); break }
+    x_new <- x - fx / fpx
+    history <- rbind(history, data.frame(iter = k, x = x_new, fx = f(x_new)))
+    if (abs(x_new - x) < eps) break
+    x <- x_new
+  }
+  list(root = x, history = history)
+}
+```
+
+```{r}
+#| label: fig-newton-raphson-demo
+#| fig-cap: "牛顿-拉弗森法：每步用切线逼近零点，收敛极快 | Newton-Raphson: Tangente nähert sich schnell der Nullstelle"
+#| fig-height: 6
+
+f_nr <- function(x) x^3 - 2*x - 5
+f_nr_d <- function(x) 3*x^2 - 2
+
+res_nr <- 牛顿法_方程(f_nr, f_nr_d, x0 = 3.5)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x_plot <- seq(1.0, 4.0, length.out = 300)
+plot(x_plot, f_nr(x_plot), type = "l", col = pal$blue, lwd = 3,
+     xlab = "x", ylab = "f(x)",
+     main = "牛顿-拉弗森法演示 | Newton-Raphson-Demonstration",
+     ylim = c(-8, 35), cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = 0, col = pal$gray, lty = 2)
+
+# 画出每步的切线 | Tangenten zeichnen
+n_show <- min(4, nrow(res_nr$history) - 1)
+cols_nr <- c(pal$red, pal$orange, pal$purple, pal$green)
+for (i in 1:n_show) {
+  xi <- res_nr$history$x[i]
+  fxi <- f_nr(xi)
+  slope <- f_nr_d(xi)
+  # 切线 y = f(xi) + slope * (x - xi)
+  x_tang <- seq(xi - 1.5, xi + 1.5, length.out = 100)
+  y_tang <- fxi + slope * (x_tang - xi)
+  lines(x_tang, y_tang, col = adjustcolor(cols_nr[i], 0.6), lwd = 2, lty = 2)
+  points(xi, fxi, pch = 16, col = cols_nr[i], cex = 2)
+  # 下一个点（切线与x轴交点）
+  x_next <- res_nr$history$x[i+1]
+  segments(xi, fxi, x_next, 0, col = adjustcolor(cols_nr[i], 0.3), lwd = 1)
+  text(xi, fxi + 2.5, paste0("k=", i-1), col = cols_nr[i], cex = 0.8, font = 2)
+}
+
+points(res_nr$root, 0, pch = 23, bg = pal$red, col = "white", cex = 2.5, lwd = 2)
+text(res_nr$root + 0.15, 1.5, paste0("根 ≈ ", round(res_nr$root, 6)),
+     col = pal$red, font = 2, cex = 0.9)
+
+legend("topleft",
+       legend = c("f(x)", paste0("第 ", 0:(n_show-1), " 步切线")),
+       col = c(pal$blue, cols_nr[1:n_show]),
+       lwd = c(3, rep(2, n_show)), lty = c(1, rep(2, n_show)), bty = "n", cex = 0.85)
+```
+
+```{r}
+#| label: convergence-comparison
+#| code-fold: false
+
+# 收敛速度对比 | Konvergenzvergleich
+cat("========== 二分法 vs 牛顿法 ==========\n\n")
+
+res_b <- 二分法(f_nr, 2, 4, eps = 1e-10)
+res_n <- 牛顿法_方程(f_nr, f_nr_d, x0 = 3.5, eps = 1e-10)
+
+cat("二分法 (Bisection):   ", nrow(res_b$history), "步 → 根 =",
+    format(res_b$root, digits = 12), "\n")
+cat("牛顿法 (Newton):      ", nrow(res_n$history) - 1, "步 → 根 =",
+    format(res_n$root, digits = 12), "\n\n")
+
+cat("牛顿法的二次收敛 | Quadratische Konvergenz des Newton-Verfahrens:\n")
+true_root <- res_n$root
+for (i in 1:nrow(res_n$history)) {
+  err <- abs(res_n$history$x[i] - true_root)
+  cat(sprintf("  k=%d: x = %.10f, |误差| = %.2e\n", 
+              res_n$history$iter[i], res_n$history$x[i], err))
+}
+```
+
+::: {.callout-tip icon="false"}
+## 📌 二次收敛的含义 | Quadratische Konvergenz
+
+牛顿法在解的附近具有**二次收敛**：每步迭代后，误差大约是上一步误差的**平方**。也就是说，如果某步误差是 $10^{-3}$，下一步大约是 $10^{-6}$，再下一步约 $10^{-12}$——有效数字每步翻倍！
+
+*Quadratische Konvergenz: Der Fehler wird in jedem Schritt etwa quadriert. Die Anzahl korrekter Stellen verdoppelt sich pro Schritt!*
+:::
+
+## 推广到多维：不动点迭代
+
+> **Verallgemeinerung auf mehrere Dimensionen: Fixpunktiteration**
+
+对于多维方程 $\mathbf{f}(\mathbf{x}) = \mathbf{0}$（其中 $\mathbf{f}: \mathbb{R}^n \to \mathbb{R}^n$），一阶不动点迭代具有统一形式：
+
+$$
+\mathbf{x}^{(k)} = \mathbf{x}^{(k-1)} - \gamma\,\mathbf{f}(\mathbf{x}^{(k-1)})
+$$
+
+当 $\rho := \|\mathbf{I}_n - \gamma\,\mathbf{J}_f(\mathbf{x}^\star)\| < 1$ 时，以线性速率收敛：$\|\mathbf{x}^{(k)} - \mathbf{x}^\star\| = O(\rho^k)$。
+
+步长 $\gamma$ 的选择至关重要：太小则收敛龟速，太大则根本不收敛。这个主题在后面的梯度下降中会更加深入地展开。
+
+::: {.callout-important icon="false"}
+## 💡 与优化的联系 | Verbindung zur Optimierung
+
+对 $\min f(\mathbf{x})$ 应用牛顿法 = 对 $\nabla f(\mathbf{x}) = \mathbf{0}$ 应用牛顿-拉弗森法！
+
+牛顿法的迭代更新如下（把 $\mathbf{f}$ 换成 $\nabla f^\top$，雅可比 $\mathbf{J}_f$ 就变成黑塞 $\mathbf{H}_f$）：
+
+$$
+\mathbf{x}^{(k+1)} = \mathbf{x}^{(k)} - \mathbf{H}_f(\mathbf{x}^{(k)})^{-1}\,\nabla f(\mathbf{x}^{(k)})^\top
+$$
+
+*Newton-Verfahren für $\min f$ = Newton-Raphson angewendet auf $\nabla f = \mathbf{0}$.*
+:::
+
+{{< pagebreak >}}
+
+# 优化问题基础 {#sec-optim-basics}
+
+> **Grundlagen der Optimierungsprobleme**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 为什么统计学和机器学习**本质上是优化问题**
+- **无约束** vs **有约束** 优化的区别
+- **局部最优** vs **全局最优**——陷阱在哪里
+- **鞍点**：不是极值却让算法"卡住"的危险点
+:::
+
+## 为什么需要优化？
+
+> **Warum brauchen wir Optimierung?**
+
+统计学与机器学习的核心问题几乎都可以表述为优化问题。极大似然估计（MLE）寻找最可能产生观测数据的参数：$\hat{\boldsymbol{\theta}}_{\text{ML}} = \arg\max_{\boldsymbol{\theta}} \sum_{i=1}^n \log f_Y(y_i \mid \boldsymbol{\theta})$。监督学习最小化经验损失：$\hat{\boldsymbol{\theta}} = \arg\min_{\boldsymbol{\theta}} \sum_{i=1}^n L(y_i,\, p_{\boldsymbol{\theta}}(\mathbf{x}_i))$。线性回归最小化残差平方和：$\hat{\boldsymbol{\beta}} = \arg\min_{\boldsymbol{\beta}} \|\mathbf{y} - \mathbf{X}\boldsymbol{\beta}\|_2^2$。正则化回归（岭回归或 Lasso）在损失中加入惩罚项：$\hat{\boldsymbol{\beta}} = \arg\min_{\boldsymbol{\beta}} \|\mathbf{y} - \mathbf{X}\boldsymbol{\beta}\|_2^2 + \lambda\|\boldsymbol{\beta}\|_p$。
+
+上述正则化的惩罚形式等价于有约束形式：$\arg\min_{\boldsymbol{\beta}} \|\mathbf{y} - \mathbf{X}\boldsymbol{\beta}\|_2^2$ 使得 $\|\boldsymbol{\beta}\|_p \le c$。
+
+所有这些问题通常都无法直接求得解析解，需要**迭代方法**。
+
+## 局部最优与全局最优
+
+> **Lokale vs. globale Optima**
+
+```{r}
+#| label: fig-local-global
+#| fig-cap: "局部极小值 vs 全局极小值：非凸函数中算法可能'掉坑' | Lokales vs. globales Minimum"
+#| fig-height: 5
+
+f_landscape <- function(x) 0.5*x^4 - 3*x^3 + 5*x^2 + 2*x - 10
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x_seq <- seq(-1.5, 5, length.out = 500)
+y_seq <- f_landscape(x_seq)
+plot(x_seq, y_seq, type = "l", col = pal$blue, lwd = 3,
+     xlab = "x", ylab = "f(x)",
+     main = "非凸函数中的极值点 | Extremstellen einer nicht-konvexen Funktion",
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 用 R 的 optimize 找局部极小
+opt1 <- optimize(f_landscape, interval = c(-1, 1.5))
+opt2 <- optimize(f_landscape, interval = c(2.5, 5))
+
+points(opt1$minimum, opt1$objective, pch = 23, bg = pal$orange, col = "white", cex = 2.5, lwd = 2)
+text(opt1$minimum + 0.2, opt1$objective + 3, "局部极小值\nLokales Min.", 
+     col = pal$orange, font = 2, cex = 0.85)
+
+points(opt2$minimum, opt2$objective, pch = 23, bg = pal$green, col = "white", cex = 2.5, lwd = 2)
+text(opt2$minimum + 0.2, opt2$objective + 3, "全局极小值\nGlobales Min.", 
+     col = pal$green, font = 2, cex = 0.85)
+
+# 局部极大值
+opt_max <- optimize(f_landscape, interval = c(1, 3.5), maximum = TRUE)
+points(opt_max$maximum, opt_max$objective, pch = 25, bg = pal$red, col = "white", cex = 2, lwd = 2)
+text(opt_max$maximum, opt_max$objective + 3, "局部极大值\nLokales Max.", 
+     col = pal$red, font = 2, cex = 0.85)
+```
+
+::: {.callout-tip icon="false"}
+## 📌 凸函数的保证 | Garantie konvexer Funktionen
+
+**定理**：若 $f: \mathbb{R}^n \to \mathbb{R}$ 是凸函数，则每个局部极小值也是**全局极小值**。若 $f$ 严格凸且可行集凸，则极小值**唯一**。
+
+这就是为什么凸优化在实践中如此受青睐——不用担心陷入局部最优！
+
+*Deshalb ist konvexe Optimierung so beliebt — keine Angst vor lokalen Minima!*
+:::
+
+## 鞍点：不是极值的危险点
+
+> **Sattelpunkte: Gefährliche Nicht-Extremstellen**
+
+在高维非凸函数（如神经网络的损失函数）中，驻点 $\nabla f(\mathbf{x}) = \mathbf{0}$ 不一定是极值——它可能是**鞍点**。
+
+```{r}
+#| label: fig-saddle-point
+#| fig-cap: "鞍点：像马鞍一样，一个方向向上弯、另一个方向向下弯 | Sattelpunkt: In einer Richtung konvex, in der anderen konkav"
+#| fig-height: 6
+
+# 画 f(x,y) = x^2 - y^2 的3D效果（用等高线+颜色）
+x_grid <- seq(-2, 2, length.out = 100)
+y_grid <- seq(-2, 2, length.out = 100)
+z_saddle <- outer(x_grid, y_grid, function(x, y) x^2 - y^2)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+image(x_grid, y_grid, z_saddle, 
+      col = hcl.colors(30, "Blue-Red 3"),
+      xlab = "x", ylab = "y",
+      main = expression("鞍点示例:" ~ f(x,y) == x^2 - y^2 ~ "| Sattelpunkt"),
+      cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+contour(x_grid, y_grid, z_saddle, nlevels = 15, add = TRUE, col = adjustcolor("black", 0.4))
+
+# 标注鞍点
+points(0, 0, pch = 23, bg = pal$red, col = "white", cex = 3, lwd = 2)
+text(0.3, 0.3, "鞍点 (0,0)\nSattelpunkt", col = pal$red, font = 2, cex = 0.9)
+
+# 标注方向
+arrows(0, 0, 1.5, 0, col = pal$green, lwd = 2.5, length = 0.12)
+text(1.7, 0.15, expression("x 方向: " * x^2 * " 上凸"), col = pal$green, cex = 0.75, font = 2)
+arrows(0, 0, 0, 1.5, col = pal$orange, lwd = 2.5, length = 0.12)
+text(0.15, 1.7, expression("y 方向: " * -y^2 * " 下凸"), col = pal$orange, cex = 0.75, font = 2)
+```
+
+在此例中，$f(x,y) = x^2 - y^2$ 在原点的黑塞矩阵为 $\mathbf{H}_f = \begin{pmatrix} 2 & 0 \\ 0 & -2 \end{pmatrix}$，特征值 $\lambda_1 = 2 > 0$，$\lambda_2 = -2 < 0$——不定，确认为鞍点。
+
+在高维神经网络中，几乎所有的驻点都是鞍点而非局部极小值。随机梯度下降（SGD）的噪声恰好有助于"逃离"鞍点——这是 SGD 的一个意外优势。
+
+{{< pagebreak >}}
+
+# 无约束优化：迭代方法 {#sec-unconstrained}
+
+> **Unbeschränkte Optimierung: Iterative Methoden**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 按导数阶次分类的四大方法族：零阶、一阶、"一阶半"、二阶
+- **Nelder-Mead**：不需要导数的"摸索"法
+- **梯度下降**：最重要的一阶方法，以及收敛性分析
+- **直线搜索**：自动调节步长
+- **牛顿法** 与 **拟牛顿法（BFGS）**：利用曲率信息加速
+- **动量** 和 **SGD**：现代深度学习的基础
+:::
+
+## 方法分类：你用了多少信息？
+
+> **Methodenklassifikation: Wie viel Information nutzen Sie?**
+
+| 阶次 / Ordnung | 使用的信息 | 典型算法 | 每步代价 |
+|:--:|:---|:---|:--:|
+| 零阶 | 仅函数值 $f(\mathbf{x})$ | Nelder-Mead, 网格搜索 | $O(n)$ |
+| 一阶 | $f$ 和梯度 $\nabla f$ | 梯度下降, SGD, 动量法 | $O(n)$ |
+| "一阶半" | $f$ 和 $\nabla f$（近似曲率） | BFGS, L-BFGS | $O(n^2)$ |
+| 二阶 | $f$、$\nabla f$ 和 $\mathbf{H}_f$ | 牛顿法 | $O(n^3)$ |
+
+**核心权衡**：阶次越高 → 每步收敛越快，但每步计算代价越高。
+
+## Nelder-Mead 法：不需要导数的探索 {#sec-nelder-mead}
+
+> **Nelder-Mead: Ableitungsfreie Exploration**
+
+**直觉**：在 $\mathbb{R}^n$ 中维护一个由 $n+1$ 个点构成的"单纯形"（二维中是三角形，三维中是四面体），通过反射、扩张、收缩和压缩四种操作，不断用更好的点替换最差的点。
+
+```{r}
+#| label: fig-nelder-mead-demo
+#| fig-cap: "Nelder-Mead 法：三角形在等高线上'变形爬行'，逐步逼近最低点 | Nelder-Mead: Das Simplex kriecht über die Konturlinien"
+#| fig-height: 6
+
+# Rosenbrock 函数 | Rosenbrock-Funktion
+rosenbrock <- function(x) (1 - x[1])^2 + 100*(x[2] - x[1]^2)^2
+
+# 手动模拟 Nelder-Mead 的几步
+# 使用 optim 的中间轨迹
+set.seed(42)
+trace_points <- matrix(NA, nrow = 0, ncol = 2)
+optim_res <- optim(c(-1, 2), function(x) {
+  trace_points <<- rbind(trace_points, x)
+  rosenbrock(x)
+}, method = "Nelder-Mead", control = list(maxit = 200))
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x1_r <- seq(-2, 2, length.out = 200)
+x2_r <- seq(-1, 3, length.out = 200)
+z_r <- outer(x1_r, x2_r, Vectorize(function(a, b) log1p(rosenbrock(c(a, b)))))
+contour(x1_r, x2_r, z_r, nlevels = 30, col = adjustcolor(pal$blue, 0.5),
+        xlab = expression(x[1]), ylab = expression(x[2]),
+        main = "Nelder-Mead 在 Rosenbrock 函数上的轨迹",
+        cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+
+# 轨迹
+n_pts <- min(nrow(trace_points), 80)
+cols_trace <- colorRampPalette(c(pal$red, pal$orange, pal$green))(n_pts)
+lines(trace_points[1:n_pts, 1], trace_points[1:n_pts, 2], 
+      col = adjustcolor(pal$orange, 0.5), lwd = 1.5)
+points(trace_points[1:n_pts, 1], trace_points[1:n_pts, 2],
+       pch = 16, col = cols_trace, cex = 0.8)
+
+# 起点和终点
+points(-1, 2, pch = 24, bg = pal$red, col = "white", cex = 2, lwd = 2)
+text(-1, 2.3, "起点 | Start", col = pal$red, font = 2, cex = 0.85)
+points(1, 1, pch = 23, bg = pal$green, col = "white", cex = 2.5, lwd = 2)
+text(1.2, 0.7, "最优 (1,1)", col = pal$green, font = 2, cex = 0.85)
+```
+
+**Nelder-Mead 的四种操作**：在每一步中，找到单纯形中函数值最大（最差）的那个顶点，然后尝试用以下策略替换它——反射（Reflection）将最差点关于其余点的重心进行镜像翻转；扩张（Expansion）沿反射方向走得更远（如果反射效果好的话）；收缩（Contraction）在反射效果不好时向内收缩；压缩（Shrink）在所有策略都失败时将整个单纯形向最优点收缩。
+
+**适用场景**：函数不可微、导数无法获取、低维问题（$n \le 10$）。这是 R 中 `optim()` 在不提供梯度时的**默认方法**。
+
+## 梯度下降法 {#sec-gradient-descent}
+
+> **Gradientenabstiegsverfahren**
+
+**核心思想**：梯度指向上升方向 $\Rightarrow$ 负梯度指向下降方向——沿负梯度走，函数值一定减小（步长足够小时）。
+
+$$
+\boxed{\mathbf{x}^{(k+1)} = \mathbf{x}^{(k)} - \gamma\,\nabla f(\mathbf{x}^{(k)})^\top}
+$$
+
+其中 $\gamma > 0$ 为步长（学习率）。
+
+```{r}
+#| label: gd-core-impl
+#| code-fold: false
+
+# 梯度下降核心实现 | Kern des Gradientenabstiegs
+梯度下降 <- function(grad_f, x0, gamma, max_iter, f = NULL, tol = 1e-10) {
+  x <- x0
+  n <- length(x0)
+  history <- matrix(NA, nrow = max_iter + 1, ncol = n)
+  loss_hist <- numeric(max_iter + 1)
+  history[1, ] <- x
+  if (!is.null(f)) loss_hist[1] <- f(x)
+  
+  for (k in 1:max_iter) {
+    g <- grad_f(x)
+    x_new <- x - gamma * g
+    history[k + 1, ] <- x_new
+    if (!is.null(f)) loss_hist[k + 1] <- f(x_new)
+    if (sqrt(sum((x_new - x)^2)) < tol) {
+      history <- history[1:(k+1), , drop = FALSE]
+      loss_hist <- loss_hist[1:(k+1)]
+      break
+    }
+    x <- x_new
+  }
+  list(x = x, history = history, loss = loss_hist, 
+       iters = nrow(history) - 1)
+}
+```
+
+```{r}
+#| label: fig-gd-contour
+#| fig-cap: "梯度下降在二次函数上的轨迹：沿负梯度方向逐步走向碗底 | Gradientenabstieg auf einer quadratischen Funktion"
+#| fig-height: 6
+
+# 二次函数 | Quadratische Funktion
+# f(x) = x^T A x / 2,  A = [[10, 0], [0, 1]]  -> 条件数 = 10
+A <- matrix(c(10, 0, 0, 1), 2, 2)
+f_quad <- function(x) as.numeric(0.5 * t(x) %*% A %*% x)
+grad_quad <- function(x) as.vector(A %*% x)
+
+res_gd <- 梯度下降(grad_quad, c(5, 3), gamma = 0.15, max_iter = 50, f = f_quad)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x1_g <- seq(-6, 6, length.out = 200)
+x2_g <- seq(-4, 4, length.out = 200)
+z_g <- outer(x1_g, x2_g, Vectorize(function(a, b) f_quad(c(a, b))))
+contour(x1_g, x2_g, z_g, nlevels = 20, col = adjustcolor(pal$blue, 0.6),
+        xlab = expression(x[1]), ylab = expression(x[2]),
+        main = "梯度下降轨迹 | Gradientenabstiegspfad",
+        cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+
+# 画轨迹
+n_steps <- nrow(res_gd$history)
+for (i in 1:(n_steps-1)) {
+  arrows(res_gd$history[i, 1], res_gd$history[i, 2],
+         res_gd$history[i+1, 1], res_gd$history[i+1, 2],
+         col = pal$red, lwd = 2, length = 0.08)
+}
+points(res_gd$history[1, 1], res_gd$history[1, 2], 
+       pch = 24, bg = pal$red, col = "white", cex = 2, lwd = 2)
+text(5.3, 3.3, "起点 | Start", col = pal$red, font = 2, cex = 0.85)
+points(0, 0, pch = 23, bg = pal$green, col = "white", cex = 2.5, lwd = 2)
+text(0.5, -0.5, "最优 x* = (0,0)", col = pal$green, font = 2, cex = 0.85)
+
+text(-4, 3, paste0("条件数 κ = ", round(max(eigen(A)$values)/min(eigen(A)$values), 1),
+                    "\n锯齿形轨迹!"), col = pal$orange, font = 2, cex = 0.9)
+```
+
+注意轨迹的"锯齿形"——这正是因为条件数 $\kappa = 10$ 导致的。等高线是拉长的椭圆，梯度方向不指向最低点，而是指向"最陡"的方向。
+
+## 梯度下降的收敛性
+
+> **Konvergenz des Gradientenabstiegs**
+
+梯度下降的收敛速度取决于函数的性质。核心概念是**梯度的 Lipschitz 连续性**：若 $\|\nabla f(\mathbf{x}) - \nabla f(\mathbf{y})\| \le L\|\mathbf{x} - \mathbf{y}\|$ 对所有 $\mathbf{x}, \mathbf{y}$ 成立，则称梯度以常数 $L$ Lipschitz 连续。这等价于黑塞矩阵的谱范数有界：$\|\mathbf{H}_f(\mathbf{x})\| \le L$——也就是曲率不会无限大。
+
+对于**一般凸函数**，取 $\gamma \le \frac{1}{L}$，收敛速率为：
+
+$$
+f(\mathbf{x}^{(k)}) - f(\mathbf{x}^\star) \le \frac{\|\mathbf{x}^{(0)} - \mathbf{x}^\star\|^2}{2\gamma k}
+$$
+
+误差以 $O(1/k)$ 的速率下降——这意味着要将误差减小到 $\epsilon$，需要约 $k \sim 1/\epsilon$ 步（较慢）。
+
+对于**强凸函数**（即 $\mathbf{H}_f(\mathbf{x}) \succeq \mu\mathbf{I}$ 对某个 $\mu > 0$ 成立），收敛速率大幅改善：
+
+$$
+f(\mathbf{x}^{(k)}) - f(\mathbf{x}^\star) \le \rho^k \cdot \bigl(f(\mathbf{x}^{(0)}) - f(\mathbf{x}^\star)\bigr), \quad \rho = 1 - \frac{\mu}{L} < 1
+$$
+
+这是**指数收敛**（线性收敛率），仅需 $k \sim \log(1/\epsilon)$ 步！
+
+**条件数** $\kappa_f = \frac{L}{\mu} = \frac{\lambda_{\max}(\mathbf{H}_f)}{\lambda_{\min}(\mathbf{H}_f)}$ 决定了收敛快慢：$\kappa$ 越大（椭圆越扁），收敛越慢。
+
+```{r}
+#| label: fig-condition-number
+#| fig-cap: "条件数对收敛速度的影响：κ 越大，锯齿越明显，收敛越慢 | Einfluss der Konditionszahl: Größeres κ → langsamere Konvergenz"
+#| fig-height: 5
+
+# 对比不同条件数 | Vergleich verschiedener Konditionszahlen
+kappas <- c(2, 10, 50)
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+
+cols_k <- c(pal$green, pal$blue, pal$red)
+plot(NULL, xlim = c(0, 100), ylim = c(1e-8, 200),
+     xlab = "迭代次数 k | Iteration k", ylab = expression(f(x^(k)) - f(x^"*") ~ "(对数)"),
+     main = "条件数 κ 与收敛速度 | Konditionszahl und Konvergenz",
+     log = "y", cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (j in seq_along(kappas)) {
+  kk <- kappas[j]
+  A_j <- diag(c(kk, 1))
+  f_j <- function(x) as.numeric(0.5 * t(x) %*% A_j %*% x)
+  grad_j <- function(x) as.vector(A_j %*% x)
+  res_j <- 梯度下降(grad_j, c(10, 10), gamma = 1/kk, max_iter = 100, f = f_j)
+  lines(0:res_j$iters, res_j$loss, col = cols_k[j], lwd = 2.5)
+}
+
+legend("topright",
+       legend = paste0("κ = ", kappas, " (ρ = ", round(1 - 1/kappas, 3), ")"),
+       col = cols_k, lwd = 2.5, bty = "n", cex = 0.95)
+```
+
+## 停止准则
+
+> **Abbruchkriterien**
+
+何时停止迭代？通常组合使用以下准则：梯度足够小（$\|\nabla f(\mathbf{x}^{(k)})\| < \varepsilon_{\text{grad}}$）、函数值不再明显变化（$|f(\mathbf{x}^{(k+1)}) - f(\mathbf{x}^{(k)})| / |f(\mathbf{x}^{(k)})| < \varepsilon_f$）、或超过最大迭代次数（$k > k_{\max}$）。典型取值为 $\varepsilon_{\text{grad}} \approx 10^{-6}$ 至 $10^{-8}$，$k_{\max} \approx 1000$ 至 $10000$。
+
+## 直线搜索：自动调节步长 {#sec-line-search}
+
+> **Liniensuche: Automatische Schrittweitensteuerung**
+
+固定步长的梯度下降需要手动调参。**回溯直线搜索（Armijo 条件）** 能自动选择合适的步长。
+
+给定下降方向 $\mathbf{d} = -\nabla f(\mathbf{x}^{(k)})^\top$，参数 $c \in (0,1)$ 和 $\rho \in (0,1)$，算法的流程是：初始令 $\gamma = 1$，然后不断检查"下降是否足够"——如果 $f(\mathbf{x}^{(k)} + \gamma\mathbf{d}) > f(\mathbf{x}^{(k)}) + c\gamma\nabla f(\mathbf{x}^{(k)})\mathbf{d}$，就将 $\gamma \leftarrow \rho\gamma$ 缩小步长；否则接受当前步长。
+
+```{r}
+#| label: backtracking-impl
+#| code-fold: false
+
+# 回溯直线搜索 | Backtracking-Liniensuche
+回溯直线搜索 <- function(f, grad_f, x, d, c1 = 1e-4, rho = 0.5) {
+  gamma <- 1.0
+  fx <- f(x)
+  gd <- sum(grad_f(x) * d)  # 方向导数
+  while (f(x + gamma * d) > fx + c1 * gamma * gd) {
+    gamma <- gamma * rho
+  }
+  return(gamma)
+}
+```
+
+Armijo 条件的直觉是：我们不要求步长完美地最小化沿搜索方向的函数值，只要求它带来"足够的下降"。典型参数：$c = 10^{-4}$，$\rho = 0.5$。
+
+## 牛顿法：利用曲率加速 {#sec-newton-opt}
+
+> **Newton-Verfahren: Beschleunigung durch Krümmungsinformation**
+
+梯度下降只看"坡度"（一阶），而牛顿法还看"坡度变化得有多快"（二阶）——它用二阶泰勒展开的抛物面来局部近似函数。
+
+$$
+f(\mathbf{x} + \mathbf{h}) \approx f(\mathbf{x}) + \nabla f(\mathbf{x})\,\mathbf{h} + \frac{1}{2}\mathbf{h}^\top\mathbf{H}_f(\mathbf{x})\,\mathbf{h}
+$$
+
+对 $\mathbf{h}$ 求极小，令其梯度为零：$\nabla f(\mathbf{x})^\top + \mathbf{H}_f(\mathbf{x})\,\mathbf{h} = \mathbf{0}$，解出**牛顿步**：
+
+$$
+\boxed{\mathbf{x}^{(k+1)} = \mathbf{x}^{(k)} - \mathbf{H}_f(\mathbf{x}^{(k)})^{-1}\,\nabla f(\mathbf{x}^{(k)})^\top}
+$$
+
+::: {.callout-warning icon="false"}
+## ⚠️ 实践要点 | Praktischer Hinweis
+
+**永远不要直接计算矩阵的逆** $\mathbf{H}_f^{-1}$！应该求解线性方程组 $\mathbf{H}_f\,\mathbf{h} = -\nabla f^\top$。
+
+*Berechnen Sie **niemals** explizit die Inverse $\mathbf{H}_f^{-1}$! Lösen Sie stattdessen das lineare Gleichungssystem.*
+:::
+
+```{r}
+#| label: fig-newton-vs-gd
+#| fig-cap: "牛顿法 vs 梯度下降：在同一个问题上，牛顿法几步就到，梯度下降缓慢锯齿 | Newton vs. GD: Newton braucht nur wenige Schritte"
+#| fig-height: 6
+
+# 牛顿法实现 | Newton-Verfahren
+牛顿法_优化 <- function(f, grad_f, hess_f, x0, max_iter = 50, tol = 1e-10) {
+  x <- x0
+  history <- matrix(NA, nrow = max_iter + 1, ncol = length(x0))
+  history[1, ] <- x
+  for (k in 1:max_iter) {
+    g <- grad_f(x)
+    H <- hess_f(x)
+    h <- -solve(H, g)  # 解线性方程组，而非求逆！
+    x_new <- x + h
+    history[k + 1, ] <- x_new
+    if (sqrt(sum(h^2)) < tol) {
+      history <- history[1:(k+1), , drop = FALSE]
+      break
+    }
+    x <- x_new
+  }
+  list(x = x, history = history[complete.cases(history), , drop = FALSE])
+}
+
+# 条件数 = 10 的二次函数
+A_demo <- diag(c(10, 1))
+f_demo2 <- function(x) as.numeric(0.5 * t(x) %*% A_demo %*% x)
+grad_demo2 <- function(x) as.vector(A_demo %*% x)
+hess_demo2 <- function(x) A_demo
+
+x0 <- c(5, 3)
+res_gd2 <- 梯度下降(grad_demo2, x0, gamma = 0.15, max_iter = 50, f = f_demo2)
+res_nt2 <- 牛顿法_优化(f_demo2, grad_demo2, hess_demo2, x0)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+contour(x1_g, x2_g, z_g, nlevels = 20, col = adjustcolor(pal$gray, 0.4),
+        xlab = expression(x[1]), ylab = expression(x[2]),
+        main = "牛顿法 vs 梯度下降 | Newton vs. Gradientenabstieg",
+        cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+
+# GD 轨迹
+n_gd <- nrow(res_gd2$history)
+for (i in 1:(min(n_gd, 20)-1)) {
+  arrows(res_gd2$history[i, 1], res_gd2$history[i, 2],
+         res_gd2$history[i+1, 1], res_gd2$history[i+1, 2],
+         col = adjustcolor(pal$blue, 0.7), lwd = 1.5, length = 0.06)
+}
+
+# 牛顿轨迹
+n_nt <- nrow(res_nt2$history)
+for (i in 1:(n_nt-1)) {
+  arrows(res_nt2$history[i, 1], res_nt2$history[i, 2],
+         res_nt2$history[i+1, 1], res_nt2$history[i+1, 2],
+         col = pal$red, lwd = 3, length = 0.1)
+}
+points(res_nt2$history[, 1], res_nt2$history[, 2], 
+       pch = 16, col = pal$red, cex = 1.5)
+
+points(x0[1], x0[2], pch = 24, bg = pal$orange, col = "white", cex = 2, lwd = 2)
+points(0, 0, pch = 23, bg = pal$green, col = "white", cex = 2.5, lwd = 2)
+
+legend("topleft",
+       legend = c(paste0("梯度下降 (", min(n_gd-1, 20), " 步)"),
+                  paste0("牛顿法 (", n_nt - 1, " 步!)")),
+       col = c(pal$blue, pal$red), lwd = c(1.5, 3), bty = "n", cex = 1)
+```
+
+牛顿法在解附近具有**二次收敛**——但代价是每步需要计算 $n \times n$ 的黑塞矩阵（$O(n^2)$ 存储、$O(n^3)$ 求解），当 $n$ 很大时不可行。
+
+## 拟牛顿法与 BFGS {#sec-bfgs}
+
+> **Quasi-Newton-Verfahren und BFGS**
+
+**问题**：牛顿法太贵——黑塞矩阵计算 $O(n^2)$ 存储、$O(n^3)$ 求解。
+
+**思路**：不算黑塞矩阵，而是从梯度的变化中**迭代近似**黑塞逆矩阵 $\mathbf{H}_f^{-1}$。
+
+**BFGS 更新公式**：令 $\mathbf{s}_k = \mathbf{x}^{(k+1)} - \mathbf{x}^{(k)}$，$\mathbf{y}_k = (\nabla f(\mathbf{x}^{(k+1)}) - \nabla f(\mathbf{x}^{(k)}))^\top$，$\rho_k = \frac{1}{\mathbf{y}_k^\top\mathbf{s}_k}$：
+
+$$
+\mathbf{B}_{k+1} = (\mathbf{I} - \rho_k\,\mathbf{s}_k\mathbf{y}_k^\top)\,\mathbf{B}_k\,(\mathbf{I} - \rho_k\,\mathbf{y}_k\mathbf{s}_k^\top) + \rho_k\,\mathbf{s}_k\mathbf{s}_k^\top
+$$
+
+其中 $\mathbf{B}_k \approx \mathbf{H}_f^{-1}(\mathbf{x}^{(k)})$。
+
+BFGS 每步复杂度为 $O(n^2)$（牛顿法 $O(n^3)$），具有**超线性收敛**，接近牛顿法的速度。对于更大规模的问题，**L-BFGS**（有限内存版）仅存储最近 $m$ 个向量，内存复杂度降至 $O(mn)$。
+
+BFGS 是 R 中 `optim()` 提供梯度时的**默认方法**，也是统计推断中最常用的优化器。
+
+## 动量梯度下降 {#sec-momentum}
+
+> **Gradientenabstieg mit Impuls (Momentum)**
+
+**动机**：在条件数 $\kappa$ 很大的问题上，梯度下降频繁"锯齿形"震荡。
+
+**类比**：想象一个球从山坡滚下——它不会在每个小坑里停住，因为惯性（"Schwung"）会带它冲过去。
+
+$$
+\mathbf{v}^{(k+1)} = \alpha\,\mathbf{v}^{(k)} - \gamma\,\nabla f(\mathbf{x}^{(k)})^\top
+$$
+$$
+\mathbf{x}^{(k+1)} = \mathbf{x}^{(k)} + \mathbf{v}^{(k+1)}
+$$
+
+其中 $\alpha \in [0, 1)$ 为阻尼系数（通常取 $0.9$），$\gamma$ 为步长。
+
+```{r}
+#| label: fig-momentum-demo
+#| fig-cap: "动量法 vs 普通梯度下降：动量能有效抑制锯齿形震荡 | Momentum vs. Standard-GD: Momentum dämpft die Zickzack-Schwingungen"
+#| fig-height: 6
+
+# 动量梯度下降实现 | Momentum-GD
+动量梯度下降 <- function(grad_f, x0, gamma, alpha, max_iter, f = NULL) {
+  x <- x0; v <- rep(0, length(x0))
+  n <- length(x0)
+  history <- matrix(NA, nrow = max_iter + 1, ncol = n)
+  loss_hist <- numeric(max_iter + 1)
+  history[1, ] <- x
+  if (!is.null(f)) loss_hist[1] <- f(x)
+  
+  for (k in 1:max_iter) {
+    g <- grad_f(x)
+    v <- alpha * v - gamma * g
+    x <- x + v
+    history[k + 1, ] <- x
+    if (!is.null(f)) loss_hist[k + 1] <- f(x)
+  }
+  list(x = x, history = history, loss = loss_hist)
+}
+
+# 高条件数问题
+A_high <- diag(c(50, 1))
+f_high <- function(x) as.numeric(0.5 * t(x) %*% A_high %*% x)
+grad_high <- function(x) as.vector(A_high %*% x)
+
+x0_h <- c(5, 5)
+res_gd_h <- 梯度下降(grad_high, x0_h, gamma = 0.035, max_iter = 80, f = f_high)
+res_mom_h <- 动量梯度下降(grad_high, x0_h, gamma = 0.035, alpha = 0.9, max_iter = 80, f = f_high)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x1_h <- seq(-6, 6, length.out = 200)
+x2_h <- seq(-6, 6, length.out = 200)
+z_h <- outer(x1_h, x2_h, Vectorize(function(a, b) f_high(c(a, b))))
+contour(x1_h, x2_h, z_h, nlevels = 25, col = adjustcolor(pal$gray, 0.4),
+        xlab = expression(x[1]), ylab = expression(x[2]),
+        main = expression("动量法 vs GD  (κ = 50) | Momentum vs. GD"),
+        cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+
+# GD 轨迹
+n_gd_h <- min(nrow(res_gd_h$history), 30)
+lines(res_gd_h$history[1:n_gd_h, 1], res_gd_h$history[1:n_gd_h, 2],
+      col = adjustcolor(pal$blue, 0.6), lwd = 1.5, type = "b", pch = 16, cex = 0.5)
+
+# Momentum 轨迹
+n_mom_h <- min(nrow(res_mom_h$history), 30)
+lines(res_mom_h$history[1:n_mom_h, 1], res_mom_h$history[1:n_mom_h, 2],
+      col = adjustcolor(pal$red, 0.8), lwd = 2, type = "b", pch = 16, cex = 0.6)
+
+points(x0_h[1], x0_h[2], pch = 24, bg = pal$orange, col = "white", cex = 2, lwd = 2)
+points(0, 0, pch = 23, bg = pal$green, col = "white", cex = 2.5, lwd = 2)
+
+legend("topright",
+       legend = c("普通 GD | Standard-GD", "动量法 (α = 0.9) | Momentum"),
+       col = c(pal$blue, pal$red), lwd = c(1.5, 2), bty = "n", cex = 0.95)
+```
+
+动量法在深度学习中几乎是标配。由此衍生出一系列现代优化器，包括 Adagrad（自适应学习率）、RMSprop 和 Adam（结合动量与自适应学习率）。
+
+## 随机梯度下降（SGD） {#sec-sgd}
+
+> **Stochastischer Gradientenabstieg (SGD)**
+
+**动机**：典型的机器学习问题需要最小化经验风险 $R(\boldsymbol{\theta}) = \frac{1}{N}\sum_{i=1}^N L(y_i,\, p_{\boldsymbol{\theta}}(\mathbf{x}_i))$。全梯度每步需要遍历全部 $N$ 个样本，当 $N$ 达到百万甚至十亿级时——一步都算不完。
+
+**关键洞察**：单个样本的梯度是全梯度的**无偏估计**：
+
+$$
+\mathbb{E}\bigl[\nabla L(y_i,\, p_{\boldsymbol{\theta}}(\mathbf{x}_i))\bigr] = \nabla R(\boldsymbol{\theta})
+$$
+
+这意味着我们可以用**一个或一小批样本**来"代替"全体样本估计梯度方向——方向"平均而言"是对的，只是带有噪声。
+
+**SGD 更新**（随机选取索引 $i_k$）：
+
+$$
+\boldsymbol{\theta}^{(k+1)} = \boldsymbol{\theta}^{(k)} - \gamma^{(k)}\,\nabla L(y_{i_k},\, p_{\boldsymbol{\theta}}(\mathbf{x}_{i_k}))^\top
+$$
+
+每步代价从 $O(N)$ 降为 $O(1)$（或 Mini-batch 的 $O(B)$）！
+
+```{r}
+#| label: fig-sgd-demo
+#| fig-cap: "SGD vs Full-batch GD：SGD 路径有噪声但整体趋向最优 | SGD vs. Full-Batch: SGD ist verrauscht, aber zielgerichtet"
+#| fig-height: 5.5
+
+# 模拟简单的 SGD | Einfache SGD-Simulation
+set.seed(2024)
+N_sgd <- 500; p_sgd <- 2
+X_sgd <- matrix(rnorm(N_sgd * p_sgd), N_sgd, p_sgd)
+X_sgd[, 1] <- X_sgd[, 1] * 3
+beta_true_sgd <- c(2, -1)
+y_sgd <- X_sgd %*% beta_true_sgd + rnorm(N_sgd, 0, 0.5)
+
+f_mse <- function(w) mean((X_sgd %*% w - y_sgd)^2)
+grad_mse <- function(w) as.vector((2/N_sgd) * t(X_sgd) %*% (X_sgd %*% w - y_sgd))
+
+# Full-batch GD
+res_full <- 梯度下降(grad_mse, c(0, 0), gamma = 0.02, max_iter = 100, f = f_mse)
+
+# SGD（batch size = 1）
+w_sgd <- c(0, 0)
+sgd_history <- matrix(NA, 101, 2)
+sgd_history[1, ] <- w_sgd
+for (k in 1:100) {
+  idx <- sample(N_sgd, 1)
+  g <- 2 * X_sgd[idx, ] * as.numeric(X_sgd[idx, ] %*% w_sgd - y_sgd[idx])
+  w_sgd <- w_sgd - 0.02 * g
+  sgd_history[k+1, ] <- w_sgd
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x1_s <- seq(-1, 4, length.out = 150)
+x2_s <- seq(-3, 1, length.out = 150)
+z_s <- outer(x1_s, x2_s, Vectorize(function(a, b) f_mse(c(a, b))))
+contour(x1_s, x2_s, z_s, nlevels = 25, col = adjustcolor(pal$gray, 0.4),
+        xlab = expression(w[1]), ylab = expression(w[2]),
+        main = "SGD (B=1) vs Full-Batch GD | Vergleich",
+        cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+
+# Full-batch 轨迹
+lines(res_full$history[, 1], res_full$history[, 2],
+      col = pal$blue, lwd = 2.5)
+
+# SGD 轨迹
+lines(sgd_history[, 1], sgd_history[, 2],
+      col = adjustcolor(pal$red, 0.5), lwd = 1)
+
+points(0, 0, pch = 24, bg = pal$orange, col = "white", cex = 2, lwd = 2)
+points(beta_true_sgd[1], beta_true_sgd[2], pch = 23, bg = pal$green, 
+       col = "white", cex = 2.5, lwd = 2)
+
+legend("topright",
+       legend = c("Full-Batch GD", "SGD (B = 1)"),
+       col = c(pal$blue, pal$red), lwd = c(2.5, 1), bty = "n", cex = 0.95)
+```
+
+::: {.callout-important icon="false"}
+## 💡 方法总对比 | Gesamtvergleich der Methoden
+
+| 属性 / Eigenschaft | Nelder-Mead | 梯度下降 | 拟牛顿 (BFGS) | 牛顿法 |
+|:--:|:--:|:--:|:--:|:--:|
+| 阶次 | 零阶 | 一阶 | "一阶半" | 二阶 |
+| 需要信息 | 仅 $f$ | $\nabla f$ | $\nabla f$ | $\nabla f$, $\mathbf{H}_f$ |
+| 每步代价 | $O(n)$ | $O(n)$ | $O(n^2)$ | $O(n^3)$ |
+| 收敛性 | 无保证 | 线性 | 超线性 | 二次 |
+| 可扩展性 | 差 ($n \le 10$) | 极好 | 好 | 差 |
+
+**实践选择**：小规模用 BFGS（`optim(..., method="BFGS")`），超大规模用 SGD + 动量。
+:::
+
+{{< pagebreak >}}
+
+# 有约束优化 {#sec-constrained}
+
+> **Beschränkte Optimierung**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **Lagrange 乘数法**：用一个新变量"吸收"等式约束
+- **KKT 条件**：处理不等式约束的完整工具
+- **互补松弛条件** 的直觉含义
+- 正则化回归（岭回归 / Lasso）的约束优化视角
+:::
+
+## Lagrange 乘数法 {#sec-lagrange}
+
+> **Lagrange-Multiplikator-Methode**
+
+**问题**：最小化 $f(\mathbf{x})$，同时满足等式约束 $g_i(\mathbf{x}) = 0$，$i = 1, \ldots, m$。
+
+**几何直觉**：在约束面上的最优点，$f$ 的等高线与约束面**相切**——也就是 $\nabla f$ 平行于 $\nabla g$。如果 $\nabla f$ 不平行于 $\nabla g$，你就还能沿约束面移动来降低 $f$。
+
+$$
+\exists\,\lambda \quad\text{使得}\quad \nabla f(\mathbf{x}^\star) + \lambda\,\nabla g(\mathbf{x}^\star) = \mathbf{0}
+$$
+
+```{r}
+#| label: fig-lagrange-geometry
+#| fig-cap: "Lagrange 乘数法的几何直觉：最优点处等高线与约束曲线相切 | Geometrie der Lagrange-Methode"
+#| fig-height: 6
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x1_l <- seq(-0.5, 2, length.out = 200)
+x2_l <- seq(-0.5, 2, length.out = 200)
+# f(x,y) = x^2 + y^2
+z_l <- outer(x1_l, x2_l, function(a, b) a^2 + b^2)
+contour(x1_l, x2_l, z_l, nlevels = 15, 
+        col = adjustcolor(pal$blue, 0.5),
+        xlab = expression(x[1]), ylab = expression(x[2]),
+        main = expression("min" ~ x^2 + y^2 ~ "使得" ~ x + y == 1),
+        cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+
+# 约束线 x + y = 1
+abline(a = 1, b = -1, col = pal$red, lwd = 3)
+text(1.6, -0.3, "x + y = 1", col = pal$red, font = 2, cex = 1)
+
+# 最优点 (0.5, 0.5)
+points(0.5, 0.5, pch = 23, bg = pal$green, col = "white", cex = 2.5, lwd = 2)
+text(0.7, 0.35, expression("(" * frac(1,2) * "," * frac(1,2) * ")"), 
+     col = pal$green, font = 2, cex = 1)
+
+# ∇f 和 ∇g 的方向
+arrows(0.5, 0.5, 0.5 + 0.6, 0.5 + 0.6, col = pal$blue, lwd = 2.5, length = 0.12)
+text(1.2, 1.2, expression(nabla * f), col = pal$blue, font = 2, cex = 1)
+arrows(0.5, 0.5, 0.5 + 0.4, 0.5 + 0.4, col = pal$red, lwd = 2.5, length = 0.12, lty = 2)
+text(0.85, 1.05, expression(nabla * g), col = pal$red, font = 2, cex = 1)
+
+text(1.5, 1.7, "相切! 平行!\nTangential! Parallel!", col = pal$purple, font = 2, cex = 0.9)
+```
+
+**Lagrange 函数**：将约束"嵌入"目标函数——
+
+$$
+\mathcal{L}(\mathbf{x}, \boldsymbol{\lambda}) = f(\mathbf{x}) + \boldsymbol{\lambda}^\top \mathbf{g}(\mathbf{x})
+$$
+
+在最优点处的**必要条件**：$\nabla_{\mathbf{x}} \mathcal{L}(\mathbf{x}^\star, \boldsymbol{\lambda}^\star) = \mathbf{0}^\top$ 且 $\mathbf{g}(\mathbf{x}^\star) = \mathbf{0}$。
+
+## KKT 条件：处理不等式约束 {#sec-kkt}
+
+> **KKT-Bedingungen: Ungleichungsnebenbedingungen**
+
+当问题包含不等式约束 $h_j(\mathbf{x}) \le 0$ 时，需要更强的条件。**Karush-Kuhn-Tucker（KKT）条件**是有约束优化最优性的必要条件（对凸问题同时也是充分条件）。
+
+在最优点 $\mathbf{x}^\star$ 处，必须同时满足四个条件：
+
+$$
+\text{(1) 驻定性: } \nabla f(\mathbf{x}^\star) + \sum_i \lambda_i\,\nabla g_i(\mathbf{x}^\star) + \sum_j \mu_j\,\nabla h_j(\mathbf{x}^\star) = \mathbf{0}^\top
+$$
+$$
+\text{(2) 原始可行性: } g_i(\mathbf{x}^\star) = 0, \quad h_j(\mathbf{x}^\star) \le 0
+$$
+$$
+\text{(3) 对偶可行性: } \mu_j \ge 0
+$$
+$$
+\text{(4) 互补松弛性: } \mu_j\,h_j(\mathbf{x}^\star) = 0 \quad \forall\, j
+$$
+
+::: {.callout-tip icon="false"}
+## 🤔 互补松弛条件的直觉 | Intuition der komplementären Schlupfbedingung
+
+条件 $\mu_j\,h_j(\mathbf{x}^\star) = 0$ 意味着：对每个不等式约束，二者必居其一——
+
+- 如果 $h_j(\mathbf{x}^\star) < 0$（约束"不紧"，有余量），则 $\mu_j = 0$（这个约束"不起作用"）
+- 如果 $\mu_j > 0$（这个约束在"推"最优解），则 $h_j(\mathbf{x}^\star) = 0$（约束恰好取等号）
+
+直觉：只有真正"挡住路"的围墙才会对你的选择产生影响。
+
+*Nur Wände, die tatsächlich „im Weg stehen", beeinflussen die optimale Lösung.*
+:::
+
+## 应用：正则化回归的几何
+
+> **Anwendung: Geometrie der regularisierten Regression**
+
+正则化回归可以从约束优化的角度来理解。惩罚形式 $\min_{\boldsymbol{\beta}} \|\mathbf{y} - \mathbf{X}\boldsymbol{\beta}\|_2^2 + \lambda\|\boldsymbol{\beta}\|_p^p$ 等价于约束形式 $\min_{\boldsymbol{\beta}} \|\mathbf{y} - \mathbf{X}\boldsymbol{\beta}\|_2^2$ 使得 $\|\boldsymbol{\beta}\|_p^p \le c$。
+
+```{r}
+#| label: fig-ridge-lasso-geometry
+#| fig-cap: "岭回归 vs Lasso 的几何对比：菱形的角促成稀疏解 | Ridge vs. Lasso: Die Ecken der Raute erzeugen Sparsity"
+#| fig-height: 5.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+
+# 公共设置
+x1_rl <- seq(-3, 3, length.out = 200)
+x2_rl <- seq(-3, 3, length.out = 200)
+# 假设一个椭圆形损失等高线
+center <- c(2, 1.5)
+z_rl <- outer(x1_rl, x2_rl, function(a, b) {
+  2*(a - center[1])^2 + (b - center[2])^2
+})
+
+# 岭回归（L2 约束：圆）
+contour(x1_rl, x2_rl, z_rl, nlevels = 12, 
+        col = adjustcolor(pal$blue, 0.5),
+        xlab = expression(beta[1]), ylab = expression(beta[2]),
+        main = expression("岭回归 | Ridge  (" * L^2 * ")"),
+        cex.main = 1.1, col.main = pal$blue)
+# 画圆
+theta_c <- seq(0, 2*pi, length.out = 200)
+r_c <- 1.4
+lines(r_c * cos(theta_c), r_c * sin(theta_c), col = pal$red, lwd = 3)
+# 最优点在圆上
+opt_ridge <- c(r_c * cos(0.35), r_c * sin(0.35))
+points(opt_ridge[1], opt_ridge[2], pch = 23, bg = pal$green, col = "white", cex = 2.5, lwd = 2)
+points(center[1], center[2], pch = 4, col = pal$blue, cex = 2, lwd = 2)
+text(center[1]+0.2, center[2]+0.3, expression(hat(beta)[OLS]), col = pal$blue, cex = 0.8)
+text(-2.5, 2.5, "约束区域\nBeschränkter\nBereich", col = pal$red, font = 2, cex = 0.7)
+
+# Lasso（L1 约束：菱形）
+contour(x1_rl, x2_rl, z_rl, nlevels = 12, 
+        col = adjustcolor(pal$blue, 0.5),
+        xlab = expression(beta[1]), ylab = expression(beta[2]),
+        main = expression("Lasso (" * L^1 * ")"),
+        cex.main = 1.1, col.main = pal$orange)
+# 画菱形
+r_d <- 1.4
+polygon(c(r_d, 0, -r_d, 0), c(0, r_d, 0, -r_d), 
+        border = pal$red, lwd = 3, col = NA)
+# 最优点在菱形角上（稀疏！）
+points(r_d, 0, pch = 23, bg = pal$green, col = "white", cex = 2.5, lwd = 2)
+points(center[1], center[2], pch = 4, col = pal$blue, cex = 2, lwd = 2)
+text(r_d + 0.15, -0.3, expression(beta[2] == 0 ~ "!"), col = pal$green, font = 2, cex = 0.9)
+text(-2.5, 2.5, "菱形的角\n→ 稀疏性!\nSparsity!", col = pal$red, font = 2, cex = 0.7)
+
+par(mfrow = c(1, 1))
+```
+
+岭回归的 KKT 驻定性条件直接给出闭式解：$\hat{\boldsymbol{\beta}}_{\text{Ridge}} = (\mathbf{X}^\top\mathbf{X} + \mu\mathbf{I})^{-1}\mathbf{X}^\top\mathbf{y}$。而 Lasso 的 $L^1$ 约束区域是菱形，等高线更容易在菱形的**角**处相切——角处某些 $\beta_j = 0$，从而产生**稀疏解**。这就是 Lasso 能做变量选择的几何原因。
+
+::: {.callout-important icon="false"}
+## 💡 KKT 与凸性 | KKT und Konvexität
+
+**定理**：若 $f$ 和所有 $h_j$ 是凸函数，所有 $g_i$ 是仿射函数，则 KKT 条件不仅是**必要条件**，也是**充分条件**——满足 KKT 的点就是全局最优。
+
+许多统计问题是凸的（最小二乘、指数族 MLE、岭回归等），所以 KKT 在统计学中特别有力。对非凸问题（如神经网络），KKT 仅给出局部最优的保证。
+:::
+
+{{< pagebreak >}}
+
+# R 中的优化实战 {#sec-r-optim}
+
+> **Optimierung in R: Praktische Umsetzung**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- `optimize()`：单变量优化
+- `optim()`：多变量优化的瑞士军刀
+- 如何选择方法、提供梯度、设置约束
+- **常见陷阱**与注意事项
+:::
+
+## `optimize()`：单变量优化
+
+> **Univariate Optimierung**
+
+```{r}
+#| label: optimize-demo
+#| code-fold: false
+
+# 单变量优化 | Univariate Optimierung
+f_uni <- function(x) (x - 3)^2 + sin(5*x)
+
+# 在 [0, 6] 上寻找最小值
+res_uni <- optimize(f_uni, interval = c(0, 6))
+cat("最小值点 | Minimum bei x =", round(res_uni$minimum, 6), "\n")
+cat("最小值   | Minimaler Wert =", round(res_uni$objective, 6), "\n")
+```
+
+`optimize()` 使用黄金分割搜索，仅适用于**单变量**。
+
+## `optim()`：多变量优化
+
+> **Multivariate Optimierung**
+
+```{r}
+#| label: optim-demo
+#| code-fold: false
+
+# Rosenbrock 函数 | Rosenbrock-Funktion
+rosenbrock <- function(x) (1 - x[1])^2 + 100*(x[2] - x[1]^2)^2
+grad_rosenbrock <- function(x) {
+  c(-2*(1 - x[1]) - 400*x[1]*(x[2] - x[1]^2),
+    200*(x[2] - x[1]^2))
+}
+
+x0 <- c(-1, 2)
+
+cat("========== 方法对比 | Methodenvergleich ==========\n\n")
+
+# Nelder-Mead（不需要梯度）
+res_nm <- optim(x0, rosenbrock, method = "Nelder-Mead")
+cat("Nelder-Mead:\n")
+cat("  解:", round(res_nm$par, 6), " 函数值:", round(res_nm$value, 8),
+    " 迭代:", res_nm$counts[1], "\n")
+cat("  收敛状态:", ifelse(res_nm$convergence == 0, "✓ 收敛", "✗ 未收敛"), "\n\n")
+
+# BFGS（提供梯度）
+res_bfgs <- optim(x0, rosenbrock, grad_rosenbrock, method = "BFGS")
+cat("BFGS (含梯度):\n")
+cat("  解:", round(res_bfgs$par, 6), " 函数值:", round(res_bfgs$value, 8),
+    " 梯度评估:", res_bfgs$counts[2], "\n")
+cat("  收敛状态:", ifelse(res_bfgs$convergence == 0, "✓ 收敛", "✗ 未收敛"), "\n\n")
+
+# L-BFGS-B（有上下界约束）
+res_lbfgsb <- optim(x0, rosenbrock, grad_rosenbrock, method = "L-BFGS-B",
+                     lower = c(-2, -2), upper = c(2, 2))
+cat("L-BFGS-B (有界约束 [-2,2]²):\n")
+cat("  解:", round(res_lbfgsb$par, 6), " 函数值:", round(res_lbfgsb$value, 8), "\n")
+cat("  收敛状态:", ifelse(res_lbfgsb$convergence == 0, "✓ 收敛", "✗ 未收敛"), "\n")
+```
+
+::: {.callout-warning icon="false"}
+## ⚠️ 使用 `optim()` 的注意事项 | Hinweise zu `optim()`
+
+1. **检查收敛状态**：`convergence == 0` 才表示真正收敛！迭代次数耗尽时不一定报错。
+2. **提供解析梯度**：比数值近似更快、更精确——`optim(x0, f, gr = grad_f, method = "BFGS")`。
+3. **尝试多个初始值**：非凸问题中，不同初始值可能收敛到不同的局部最优。
+4. **默认方法**：不提供梯度时默认 Nelder-Mead，提供梯度时推荐 BFGS。
+
+*Überprüfen Sie immer `convergence == 0`! Stellen Sie analytische Gradienten bereit! Probieren Sie mehrere Startwerte!*
+:::
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 方法决策树
+
+遇到一个优化问题时，你应该问自己以下问题来选择合适的方法：
+
+```{r}
+#| label: fig-decision-tree
+#| fig-cap: "优化方法选择决策树 | Entscheidungsbaum für Optimierungsmethoden"
+#| fig-height: 7
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("方法选择决策树 | Entscheidungsbaum", 
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 根节点
+rect(3.5, 7, 6.5, 8, col = "#DBEAFE", border = pal$blue, lwd = 2)
+text(5, 7.5, "有约束吗?", cex = 0.9, font = 2, col = "#1E293B")
+
+# 有约束分支
+arrows(4, 7, 2, 6.3, col = pal$gray, lwd = 1.5, length = 0.1)
+text(2.8, 6.8, "是", col = pal$red, font = 2, cex = 0.8)
+rect(0.5, 5.5, 3.5, 6.3, col = "#D1FAE5", border = pal$green, lwd = 2)
+text(2, 5.9, "Lagrange/KKT\nL-BFGS-B", cex = 0.75, font = 2, col = "#1E293B")
+
+# 无约束分支
+arrows(6, 7, 8, 6.3, col = pal$gray, lwd = 1.5, length = 0.1)
+text(7.2, 6.8, "否", col = pal$green, font = 2, cex = 0.8)
+rect(6.5, 5.5, 9.5, 6.3, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(8, 5.9, "有导数吗?", cex = 0.9, font = 2, col = "#1E293B")
+
+# 无导数
+arrows(7, 5.5, 5.5, 4.8, col = pal$gray, lwd = 1.5, length = 0.1)
+text(6, 5.3, "否", col = pal$red, font = 2, cex = 0.8)
+rect(4, 4, 7, 4.8, col = "#FEE2E2", border = pal$red, lwd = 2)
+text(5.5, 4.4, "Nelder-Mead\n(n ≤ 10)", cex = 0.75, font = 2, col = "#1E293B")
+
+# 有导数
+arrows(9, 5.5, 9, 4.8, col = pal$gray, lwd = 1.5, length = 0.1)
+text(9.3, 5.3, "是", col = pal$green, font = 2, cex = 0.8)
+rect(7.5, 4, 10.5, 4.8, col = "#E0E7FF", border = pal$indigo, lwd = 2)
+text(9, 4.4, "数据量大吗?", cex = 0.9, font = 2, col = "#1E293B")
+
+# 数据小
+arrows(8, 4, 7, 3.3, col = pal$gray, lwd = 1.5, length = 0.1)
+text(7.2, 3.8, "小", col = pal$blue, font = 2, cex = 0.8)
+rect(5.5, 2.5, 8.5, 3.3, col = "#DBEAFE", border = pal$blue, lwd = 2)
+text(7, 2.9, "BFGS / 牛顿法", cex = 0.75, font = 2, col = "#1E293B")
+
+# 数据大
+arrows(10, 4, 10, 3.3, col = pal$gray, lwd = 1.5, length = 0.1)
+text(10.3, 3.8, "大", col = pal$red, font = 2, cex = 0.8)
+rect(8.8, 2.5, 11.2, 3.3, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(10, 2.9, "SGD + 动量\n(Mini-Batch)", cex = 0.75, font = 2, col = "#1E293B")
+
+# 底部标注
+rect(1, 0.5, 10, 1.5, col = adjustcolor(pal$purple, 0.1), border = pal$purple, lwd = 1.5)
+text(5.5, 1, "实践默认: optim(..., method='BFGS') | 深度学习: Adam/SGD",
+     cex = 0.85, col = pal$purple, font = 2)
+```
+
+## 核心公式速查
+
+| 方法 / Methode | 更新公式 / Update | 每步代价 | 收敛 |
+|:--:|:---|:--:|:--:|
+| 梯度下降 | $\mathbf{x}^{(k+1)} = \mathbf{x}^{(k)} - \gamma\nabla f^\top$ | $O(n)$ | 线性 |
+| 动量 GD | $\mathbf{v}^{+} = \alpha\mathbf{v} - \gamma\nabla f^\top;\; \mathbf{x}^{+} = \mathbf{x} + \mathbf{v}^{+}$ | $O(n)$ | 加速 |
+| 牛顿法 | $\mathbf{x}^{(k+1)} = \mathbf{x}^{(k)} - \mathbf{H}_f^{-1}\nabla f^\top$ | $O(n^3)$ | 二次 |
+| BFGS | $\mathbf{x}^{(k+1)} = \mathbf{x}^{(k)} - \mathbf{B}_k\nabla f^\top$ | $O(n^2)$ | 超线性 |
+| SGD | $\boldsymbol{\theta}^{+} = \boldsymbol{\theta} - \gamma\nabla\ell_{i_k}^\top$ | $O(1)$ | 依赖 $\gamma$ |
+
+## 本章的逻辑链
+
+```{r}
+#| label: fig-logic-chain
+#| fig-cap: "知识逻辑链：每一步都被实际需求驱动 | Logikkette: Jeder Schritt wird durch praktische Bedürfnisse motiviert"
+#| fig-width: 12
+#| fig-height: 7
+
+library(ggplot2)
+library(showtext)
+font_add_google("Noto Sans SC", "noto")
+showtext_auto()
+
+nodes <- data.frame(
+  x = c(1, 1.8, 2.6, 3.4, 3.4, 3.4, 4.2),
+  y = c(2, 2, 2, 3, 2, 1, 2),
+  label = c("方程求解\n二分/牛顿", "优化≃解方程\n∇f=0",
+            "凸性/鞍点\n最优性条件", "牛顿法\n二次收敛",
+            "梯度下降\nSGD/动量", "BFGS\n拟牛顿",
+            "有约束\nLagrange/KKT"),
+  fill = c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#FEE2E2", "#D1FAE5", "#E0E7FF", "#F0FDF4"),
+  color = c("#2563EB", "#D97706", "#DB2777", "#DC2626", "#16A34A", "#6366F1", "#15803D")
+)
+
+arrows_df <- data.frame(
+  x    = c(1.35, 2.15, 2.95, 2.95, 2.95, 3.55, 3.55, 3.55),
+  y    = c(2, 2, 2.15, 2, 1.85, 2.85, 2, 1.15),
+  xend = c(1.45, 2.25, 3.05, 3.05, 3.05, 3.85, 3.85, 3.85),
+  yend = c(2, 2, 2.85, 2, 1.15, 2.15, 2, 1.85)
+)
+
+ggplot() +
+  geom_segment(data = arrows_df,
+               aes(x = x, y = y, xend = xend, yend = yend),
+               arrow = arrow(length = unit(0.25, "cm")),
+               color = "#94A3B8", linewidth = 1) +
+  geom_tile(data = nodes, aes(x, y, fill = I(fill), color = I(color)),
+            width = 0.6, height = 0.45, linewidth = 1.8) +
+  geom_text(data = nodes, aes(x, y, label = label),
+            family = "noto", size = 5, color = "#1E293B", lineheight = 0.9) +
+  annotate("text", x = 2.6, y = 0.3,
+           label = "统计学与机器学习 = 优化 + 概率",
+           family = "noto", size = 6, color = pal$red, fontface = "bold") +
+  annotate("text", x = 2.6, y = 0.05,
+           label = "Statistik & ML = Optimierung + Wahrscheinlichkeit",
+           family = "noto", size = 4.5, color = "#64748B", fontface = "italic") +
+  theme_void() +
+  theme(text = element_text(family = "noto"),
+        plot.title = element_text(hjust = 0.5, size = 18, face = "bold")) +
+  labs(title = "概念逻辑链 | Logikkette der Konzepte") +
+  coord_fixed(ratio = 0.7, xlim = c(0.5, 4.7), ylim = c(-0.2, 3.5))
+```
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 方程求解
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| das Bisektionsverfahren | 二分法 | bisection method |
+| das Newton-Raphson-Verfahren | 牛顿-拉弗森法 | Newton-Raphson method |
+| die Fixpunktiteration | 不动点迭代 | fixed-point iteration |
+| die Nullstelle | 零点 | root / zero |
+| die Tangente | 切线 | tangent line |
+| die Konvergenzordnung | 收敛阶 | convergence order |
+
+## 优化基础
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Optimierung | 优化 | optimization |
+| die Zielfunktion | 目标函数 | objective function |
+| das Minimum (Pl: Minima) | 极小值 | minimum |
+| das Maximum (Pl: Maxima) | 极大值 | maximum |
+| der Sattelpunkt | 鞍点 | saddle point |
+| die konvexe Funktion | 凸函数 | convex function |
+| die starke Konvexität | 强凸性 | strong convexity |
+| die Konditionszahl | 条件数 | condition number |
+| der stationäre Punkt | 驻点 | stationary point |
+
+## 迭代方法
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| das Gradientenabstiegsverfahren | 梯度下降法 | gradient descent |
+| das Newton-Verfahren | 牛顿法 | Newton's method |
+| das Quasi-Newton-Verfahren | 拟牛顿法 | quasi-Newton method |
+| der stochastische Gradientenabstieg | 随机梯度下降 | stochastic gradient descent |
+| das Impulsverfahren / Momentum | 动量法 | momentum method |
+| die Liniensuche | 直线搜索 | line search |
+| die Schrittweite / Lernrate | 步长 / 学习率 | step size / learning rate |
+| die Armijo-Bedingung | Armijo 条件 | Armijo condition |
+| das Nelder-Mead-Verfahren | Nelder-Mead 法 | Nelder-Mead method |
+| das Simplex | 单纯形 | simplex |
+
+## 收敛性
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Konvergenz | 收敛 | convergence |
+| die Konvergenzrate | 收敛速率 | convergence rate |
+| die lineare Konvergenz | 线性收敛 | linear convergence |
+| die quadratische Konvergenz | 二次收敛 | quadratic convergence |
+| die superlineare Konvergenz | 超线性收敛 | superlinear convergence |
+| die Lipschitz-Stetigkeit | Lipschitz 连续性 | Lipschitz continuity |
+| das Abbruchkriterium | 停止准则 | stopping criterion |
+
+## 有约束优化
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die beschränkte Optimierung | 有约束优化 | constrained optimization |
+| die Nebenbedingung | 约束条件 | constraint |
+| die Gleichungsnebenbedingung | 等式约束 | equality constraint |
+| die Ungleichungsnebenbedingung | 不等式约束 | inequality constraint |
+| der Lagrange-Multiplikator | Lagrange 乘数 | Lagrange multiplier |
+| die Lagrange-Funktion | Lagrange 函数 | Lagrangian |
+| die KKT-Bedingungen | KKT 条件 | KKT conditions |
+| die komplementäre Schlupfbedingung | 互补松弛条件 | complementary slackness |
+| die zulässige Menge | 可行集 | feasible set |
+| die Regularisierung | 正则化 | regularization |
+
+## 线性代数 & 统计
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| der Gradient | 梯度 | gradient |
+| die Hesse-Matrix | 黑塞矩阵 | Hessian matrix |
+| die Jacobi-Matrix | 雅可比矩阵 | Jacobian matrix |
+| die positiv definite Matrix | 正定矩阵 | positive definite matrix |
+| der Eigenwert | 特征值 | eigenvalue |
+| die Spektralnorm | 谱范数 | spectral norm |
+| die Maximum-Likelihood-Schätzung | 极大似然估计 | maximum likelihood estimation |
+| die Ridge-Regression | 岭回归 | ridge regression |
+:::

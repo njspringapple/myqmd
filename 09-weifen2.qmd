@@ -1,0 +1,1369 @@
+---
+title: "第二章：微分法则与高阶导数"
+subtitle: "从运算法则到 Taylor 展开——优化的数学引擎 | Von Rechenregeln bis Taylor-Entwicklung — Die mathematische Engine der Optimierung"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+# 全局配色方案 | Globales Farbschema
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  indigo   = "#6366F1",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+上一章我们学会了「训练 = 在损失函数的碗里找最低点」。但当模型从简单的线性回归变成深度神经网络——函数套函数、矩阵乘矩阵——你怎么 **算出** 梯度？
+
+*Im letzten Kapitel haben wir gelernt: „Training = den tiefsten Punkt in der Verlustschüssel finden." Aber wenn das Modell von einer einfachen linearen Regression zu einem tiefen neuronalen Netz wird — Funktionen in Funktionen, Matrizen mal Matrizen — wie **berechnet** man den Gradienten?*
+
+本章就是你的 **微积分工具箱**。每一节打开一层抽屉，拿出一把新工具，最终你将拥有从逻辑回归到 Newton 法的全套装备。
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图：从基本性质到 Newton 法 | Lernroadmap: Von Grundeigenschaften bis Newton-Verfahren"
+#| code-fold: true
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 12), ylim = c(0, 7), axes = FALSE,
+     xlab = "", ylab = "", main = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")),
+      cex.main = 1.4, col.main = "#1E293B")
+
+# 步骤坐标
+steps_x <- c(1.2, 3.4, 5.6, 7.8, 10.0)
+steps_y <- rep(5.3, 5)
+arrows(steps_x[-5] + 0.85, steps_y[-5], steps_x[-1] - 0.85, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("连续性\n线性性", "乘积法则",
+               "链式法则\n逻辑回归", "Hesse 矩阵\n高阶导数",
+               "Taylor 展开\nNewton 法")
+labels_de <- c("Stetigkeit\nLinearität", "Produktregel",
+               "Kettenregel\nLogist. Reg.", "Hesse-Matrix\nHöhere Abl.",
+               "Taylor-Entw.\nNewton-Verf.")
+colors <- c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#E0E7FF", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DC2626", "#6366F1", "#16A34A")
+
+for (i in 1:5) {
+  rect(steps_x[i] - 0.85, steps_y[i] - 0.95, steps_x[i] + 0.85, steps_y[i] + 0.95,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.25, labels_cn[i], cex = 0.68, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.48, col = "#64748B", font = 3)
+}
+
+arrows(0.5, 1.5, 11.5, 1.5, col = "#DC2626", lwd = 2, length = 0.15)
+text(6, 1.9, "从「性质」到「应用」 | Von Eigenschaften zu Anwendungen  >>>",
+     cex = 0.85, col = "#DC2626")
+
+triggers <- c("", "复合表达式!", "函数嵌套!", "曲率信息!", "局部近似!")
+for (i in 2:5) {
+  text(steps_x[i] - 1.1, steps_y[i] + 1.35, triggers[i],
+       cex = 0.65, col = "#EA580C", font = 2)
+}
+
+for (i in 1:5) {
+  text(steps_x[i] - 0.6, steps_y[i] + 0.8, paste0("§", i),
+       cex = 0.55, col = borders[i], font = 2)
+}
+```
+
+**最终目标 | Endziel**：理解并能运用以下核心公式——
+
+$$
+f(\mathbf{x}+\mathbf{h}) = f(\mathbf{x}) + \nabla f(\mathbf{x})\,\mathbf{h} + \frac{1}{2}\mathbf{h}^\top \mathbf{H}_f(\mathbf{x})\,\mathbf{h} + o(\|\mathbf{h}\|^2)
+$$
+
+现在看不懂？**完全没关系**——读完本章，每一项你都能亲手算出来。
+
+## 所用预备知识 | Voraussetzungen {.unnumbered}
+
+本章假设你已熟悉以下概念（均在第一章或先修课中介绍过）：
+
+| 概念 / Konzept | 简要说明 / Kurzbeschreibung |
+|:--|:--|
+| Fréchet 可微性 | $f(\mathbf{x}+\mathbf{h})=f(\mathbf{x})+D_\mathbf{x}f(\mathbf{h})+o(\|\mathbf{h}\|)$ |
+| 梯度 $\nabla f(\mathbf{x})$ | 用于 $f:\mathbb{R}^n\to\mathbb{R}$，满足 $D_\mathbf{x}f(\mathbf{h})=\nabla f(\mathbf{x})\,\mathbf{h}$ |
+| Jacobi 矩阵 $\mathbf{J}_f(\mathbf{x})$ | 用于 $f:\mathbb{R}^n\to\mathbb{R}^m$，满足 $D_\mathbf{x}f(\mathbf{h})=\mathbf{J}_f(\mathbf{x})\,\mathbf{h}$ |
+| 矩阵导数 $\partial f/\partial \mathbf{X}$ | 用于 $f:\mathbb{R}^{m\times n}\to\mathbb{R}$ |
+| 乘积法则 / 链式法则 (一维) | $(fg)'=f'g+fg'$；$(g\circ f)'=g'(f)\cdot f'$ |
+| 二次型 | $\mathbf{x}^\top\mathbf{A}\mathbf{x}$ |
+
+{{< pagebreak >}}
+
+# 可微性的"赠品"：连续性与线性性 {#sec-properties}
+
+> **Geschenke der Differenzierbarkeit: Stetigkeit und Linearität**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie in diesem Abschnitt lernen
+
+- 可微  $\implies$ 连续——但反过来不成立
+- 导数算子具有 **线性性**：可以拆分复杂梯度
+- *Differenzierbarkeit $\implies$ Stetigkeit, aber nicht umgekehrt*
+- *Der Ableitungsoperator ist **linear**: komplexe Gradienten lassen sich zerlegen*
+:::
+
+## 可微 ⟹ 连续 {#sec-continuity}
+
+> **Differenzierbar ⟹ stetig**
+
+**定理 | Satz：** 设 $\mathbb{D}$ 和 $\mathbb{E}$ 为赋范空间，$f:\mathbb{D}\to\mathbb{E}$ 在 $\mathbf{x}\in\mathbb{D}$ 处可微，则 $f$ 在 $\mathbf{x}$ 处连续。
+
+**证明 | Beweis：**
+
+由可微性定义，$D_\mathbf{x}f$ 是有界线性算子，因此存在常数 $M$ 使得
+
+$$
+\|D_\mathbf{x}f(\mathbf{h})\| \le M\|\mathbf{h}\| = O(\|\mathbf{h}\|)
+$$
+
+于是
+
+$$
+f(\mathbf{x}+\mathbf{h}) = f(\mathbf{x}) + \underbrace{D_\mathbf{x}f(\mathbf{h})}_{O(\|\mathbf{h}\|)} + o(\|\mathbf{h}\|) = f(\mathbf{x}) + O(\|\mathbf{h}\|)
+$$
+
+当 $\|\mathbf{h}\|\to 0$ 时，$f(\mathbf{x}+\mathbf{h})\to f(\mathbf{x})$。 $\square$
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+可微性 $\implies$ 连续性。这意味着：如果损失函数可微，它就不会"跳跃"——梯度下降沿着一条 **连续的** 曲面走，不会突然掉进悬崖。
+
+*Wenn die Verlustfunktion differenzierbar ist, „springt" sie nicht — der Gradientenabstieg bewegt sich auf einer **stetigen** Oberfläche.*
+:::
+
+## 反例：连续但不可微
+
+> **Gegenbeispiel: stetig, aber nicht differenzierbar**
+
+经典反例：$f(x)=|x|$。
+
+- 在 $x=0$ 处 **连续**：$f(0+h)=|h|\to 0=f(0)$。✓
+
+- 在 $x=0$ 处 **不可微**：左右极限不同。✗
+
+$$
+\lim_{h\to 0^+}\frac{|h|}{h}=1, \qquad \lim_{h\to 0^-}\frac{|h|}{h}=-1
+$$
+
+```{r}
+#| label: fig-abs-value
+#| fig-cap: "|x| 在 x = 0 处连续但不可微：左右'坡度'不一致 | |x| ist bei x = 0 stetig, aber nicht differenzierbar"
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x_seq <- seq(-3, 3, length.out = 500)
+plot(x_seq, abs(x_seq), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "x", ylab = "f(x) = |x|",
+     main = "连续 ≠ 可微 | Stetig ≠ Differenzierbar",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 左侧切线斜率 = -1
+lines(c(-3, 0), c(3, 0), col = "#DC2626", lwd = 2, lty = 2)
+# 右侧切线斜率 = +1
+lines(c(0, 3), c(0, 3), col = "#16A34A", lwd = 2, lty = 2)
+# 尖角点
+points(0, 0, pch = 21, bg = "#EA580C", col = "white", cex = 2.5, lwd = 2)
+
+text(-1.8, 2.2, "左导数 = -1", col = "#DC2626", cex = 0.95, font = 2)
+text(1.8, 2.2, "右导数 = +1", col = "#16A34A", cex = 0.95, font = 2)
+text(0.6, 0.5, "尖角!\nKnick!", col = "#EA580C", cex = 0.85, font = 2)
+
+legend("top",
+       legend = c("f(x) = |x|", "左切线 | Linke Tangente", "右切线 | Rechte Tangente"),
+       col = c("#2563EB", "#DC2626", "#16A34A"),
+       lwd = c(3, 2, 2), lty = c(1, 2, 2), bty = "n", cex = 0.9, horiz = TRUE)
+```
+
+::: {.callout-warning icon="false"}
+## ⚠️ 机器学习中的启示 | Bedeutung für ML
+
+ReLU 激活函数 $\text{ReLU}(x)=\max(0,x)$ 在 $x=0$ 处严格来讲不可微（和 $|x|$ 类似的尖角）。实际操作中，我们在该点人为指定一个值（如 $0$），因为单个点不影响积分/期望。
+
+*Die ReLU-Funktion $\text{ReLU}(x)=\max(0,x)$ ist bei $x=0$ streng genommen nicht differenzierbar. In der Praxis definiert man den Wert dort einfach als $0$.*
+:::
+
+## 导数算子的线性性 {#sec-linearity}
+
+> **Linearität des Ableitungsoperators**
+
+**定理 | Satz：** 设 $f,g:\mathbb{D}\to\mathbb{E}$ 在 $\mathbf{x}$ 处可微，则对所有 $c_1,c_2\in\mathbb{R}$：
+
+$$
+D_\mathbf{x}(c_1 f + c_2 g) = c_1 \, D_\mathbf{x}f + c_2 \, D_\mathbf{x}g
+$$
+
+这意味着：**求导可以"穿过"加法和常数乘法**。把它套到不同的空间上，就得到我们熟悉的各种形式：
+
+| 空间 / Räume | 形式 / Form |
+|:--|:--|
+| $f,g:\mathbb{R}\to\mathbb{R}$ | $(c_1 f+c_2 g)'=c_1 f'+c_2 g'$ |
+| $f,g:\mathbb{R}^n\to\mathbb{R}$ | $\nabla(c_1 f+c_2 g)=c_1\nabla f+c_2\nabla g$ |
+| $f,g:\mathbb{R}^n\to\mathbb{R}^m$ | $\mathbf{J}_{c_1 f+c_2 g}=c_1\mathbf{J}_f+c_2\mathbf{J}_g$ |
+| $f,g:\mathbb{R}^{m\times n}\to\mathbb{R}$ | $\frac{\partial(c_1 f+c_2 g)}{\partial\mathbf{X}}=c_1\frac{\partial f}{\partial\mathbf{X}}+c_2\frac{\partial g}{\partial\mathbf{X}}$ |
+
+## 示例：线性性的威力
+
+> **Beispiel: Die Kraft der Linearität**
+
+已知 $f(\mathbf{x})=\mathbf{x}^\top\mathbf{x}$ 和 $g(\mathbf{x})=\mathbf{a}^\top\mathbf{x}$（其中 $\mathbf{a}=(1,2)^\top$）。在 $\mathbf{x}=(1,-1)^\top$ 处计算 $h(\mathbf{x})=3f(\mathbf{x})-2g(\mathbf{x})$ 的梯度。
+
+**解 | Lösung：**
+
+分别求梯度：$\nabla f(\mathbf{x})=2\mathbf{x}^\top$，$\nabla g(\mathbf{x})=\mathbf{a}^\top=(1,\;2)$。
+
+由线性性：
+
+$$
+\nabla h(\mathbf{x}) = 3\nabla f(\mathbf{x})-2\nabla g(\mathbf{x}) = 3(2x_1,\;2x_2)-2(1,\;2) = (6x_1-2,\;6x_2-4)
+$$
+
+代入 $\mathbf{x}=(1,-1)^\top$：
+
+$$
+\nabla h\!\left(\begin{pmatrix}1\\-1\end{pmatrix}\right) = (6\cdot 1-2,\;6\cdot(-1)-4) = (4,\;-10)
+$$
+
+```{r}
+#| label: linearity-verify
+#| code-fold: false
+
+# 数值验证线性性 | Numerische Überprüfung der Linearität
+x <- c(1, -1)
+a <- c(1, 2)
+
+# 分别计算梯度
+梯度_f <- 2 * x             # ∇f = 2x^T
+梯度_g <- a                  # ∇g = a^T
+
+# 用线性性组合
+梯度_h_线性性 <- 3 * 梯度_f - 2 * 梯度_g
+
+# 直接用数值微分验证
+h_func <- function(x) 3 * sum(x^2) - 2 * sum(a * x)
+eps <- 1e-7
+梯度_h_数值 <- c(
+  (h_func(x + c(eps, 0)) - h_func(x - c(eps, 0))) / (2 * eps),
+  (h_func(x + c(0, eps)) - h_func(x - c(0, eps))) / (2 * eps)
+)
+
+cat("线性性法 | Linearitätsmethode:  ", 梯度_h_线性性, "\n")
+cat("数值微分 | Numerisch:           ", round(梯度_h_数值, 6), "\n")
+cat("最大差异 | Max. Differenz:       ", max(abs(梯度_h_线性性 - 梯度_h_数值)), "\n")
+```
+
+{{< pagebreak >}}
+
+# 乘积法则：处理复合表达式 {#sec-product}
+
+> **Produktregel: Zusammengesetzte Ausdrücke handhaben**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 一般化的 **乘积法则**：适用于任意双线性映射
+- 从一维到矩阵的各种特化形式
+- 经典应用：**二次型 $\mathbf{x}^\top\!\mathbf{A}\mathbf{x}$** 的求导
+:::
+
+## 一般乘积法则
+
+> **Allgemeine Produktregel**
+
+**定理 | Satz：** 设 $\langle\cdot,\cdot\rangle:\mathbb{E}\times\mathbb{E}\to\mathbb{B}$ 为双线性映射（Bilinearform），$b(\mathbf{x})=\langle f(\mathbf{x}),\,g(\mathbf{x})\rangle$。若 $f,g$ 在 $\mathbf{x}$ 处可微，则
+
+$$
+D_\mathbf{x}b(\mathbf{h}) = \langle D_\mathbf{x}f(\mathbf{h}),\;g(\mathbf{x})\rangle + \langle f(\mathbf{x}),\;D_\mathbf{x}g(\mathbf{h})\rangle
+$$
+
+::: {.callout-tip collapse="true"}
+## 🔍 证明 | Beweis（点击展开）
+
+将 $b(\mathbf{x}+\mathbf{h})$ 展开：
+
+$$
+b(\mathbf{x}+\mathbf{h})=\langle f(\mathbf{x}+\mathbf{h}),\;g(\mathbf{x}+\mathbf{h})\rangle
+$$
+
+由 $f,g$ 可微，分别代入 $f(\mathbf{x}+\mathbf{h})=f(\mathbf{x})+D_\mathbf{x}f(\mathbf{h})+o(\|\mathbf{h}\|)$ 和 $g$ 的类似展开，然后利用双线性性展开得到 9 项。其中：
+
+- $\langle f(\mathbf{x}),g(\mathbf{x})\rangle = b(\mathbf{x})$（零阶项）
+- $\langle D_\mathbf{x}f(\mathbf{h}),g(\mathbf{x})\rangle + \langle f(\mathbf{x}),D_\mathbf{x}g(\mathbf{h})\rangle$（一阶项 = $D_\mathbf{x}b(\mathbf{h})$）
+- 剩余项：$\langle D_\mathbf{x}f(\mathbf{h}),D_\mathbf{x}g(\mathbf{h})\rangle = O(\|\mathbf{h}\|^2) = o(\|\mathbf{h}\|)$ 以及包含 $o(\|\mathbf{h}\|)$ 的项，都被吸收进 $o(\|\mathbf{h}\|)$。$\square$
+:::
+
+## 特化形式一览
+
+> **Spezialfälle im Überblick**
+
+乘积法则在不同空间上的"长相"：
+
+| 空间 / Räume | 乘积 / Produkt | 法则 / Regel |
+|:--|:--|:--|
+| $f,g:\mathbb{R}\to\mathbb{R}$ | $fg$ | $b'=f'g+fg'$ |
+| $f,g:\mathbb{R}^n\to\mathbb{R}$ | $fg$ | $\nabla b=g\nabla f+f\nabla g$ |
+| $f,g:\mathbb{R}^n\to\mathbb{R}^m$ | $f^\top g$ | $\nabla b=g^\top\mathbf{J}_f+f^\top\mathbf{J}_g$ |
+| $\mathbf{F},\mathbf{G}:\mathbb{R}\to\mathbb{R}^{m\times n}$ | $\mathrm{tr}[\mathbf{F}\mathbf{G}]$ | $b'=\mathrm{tr}\!\big[\mathbf{F}'\mathbf{G}\big]+\mathrm{tr}\!\big[\mathbf{F}\mathbf{G}'\big]$ |
+
+## 经典应用：二次型的导数
+
+> **Klassische Anwendung: Ableitung der quadratischen Form**
+
+设 $b(\mathbf{x})=\mathbf{x}^\top\!\mathbf{A}\mathbf{x}$，其中 $f(\mathbf{x})=\mathbf{x}$，$g(\mathbf{x})=\mathbf{A}\mathbf{x}$。
+
+计算所需的 Jacobi 矩阵：$\mathbf{J}_f(\mathbf{x})=\mathbf{I}_n$，$\mathbf{J}_g(\mathbf{x})=\mathbf{A}$。
+
+由乘积法则（第三行）：
+
+$$
+\nabla b(\mathbf{x}) = g(\mathbf{x})^\top\mathbf{J}_f(\mathbf{x}) + f(\mathbf{x})^\top\mathbf{J}_g(\mathbf{x}) = (\mathbf{A}\mathbf{x})^\top\mathbf{I}_n + \mathbf{x}^\top\mathbf{A} = \mathbf{x}^\top(\mathbf{A}^\top+\mathbf{A})
+$$
+
+若 $\mathbf{A}$ 对称（$\mathbf{A}=\mathbf{A}^\top$），则
+
+$$
+\boxed{\nabla(\mathbf{x}^\top\!\mathbf{A}\mathbf{x}) = 2\mathbf{x}^\top\mathbf{A}}
+$$
+
+```{r}
+#| label: quadratic-form-verify
+#| code-fold: false
+
+# 验证二次型导数 | Überprüfung der Ableitung der quadratischen Form
+set.seed(42)
+n <- 4
+A <- matrix(rnorm(n * n), n, n)
+A <- (A + t(A)) / 2  # 对称化 | Symmetrisierung
+
+x0 <- rnorm(n)
+
+# 解析梯度：2 * x^T * A
+梯度_解析 <- 2 * crossprod(x0, A)  # 1 × n 行向量
+
+# 数值梯度
+b_func <- function(x) as.numeric(t(x) %*% A %*% x)
+eps <- 1e-7
+梯度_数值 <- numeric(n)
+for (j in 1:n) {
+  e_j <- rep(0, n); e_j[j] <- eps
+  梯度_数值[j] <- (b_func(x0 + e_j) - b_func(x0 - e_j)) / (2 * eps)
+}
+
+cat("解析梯度 | Analytisch:", round(梯度_解析, 6), "\n")
+cat("数值梯度 | Numerisch: ", round(梯度_数值, 6), "\n")
+cat("最大差异 | Max. Diff: ", format(max(abs(梯度_解析 - 梯度_数值)), scientific = TRUE), "\n")
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+二次型 $\mathbf{x}^\top\!\mathbf{A}\mathbf{x}$ 的求导是机器学习中最常用的公式之一——它直接出现在正规方程（$L(\mathbf{w})=\|X\mathbf{w}-\mathbf{y}\|^2$ 的展开）、岭回归的正则项等场景中。
+
+*Die Ableitung der quadratischen Form ist eine der meistverwendeten Formeln im ML.*
+:::
+
+{{< pagebreak >}}
+
+# 链式法则：反向传播的数学基石 {#sec-chain}
+
+> **Kettenregel: Das mathematische Fundament der Backpropagation**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 一般化的 **链式法则**：函数复合时的求导法则
+- 在各种空间中的特化形式（标量→向量→矩阵）
+- **应用**：逻辑回归的梯度推导
+- 欧几里得范数 $\|\mathbf{x}\|_2$ 的梯度
+:::
+
+## 一般链式法则
+
+> **Allgemeine Kettenregel**
+
+**定理 | Satz：** 设 $f:\mathbb{D}_1\to\mathbb{D}_2$，$g:\mathbb{D}_2\to\mathbb{D}_3$，令 $\mathbf{y}=f(\mathbf{x})$。若 $f$ 在 $\mathbf{x}$ 处可微，$g$ 在 $\mathbf{y}$ 处可微，则
+
+$$
+\boxed{D_\mathbf{x}(g\circ f) = D_\mathbf{y}g \circ D_\mathbf{x}f}
+$$
+
+**用一句话说 | In einem Satz：** 复合函数的导数 = 外层导数 $\circ$ 内层导数。
+
+::: {.callout-tip collapse="true"}
+## 🔍 证明 | Beweis（点击展开）
+
+由 $f$ 可微：
+
+$$
+f(\mathbf{x}+\mathbf{h}) = f(\mathbf{x}) + D_\mathbf{x}f(\mathbf{h}) + o(\|\mathbf{h}\|)
+$$
+
+代入 $g$：
+
+$$
+(g\circ f)(\mathbf{x}+\mathbf{h}) = g\!\Big(f(\mathbf{x}) + \underbrace{D_\mathbf{x}f(\mathbf{h}) + o(\|\mathbf{h}\|)}_{\text{记为}\;\boldsymbol{\delta}}\Big)
+$$
+
+由 $g$ 在 $\mathbf{y}=f(\mathbf{x})$ 处可微：
+
+$$
+= g(\mathbf{y}) + D_\mathbf{y}g(\boldsymbol{\delta}) + o(\|\boldsymbol{\delta}\|)
+$$
+
+由 $D_\mathbf{y}g$ 的线性性：
+
+$$
+D_\mathbf{y}g(\boldsymbol{\delta}) = D_\mathbf{y}g\!\big(D_\mathbf{x}f(\mathbf{h})\big) + D_\mathbf{y}g\!\big(o(\|\mathbf{h}\|)\big)
+$$
+
+由 $D_\mathbf{y}g$ 有界，$D_\mathbf{y}g(o(\|\mathbf{h}\|))=o(\|\mathbf{h}\|)$；又 $\|\boldsymbol{\delta}\|=O(\|\mathbf{h}\|)$，故 $o(\|\boldsymbol{\delta}\|)=o(\|\mathbf{h}\|)$。合并后：
+
+$$
+(g\circ f)(\mathbf{x}+\mathbf{h}) = (g\circ f)(\mathbf{x}) + (D_\mathbf{y}g\circ D_\mathbf{x}f)(\mathbf{h}) + o(\|\mathbf{h}\|) \quad \square
+$$
+:::
+
+## 特化形式一览
+
+> **Spezialfälle im Überblick**
+
+| 空间 / Räume | 链式法则 / Kettenregel |
+|:--|:--|
+| $f,g:\mathbb{R}\to\mathbb{R}$ | $[g(f(x))]'=g'(f(x))\cdot f'(x)$ |
+| $f:\mathbb{R}^n\to\mathbb{R},\;g:\mathbb{R}\to\mathbb{R}$ | $\nabla[g(f(\mathbf{x}))]=g'(f(\mathbf{x}))\,\nabla f(\mathbf{x})$ |
+| $f:\mathbb{R}^n\to\mathbb{R}^m,\;g:\mathbb{R}^m\to\mathbb{R}^p$ | $\mathbf{J}_{g\circ f}(\mathbf{x})=\mathbf{J}_g(f(\mathbf{x}))\,\mathbf{J}_f(\mathbf{x})$ |
+| $f:\mathbb{R}^{m\times n}\to\mathbb{R},\;g:\mathbb{R}\to\mathbb{R}$ | $\frac{\partial(g\circ f)}{\partial\mathbf{X}}=g'(f(\mathbf{X}))\frac{\partial f}{\partial\mathbf{X}}$ |
+| $\mathbf{F}:\mathbb{R}\to\mathbb{R}^{m\times n},\;g:\mathbb{R}^{m\times n}\to\mathbb{R}$ | $\frac{\partial(g\circ\mathbf{F})}{\partial x}=\mathrm{tr}\!\Big(\!\Big(\frac{\partial g}{\partial\mathbf{Y}}\Big)^\top\frac{\partial\mathbf{F}}{\partial x}\Big)$ |
+
+```{r}
+#| label: fig-chain-rule-diagram
+#| fig-cap: "链式法则图示：求导沿复合链传播——这正是神经网络'反向传播'的本质 | Kettenregel: Ableitungen propagieren entlang der Kompositionskette"
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 5), axes = FALSE, xlab = "", ylab = "")
+title("链式法则直觉 | Intuition der Kettenregel", cex.main = 1.3, col.main = "#1E293B")
+
+# 三个节点
+cx <- c(1.5, 5, 8.5); cy <- rep(3, 3)
+labels <- c(expression(bold(x) %in% D[1]),
+            expression(bold(y) == f(bold(x)) %in% D[2]),
+            expression(bold(z) == g(bold(y)) %in% D[3]))
+fills <- c("#DBEAFE", "#FEF3C7", "#D1FAE5")
+bords <- c("#2563EB", "#D97706", "#16A34A")
+
+for (i in 1:3) {
+  rect(cx[i] - 1.2, cy[i] - 0.6, cx[i] + 1.2, cy[i] + 0.6,
+       col = fills[i], border = bords[i], lwd = 2.5)
+  text(cx[i], cy[i], labels[i], cex = 1.0, col = "#1E293B")
+}
+
+# 前向箭头
+arrows(cx[1] + 1.3, cy[1], cx[2] - 1.3, cy[2], col = "#475569", lwd = 2.5, length = 0.12)
+arrows(cx[2] + 1.3, cy[2], cx[3] - 1.3, cy[3], col = "#475569", lwd = 2.5, length = 0.12)
+text(3.25, 3.5, expression(italic(f)), cex = 1.2, col = "#475569", font = 2)
+text(6.75, 3.5, expression(italic(g)), cex = 1.2, col = "#475569", font = 2)
+
+# 反向箭头（导数）
+arrows(cx[3] - 1.3, cy[3] - 0.9, cx[2] + 1.3, cy[2] - 0.9, col = "#DC2626", lwd = 2, lty = 2, length = 0.12)
+arrows(cx[2] - 1.3, cy[2] - 0.9, cx[1] + 1.3, cy[1] - 0.9, col = "#DC2626", lwd = 2, lty = 2, length = 0.12)
+text(6.75, 1.6, expression(D[bold(y)] * g), cex = 0.9, col = "#DC2626", font = 2)
+text(3.25, 1.6, expression(D[bold(x)] * f), cex = 0.9, col = "#DC2626", font = 2)
+
+# 总导数
+text(5, 0.6, expression(D[bold(x)](g %.% f) == D[bold(y)] * g %.% D[bold(x)] * f),
+     cex = 1.1, col = "#DC2626", font = 2)
+
+text(5, 4.5, "前向传播 | Vorwärtsdurchlauf →", cex = 0.85, col = "#475569")
+text(5, 1.1, "← 反向传播 | Rückwärtsdurchlauf", cex = 0.85, col = "#DC2626")
+```
+
+## 练习：欧几里得范数的梯度
+
+> **Übung: Gradient der euklidischen Norm**
+
+设 $h(\mathbf{x})=\|\mathbf{x}\|_2=\sqrt{\mathbf{x}^\top\mathbf{x}}$。用链式法则求 $\nabla h(\mathbf{x})$。
+
+**解 | Lösung：** 令 $f(\mathbf{x})=\mathbf{x}^\top\mathbf{x}$，$g(t)=\sqrt{t}=t^{1/2}$，则 $h=g\circ f$。
+
+- $\nabla f(\mathbf{x})=2\mathbf{x}^\top$（二次型求导）
+- $g'(t)=\frac{1}{2}t^{-1/2}$
+
+由链式法则（$f:\mathbb{R}^n\to\mathbb{R}$，$g:\mathbb{R}\to\mathbb{R}$）：
+
+$$
+\nabla h(\mathbf{x}) = g'(f(\mathbf{x}))\,\nabla f(\mathbf{x}) = \frac{1}{2(\mathbf{x}^\top\mathbf{x})^{1/2}}\cdot 2\mathbf{x}^\top = \frac{\mathbf{x}^\top}{\|\mathbf{x}\|}
+$$
+
+::: {.callout-tip icon="false"}
+## 🤔 想一想 | Denken Sie nach
+
+$\nabla h(\mathbf{x})=\frac{\mathbf{x}^\top}{\|\mathbf{x}\|}$ 就是 **单位向量**——范数增长最快的方向就是 $\mathbf{x}$ 自身的方向。几何上完全合理！
+
+*Der Gradient der Norm ist der Einheitsvektor — die Richtung des steilsten Anstiegs der Norm ist die Richtung von $\mathbf{x}$ selbst.*
+:::
+
+## 应用：逻辑回归的梯度 {#sec-logistic}
+
+> **Anwendung: Gradient der logistischen Regression**
+
+**问题背景 | Problemstellung：** 二分类，$Y\in\{0,1\}$，特征 $\mathbf{x}\in\mathbb{R}^p$。模型：
+
+$$
+P(Y\!=\!1\mid\mathbf{x})=\sigma(\boldsymbol{\beta}^\top\mathbf{x}), \quad \sigma(t)=\frac{1}{1+e^{-t}}
+$$
+
+对单个观测 $(\mathbf{x},y)$ 的损失（交叉熵）：
+
+$$
+\ell(\boldsymbol{\beta})=-\big[y\log\sigma(\boldsymbol{\beta}^\top\mathbf{x})+(1-y)\log(1-\sigma(\boldsymbol{\beta}^\top\mathbf{x}))\big]
+$$
+
+```{r}
+#| label: fig-sigmoid
+#| fig-cap: "Sigmoid 函数及其导数：σ'(t) = σ(t)(1 − σ(t))，在 t = 0 时导数最大 | Sigmoid und ihre Ableitung"
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+t_seq <- seq(-6, 6, length.out = 500)
+sigma_t <- 1 / (1 + exp(-t_seq))
+sigma_deriv <- sigma_t * (1 - sigma_t)
+
+plot(t_seq, sigma_t, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "t", ylab = "",
+     main = "Sigmoid 函数 σ(t) 与其导数 σ'(t)",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B",
+     ylim = c(-0.05, 1.05))
+grid(col = "#E2E8F0")
+lines(t_seq, sigma_deriv, col = "#DC2626", lwd = 2.5, lty = 2)
+abline(h = 0.5, col = "#94A3B8", lty = 3)
+points(0, 0.5, pch = 21, bg = "#2563EB", col = "white", cex = 2, lwd = 2)
+points(0, 0.25, pch = 21, bg = "#DC2626", col = "white", cex = 2, lwd = 2)
+
+legend("right",
+       legend = c(expression(sigma(t)), expression(sigma * "'" * (t) == sigma(t)(1 - sigma(t)))),
+       col = c("#2563EB", "#DC2626"), lwd = c(3, 2.5), lty = c(1, 2),
+       bty = "n", cex = 0.95)
+```
+
+**求导（以 $y=1$ 为例）| Ableitung (Beispiel $y=1$)：**
+
+$\ell(\boldsymbol{\beta})=-\log\sigma(\boldsymbol{\beta}^\top\mathbf{x})$。将其拆解为复合链：
+
+$$
+\boldsymbol{\beta} \xrightarrow{f} t=\boldsymbol{\beta}^\top\mathbf{x} \xrightarrow{g} -\log\sigma(t)
+$$
+
+- $\nabla f(\boldsymbol{\beta})=\mathbf{x}^\top$
+
+- $g(t)=-\log\sigma(t)$，$g'(t)=-\frac{\sigma'(t)}{\sigma(t)}$。因为 $\sigma'(t)=\sigma(t)(1-\sigma(t))$，所以 $g'(t)=-(1-\sigma(t))=\sigma(t)-1$
+
+由链式法则：
+
+$$
+\nabla\ell(\boldsymbol{\beta}) = g'(f(\boldsymbol{\beta}))\,\nabla f(\boldsymbol{\beta}) = (\sigma(\boldsymbol{\beta}^\top\mathbf{x})-1)\,\mathbf{x}^\top = (\hat{y}-1)\,\mathbf{x}^\top
+$$
+
+类似地，当 $y=0$ 时：$\nabla\ell(\boldsymbol{\beta})=\hat{y}\,\mathbf{x}^\top$。两种情况统一为：
+
+$$
+\boxed{\nabla\ell(\boldsymbol{\beta}) = (\hat{y}-y)\,\mathbf{x}^\top}
+$$
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+逻辑回归的梯度有着极其简洁的形式：**预测误差 $\times$ 特征向量**。这与线性回归的梯度形式完全类似！链式法则是推导这一结果的核心工具。
+
+*Der Gradient der logistischen Regression hat eine elegante Form: **Vorhersagefehler $\times$ Merkmalsvektor** — analog zur linearen Regression. Die Kettenregel ist das zentrale Werkzeug.*
+:::
+
+```{r}
+#| label: logistic-gradient-verify
+#| code-fold: false
+
+# 验证逻辑回归梯度 | Überprüfung des logistischen Gradienten
+sigma <- function(t) 1 / (1 + exp(-t))
+
+set.seed(42)
+p <- 5
+beta_test <- rnorm(p)
+x_test <- rnorm(p)
+y_test <- 1
+
+# 解析梯度
+y_hat <- sigma(sum(beta_test * x_test))
+梯度_解析 <- (y_hat - y_test) * x_test
+
+# 数值梯度
+ell <- function(beta) {
+  p_hat <- sigma(sum(beta * x_test))
+  -(y_test * log(p_hat) + (1 - y_test) * log(1 - p_hat))
+}
+eps <- 1e-7
+梯度_数值 <- numeric(p)
+for (j in 1:p) {
+  e_j <- rep(0, p); e_j[j] <- eps
+  梯度_数值[j] <- (ell(beta_test + e_j) - ell(beta_test - e_j)) / (2 * eps)
+}
+
+cat("解析梯度 | Analytisch:", round(梯度_解析, 6), "\n")
+cat("数值梯度 | Numerisch: ", round(梯度_数值, 6), "\n")
+cat("最大差异 | Max. Diff: ", format(max(abs(梯度_解析 - 梯度_数值)), scientific = TRUE), "\n")
+```
+
+{{< pagebreak >}}
+
+# 高阶导数与 Hesse 矩阵 {#sec-higher}
+
+> **Höhere Ableitungen und die Hesse-Matrix**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 高阶 Fréchet 导数的定义：导数的导数是 **多线性映射**
+- **Hesse 矩阵**：二阶导数在 $f:\mathbb{R}^n\to\mathbb{R}$ 时的矩阵表示
+- Schwarz 定理：混合偏导交换顺序
+- Hesse 矩阵与 **凸性、临界点分类** 的关系
+- **Fisher 信息矩阵**：统计学中的核心应用
+:::
+
+## 高阶 Fréchet 导数
+
+> **Höhere Fréchet-Ableitungen**
+
+一阶导数 $D_\mathbf{x}f$ 是线性映射。如果它本身关于 $\mathbf{x}$ 也是可微的，我们就得到二阶导数——一个 **双线性映射**：
+
+$$
+D^2_\mathbf{x}f(\mathbf{h}_1,\mathbf{h}_2) = \lim_{\|\mathbf{h}\|\to 0}\frac{D_{\mathbf{x}+\mathbf{h}}f(\mathbf{h}_1)-D_\mathbf{x}f(\mathbf{h}_1)-D^2_\mathbf{x}f(\mathbf{h}_1,\mathbf{h})}{\|\mathbf{h}\|}=0
+$$
+
+一般地，$k$ 阶导数 $D^k_\mathbf{x}f$ 是一个 $k$-线性映射。随着阶数增长，涉及的对象变成 **张量**（tensor）。
+
+## Hesse 矩阵：二阶导数的矩阵表示 {#sec-hesse}
+
+> **Hesse-Matrix: Matrixdarstellung der zweiten Ableitung**
+
+对于 $f:\mathbb{R}^n\to\mathbb{R}$，二阶导数可以用一个 $n\times n$ 矩阵紧凑表示：
+
+$$
+\mathbf{H}_f(\mathbf{x})_{i,j} := \frac{\partial^2 f(\mathbf{x})}{\partial x_i\,\partial x_j} \in \mathbb{R}^{n\times n}
+$$
+
+此时各阶导数的作用方式为：
+
+- 一阶：$D_\mathbf{x}f(\mathbf{h})=\nabla f(\mathbf{x})\,\mathbf{h}$
+- 二阶：$D^2_\mathbf{x}f(\mathbf{h}_1,\mathbf{h}_2)=\mathbf{h}_1^\top\mathbf{H}_f(\mathbf{x})\,\mathbf{h}_2$
+
+**Schwarz 定理 | Satz von Schwarz：** 若 $f\in\mathscr{C}^2$（二阶连续可微），则
+
+$$
+\frac{\partial^2 f}{\partial x_i\,\partial x_j}=\frac{\partial^2 f}{\partial x_j\,\partial x_i} \qquad\Longrightarrow\qquad \mathbf{H}_f(\mathbf{x})=\mathbf{H}_f(\mathbf{x})^\top
+$$
+
+Hesse 矩阵是 **对称** 的。这将需要计算的独立二阶偏导数从 $n^2$ 减少到 $\frac{n(n+1)}{2}$。
+
+## 几何意义：曲率与临界点分类
+
+> **Geometrische Bedeutung: Krümmung und Klassifikation kritischer Punkte**
+
+Hesse 矩阵刻画了函数在某点附近的 **局部曲率**。在临界点 $\mathbf{x}^*$（即 $\nabla f(\mathbf{x}^*)=\mathbf{0}$）处：
+
+| $\mathbf{H}_f(\mathbf{x}^*)$ 的性质 / Eigenschaft | 临界点类型 / Typ | 直觉 / Intuition |
+|:--|:--|:--|
+| **正定**（所有特征值 $>0$） | 局部极小值 | 所有方向都向上弯曲——碗底 |
+| **负定**（所有特征值 $<0$） | 局部极大值 | 所有方向都向下弯曲——山顶 |
+| **不定**（有正有负特征值） | 鞍点 | 有的方向上弯、有的下弯——马鞍 |
+
+```{r}
+#| label: fig-critical-points
+#| fig-cap: "三种临界点的等高线图：极小值（碗）、极大值（山顶）、鞍点（马鞍）| Drei Typen kritischer Punkte"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(3, 3, 3, 1))
+
+grid_1d <- seq(-2, 2, length.out = 100)
+grid_xy <- expand.grid(x = grid_1d, y = grid_1d)
+
+# 极小值：f = x^2 + y^2，H 正定
+z_min <- matrix(grid_xy$x^2 + grid_xy$y^2, 100, 100)
+contour(grid_1d, grid_1d, z_min, nlevels = 15, col = "#2563EB",
+        main = "极小值 | Minimum\nH ≻ 0 (正定)", cex.main = 1.0,
+        xlab = expression(x[1]), ylab = expression(x[2]))
+points(0, 0, pch = 23, bg = "#16A34A", col = "white", cex = 2, lwd = 2)
+
+# 极大值：f = -x^2 - y^2，H 负定
+z_max <- matrix(-(grid_xy$x^2 + grid_xy$y^2), 100, 100)
+contour(grid_1d, grid_1d, z_max, nlevels = 15, col = "#9333EA",
+        main = "极大值 | Maximum\nH ≺ 0 (负定)", cex.main = 1.0,
+        xlab = expression(x[1]), ylab = expression(x[2]))
+points(0, 0, pch = 25, bg = "#DC2626", col = "white", cex = 2, lwd = 2)
+
+# 鞍点：f = x^2 - y^2，H 不定
+z_sad <- matrix(grid_xy$x^2 - grid_xy$y^2, 100, 100)
+contour(grid_1d, grid_1d, z_sad, nlevels = 15, col = "#EA580C",
+        main = "鞍点 | Sattelpunkt\nH 不定 | indefinit", cex.main = 1.0,
+        xlab = expression(x[1]), ylab = expression(x[2]))
+points(0, 0, pch = 4, col = "#DC2626", cex = 2, lwd = 3)
+
+par(mfrow = c(1, 1))
+```
+
+**凸性判据 | Konvexitätskriterium：**
+
+$$
+f\in\mathscr{C}^2 \text{ 在 } S \text{ 上为凸函数} \iff \mathbf{H}_f(\mathbf{x})\succeq 0\;(\text{半正定})\;\forall\,\mathbf{x}\in S
+$$
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+**高维世界中，真正的局部极小值极其罕见——绝大多数临界点是鞍点！** 这是因为要让所有 $n$ 个特征值同号非常困难。
+
+这恰恰是 SGD 等随机方法的优势之一：噪声帮助优化器跳出鞍点。
+
+*In der hochdimensionalen Welt sind echte lokale Minima extrem selten — die meisten kritischen Punkte sind Sattelpunkte!*
+:::
+
+## 应用：Fisher 信息矩阵 {#sec-fisher}
+
+> **Anwendung: Fisher-Informationsmatrix**
+
+对于参数为 $\boldsymbol{\theta}\in\mathbb{R}^p$、对数似然为 $\ell(\boldsymbol{\theta})$ 的统计模型，**Fisher 信息矩阵** 定义为：
+
+$$
+\mathbf{I}(\boldsymbol{\theta}) := \mathbb{E}\!\left[-\mathbf{H}_\ell(\boldsymbol{\theta})\right] = -\mathbb{E}\!\left[\frac{\partial^2\ell(\boldsymbol{\theta})}{\partial\theta_i\,\partial\theta_j}\right]_{i,j} \in \mathbb{R}^{p\times p}
+$$
+
+直观理解：
+
+- 对数似然的 **曲率大**（Hesse 矩阵"很负定"） $\implies$ 数据对最优 $\boldsymbol{\theta}$ 提供 **较多信息**，参数估计 **更精确**。
+- 对数似然 **平坦** $\implies$ 数据信息少，参数难以确定。
+
+**Cramér-Rao 下界 | Cramér-Rao-Schranke：**
+
+$$
+\mathrm{Var}(\hat{\boldsymbol{\theta}}) \xrightarrow{n\to\infty} \mathbf{I}(\boldsymbol{\theta})^{-1}
+$$
+
+信息越多 = 方差越小 = 估计越精确。
+
+```{r}
+#| label: fig-fisher-intuition
+#| fig-cap: "Fisher 信息的直觉：曲率大 = 信息多 = 估计精确 | Fisher-Intuition: Große Krümmung = mehr Information = präzisere Schätzung"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+theta <- seq(-3, 3, length.out = 300)
+
+# 高信息（尖锐的似然）
+ell_sharp <- -2 * theta^2
+plot(theta, ell_sharp, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(theta), ylab = expression(ell(theta)),
+     main = "高 Fisher 信息\nHohe Fisher-Info",
+     cex.main = 1.1, col.main = "#16A34A", ylim = c(-20, 1))
+grid(col = "#E2E8F0")
+abline(v = 0, col = "#DC2626", lty = 2, lwd = 2)
+text(1.5, -5, "曲率大\nGroße Krümmung", col = "#16A34A", cex = 0.85, font = 2)
+
+# 低信息（平坦的似然）
+ell_flat <- -0.2 * theta^2
+plot(theta, ell_flat, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(theta), ylab = expression(ell(theta)),
+     main = "低 Fisher 信息\nNiedrige Fisher-Info",
+     cex.main = 1.1, col.main = "#DC2626", ylim = c(-20, 1))
+grid(col = "#E2E8F0")
+abline(v = 0, col = "#DC2626", lty = 2, lwd = 2)
+text(1.5, -5, "曲率小\nKleine Krümmung", col = "#DC2626", cex = 0.85, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+{{< pagebreak >}}
+
+# Taylor 展开：用多项式逼近一切 {#sec-taylor}
+
+> **Taylor-Entwicklung: Alles mit Polynomen approximieren**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **单变量** Taylor 展开及其几何直觉
+- **一般化** Taylor 展开（赋范空间版本）
+- $f:\mathbb{R}^n\to\mathbb{R}$ 的展开：梯度 + Hesse 矩阵 + ...
+- **应用**：Newton-Raphson 方法——用二阶信息加速优化
+:::
+
+## 单变量 Taylor 展开
+
+> **Univariate Taylor-Entwicklung**
+
+**定理 | Satz：** 设 $f:\mathbb{R}\to\mathbb{R}$ 为 $(k+1)$ 次连续可微函数，则
+
+$$
+f(x+h) = f(x) + \sum_{j=1}^{k}\frac{1}{j!}f^{(j)}(x)\,h^j + o(|h|^k)
+$$
+
+**直觉 | Intuition：** 在 $x$ 处用一个"最像 $f$"的 $k$ 次多项式来近似 $f$。阶数越高，近似越好。
+
+```{r}
+#| label: fig-taylor-1d
+#| fig-cap: "e^x 在 x = 0 处的 Taylor 近似：阶数越高，近似越好 | Taylor-Approximation von e^x bei x = 0"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x_seq <- seq(-3, 3, length.out = 500)
+
+plot(x_seq, exp(x_seq), type = "l", col = "#1E293B", lwd = 3.5,
+     xlab = "x", ylab = "f(x)",
+     main = expression("Taylor 近似 " * e^x * " 在 x = 0 | Taylor-Approximation bei x = 0"),
+     ylim = c(-2, 12), cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 各阶 Taylor 多项式
+taylor_colors <- c("#2563EB", "#D97706", "#DC2626", "#16A34A")
+taylor_labels <- c("k = 1: 1 + x",
+                    expression("k = 2: 1 + x + " * x^2/2),
+                    expression("k = 3: + " * x^3/6),
+                    expression("k = 4: + " * x^4/24))
+
+T1 <- 1 + x_seq
+T2 <- T1 + x_seq^2 / 2
+T3 <- T2 + x_seq^3 / 6
+T4 <- T3 + x_seq^4 / 24
+
+lines(x_seq, T1, col = taylor_colors[1], lwd = 2, lty = 2)
+lines(x_seq, T2, col = taylor_colors[2], lwd = 2, lty = 3)
+lines(x_seq, T3, col = taylor_colors[3], lwd = 2, lty = 4)
+lines(x_seq, T4, col = taylor_colors[4], lwd = 2, lty = 5)
+
+points(0, 1, pch = 21, bg = "white", col = "#1E293B", cex = 2, lwd = 2)
+
+legend("topleft",
+       legend = c(expression(e^x), "k = 1", "k = 2", "k = 3", "k = 4"),
+       col = c("#1E293B", taylor_colors),
+       lwd = c(3.5, 2, 2, 2, 2), lty = c(1, 2, 3, 4, 5),
+       bty = "n", cex = 0.9)
+```
+
+## 一般 Taylor 展开
+
+> **Allgemeine Taylor-Entwicklung**
+
+**定理 | Satz：** 设 $f:V\to W$ 为 $k$ 次连续 Fréchet 可微函数（$f\in\mathscr{C}^k$），则
+
+$$
+f(\mathbf{x}+\mathbf{h}) = f(\mathbf{x}) + \sum_{j=1}^{k}\frac{1}{j!}\,D^j_\mathbf{x}f(\underbrace{\mathbf{h},\ldots,\mathbf{h}}_{j\text{ 次}}) + o(\|\mathbf{h}\|^k)
+$$
+
+::: {.callout-tip collapse="true"}
+## 🔍 证明思路 | Beweisskizze（点击展开）
+
+1. 令 $s:=\|\mathbf{h}\|$，$\mathbf{u}:=\mathbf{h}/s$（单位向量）。
+2. 定义一维函数 $\psi(w):=f(\mathbf{x}+w\mathbf{u})$。
+3. 反复使用链式法则得 $\psi^{(j)}(w)=D^j_{\mathbf{x}+w\mathbf{u}}f(\mathbf{u},\ldots,\mathbf{u})$。
+4. 对 $\psi$ 在 $w=0$ 处作一维 Taylor 展开：$\psi(s)=\sum_{j=0}^{k}\frac{s^j}{j!}\psi^{(j)}(0)+o(s^k)$。
+5. 利用 $D^j_\mathbf{x}f$ 的多线性性：$D^j_\mathbf{x}f(\mathbf{u},\ldots,\mathbf{u})=\frac{1}{s^j}D^j_\mathbf{x}f(\mathbf{h},\ldots,\mathbf{h})$。
+6. 代入 $s=\|\mathbf{h}\|$ 即得结论。$\square$
+:::
+
+## $f:\mathbb{R}^n\to\mathbb{R}$ 的展开公式
+
+> **Entwicklungsformel für $f:\mathbb{R}^n\to\mathbb{R}$**
+
+这是机器学习中最常用的特化形式。将一般公式中的高阶导数用梯度和 Hesse 矩阵表示：
+
+**一阶近似（线性化 | Linearisierung）：**
+
+$$
+f(\mathbf{x}+\mathbf{h}) \approx f(\mathbf{x}) + \nabla f(\mathbf{x})\,\mathbf{h}
+$$
+
+**二阶近似（二次近似 | Quadratische Approximation）：**
+
+$$
+f(\mathbf{x}+\mathbf{h}) \approx f(\mathbf{x}) + \nabla f(\mathbf{x})\,\mathbf{h} + \frac{1}{2}\mathbf{h}^\top\mathbf{H}_f(\mathbf{x})\,\mathbf{h}
+$$
+
+**三阶近似：**
+
+$$
+f(\mathbf{x}+\mathbf{h}) \approx f(\mathbf{x}) + \nabla f(\mathbf{x})\,\mathbf{h} + \frac{1}{2}\mathbf{h}^\top\mathbf{H}_f(\mathbf{x})\,\mathbf{h} + \frac{1}{6}\sum_{i,j,k}\frac{\partial^3 f}{\partial x_i\,\partial x_j\,\partial x_k}h_i h_j h_k
+$$
+
+以展开点 $\mathbf{x}_0$ 表示（令 $\mathbf{h}=\mathbf{x}-\mathbf{x}_0$）：
+
+$$
+f(\mathbf{x}) \approx f(\mathbf{x}_0) + \nabla f(\mathbf{x}_0)(\mathbf{x}-\mathbf{x}_0) + \frac{1}{2}(\mathbf{x}-\mathbf{x}_0)^\top\mathbf{H}_f(\mathbf{x}_0)(\mathbf{x}-\mathbf{x}_0)
+$$
+
+```{r}
+#| label: fig-taylor-2d
+#| fig-cap: "二维函数 f(x,y)=sin(x)·cos(y) 在原点处的一阶和二阶 Taylor 近似等高线 | Taylor-Approximation einer 2D-Funktion"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(3, 3, 3, 1))
+
+grid_1d <- seq(-2.5, 2.5, length.out = 120)
+gx <- rep(grid_1d, each = 120)
+gy <- rep(grid_1d, times = 120)
+
+# 真实函数 f(x,y) = sin(x)*cos(y)
+f_true <- matrix(sin(gx) * cos(gy), 120, 120)
+
+# 在 (0,0) 处：f=0, ∇f=(cos0·cos0, -sin0·sin0)=(1,0)
+# H = [[-sin(x)cos(y), -cos(x)sin(y)],[-cos(x)sin(y), -sin(x)cos(y)]]
+# H(0,0) = [[0,0],[0,0]] → 二阶近似 = 一阶近似!
+# 换一个更好的函数：f(x,y) = x^2 + 0.5*y^2 + 0.3*x*y + sin(x)*cos(y)
+
+f_func <- function(x, y) x^2 + 0.5*y^2 + 0.3*x*y + sin(x)*cos(y)
+
+f_true <- matrix(f_func(gx, gy), 120, 120)
+
+# 展开点
+x0 <- 0; y0 <- 0
+f0 <- f_func(x0, y0)  # = 0
+
+# 数值梯度
+eps <- 1e-5
+df_dx <- (f_func(x0+eps, y0) - f_func(x0-eps, y0)) / (2*eps)
+df_dy <- (f_func(x0, y0+eps) - f_func(x0, y0-eps)) / (2*eps)
+
+# 数值 Hesse
+d2f_dxdx <- (f_func(x0+eps, y0) - 2*f0 + f_func(x0-eps, y0)) / eps^2
+d2f_dydy <- (f_func(x0, y0+eps) - 2*f0 + f_func(x0, y0-eps)) / eps^2
+d2f_dxdy <- (f_func(x0+eps, y0+eps) - f_func(x0+eps, y0-eps) -
+              f_func(x0-eps, y0+eps) + f_func(x0-eps, y0-eps)) / (4*eps^2)
+
+T1_vals <- f0 + df_dx*(gx - x0) + df_dy*(gy - y0)
+T2_vals <- T1_vals + 0.5*(d2f_dxdx*(gx-x0)^2 + 2*d2f_dxdy*(gx-x0)*(gy-y0) + d2f_dydy*(gy-y0)^2)
+
+T1_mat <- matrix(T1_vals, 120, 120)
+T2_mat <- matrix(T2_vals, 120, 120)
+
+lev <- seq(-1, 8, by = 0.5)
+
+contour(grid_1d, grid_1d, f_true, levels = lev, col = "#1E293B",
+        main = "真实函数 | Wahre Funktion", cex.main = 0.95,
+        xlab = expression(x[1]), ylab = expression(x[2]))
+points(0, 0, pch = 16, col = "#DC2626", cex = 1.5)
+
+contour(grid_1d, grid_1d, T1_mat, levels = lev, col = "#2563EB",
+        main = "一阶近似 | 1. Ordnung", cex.main = 0.95,
+        xlab = expression(x[1]), ylab = expression(x[2]))
+points(0, 0, pch = 16, col = "#DC2626", cex = 1.5)
+
+contour(grid_1d, grid_1d, T2_mat, levels = lev, col = "#16A34A",
+        main = "二阶近似 | 2. Ordnung", cex.main = 0.95,
+        xlab = expression(x[1]), ylab = expression(x[2]))
+points(0, 0, pch = 16, col = "#DC2626", cex = 1.5)
+
+par(mfrow = c(1, 1))
+```
+
+{{< pagebreak >}}
+
+# 应用：Newton-Raphson 方法 {#sec-newton}
+
+> **Anwendung: Das Newton-Raphson-Verfahren**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 如何用二阶 Taylor 展开推导出 **Newton 迭代**
+- Newton 法 vs 梯度下降的 **收敛速度对比**
+- Newton 法在 **统计学和机器学习** 中的重要角色
+:::
+
+## 从 Taylor 展开到 Newton 步
+
+> **Von der Taylor-Entwicklung zum Newton-Schritt**
+
+**问题 | Problem：** 对 $f\in\mathscr{C}^2$，求 $\mathbf{x}^*=\arg\min_\mathbf{x} f(\mathbf{x})$。
+
+**思路 | Idee：** 在当前点 $\mathbf{x}^{(k)}$ 处用二阶 Taylor 多项式近似 $f$：
+
+$$
+f(\mathbf{x}) \approx T_2(\mathbf{x}) = f(\mathbf{x}^{(k)}) + \nabla f(\mathbf{x}^{(k)})(\mathbf{x}-\mathbf{x}^{(k)}) + \frac{1}{2}(\mathbf{x}-\mathbf{x}^{(k)})^\top\mathbf{H}_f(\mathbf{x}^{(k)})(\mathbf{x}-\mathbf{x}^{(k)})
+$$
+
+对这个 **二次函数** 求最小值——令梯度为零：
+
+$$
+\nabla T_2(\mathbf{x}) = \nabla f(\mathbf{x}^{(k)}) + (\mathbf{x}-\mathbf{x}^{(k)})^\top\mathbf{H}_f(\mathbf{x}^{(k)}) \overset{!}{=} \mathbf{0}^\top
+$$
+
+解出：
+
+$$
+(\mathbf{x}-\mathbf{x}^{(k)})^\top = -\nabla f(\mathbf{x}^{(k)})\,\mathbf{H}_f(\mathbf{x}^{(k)})^{-1}
+$$
+
+由此得到 **Newton 迭代公式**：
+
+$$
+\boxed{\mathbf{x}^{(k+1)} = \mathbf{x}^{(k)} - \Big(\nabla f(\mathbf{x}^{(k)})\,\mathbf{H}_f(\mathbf{x}^{(k)})^{-1}\Big)^\top}
+$$
+
+::: {.callout-tip icon="false"}
+## 🤔 对比梯度下降 | Vergleich mit Gradientenabstieg
+
+| 方面 / Aspekt | 梯度下降 | Newton 法 |
+|:--|:--|:--|
+| 用到的信息 | 一阶（梯度） | 一阶 + 二阶（梯度 + Hesse） |
+| 每步计算量 | $O(Np)$ | $O(Np^2 + p^3)$ |
+| 收敛速度 | **线性**收敛 | **二次**收敛（接近最优时极快） |
+| 超参数 | 学习率 $\eta$ | 无（自适应步长） |
+| 适用规模 | 任意 | $p$ 不能太大 |
+:::
+
+## 数值实验：Newton vs 梯度下降
+
+> **Numerisches Experiment: Newton vs. Gradientenabstieg**
+
+```{r}
+#| label: newton-vs-gd
+#| code-fold: true
+
+# 目标函数：f(x) = x1^4 + x2^4 - 2*x1^2 - 2*x2^2 + x1*x2 + 5
+# 这是一个有两个局部极小值和一个鞍点的函数
+# 为了演示 Newton 法的二次收敛，用一个强凸的二次+四次混合函数
+
+f_obj <- function(x) 5*x[1]^2 + 10*x[2]^2 + 0.5*x[1]^4 + 0.5*x[2]^4 + 3*x[1]*x[2]
+
+grad_obj <- function(x) {
+  c(10*x[1] + 2*x[1]^3 + 3*x[2],
+    20*x[2] + 2*x[2]^3 + 3*x[1])
+}
+
+hesse_obj <- function(x) {
+  matrix(c(10 + 6*x[1]^2, 3,
+           3, 20 + 6*x[2]^2), 2, 2)
+}
+
+# Newton 法
+newton_run <- function(x_init, max_iter = 20, tol = 1e-12) {
+  x <- x_init
+  history <- matrix(NA, max_iter + 1, 2)
+  loss_h <- numeric(max_iter + 1)
+  history[1,] <- x
+  loss_h[1] <- f_obj(x)
+  
+  for (i in 1:max_iter) {
+    g <- grad_obj(x)
+    H <- hesse_obj(x)
+    delta <- solve(H, g)  # H^{-1} * g
+    x <- x - delta
+    history[i+1,] <- x
+    loss_h[i+1] <- f_obj(x)
+    if (sqrt(sum(g^2)) < tol) {
+      history <- history[1:(i+1),]
+      loss_h <- loss_h[1:(i+1)]
+      break
+    }
+  }
+  list(x = x, history = history, loss = loss_h)
+}
+
+# 梯度下降
+gd_simple <- function(x_init, lr, max_iter = 200) {
+  x <- x_init
+  loss_h <- numeric(max_iter + 1)
+  loss_h[1] <- f_obj(x)
+  
+  for (i in 1:max_iter) {
+    g <- grad_obj(x)
+    x <- x - lr * g
+    loss_h[i+1] <- f_obj(x)
+  }
+  list(x = x, loss = loss_h)
+}
+
+x0 <- c(3, -2)
+res_newton <- newton_run(x0, max_iter = 15)
+res_gd <- gd_simple(x0, lr = 0.01, max_iter = 200)
+```
+
+```{r}
+#| label: fig-newton-convergence
+#| fig-cap: "Newton 法的二次收敛 vs 梯度下降的线性收敛——迭代次数差距巨大 | Quadratische Konvergenz (Newton) vs. Lineare Konvergenz (GD)"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+
+n_newton <- length(res_newton$loss)
+n_gd <- length(res_gd$loss)
+
+plot(0:(n_gd-1), res_gd$loss, type = "l", col = "#2563EB", lwd = 2.5,
+     xlab = "迭代次数 | Iteration", ylab = "f(x) (对数尺度 | log)",
+     main = "Newton 法 vs 梯度下降 | Newton vs. Gradientenabstieg",
+     log = "y", cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B",
+     ylim = c(min(res_newton$loss[res_newton$loss > 0], res_gd$loss[res_gd$loss > 0]),
+              max(res_gd$loss) * 1.5))
+grid(col = "#E2E8F0")
+lines(0:(n_newton-1), pmax(res_newton$loss, 1e-16), col = "#DC2626", lwd = 2.5, type = "b",
+      pch = 16, cex = 1.2)
+
+legend("topright",
+       legend = c(
+         paste0("梯度下降 (", n_gd - 1, " 次迭代, η = 0.01)"),
+         paste0("Newton 法 (", n_newton - 1, " 次迭代, 无需 η)")
+       ),
+       col = c("#2563EB", "#DC2626"), lwd = 2.5,
+       pch = c(NA, 16), lty = c(1, 1), bty = "n", cex = 0.9)
+
+cat("梯度下降：", n_gd - 1, "次迭代后 f =", format(tail(res_gd$loss, 1), digits = 6), "\n")
+cat("Newton 法：", n_newton - 1, "次迭代后 f =", format(tail(res_newton$loss, 1), digits = 6), "\n")
+```
+
+```{r}
+#| label: fig-newton-path
+#| fig-cap: "Newton 法（红色）直奔最优点，梯度下降（蓝色）缓慢地绕弯 | Newton (rot) geht direkt zum Optimum, GD (blau) nähert sich langsam"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 等高线
+grid_1d <- seq(-4, 4, length.out = 200)
+z_mat <- outer(grid_1d, grid_1d, Vectorize(function(a, b) f_obj(c(a, b))))
+
+contour(grid_1d, grid_1d, z_mat, nlevels = 30,
+        col = adjustcolor("#64748B", 0.5),
+        xlab = expression(x[1]), ylab = expression(x[2]),
+        main = "优化路径对比 | Vergleich der Optimierungspfade",
+        cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+
+# GD 路径
+x_gd <- x0
+gd_path <- matrix(NA, 201, 2)
+gd_path[1,] <- x_gd
+for (i in 1:200) {
+  x_gd <- x_gd - 0.01 * grad_obj(x_gd)
+  gd_path[i+1,] <- x_gd
+}
+lines(gd_path[1:100, 1], gd_path[1:100, 2], col = "#2563EB", lwd = 2)
+points(gd_path[1:100, 1], gd_path[1:100, 2], col = "#2563EB", pch = 16, cex = 0.3)
+
+# Newton 路径
+lines(res_newton$history[,1], res_newton$history[,2], col = "#DC2626", lwd = 2.5)
+points(res_newton$history[,1], res_newton$history[,2], col = "#DC2626",
+       pch = 16, cex = 1.5)
+
+# 起点和终点
+points(x0[1], x0[2], pch = 21, bg = "#EA580C", col = "white", cex = 2.5, lwd = 2)
+text(x0[1] + 0.3, x0[2] + 0.4, "起点 | Start", col = "#EA580C", font = 2, cex = 0.85)
+
+points(0, 0, pch = 23, bg = "#16A34A", col = "white", cex = 2.5, lwd = 2)
+text(0.4, 0.4, "最优 | Opt.", col = "#16A34A", font = 2, cex = 0.85)
+
+legend("topright",
+       legend = c("梯度下降 | GD", "Newton 法 | Newton"),
+       col = c("#2563EB", "#DC2626"), lwd = c(2, 2.5), pch = c(16, 16),
+       pt.cex = c(0.5, 1.5), bty = "n", cex = 0.95)
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+Newton 法利用了 **曲率信息**（Hesse 矩阵），所以它能自适应地调整步长和方向——在"碗壁陡"的地方走小步，在"碗壁缓"的地方走大步。代价是每步需要计算和求逆 Hesse 矩阵（$O(p^3)$），所以只适用于参数不太多的情形。
+
+**在机器学习/统计中的应用 | Anwendungen：**
+
+- **最大似然估计**：经典统计方法
+- **广义线性模型 (GLM)**：IRLS/IWLS 算法本质上就是 Newton 法
+- **信赖域方法 (Trust Region)**：现代优化器中 Newton 法的稳定化版本
+:::
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 本章工具箱总览
+
+本章我们建立了一个完整的微积分工具箱。让我们回顾每个工具及其在机器学习中的角色：
+
+| 工具 / Werkzeug | 公式 / Formel | ML 中的用途 / Verwendung in ML |
+|:--|:--|:--|
+| 连续性 | 可微 $\implies$ 连续 | 保证损失曲面无跳跃 |
+| 线性性 | $D(c_1 f+c_2 g)=c_1 Df+c_2 Dg$ | 拆分复杂损失函数的梯度 |
+| 乘积法则 | $D\langle f,g\rangle=\langle Df,g\rangle+\langle f,Dg\rangle$ | 二次型 $\mathbf{x}^\top\!\mathbf{A}\mathbf{x}$ 等的求导 |
+| 链式法则 | $D(g\circ f)=Dg\circ Df$ | **反向传播** 的数学基础 |
+| Hesse 矩阵 | $\mathbf{H}_f=[\partial^2 f/\partial x_i\partial x_j]$ | 曲率、凸性、Fisher 信息 |
+| Taylor 展开 | $f\approx f_0+\nabla f\cdot h+\frac{1}{2}h^\top\!Hh$ | Newton 法、收敛性分析 |
+
+## 概念逻辑链
+
+```{r}
+#| label: fig-concept-chain
+#| fig-cap: "知识逻辑链：每一步都由'需求'驱动 | Logikkette: Jeder Schritt wird durch Bedarf motiviert"
+#| fig-width: 12
+#| fig-height: 7.5
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(1, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("概念逻辑链 | Logikkette der Konzepte",
+      cex.main = 1.4, col.main = "#1E293B")
+
+# 节点
+nx <- c(1.5, 1.5, 5, 5, 5, 8.5, 8.5)
+ny <- c(6.5, 4.5, 6.5, 4.5, 2.5, 4.5, 2.5)
+nlabels <- c("连续性\nStetigkeit", "线性性\nLinearität",
+             "乘积法则\nProduktregel", "链式法则\nKettenregel",
+             "逻辑回归\nLogist. Reg.",
+             "Hesse+Taylor\nHöhere Abl.", "Newton 法\nNewton-Verf.")
+nfill <- c("#DBEAFE", "#DBEAFE", "#FEF3C7", "#FEE2E2", "#FCE7F3", "#E0E7FF", "#D1FAE5")
+nbord <- c("#2563EB", "#2563EB", "#D97706", "#DC2626", "#DB2777", "#6366F1", "#16A34A")
+
+for (i in 1:7) {
+  rect(nx[i]-1.1, ny[i]-0.55, nx[i]+1.1, ny[i]+0.55,
+       col = nfill[i], border = nbord[i], lwd = 2)
+  text(nx[i], ny[i], nlabels[i], cex = 0.72, font = 2, col = "#1E293B")
+}
+
+# 箭头
+arr <- function(x1,y1,x2,y2,...) arrows(x1,y1,x2,y2,col="#64748B",lwd=2,length=0.1,...)
+arr(2.7, 6.5, 3.8, 6.5)   # 连续性 → 乘积法则
+arr(2.7, 4.5, 3.8, 4.5)   # 线性性 → 链式法则
+arr(5, 3.8, 5, 3.1)        # 链式法则 → 逻辑回归
+arr(6.2, 6.0, 7.3, 5.0)   # 乘积法则 → Hesse
+arr(6.2, 4.5, 7.3, 4.5)   # 链式法则 → Hesse
+arr(8.5, 3.8, 8.5, 3.1)   # Hesse → Newton
+
+# 驱动力标签
+text(3.3, 7.0, "需要处理乘积!", cex = 0.65, col = "#EA580C", font = 3)
+text(3.3, 4.0, "函数嵌套!", cex = 0.65, col = "#EA580C", font = 3)
+text(5.6, 3.5, "ML应用!", cex = 0.65, col = "#EA580C", font = 3)
+text(7.0, 5.8, "需要曲率!", cex = 0.65, col = "#EA580C", font = 3)
+text(9.1, 3.5, "加速优化!", cex = 0.65, col = "#EA580C", font = 3)
+
+# 底部总结
+rect(2, 0.3, 8, 1.3, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(5, 0.8, "下一章预告：凸性理论——为什么损失函数的'碗'如此重要？",
+     cex = 0.8, font = 2, col = "#1E293B")
+```
+
+## 方法对比总结
+
+|  方法 / Methode  |   信息阶数 / Ordnung   | 每步复杂度 / Aufwand | 收敛速度 / Konvergenz |       适用场景 / Einsatz        |
+|:----------------:|:---:|:---:|:---:|:---:|
+|    梯度下降 GD   | 一阶 | $O(Np)$ | 线性 | **通用**，大规模 |
+|  Newton-Raphson  | 二阶 | $O(Np^2\!+p^3)$ | 二次 | 小 $p$，精确解 |
+| IRLS (GLM) | 二阶 | $O(Np^2\!+p^3)$ | 二次 | 广义线性模型 |
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 微分法则
+
+| Deutsch | 中文 | English |
+|:--|:--|:--|
+| die Stetigkeit | 连续性 | continuity |
+| die Differenzierbarkeit | 可微性 | differentiability |
+| die Linearität | 线性性 | linearity |
+| die Produktregel | 乘积法则 | product rule |
+| die Kettenregel | 链式法则 | chain rule |
+| die Bilinearform | 双线性形式 | bilinear form |
+| die Multilinearität | 多线性性 | multilinearity |
+
+## 高阶导数
+
+| Deutsch | 中文 | English |
+|:--|:--|:--|
+| die Hesse-Matrix | Hesse 矩阵 | Hessian matrix |
+| die Krümmung | 曲率 | curvature |
+| die zweite Ableitung | 二阶导数 | second derivative |
+| der Tensor | 张量 | tensor |
+| der Satz von Schwarz | Schwarz 定理 | Schwarz's theorem |
+| die partielle Ableitung | 偏导数 | partial derivative |
+
+## 临界点与凸性
+
+| Deutsch | 中文 | English |
+|:--|:--|:--|
+| der kritische Punkt | 临界点 | critical point |
+| das lokale Minimum | 局部极小值 | local minimum |
+| das lokale Maximum | 局部极大值 | local maximum |
+| der Sattelpunkt | 鞍点 | saddle point |
+| die Konvexität | 凸性 | convexity |
+| positiv definit | 正定 | positive definite |
+| positiv semidefinit | 半正定 | positive semi-definite |
+| indefinit | 不定 | indefinite |
+
+## Taylor 展开与优化
+
+| Deutsch | 中文 | English |
+|:--|:--|:--|
+| die Taylor-Entwicklung | Taylor 展开 | Taylor expansion |
+| das Taylor-Polynom | Taylor 多项式 | Taylor polynomial |
+| die Approximation | 近似 | approximation |
+| das Newton-Raphson-Verfahren | Newton-Raphson 方法 | Newton-Raphson method |
+| die quadratische Konvergenz | 二次收敛 | quadratic convergence |
+| die lineare Konvergenz | 线性收敛 | linear convergence |
+
+## 统计应用
+
+| Deutsch | 中文 | English |
+|:--|:--|:--|
+| die Fisher-Informationsmatrix | Fisher 信息矩阵 | Fisher information matrix |
+| die Log-Likelihood-Funktion | 对数似然函数 | log-likelihood function |
+| die Cramér-Rao-Schranke | Cramér-Rao 下界 | Cramér-Rao bound |
+| die logistische Regression | 逻辑回归 | logistic regression |
+| die Kreuzentropie | 交叉熵 | cross-entropy |
+| die Sigmoid-Funktion | Sigmoid 函数 | sigmoid function |
+| IRLS (Iterativ gewichtete kleinste Quadrate) | 迭代加权最小二乘 | iteratively reweighted least squares |
+:::

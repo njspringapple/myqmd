@@ -1,0 +1,1581 @@
+---
+title: "函数逼近：从插值到光滑化"
+subtitle: "用曲线拟合理解统计建模的核心 | Funktionsapproximation: Von der Interpolation zur Glättung"
+author: "统计中的高级数学方法"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+# 全局配色方案 | Globales Farbschema
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  pink     = "#DB2777",
+  indigo   = "#6366F1",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+想象你拿到了一份传感器数据——只有 10 个测量点，但你需要在 **任意位置** 估计传感器读数。你会怎么做？把这些点"连"起来？用一条光滑曲线穿过它们？还是画一条"大致经过"但不必精确通过每个点的曲线？
+
+*Stellen Sie sich vor, Sie haben 10 Messpunkte eines Sensors — aber Sie müssen den Sensorwert an beliebigen Stellen schätzen. Wie verbinden Sie die Punkte?*
+
+这三种思路分别对应 **逼近、插值、光滑化** ——本章将带你走完从最简单的多项式到工业级样条方法的全部旅程。
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图：从多项式到 GAM | Lernroadmap: Vom Polynom zum GAM"
+#| code-fold: true
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 12), ylim = c(0, 7), axes = FALSE, 
+     xlab = "", ylab = "", main = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# 路径 | Pfad
+steps_x <- c(1, 3, 5, 7, 9, 11)
+steps_y <- rep(5.5, 6)
+arrows(steps_x[-6] + 0.7, steps_y[-6], steps_x[-1] - 0.7, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+# 步骤方块 | Schrittboxen
+labels_cn <- c("三种问题\n逼近·插值·光滑", "基表示\n线性方程组",
+               "多项式插值\n与陷阱", "样条 &\nB 样条",
+               "光滑化\n偏差-方差", "多维扩展\nGAM")
+labels_de <- c("Drei Varianten", "Basisdarstellung", 
+               "Polynom-\ninterpolation", "Splines &\nB-Splines",
+               "Glättung\nBias-Varianz", "Mehrdim.\nGAM")
+colors <- c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#E0E7FF", "#D1FAE5", "#FCE7F3")
+borders <- c("#2563EB", "#D97706", "#DC2626", "#6366F1", "#16A34A", "#DB2777")
+
+for (i in 1:6) {
+  rect(steps_x[i] - 0.7, steps_y[i] - 0.9, steps_x[i] + 0.7, steps_y[i] + 0.9,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.2, labels_cn[i], cex = 0.65, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.48, col = "#64748B", font = 3)
+}
+
+# 难度箭头 | Schwierigkeitspfeil
+arrows(0.5, 1.5, 11.5, 1.5, col = "#DC2626", lwd = 2, length = 0.15)
+text(6, 1.9, "难度递增 | Zunehmende Komplexität  >>>", cex = 0.85, col = "#DC2626")
+
+# 触发标签 | Auslöser
+triggers <- c("", "无穷多解!", "条件数爆炸!", "Runge!", "噪声!", "维数诅咒!")
+for (i in 2:6) {
+  text(steps_x[i] - 1, steps_y[i] + 1.3, triggers[i],
+       cex = 0.65, col = "#EA580C", font = 2)
+}
+
+# 编号 | Nummerierung
+for (i in 1:6) {
+  text(steps_x[i] - 0.5, steps_y[i] + 0.75, paste0("§", i), 
+       cex = 0.6, col = borders[i], font = 2)
+}
+
+# 讲次分界 | Vorlesungstrennung
+abline(v = 6, col = "#94A3B8", lty = 3, lwd = 1.5)
+text(3.5, 3.2, "第一讲 | Vorlesung 1", cex = 0.8, col = "#64748B", font = 3)
+text(8.5, 3.2, "第二讲 | Vorlesung 2", cex = 0.8, col = "#64748B", font = 3)
+```
+
+**最终目标 \| Endziel**：理解下面这个优化问题的 **每一个组成部分**——
+
+$$
+\hat{f} = \arg\min_{f \in \mathcal{F}_K} \left\{ \frac{1}{n}\sum_{i=1}^{n}\bigl(y_i - f(x_i)\bigr)^2 + \lambda \int_a^b \bigl|f''(x)\bigr|^2\,dx \right\}
+$$
+
+现在看不懂？**完全没关系**——读完本章，你将亲手"组装"出这个公式。
+
+{{< pagebreak >}}
+
+# 三种问题：逼近、插值、光滑化 {#sec-three-variants}
+
+> **Drei Varianten: Approximation, Interpolation, Glättung**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie in diesem Abschnitt lernen
+
+- 函数逼近的三种核心任务及其区别
+- 插值问题为什么有 **无穷多解**
+- 为什么需要"基系统"来限制解的范围
+- *Drei Kernaufgaben der Funktionsapproximation und warum Basissysteme nötig sind*
+:::
+
+## 问题设定：三种"找函数"的需求
+
+> **Problemstellung: Drei Arten, eine Funktion zu finden**
+
+假设我们有一个未知函数 $f$，以及一些数据点 $(x_1, y_1), \ldots, (x_n, y_n)$。我们想找一个函数 $\hat{f}$ 来"接近" $f$，但"接近"有三种不同的含义：
+
+```{r}
+#| label: fig-three-variants
+#| fig-cap: "三种变体：逼近关注整体距离，插值要求精确通过每个点，光滑化允许偏差以换取规律性 | Drei Varianten der Funktionsapproximation"
+#| fig-height: 4.5
+
+set.seed(42)
+x_demo <- sort(c(0, runif(8, 0.1, 0.9), 1))
+f_true <- function(x) sin(2 * pi * x) + 0.3 * cos(4 * pi * x)
+y_true <- f_true(x_demo)
+y_noisy <- y_true + rnorm(10, 0, 0.15)
+
+x_fine <- seq(0, 1, length.out = 300)
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(4, 4, 3.5, 1))
+
+# 逼近 | Approximation
+plot(x_fine, f_true(x_fine), type = "l", col = "#6B7280", lwd = 2, lty = 2,
+     xlab = "x", ylab = "f(x)", main = "逼近 | Approximation",
+     cex.main = 1.1, col.main = "#2563EB", ylim = c(-1.5, 1.8))
+grid(col = "#E2E8F0")
+lines(x_fine, 0.8 * sin(2 * pi * x_fine), col = "#2563EB", lwd = 2.5)
+legend("topright", legend = c(expression(f), expression(hat(f))),
+       col = c("#6B7280", "#2563EB"), lwd = c(2, 2.5), lty = c(2, 1),
+       bty = "n", cex = 0.85)
+text(0.5, -1.3, expression(paste("||", f - hat(f), "|| ≈ 0")),
+     col = "#2563EB", cex = 0.9, font = 2)
+
+# 插值 | Interpolation
+plot(x_demo, y_true, pch = 21, bg = "#DC2626", col = "white", cex = 2.2, lwd = 1.5,
+     xlab = "x", ylab = "f(x)", main = "插值 | Interpolation",
+     cex.main = 1.1, col.main = "#DC2626", ylim = c(-1.5, 1.8))
+grid(col = "#E2E8F0")
+sp_interp <- splinefun(x_demo, y_true)
+lines(x_fine, sp_interp(x_fine), col = "#DC2626", lwd = 2.5)
+text(0.5, -1.3, expression(paste(hat(f)(x[i]), " = ", y[i], "  ∀i")),
+     col = "#DC2626", cex = 0.9, font = 2)
+
+# 光滑化 | Glättung
+plot(x_demo, y_noisy, pch = 21, bg = "#16A34A", col = "white", cex = 2.2, lwd = 1.5,
+     xlab = "x", ylab = "y", main = "光滑化 | Glättung",
+     cex.main = 1.1, col.main = "#16A34A", ylim = c(-1.5, 1.8))
+grid(col = "#E2E8F0")
+sp_smooth <- smooth.spline(x_demo, y_noisy, df = 5)
+lines(predict(sp_smooth, x_fine), col = "#16A34A", lwd = 2.5)
+for (i in 1:10) {
+  segments(x_demo[i], y_noisy[i], x_demo[i], predict(sp_smooth, x_demo[i])$y,
+           col = adjustcolor("#EA580C", 0.5), lwd = 1.5, lty = 3)
+}
+text(0.5, -1.3, expression(paste(y[i], " = ", hat(f)(x[i]), " + ", epsilon[i])),
+     col = "#16A34A", cex = 0.9, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+三种变体的核心区别在于对 $\hat{f}$ 的要求不同：
+
+| 变体 / Variante | 目标 / Ziel | 条件 / Bedingung |
+|:---:|:---|:---|
+| **逼近** (Approximation) | $\hat{f}$ 与 $f$ 整体上尽量接近 | $\|f - \hat{f}\| \approx 0$ |
+| **插值** (Interpolation) | $\hat{f}$ 精确通过每个数据点 | $f(x_i) = \hat{f}(x_i) \;\forall i$ |
+| **光滑化** (Glättung) | $\hat{f}$ 大致通过但允许偏差 | $y_i = \hat{f}(x_i) + \varepsilon_i \;\forall i$ |
+
+::: {.callout-tip icon="false"}
+## 🤔 想一想 \| Denken Sie nach
+
+这三种变体之间有什么联系？
+
+- 逼近问题通常通过转化为插值或光滑化问题来求解。
+- 光滑化是"最难"的变体——因为误差 $\varepsilon_i$ 通常是随机的。
+- 本章先从 **插值** 出发，再扩展到光滑化。
+
+*Approximation wird oft durch Interpolation oder Glättung gelöst. Glättung ist die schwierigste Variante.*
+:::
+
+## 插值问题的无穷多解
+
+> **Unendlich viele Lösungen des Interpolationsproblems**
+
+对插值问题 $y_i = \hat{f}(x_i), \; i=1,\ldots,n$，存在 **无穷多个** 函数 $\hat{f}$ 满足条件。
+
+让我们用 3 个点 $(0, 1), (1, 2), (2, 5)$ 来验证——以下四个完全不同的函数都精确通过这三个点：
+
+```{r}
+#| label: fig-many-solutions
+#| fig-cap: "同一组数据点，四种不同的插值函数——哪条才是'正确'的？| Vier verschiedene Interpolationsfunktionen durch dieselben Punkte"
+#| fig-height: 5
+
+x_pts <- c(0, 1, 2)
+y_pts <- c(1, 2, 5)
+
+f1 <- function(x) 1 + x^2                         # 抛物线
+f2 <- function(x) ifelse(x <= 1, x + 1, 3*x - 1)  # 分段线性
+f3 <- function(x) x^3 - 2*x^2 + 2*x + 1           # 三次多项式
+f4 <- function(x) 1 + x^2 + 0.5*sin(2*pi*x)       # 含正弦项
+
+x_fine <- seq(-0.3, 2.3, length.out = 500)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(x_fine, f1(x_fine), type = "l", col = "#2563EB", lwd = 2.5,
+     xlab = "x", ylab = expression(hat(f)(x)),
+     main = "四种插值函数都精确通过相同的 3 个点 | Vier Interpolanten durch 3 Punkte",
+     ylim = c(-0.5, 8), cex.lab = 1.1, cex.main = 1.15, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(x_fine, f3(x_fine), col = "#9333EA", lwd = 2.5)
+lines(x_fine, f4(x_fine), col = "#EA580C", lwd = 2.5)
+
+# 分段线性（仅在定义域内画）
+x_pw <- seq(0, 2, length.out = 300)
+lines(x_pw, f2(x_pw), col = "#16A34A", lwd = 2.5)
+
+# 数据点
+points(x_pts, y_pts, pch = 21, bg = "#DC2626", col = "white", cex = 3, lwd = 2)
+
+# 验证标注
+for (i in 1:3) {
+  text(x_pts[i], y_pts[i] + 0.5,
+       paste0("(", x_pts[i], ", ", y_pts[i], ")"),
+       cex = 0.8, col = "#475569", font = 2)
+}
+
+legend("topleft",
+       legend = c(expression(hat(f)[1] == 1 + x^2),
+                  expression(hat(f)[2] == "分段线性"),
+                  expression(hat(f)[3] == x^3 - 2*x^2 + 2*x + 1),
+                  expression(hat(f)[4] == 1 + x^2 + 0.5*sin(2*pi*x))),
+       col = c("#2563EB", "#16A34A", "#9333EA", "#EA580C"),
+       lwd = 2.5, bty = "n", cex = 0.85)
+```
+
+```{r}
+#| label: verify-solutions
+#| code-fold: false
+
+# 验证：所有函数在三个点处的值 | Verifikation
+cat("验证所有函数在数据点处的值 | Verifikation der Funktionswerte:\n\n")
+for (x_val in x_pts) {
+  cat(sprintf("x = %d:  f1 = %.0f,  f2 = %.0f,  f3 = %.0f,  f4 = %.1f\n",
+              x_val, f1(x_val), f2(x_val), f3(x_val), f4(x_val)))
+}
+cat("\n所有函数都精确通过数据点！但它们在数据点之外的行为截然不同。\n")
+cat("Alle Funktionen interpolieren exakt! Aber ihr Verhalten zwischen den Punkten ist völlig verschieden.\n")
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 \| Schlüsselerkenntnis
+
+函数全体 $f:[a,b]\to\mathbb{R}$ 构成一个 **无穷维** 向量空间——因此对 $n$ 个点存在无穷多个插值函数。
+
+**解决方案**：限制到有限维子空间——选取 **基函数** $\phi_1, \ldots, \phi_K$，只在形如 $f(x) = \sum_{k=1}^{K} a_k \phi_k(x)$ 的函数中寻找答案。
+
+*Lösung: Einschränkung auf einen endlich-dimensionalen Unterraum durch Wahl eines Basissystems.*
+:::
+
+{{< pagebreak >}}
+
+# 基表示：把插值变成解方程 {#sec-basis}
+
+> **Basisdarstellung: Interpolation als lineares Gleichungssystem**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+- **基函数** 的概念：用有限个"积木"搭建函数
+- 插值条件如何转化为 **线性方程组** $\mathbf{Ba} = \mathbf{y}$
+- 不同插值方法的区别本质上就是 **基系统的选择**
+:::
+
+## 核心思想：有限维子空间
+
+> **Kernidee: Endlich-dimensionaler Unterraum**
+
+选取 $K$ 个基函数 $\phi_1, \ldots, \phi_K$，只考虑以下形式的函数：
+
+$$
+\mathcal{F}_K = \left\{ f(x) = \sum_{k=1}^{K} a_k \phi_k(x) \;\Big|\; a_k \in \mathbb{R} \right\}
+$$
+
+$\mathcal{F}_K$ 中的每个函数由 $K$ 个系数 $(a_1, \ldots, a_K)$ **唯一确定**。就像乐高积木——基函数是"基本零件"，系数决定"每种零件用几个"。
+
+## 从插值条件到线性方程组
+
+> **Von Interpolationsbedingungen zum linearen Gleichungssystem**
+
+设 $\hat{f}(x) = \sum_{k=1}^{K} a_k \phi_k(x)$，将插值条件 $y_i = \hat{f}(x_i)$ 展开：
+
+$$
+y_i = \sum_{k=1}^{K} a_k \phi_k(x_i), \quad i = 1, \ldots, n
+$$
+
+写成矩阵形式 $\mathbf{Ba} = \mathbf{y}$：
+
+$$
+\underbrace{\begin{pmatrix} \phi_1(x_1) & \phi_2(x_1) & \cdots & \phi_K(x_1) \\ \phi_1(x_2) & \phi_2(x_2) & \cdots & \phi_K(x_2) \\ \vdots & \vdots & \ddots & \vdots \\ \phi_1(x_n) & \phi_2(x_n) & \cdots & \phi_K(x_n) \end{pmatrix}}_{\mathbf{B} \;\in\; \mathbb{R}^{n \times K}} \underbrace{\begin{pmatrix} a_1 \\ a_2 \\ \vdots \\ a_K \end{pmatrix}}_{\mathbf{a} \;\in\; \mathbb{R}^K} = \underbrace{\begin{pmatrix} y_1 \\ y_2 \\ \vdots \\ y_n \end{pmatrix}}_{\mathbf{y} \;\in\; \mathbb{R}^n}
+$$
+
+其中基矩阵（Basismatrix）的元素为 $B_{ik} = \phi_k(x_i)$。
+
+## 具体例子：3 个点的手算
+
+> **Konkretes Beispiel: Handrechnung mit 3 Punkten**
+
+用 3 个点 $(0, 1), (1, 2), (2, 5)$ 和单项式基 $\phi_k(x) = x^{k-1}$（即 $1, x, x^2$），$K = 3$：
+
+```{r}
+#| label: basis-example
+#| code-fold: false
+
+# 3 个数据点 | 3 Datenpunkte
+x_pts <- c(0, 1, 2)
+y_pts <- c(1, 2, 5)
+
+# 构建单项式基矩阵 | Monombasismatrix aufbauen
+# phi_k(x) = x^{k-1}，即列分别为 1, x, x^2
+B <- outer(x_pts, 0:2, "^")
+colnames(B) <- c("1", "x", "x²")
+rownames(B) <- paste0("x=", x_pts)
+
+cat("基矩阵 B | Basismatrix B:\n")
+print(B)
+cat("\n右端向量 y | Rechte Seite y:", y_pts, "\n")
+
+# 解方程 Ba = y | Gleichungssystem lösen
+a <- solve(B, y_pts)
+cat("\n系数向量 a | Koeffizientenvektor a:\n")
+cat("  a1 (常数项)  =", a[1], "\n")
+cat("  a2 (x 的系数) =", a[2], "\n")
+cat("  a3 (x² 的系数) =", a[3], "\n")
+cat("\n插值多项式：f(x) =", a[1], "+", a[2], "x +", a[3], "x²\n")
+
+# 验证 | Verifikation
+cat("\n验证 | Verifikation:\n")
+for (i in 1:3) {
+  val <- a[1] + a[2]*x_pts[i] + a[3]*x_pts[i]^2
+  cat(sprintf("  f(%d) = %.0f  ✓\n", x_pts[i], val))
+}
+```
+
+::: {.callout-tip icon="false"}
+## 📌 关键联系 \| Schlüsselverbindung
+
+插值问题 ↔ 线性方程组 $\mathbf{Ba} = \mathbf{y}$
+
+不同插值方法的本质区别就在于 **基系统** $\{\phi_k\}$ 的选择。各系统在条件数、稳定性、局部性、计算效率等方面各有优劣——这也是我们后续比较多项式基与 B 样条基的核心议题。
+
+*Verschiedene Interpolationsmethoden unterscheiden sich im Wesentlichen durch die Wahl des Basissystems.*
+:::
+
+## 符号速查表
+
+> **Symbolübersicht**
+
+| 符号 / Symbol | 含义 / Bedeutung | 维度 / Dimension |
+|:---:|:---|:---:|
+| $n$ | 数据点个数 / Anzahl der Datenpunkte | 标量 / Skalar |
+| $K$ | 基函数个数 / Anzahl der Basisfunktionen | 标量 / Skalar |
+| $\phi_k$ | 第 $k$ 个基函数 / $k$-te Basisfunktion | $[a,b] \to \mathbb{R}$ |
+| $a_k$ | 第 $k$ 个基系数 / $k$-ter Basiskoeffizient | $\mathbb{R}$ |
+| $\mathbf{B}$ | 基矩阵 / Basismatrix，$B_{ik} = \phi_k(x_i)$ | $\mathbb{R}^{n \times K}$ |
+| $\mathbf{a}$ | 系数向量 / Koeffizientenvektor | $\mathbb{R}^K$ |
+| $\mathcal{F}_K$ | $K$ 维函数子空间 / $K$-dimensionaler Funktionsunterraum | — |
+| $\xi_0, \ldots, \xi_m$ | 样条节点 / Spline-Knoten | — |
+| $q$ | 样条次数 / Spline-Grad | 标量 / Skalar |
+
+{{< pagebreak >}}
+
+# 多项式插值：简单而危险 {#sec-polynomial}
+
+> **Polynominterpolation: Einfach, aber gefährlich**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+- 多项式插值的 **唯一性定理**
+- **条件数灾难**：为什么单项式基在 $n \geq 20$ 时崩溃
+- **Runge 现象**：为什么更多节点反而更糟
+- 这些问题如何引出 **样条** 方法
+:::
+
+## 唯一性定理：一个好消息
+
+> **Eindeutigkeitssatz: Eine gute Nachricht**
+
+**定理（多项式插值唯一性）：** 对 $n$ 对点 $(x_i, y_i)_{i=1}^{n}$（$x_i$ 两两不同），**恰好存在唯一** 一个次数 **至多** 为 $n-1$ 的多项式 $p$ 满足 $p(x_i) = y_i$。
+
+这是因为：若有两个这样的多项式 $p$ 和 $q$，则 $p - q$ 是次数 $\leq n-1$ 的多项式，却有 $n$ 个不同零点——根据代数基本定理，$p - q$ 只能是零多项式。
+
+::: {.callout-warning icon="false"}
+## ⚠️ 常见误解 \| Häufiges Missverständnis
+
+是次数 **至多** $n-1$，而非 **恰好** $n-1$！例如 3 个共线点 $(0, 0), (1, 1), (2, 2)$ 的插值多项式是 $p(x) = x$（1 次，而非 2 次）。
+
+*Es heißt „höchstens" Grad $n-1$, nicht „genau" Grad $n-1$!*
+:::
+
+## 问题 1：条件数灾难
+
+> **Problem 1: Katastrophale Konditionszahl**
+
+用单项式基 $\phi_k(x) = x^{k-1}$ 构建的 Vandermonde 矩阵，随 $n$ 增大条件数会急剧恶化。
+
+```{r}
+#| label: fig-condition-number
+#| fig-cap: "单项式基矩阵的条件数随节点数指数增长——在 n ≈ 20 时已达双精度浮点极限！| Konditionszahl der Vandermonde-Matrix wächst exponentiell"
+#| fig-height: 5
+
+n_vals <- 5:25
+cond_vals <- numeric(length(n_vals))
+
+for (i in seq_along(n_vals)) {
+  nn <- n_vals[i]
+  x_eq <- seq(0, 1, length.out = nn)
+  B_vdm <- outer(x_eq, 0:(nn - 1), "^")  # Vandermonde 矩阵
+  cond_vals[i] <- kappa(B_vdm, exact = TRUE)
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(n_vals, cond_vals, type = "b", pch = 16, col = "#DC2626", lwd = 2.5, cex = 1.3,
+     xlab = "节点数 n | Knotenanzahl n", ylab = expression(paste("条件数 ", kappa, "(B)")),
+     main = "单项式基的条件数灾难 | Konditionszahlkatastrophe der Monombasis",
+     log = "y", cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 双精度极限 | Doppelte Genauigkeitsgrenze
+abline(h = 1e16, col = "#9333EA", lty = 2, lwd = 2)
+text(15, 3e16, expression(paste("双精度极限 ~", 10^{16})), 
+     col = "#9333EA", cex = 0.9, font = 2)
+
+# 标注关键点
+arrows(20, cond_vals[16] * 5, 20, cond_vals[16] * 1.5,
+       col = "#EA580C", lwd = 2, length = 0.1)
+text(20, cond_vals[16] * 10, "n = 20 时\n精度全丧失!", 
+     col = "#EA580C", cex = 0.85, font = 2)
+```
+
+```{r}
+#| label: condition-table
+#| code-fold: false
+
+# 条件数对照表 | Konditionszahltabelle
+cat("条件数对照表 | Konditionszahltabelle:\n\n")
+key_n <- c(5, 10, 15, 20)
+for (nn in key_n) {
+  x_eq <- seq(0, 1, length.out = nn)
+  B <- outer(x_eq, 0:(nn-1), "^")
+  k <- kappa(B, exact = TRUE)
+  digits_lost <- floor(log10(k))
+  cat(sprintf("  n = %2d:  κ(B) ≈ 10^%-3d → 损失约 %d 位有效数字\n",
+              nn, digits_lost, digits_lost))
+}
+cat("\n双精度浮点约有 16 位有效数字。n ≥ 20 时几乎丧失全部精度！\n")
+cat("Doppelte Genauigkeit: ~16 Dezimalstellen. Ab n ≥ 20 geht fast alle Genauigkeit verloren!\n")
+```
+
+::: {.callout-tip collapse="true"}
+## 🔍 什么是条件数？为什么它重要？（点击展开）
+
+矩阵的 **条件数** $\kappa(\mathbf{B})$ 衡量的是：输入（$\mathbf{y}$）中微小扰动被放大到输出（$\mathbf{a}$）中的最大倍数。
+
+若 $\kappa(\mathbf{B}) \approx 10^{d}$，则求解 $\mathbf{Ba} = \mathbf{y}$ 时大约 **损失 $d$ 位有效数字**。在双精度浮点（约 16 位有效数字）下，$\kappa \geq 10^{16}$ 意味着结果可能毫无意义。
+
+*Die Konditionszahl $\kappa(\mathbf{B})$ misst, wie stark kleine Störungen in $\mathbf{y}$ im Ergebnis $\mathbf{a}$ verstärkt werden.*
+
+**解决方案**：使用正交化多项式基（Legendre、Chebyshev）代替单项式基。在 R 中用 `poly(x, n)` 代替 `cbind(1, x, x^2, ...)`。
+:::
+
+## 问题 2：Runge 现象
+
+> **Problem 2: Das Runge-Phänomen**
+
+即使条件数问题被解决（例如用正交基），多项式插值还有一个更深层的问题：**全局多项式在区间边缘会剧烈振荡**。
+
+用等距节点插值 $f(x) = \frac{1}{1 + 25x^2}$（一个非常光滑的函数）于 $[-1, 1]$，随着节点数增加，边缘误差反而爆炸！
+
+```{r}
+#| label: fig-runge
+#| fig-cap: "Runge 现象：等距节点多项式插值在边缘处剧烈振荡——节点越多越糟！| Runge-Phänomen: Polynominterpolation mit äquidistanten Knoten divergiert an den Rändern"
+#| fig-height: 6
+
+runge <- function(x) 1 / (1 + 25 * x^2)
+x_fine <- seq(-1, 1, length.out = 1000)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(x_fine, runge(x_fine), type = "l", col = "#1E293B", lwd = 3,
+     xlab = "x", ylab = "f(x)",
+     main = "Runge 现象 | Runge-Phänomen: f(x) = 1/(1+25x²)",
+     ylim = c(-0.5, 1.5), cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+colors_runge <- c("#2563EB", "#16A34A", "#DC2626")
+n_nodes <- c(7, 11, 15)
+
+for (j in seq_along(n_nodes)) {
+  nn <- n_nodes[j]
+  x_nodes <- seq(-1, 1, length.out = nn)
+  y_nodes <- runge(x_nodes)
+  
+  # 用正交多项式避免条件数问题——纯展示 Runge 现象
+  fit <- lm(y_nodes ~ poly(x_nodes, nn - 1, raw = FALSE))
+  
+  # 在细网格上用 Lagrange 插值（数值更直接）
+  # 这里用 R 自带的 approxfun + polyroot 会比较复杂，改用 splinefun with method="fmm"
+  # 实际上为了展示 Runge 现象，用最简单的方式
+  poly_interp <- function(x_eval, x_data, y_data) {
+    n <- length(x_data)
+    result <- numeric(length(x_eval))
+    for (i in seq_along(x_eval)) {
+      val <- 0
+      for (k in 1:n) {
+        Lk <- prod((x_eval[i] - x_data[-k]) / (x_data[k] - x_data[-k]))
+        val <- val + y_data[k] * Lk
+      }
+      result[i] <- val
+    }
+    result
+  }
+  
+  y_interp <- poly_interp(x_fine, x_nodes, y_nodes)
+  lines(x_fine, y_interp, col = colors_runge[j], lwd = 2)
+  points(x_nodes, y_nodes, pch = 16, col = colors_runge[j], cex = 1)
+}
+
+legend("topright",
+       legend = c("f(x) 真实函数",
+                  paste0("n = ", n_nodes, " 节点")),
+       col = c("#1E293B", colors_runge),
+       lwd = c(3, 2, 2, 2), pch = c(NA, 16, 16, 16), bty = "n", cex = 0.9)
+```
+
+::: {.callout-important icon="false"}
+## 💡 两个致命问题的共同解药 \| Das gemeinsame Heilmittel
+
+多项式插值的两大致命问题（条件数灾难 + Runge 现象）有一个共同根源：**全局基函数**——改变任何一个 $y_i$，整个插值函数都会变化。
+
+**解决方案**：用 **分段多项式**（每个区间上用低次多项式），在节点处"拼接"起来 → 这就是 **样条（Spline）**！
+
+*Lösung: Stückweise Polynome (niedrigen Grades) an den Knoten zusammensetzen → Splines!*
+:::
+
+{{< pagebreak >}}
+
+# 样条：分段拼接的智慧 {#sec-splines}
+
+> **Splines: Die Klugheit des stückweisen Zusammensetzens**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+- **样条** 的精确定义：分段多项式 + 光滑拼接条件
+- 样条的 **自由度计数**
+- 三次样条为什么需要 **边界条件**
+- **B 样条**：数值稳定且高效的基系统
+- B 样条的核心性质：**局部支撑、低条件数、带状结构**
+:::
+
+## 样条的定义
+
+> **Definition eines Splines**
+
+**定义：** $[a,b]$ 上的 **$q$ 次多项式样条** 是函数 $s: [a,b] \to \mathbb{R}$，满足以下三个条件：
+
+1. 定义在节点网格 $a = \xi_0 < \xi_1 < \cdots < \xi_m = b$ 上。
+2. 在每个子区间 $[\xi_{k-1}, \xi_k)$ 上为 $q$ 次多项式 $p_k$。
+3. 整体具有 $q-1$ 阶连续导数，即 $s \in \mathcal{C}^{q-1}$。
+
+通俗地说，样条是在内部节点 $\xi_1, \ldots, \xi_{m-1}$ 处将低次多项式"光滑拼接"在一起的函数。
+
+```{r}
+#| label: fig-spline-idea
+#| fig-cap: "样条的核心思想：在每个区间内用低次多项式，在节点处光滑拼接 | Kernidee der Splines: Niedriggradige Polynome, glatt verbunden"
+#| fig-height: 5
+
+set.seed(2024)
+x_knots <- c(0, 0.25, 0.5, 0.75, 1)
+x_data <- sort(c(x_knots, runif(8, 0.02, 0.98)))
+y_data <- sin(3 * x_data) + 0.5 * cos(7 * x_data)
+
+x_fine <- seq(0, 1, length.out = 500)
+sp_fit <- splinefun(x_data, y_data, method = "natural")
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(x_fine, sp_fit(x_fine), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "x", ylab = "s(x)", ylim = c(-1.5, 1.8),
+     main = "三次样条：每个区间内为三次多项式 | Kubischer Spline",
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 标记内部节点 | Innere Knoten markieren
+for (xk in x_knots[2:4]) {
+  abline(v = xk, col = adjustcolor("#DC2626", 0.3), lty = 2)
+  points(xk, sp_fit(xk), pch = 18, col = "#DC2626", cex = 2)
+}
+
+# 不同区间着色 | Intervalle einfärben
+interval_cols <- c(adjustcolor("#DBEAFE", 0.3), adjustcolor("#FEF3C7", 0.3),
+                   adjustcolor("#FEE2E2", 0.3), adjustcolor("#D1FAE5", 0.3))
+for (i in 1:4) {
+  rect(x_knots[i], -1.5, x_knots[i+1], 1.8, col = interval_cols[i], border = NA)
+}
+# 重画曲线
+lines(x_fine, sp_fit(x_fine), col = "#2563EB", lwd = 3)
+
+points(x_data, y_data, pch = 21, bg = "#16A34A", col = "white", cex = 1.8, lwd = 1.5)
+abline(v = x_knots[c(1,5)], col = "#6B7280", lty = 1, lwd = 1.5)
+
+legend("topright",
+       legend = c("三次样条 | Kubischer Spline", "内部节点 | Innere Knoten",
+                  "数据点 | Datenpunkte"),
+       col = c("#2563EB", "#DC2626", "#16A34A"),
+       lwd = c(3, NA, NA), pch = c(NA, 18, 21),
+       pt.bg = c(NA, NA, "#16A34A"), pt.cex = c(NA, 2, 1.8),
+       bty = "n", cex = 0.9)
+
+# 区间标签
+text(0.125, 1.6, expression(p[1]), col = "#2563EB", cex = 1.2, font = 2)
+text(0.375, 1.6, expression(p[2]), col = "#2563EB", cex = 1.2, font = 2)
+text(0.625, 1.6, expression(p[3]), col = "#2563EB", cex = 1.2, font = 2)
+text(0.875, 1.6, expression(p[4]), col = "#2563EB", cex = 1.2, font = 2)
+```
+
+## 自由度计数
+
+> **Freiheitsgradberechnung**
+
+$q$ 次、$m+1$ 个节点的样条有多少自由参数？
+
+无连续性条件时：$m$ 个区间 $\times$ 每个区间 $(q+1)$ 个系数 $= m(q+1)$ 个参数。
+
+在 $m-1$ 个内部节点上，需施加 $q$ 个连续性条件（函数值连续 + $q-1$ 阶导数连续），共消去 $(m-1) \times q$ 个参数。
+
+$$
+\text{自由度} = m(q+1) - (m-1) \cdot q = m + q
+$$
+
+```{r}
+#| label: dof-examples
+#| code-fold: false
+
+# 自由度计算示例 | Freiheitsgradbeispiele
+cat("自由度计算 | Freiheitsgradberechnung:\n\n")
+cases <- data.frame(
+  q = c(1, 2, 3, 3, 3),
+  m = c(4, 4, 4, 10, 50),
+  name = c("线性样条", "二次样条", "三次样条", "三次样条", "三次样条")
+)
+for (i in 1:nrow(cases)) {
+  q <- cases$q[i]; m <- cases$m[i]
+  cat(sprintf("  %s (q=%d, m=%d 个区间): 自由度 = %d + %d = %d\n",
+              cases$name[i], q, m, m, q, m + q))
+}
+```
+
+## 三次样条的边界条件
+
+> **Randbedingungen kubischer Splines**
+
+对三次样条（$q = 3$），$n = m + 1$ 个节点的插值问题有 $m + 3$ 个自由度，但只有 $n = m + 1$ 个插值条件——还差 2 个条件。常用的三种补充方式：
+
+| 类型 / Typ | 条件 / Bedingung | 适用场景 / Anwendung |
+|:---:|:---|:---|
+| 自然 (Natural) | $s''(a) = s''(b) = 0$ | 无边界信息时的默认选择 |
+| 夹紧 (Clamped) | $s'(a), s'(b)$ 给定 | 已知端点斜率 |
+| 周期 (Periodic) | $s(a) = s(b),\; s'(a) = s'(b)$ | 周期性数据 |
+
+## B 样条：工业级基系统
+
+> **B-Splines: Das Basissystem für die Praxis**
+
+每个 $q$ 次样条都可以用 $m + q$ 个 **B 样条基函数** $B_k$ 的线性组合表示：
+
+$$
+s(x) = \sum_{k=1}^{m+q} a_k B_k(x)
+$$
+
+B 样条的构造基于 **Cox-de Boor 递推**。对扩展节点序列 $\tau_0, \tau_1, \ldots$：
+
+$$
+B_k^{(0)}(x) = \mathbf{1}(\tau_k \leq x < \tau_{k+1})
+$$
+
+$$
+B_k^{(q)}(x) = \frac{x - \tau_k}{\tau_{k+q} - \tau_k} B_k^{(q-1)}(x) + \frac{\tau_{k+q+1} - x}{\tau_{k+q+1} - \tau_{k+1}} B_{k+1}^{(q-1)}(x)
+$$
+
+在 R 中直接用 `splines::bs()` 即可。
+
+```{r}
+#| label: fig-bspline-basis
+#| fig-cap: "三次 B 样条基函数：每个基函数只在局部非零（4 个相邻区间）| Kubische B-Spline-Basisfunktionen: jede nur lokal von null verschieden"
+#| fig-height: 5
+
+library(splines)
+
+x_fine <- seq(0, 1, length.out = 500)
+knots_inner <- c(0.2, 0.4, 0.6, 0.8)
+
+B_mat <- bs(x_fine, knots = knots_inner, degree = 3, intercept = TRUE)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+matplot(x_fine, B_mat, type = "l", lwd = 2.2, lty = 1,
+        xlab = "x", ylab = expression(B[k](x)),
+        main = "三次 B 样条基函数 | Kubische B-Spline-Basisfunktionen",
+        cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B",
+        col = rainbow(ncol(B_mat), s = 0.7, v = 0.8))
+grid(col = "#E2E8F0")
+
+# 标记节点
+for (xk in knots_inner) {
+  abline(v = xk, col = adjustcolor("#DC2626", 0.3), lty = 2)
+}
+abline(v = c(0, 1), col = "#6B7280", lty = 1, lwd = 1)
+
+text(0.5, 0.95, "每个基函数只在 4 个区间内非零！",
+     col = "#DC2626", cex = 0.9, font = 2)
+text(0.5, 0.85, "Jede Basisfunktion nur in 4 Intervallen ≠ 0!",
+     col = "#64748B", cex = 0.7, font = 3)
+```
+
+## B 样条 vs 单项式基：条件数对比
+
+> **B-Splines vs. Monombasis: Konditionszahlvergleich**
+
+```{r}
+#| label: fig-condition-comparison
+#| fig-cap: "条件数对比：B 样条优于单项式基 14 个数量级！| Konditionszahl: B-Splines 14 Größenordnungen besser!"
+#| fig-height: 5
+
+n_vals <- seq(5, 40, by = 5)
+cond_mono <- numeric(length(n_vals))
+cond_bspl <- numeric(length(n_vals))
+
+for (i in seq_along(n_vals)) {
+  nn <- n_vals[i]
+  x_eq <- seq(0, 1, length.out = nn)
+  
+  # 单项式基 | Monombasis
+  B_mono <- outer(x_eq, 0:(nn-1), "^")
+  cond_mono[i] <- kappa(B_mono)
+  
+  # B 样条基（三次）| B-Spline-Basis (kubisch)
+  if (nn > 4) {
+    B_bspl <- bs(x_eq, df = min(nn, nn - 1), degree = 3, intercept = TRUE)
+    cond_bspl[i] <- kappa(B_bspl)
+  } else {
+    cond_bspl[i] <- NA
+  }
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(n_vals, cond_mono, type = "b", pch = 16, col = "#DC2626", lwd = 2.5, cex = 1.3,
+     xlab = "节点数 n | Knotenanzahl n",
+     ylab = expression(paste("条件数 ", kappa, "(B)")),
+     main = "基系统条件数对比 | Vergleich der Konditionszahlen",
+     log = "y", ylim = c(1, 1e18),
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(n_vals, cond_bspl, type = "b", pch = 17, col = "#2563EB", lwd = 2.5, cex = 1.3)
+
+abline(h = 1e16, col = "#9333EA", lty = 2, lwd = 1.5)
+text(25, 5e16, "双精度极限 | Grenze der doppelten Genauigkeit", 
+     col = "#9333EA", cex = 0.8, font = 3)
+
+legend("topleft",
+       legend = c(expression(paste("单项式基 | Monombasis: ", kappa, " ~ ", 10^{n})),
+                  expression(paste("B 样条基 | B-Splines: ", kappa, " ~ ", 10^{2}))),
+       col = c("#DC2626", "#2563EB"), pch = c(16, 17), lwd = 2.5,
+       bty = "n", cex = 0.95)
+```
+
+## B 样条的核心性质
+
+> **Schlüsseleigenschaften der B-Splines**
+
+::: {.callout-important icon="false"}
+## 💡 B 样条五大优势 \| Fünf Vorteile der B-Splines
+
+1. **逼近能力强**：节点间距足够小时，可任意精确逼近任何连续函数。
+2. **微积分友好**：$q$ 次样条的导数是 $q-1$ 次样条，积分是 $q+1$ 次样条。
+3. **逼近传递**：样条对 $f$ 的逼近同时逼近 $f$ 的导数和积分。
+4. **数值稳定**：条件数低（约 $10^2$ vs 单项式基的 $10^{16}$）。
+5. **局部支撑**：$B_k(x) = 0$ 对 $x \notin [\tau_k, \tau_{k+q+1}]$。
+
+**局部支撑** 带来两个重要推论：改变一个数据点只影响附近的拟合（**更稳定**）；基矩阵是带状稀疏矩阵，线性方程组求解从 $O(n^3)$ 降至 $O(nq^2)$（**更高效**）。
+
+*Lokaler Träger → stabilere Anpassung + dünnbesetzte Bandmatrix → effizientere Lösung.*
+:::
+
+{{< pagebreak >}}
+
+# 样条的理论保证 {#sec-spline-theory}
+
+> **Theoretische Garantien für Splines**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+- 三次样条的 **最小曲率性**——为什么三次样条是"最光滑的"
+- **逼近误差** $O(h^4)$ 的含义与验证
+- 这些性质如何为光滑化问题提供理论基础
+:::
+
+## 最小曲率性：三次样条最"省力"
+
+> **Minimale Krümmung: Kubische Splines sind am „sparsamsten"**
+
+**定理：** 设 $s$ 是插值点 $(x_1, y_1), \ldots, (x_n, y_n)$ 的 **自然三次样条**（即 $s''(a) = s''(b) = 0$）。若 $g \in \mathcal{C}^2[a,b]$ 是另一个满足 $g(x_i) = y_i \;\forall i$ 的函数，则
+
+$$
+\int_a^b |s''(x)|^2\,dx \leq \int_a^b |g''(x)|^2\,dx
+$$
+
+也就是说，在所有二阶连续可微的插值函数中，自然三次样条的 **弯曲程度最小**。
+
+```{r}
+#| label: fig-min-curvature
+#| fig-cap: "最小曲率性：自然三次样条（蓝）比抛物线（红）弯曲更小 | Minimale Krümmung: Spline (blau) krümmt sich weniger als die Parabel (rot)"
+#| fig-height: 5
+
+x_pts <- c(0, 1, 2)
+y_pts <- c(0, 1, 0)
+
+# 抛物线插值 | Parabel-Interpolation
+parabola <- function(x) -(x - 1)^2 + 1
+
+# 自然三次样条 | Natürlicher kubischer Spline
+sp_nat <- splinefun(x_pts, y_pts, method = "natural")
+
+x_fine <- seq(0, 2, length.out = 500)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(x_fine, sp_nat(x_fine), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "x", ylab = "f(x)",
+     main = "最小曲率性 | Minimale Krümmung",
+     ylim = c(-0.3, 1.3), cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(x_fine, parabola(x_fine), col = "#DC2626", lwd = 2.5, lty = 2)
+points(x_pts, y_pts, pch = 21, bg = "#1E293B", col = "white", cex = 2.5, lwd = 2)
+
+# 计算曲率 | Krümmung berechnen
+curvature_spline <- integrate(function(x) sp_nat(x, deriv = 2)^2, 0, 2)$value
+curvature_parabola <- integrate(function(x) (-2)^2 + 0*x, 0, 2)$value
+
+legend("topright",
+       legend = c(
+         bquote("自然三次样条: " ~ integral("|s''|"^2) == .(round(curvature_spline, 2))),
+         bquote("抛物线: " ~ integral("|p''|"^2) == .(round(curvature_parabola, 2)))
+       ),
+       col = c("#2563EB", "#DC2626"), lwd = c(3, 2.5), lty = c(1, 2),
+       bty = "n", cex = 0.9)
+```
+
+::: {.callout-tip collapse="true"}
+## 🔍 证明思路（点击展开）
+
+令 $g = s + h$，其中 $h(x_i) = 0 \;\forall i$。定义曲率泛函 $J(g) := \int_a^b (g''(x))^2\,dx$，则：
+
+$$
+J(g) = J(s) + 2\int_a^b s''(x) h''(x)\,dx + \int_a^b (h''(x))^2\,dx
+$$
+
+在每个区间 $[x_{i-1}, x_i]$ 上分部积分：
+
+$$
+\int s'' h''\,dx = \bigl[s'' h' - s^{(3)} h\bigr]_{x_{i-1}}^{x_i} + \int s^{(4)} h\,dx
+$$
+
+因为三次样条的四阶导数 $s^{(4)} = 0$；各项边界贡献因 $h(x_i) = 0$ 及自然边界条件 $s''(a) = s''(b) = 0$ 而消去。故 $J(g) = J(s) + \int_a^b (h''(x))^2\,dx \geq J(s)$。$\square$
+:::
+
+## 逼近误差：$O(h^4)$
+
+> **Approximationsfehler: $O(h^4)$**
+
+**定理：** 设网格步长 $h := \max_i |x_i - x_{i-1}|$。对每个 $f \in \mathcal{C}^4[a,b]$，存在三次样条 $s$ 满足 $f(x_i) = s(x_i) \;\forall i$ 且
+
+$$
+\max_{x \in [a,b]} |f(x) - s(x)| \leq C \cdot h^4 \max_{x \in [a,b]} |f^{(4)}(x)|
+$$
+
+其中 $C$ 为小常数（自然样条约 $C = \frac{5}{384}$）。
+
+这意味着：网格步长 $h$ **减半** 时，误差缩小为原来的 $2^4 = 16$ **分之一**！
+
+```{r}
+#| label: fig-approximation-error
+#| fig-cap: "逼近误差验证：h 减半 → 误差缩小约 16 倍，与 O(h⁴) 理论预测一致 | Verifikation: h halbiert → Fehler ÷ 16, konsistent mit O(h⁴)"
+#| fig-height: 5
+
+f_test <- function(x) sin(2 * pi * x)
+f_test_d4 <- (2 * pi)^4  # |f''''| 的最大值
+
+n_nodes_vec <- c(5, 9, 17, 33, 65)
+h_vec <- 1 / (n_nodes_vec - 1)
+error_actual <- numeric(length(n_nodes_vec))
+error_bound <- numeric(length(n_nodes_vec))
+
+x_eval <- seq(0, 1, length.out = 2000)
+
+for (i in seq_along(n_nodes_vec)) {
+  nn <- n_nodes_vec[i]
+  x_nodes <- seq(0, 1, length.out = nn)
+  y_nodes <- f_test(x_nodes)
+  sp <- splinefun(x_nodes, y_nodes, method = "natural")
+  
+  error_actual[i] <- max(abs(sp(x_eval) - f_test(x_eval)))
+  error_bound[i] <- (5/384) * h_vec[i]^4 * f_test_d4
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(h_vec, error_actual, type = "b", pch = 16, col = "#2563EB", lwd = 2.5, cex = 1.5,
+     xlab = "网格步长 h | Gitterschrittweite h",
+     ylab = "最大误差 | Maximaler Fehler",
+     main = expression(paste("逼近误差 = O(", h^4, ") 的验证 | Verifikation")),
+     log = "xy", cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(h_vec, error_bound, type = "b", pch = 17, col = "#DC2626", lwd = 2, lty = 2, cex = 1.3)
+
+# 参考斜率 h^4
+h_ref <- seq(min(h_vec), max(h_vec), length.out = 50)
+lines(h_ref, 500 * h_ref^4, col = "#16A34A", lwd = 2, lty = 3)
+
+legend("topleft",
+       legend = c("实际误差 | Tatsächlicher Fehler",
+                  expression(paste("理论上界 (C = ", frac(5, 384), ")")),
+                  expression(paste("参考斜率 ", h^4))),
+       col = c("#2563EB", "#DC2626", "#16A34A"),
+       pch = c(16, 17, NA), lwd = c(2.5, 2, 2), lty = c(1, 2, 3),
+       bty = "n", cex = 0.9)
+
+cat("逼近误差验证 | Verifikation des Approximationsfehlers:\n\n")
+cat("f(x) = sin(2πx),  max|f''''| = (2π)^4 ≈", round(f_test_d4, 0), "\n\n")
+for (i in seq_along(n_nodes_vec)) {
+  cat(sprintf("  n = %2d,  h = %.4f:  实际误差 = %.2e,  理论上界 = %.2e",
+              n_nodes_vec[i], h_vec[i], error_actual[i], error_bound[i]))
+  if (i > 1) {
+    cat(sprintf(",  误差缩小 %.1f 倍", error_actual[i-1] / error_actual[i]))
+  }
+  cat("\n")
+}
+```
+
+{{< pagebreak >}}
+
+# 光滑化：当数据有噪声 {#sec-smoothing}
+
+> **Glättung: Wenn Daten verrauscht sind**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+- 从插值到光滑化：为什么不能精确通过每个数据点
+- **偏差-方差权衡**：模型复杂度的两难选择
+- 如何用 **交叉验证、AIC/BIC、GCV** 选择合适的复杂度 $K$
+- **惩罚光滑化**（P 样条）的直觉
+:::
+
+## 从插值到光滑化
+
+> **Von der Interpolation zur Glättung**
+
+模型：$y_i = f(x_i) + \varepsilon_i$，其中 $\varepsilon_i$ 独立同分布，$\mathbb{E}[\varepsilon_i | x_i] = 0$。
+
+光滑化与插值类似，令 $\hat{f}(x) = \sum_{k=1}^{K} a_k \phi_k(x)$，解最小二乘问题：
+
+$$
+\min_{\mathbf{a}} \|\mathbf{y} - \mathbf{Ba}\|_2^2
+$$
+
+**关键区别**：插值时 $K = n$（精确通过所有点，但会拟合噪声）；光滑化时 $K < n$（允许 $\hat{f}(x_i) \neq y_i$，换取更光滑、更可推广的函数）。
+
+```{r}
+#| label: fig-interp-vs-smooth
+#| fig-cap: "插值（K=n）拟合了噪声——光滑化（K<n）更接近真实函数 | Interpolation passt Rauschen an — Glättung approximiert die wahre Funktion besser"
+#| fig-height: 5
+
+set.seed(42)
+n <- 20
+x_data <- sort(runif(n, 0, 1))
+f_true <- function(x) sin(3 * x)
+y_data <- f_true(x_data) + rnorm(n, 0, 0.3)
+
+x_fine <- seq(0, 1, length.out = 500)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(x_data, y_data, pch = 21, bg = "#6B7280", col = "white", cex = 1.8, lwd = 1.5,
+     xlab = "x", ylab = "y",
+     main = "插值 vs. 光滑化 | Interpolation vs. Glättung",
+     ylim = c(-2, 2.5), cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 真实函数 | Wahre Funktion
+lines(x_fine, f_true(x_fine), col = "#1E293B", lwd = 2.5, lty = 1)
+
+# 插值 (K = n) | Interpolation
+sp_interp <- splinefun(x_data, y_data)
+lines(x_fine, sp_interp(x_fine), col = "#DC2626", lwd = 2, lty = 2)
+
+# 光滑化 (K << n) | Glättung
+sp_smooth <- smooth.spline(x_data, y_data, df = 5)
+lines(predict(sp_smooth, x_fine), col = "#2563EB", lwd = 2.5)
+
+legend("topright",
+       legend = c("真实函数 f(x) | Wahre Funktion",
+                  "插值 (K = n): 拟合噪声！",
+                  "光滑化 (K = 5): 更接近 f"),
+       col = c("#1E293B", "#DC2626", "#2563EB"),
+       lwd = c(2.5, 2, 2.5), lty = c(1, 2, 1), bty = "n", cex = 0.9)
+```
+
+## 偏差-方差权衡
+
+> **Bias-Varianz-Tradeoff**
+
+均方误差可以分解为两部分：
+
+$$
+\mathbb{E}\bigl[(\hat{f}(x) - f(x))^2\bigr] = \underbrace{\bigl(\mathbb{E}[\hat{f}(x)] - f(x)\bigr)^2}_{\text{偏差}^2 \;(\text{Bias}^2)} + \underbrace{\text{Var}[\hat{f}(x)]}_{\text{方差 (Varianz)}}
+$$
+
+对三次样条：偏差 $= O(K^{-4})$（$K$ 越大偏差越小），方差 $= O(K/n)$（$K$ 越大方差越大）。
+
+$$
+\text{MSE} = O(K^{-8} + K/n)
+$$
+
+```{r}
+#| label: fig-bias-variance
+#| fig-cap: "偏差-方差权衡：K 太小 → 偏差大（欠拟合），K 太大 → 方差大（过拟合）| Bias-Varianz-Tradeoff: K zu klein → Underfitting, K zu groß → Overfitting"
+#| fig-height: 5.5
+
+set.seed(42)
+n_bv <- 100
+x_bv <- sort(runif(n_bv, 0, 2*pi))
+f_true_bv <- function(x) sin(x) + 0.3 * sin(3*x)
+sigma_bv <- 0.3
+
+K_vals <- c(3, 5, 8, 12, 20, 35, 50)
+n_sim <- 200
+
+bias_sq <- numeric(length(K_vals))
+variance <- numeric(length(K_vals))
+
+x_eval_bv <- seq(0.1, 2*pi - 0.1, length.out = 50)
+
+for (ki in seq_along(K_vals)) {
+  K <- K_vals[ki]
+  preds <- matrix(NA, n_sim, length(x_eval_bv))
+  
+  for (sim in 1:n_sim) {
+    y_sim <- f_true_bv(x_bv) + rnorm(n_bv, 0, sigma_bv)
+    fit <- tryCatch(
+      smooth.spline(x_bv, y_sim, df = K),
+      error = function(e) NULL
+    )
+    if (!is.null(fit)) {
+      preds[sim, ] <- predict(fit, x_eval_bv)$y
+    }
+  }
+  
+  valid_rows <- complete.cases(preds)
+  if (sum(valid_rows) > 10) {
+    preds_valid <- preds[valid_rows, ]
+    mean_pred <- colMeans(preds_valid)
+    true_vals <- f_true_bv(x_eval_bv)
+    bias_sq[ki] <- mean((mean_pred - true_vals)^2)
+    variance[ki] <- mean(apply(preds_valid, 2, var))
+  }
+}
+
+mse_total <- bias_sq + variance
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(K_vals, mse_total, type = "b", pch = 16, col = "#1E293B", lwd = 3, cex = 1.5,
+     xlab = "基函数个数 K | Anzahl Basisfunktionen K",
+     ylab = "误差 | Fehler",
+     main = "偏差-方差权衡 | Bias-Varianz-Tradeoff",
+     ylim = c(0, max(mse_total) * 1.1),
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(K_vals, bias_sq, type = "b", pch = 17, col = "#2563EB", lwd = 2, cex = 1.2)
+lines(K_vals, variance, type = "b", pch = 18, col = "#DC2626", lwd = 2, cex = 1.2)
+
+# 最优点
+k_opt <- K_vals[which.min(mse_total)]
+points(k_opt, min(mse_total), pch = 23, bg = "#16A34A", col = "white", cex = 3, lwd = 2)
+
+legend("topright",
+       legend = c("MSE = Bias² + Var",
+                  expression(paste("Bias² = O(", K^{-8}, ")")),
+                  expression(paste("Var = O(K/n)")),
+                  paste0("最优 K* = ", k_opt)),
+       col = c("#1E293B", "#2563EB", "#DC2626", "#16A34A"),
+       pch = c(16, 17, 18, 23), pt.bg = c(NA, NA, NA, "#16A34A"),
+       lwd = c(3, 2, 2, NA), bty = "n", cex = 0.9)
+```
+
+```{r}
+#| label: fig-underfit-optimal-overfit
+#| fig-cap: "三种拟合效果：欠拟合（K 太小）、最优（K 合适）、过拟合（K 太大）| Underfitting, Optimal, Overfitting"
+#| fig-height: 4.5
+
+set.seed(42)
+y_demo <- f_true_bv(x_bv) + rnorm(n_bv, 0, sigma_bv)
+x_fine_bv <- seq(0, 2*pi, length.out = 500)
+
+K_show <- c(3, 10, 50)
+titles <- c("欠拟合 K=3 | Underfitting", "最优 K=10 | Optimal", "过拟合 K=50 | Overfitting")
+cols <- c("#2563EB", "#16A34A", "#DC2626")
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(4, 4, 3.5, 1))
+for (j in 1:3) {
+  plot(x_bv, y_demo, pch = 16, col = adjustcolor("#6B7280", 0.4), cex = 1,
+       xlab = "x", ylab = "y", main = titles[j],
+       ylim = c(-2, 2), cex.main = 0.95, col.main = cols[j])
+  grid(col = "#E2E8F0")
+  lines(x_fine_bv, f_true_bv(x_fine_bv), col = "#1E293B", lwd = 2, lty = 2)
+  
+  fit_j <- smooth.spline(x_bv, y_demo, df = K_show[j])
+  lines(predict(fit_j, x_fine_bv), col = cols[j], lwd = 2.5)
+}
+par(mfrow = c(1, 1))
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 \| Schlüsselerkenntnis
+
+**偏差 vs 方差** 是机器学习和统计建模中最核心的矛盾之一。
+
+- $K$ 太小 → 模型太简单 → **高偏差**（欠拟合 / Underfitting）
+- $K$ 太大 → 模型太复杂 → **高方差**（过拟合 / Overfitting）
+- 最优 $K$ 在两者之间取得平衡
+
+*Bias vs. Varianz ist einer der zentralen Zielkonflikte in ML und Statistik.*
+:::
+
+## 模型选择：如何在实践中选 $K$？
+
+> **Modellauswahl: Wie wählt man $K$ in der Praxis?**
+
+理论最优 $K \sim n^{1/9}$ 只给出渐近数量级，实践中需要数据驱动的方法：
+
+**广义交叉验证（GCV）**：
+
+$$
+\text{GCV}(K) = \frac{\text{RSS}_K / n}{(1 - K/n)^2}
+$$
+
+```{r}
+#| label: fig-gcv
+#| fig-cap: "GCV 准则帮助我们自动选择合适的 K | GCV-Kriterium wählt automatisch das passende K"
+#| fig-height: 5
+
+K_search <- 3:40
+gcv_vals <- numeric(length(K_search))
+
+for (ki in seq_along(K_search)) {
+  fit_k <- smooth.spline(x_bv, y_demo, df = K_search[ki])
+  resid_k <- y_demo - predict(fit_k, x_bv)$y
+  rss_k <- sum(resid_k^2)
+  gcv_vals[ki] <- (rss_k / n_bv) / (1 - K_search[ki] / n_bv)^2
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(K_search, gcv_vals, type = "b", pch = 16, col = "#2563EB", lwd = 2,
+     xlab = "基函数个数 K | Anzahl Basisfunktionen K",
+     ylab = "GCV 分数 | GCV-Score",
+     main = "用 GCV 选择 K | K-Wahl mittels GCV",
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+k_gcv_opt <- K_search[which.min(gcv_vals)]
+points(k_gcv_opt, min(gcv_vals), pch = 23, bg = "#DC2626", col = "white", cex = 3, lwd = 2)
+text(k_gcv_opt + 2, min(gcv_vals), paste0("GCV 最优 K = ", k_gcv_opt),
+     col = "#DC2626", font = 2, cex = 1)
+```
+
+## 惩罚光滑化：另一种控制光滑度的方式
+
+> **Penalisierte Glättung: Eine andere Art, die Glätte zu steuern**
+
+除了控制 $K$，还可以选择较大的 $K$ 但加入 **惩罚项**，惩罚函数的弯曲程度：
+
+$$
+\hat{f} = \arg\min_{f \in \mathcal{F}_K} \left\{ \underbrace{\frac{1}{n}\sum_{i=1}^{n}(y_i - f(x_i))^2}_{\text{数据拟合度}} + \underbrace{\lambda \int_a^b |f''(x)|^2\,dx}_{\text{光滑惩罚}} \right\}
+$$
+
+这里 $\lambda \geq 0$ 是一个 **调节参数**：$\lambda = 0$ 意味着只关心拟合（插值）；$\lambda \to \infty$ 意味着只关心光滑（直线）。
+
+::: {.callout-tip icon="false"}
+## 🤔 想一想 \| Denken Sie nach
+
+回顾开篇那个"吓人"的公式——现在你能解读其中的每一个组成部分了吗？
+
+$$
+\hat{f} = \arg\min_{f \in \mathcal{F}_K} \left\{ \frac{1}{n}\sum_{i=1}^{n}\bigl(y_i - f(x_i)\bigr)^2 + \lambda \int_a^b \bigl|f''(x)\bigr|^2\,dx \right\}
+$$
+
+- $\mathcal{F}_K$：由 $K$ 个基函数张成的函数空间（§2）
+- $\sum (y_i - f(x_i))^2$：数据拟合度——损失函数（§5）
+- $\int |f''|^2\,dx$：曲率惩罚——源自最小曲率性（§5）
+- $\lambda$：控制偏差-方差权衡的调节参数（§5）
+
+*Jeder Bestandteil der Formel wurde in diesem Kapitel Schritt für Schritt eingeführt!*
+:::
+
+{{< pagebreak >}}
+
+# 多维扩展：维数诅咒与 GAM {#sec-multivariate}
+
+> **Mehrdimensionale Erweiterung: Fluch der Dimensionalität und GAM**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 \| Was Sie lernen
+
+- **张量积基** 如何将一维方法推广到多维
+- **维数诅咒**：为什么高维问题指数级困难
+- **广义加性模型（GAM）**：用加性结构突破维数诅咒
+:::
+
+## 张量积基
+
+> **Tensorproduktbasis**
+
+对多变量函数 $f: \mathbb{R}^p \to \mathbb{R}$，可构造 **张量积基**：
+
+$$
+\hat{f}(\mathbf{x}) = \sum_{j_1=1}^{K} \cdots \sum_{j_p=1}^{K} a_{j_1, \ldots, j_p} \bigl(\phi_{j_1}(x_1) \times \cdots \times \phi_{j_p}(x_p)\bigr)
+$$
+
+系数张量 $\mathbf{A} = (a_{j_1, \ldots, j_p}) \in \mathbb{R}^{K \times \cdots \times K}$ 仍可通过普通最小二乘求解。
+
+## 维数诅咒
+
+> **Fluch der Dimensionalität**
+
+**存储问题**：$K = 10$ 时，
+
+```{r}
+#| label: fig-curse
+#| fig-cap: "维数诅咒：参数数量随维度指数增长 | Fluch der Dimensionalität: Parameterzahl wächst exponentiell"
+#| fig-height: 5
+
+K <- 10
+p_vals <- 1:10
+params <- K^p_vals
+memory_bytes <- params * 8  # double 类型每个 8 字节
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(p_vals, params, type = "b", pch = 16, col = "#DC2626", lwd = 2.5, cex = 1.5,
+     xlab = "维度 p | Dimension p",
+     ylab = expression(paste("参数数量 ", K^p)),
+     main = "维数诅咒：参数爆炸 | Fluch der Dimensionalität",
+     log = "y", cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B",
+     yaxt = "n")
+grid(col = "#E2E8F0")
+axis(2, at = 10^(1:10), labels = paste0("10^", 1:10), las = 1, cex.axis = 0.8)
+
+# 标注内存
+mem_labels <- c("80 B", "800 B", "80 KB", "8 MB", "800 MB", "80 GB", "8 TB", "800 TB", "80 PB", "8 EB")
+for (i in c(1, 2, 5, 7, 10)) {
+  text(p_vals[i] + 0.3, params[i], mem_labels[i], col = "#EA580C", cex = 0.7, pos = 4, font = 2)
+}
+
+# p=10 时标注
+arrows(10, params[10] * 0.3, 10, params[10] * 0.05, col = "#9333EA", lwd = 2, length = 0.1)
+text(10, params[10] * 0.5, "p = 10:\n10^10 个参数!", col = "#9333EA", cex = 0.85, font = 2)
+```
+
+**收敛问题**：理论最优 $K \sim n^{1/(8+p)}$ 时 $\text{MSE} = O(n^{-8/(8+p)})$，随 $p$ 增大收敛越来越慢：
+
+```{r}
+#| label: convergence-curse
+#| code-fold: false
+
+cat("MSE 收敛速率随维度的变化 | MSE-Konvergenzrate vs. Dimension:\n\n")
+for (p in c(1, 2, 5, 10, 20)) {
+  rate <- -8 / (8 + p)
+  # 要让 MSE < 0.01 需要多少样本？
+  n_needed <- ceiling(0.01^(1/rate))
+  cat(sprintf("  p = %2d:  MSE = O(n^{%.2f})  →  MSE < 0.01 需约 n ≈ 10^%.0f 个样本\n",
+              p, rate, log10(n_needed)))
+}
+```
+
+## GAM：加性结构的拯救
+
+> **GAM: Rettung durch additive Struktur**
+
+**广义加性模型（GAM）** 用加性结构代替完整张量积：
+
+$$
+\hat{f}(\mathbf{x}) = \beta_0 + \sum_{j=1}^{p} f_j(x_j)
+$$
+
+每个 $f_j$ 是一维光滑函数（如三次样条），总参数数从 $K^p$ 降至 $pK$。
+
+```{r}
+#| label: fig-gam-vs-tensor
+#| fig-cap: "GAM 的参数数量仅线性增长，而张量积指数增长 | GAM: lineare vs. exponentielle Parameterzahl"
+#| fig-height: 5
+
+K <- 10
+p_vals <- 1:10
+params_tensor <- K^p_vals
+params_gam <- p_vals * K
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(p_vals, params_tensor, type = "b", pch = 16, col = "#DC2626", lwd = 2.5, cex = 1.3,
+     xlab = "维度 p | Dimension p",
+     ylab = "参数数量 | Parameterzahl",
+     main = "张量积 vs. GAM 参数数量 | Tensorprodukt vs. GAM",
+     log = "y", cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(p_vals, params_gam, type = "b", pch = 17, col = "#16A34A", lwd = 2.5, cex = 1.3)
+
+legend("topleft",
+       legend = c(expression(paste("张量积: ", K^p, " (指数增长)")),
+                  expression(paste("GAM: pK (线性增长)"))),
+       col = c("#DC2626", "#16A34A"), pch = c(16, 17), lwd = 2.5, bty = "n", cex = 0.95)
+```
+
+在 R 中实现 GAM 非常简单：
+
+```{r}
+#| label: gam-demo
+#| code-fold: false
+
+library(mgcv)
+
+# 模拟数据 | Simulierte Daten
+set.seed(42)
+n_gam <- 500
+x1 <- runif(n_gam, 0, 2*pi)
+x2 <- runif(n_gam, 0, 2*pi)
+x3 <- runif(n_gam, 0, 2*pi)
+y_gam <- sin(x1) + 0.5 * cos(x2) - 0.3 * x3 + rnorm(n_gam, 0, 0.5)
+
+# 拟合 GAM | GAM anpassen
+gam_fit <- gam(y_gam ~ s(x1) + s(x2) + s(x3))
+
+cat("GAM 拟合结果 | GAM-Ergebnisse:\n")
+summary(gam_fit)
+```
+
+```{r}
+#| label: fig-gam-effects
+#| fig-cap: "GAM 的每个变量效应可以单独可视化——高度可解释 | Jeder Variableneffekt kann einzeln visualisiert werden — hochgradig interpretierbar"
+#| fig-height: 4
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+plot(gam_fit, shade = TRUE, shade.col = adjustcolor("#2563EB", 0.2),
+     col = "#2563EB", lwd = 2, main = "", cex.lab = 1.1)
+par(mfrow = c(1, 1))
+```
+
+::: {.callout-important icon="false"}
+## 💡 GAM 的三大优势 \| Drei Vorteile des GAM
+
+1. **可扩展**：$O(pK)$ 而非 $O(K^p)$ 个参数——高维问题可行
+2. **可解释**：每个变量的效应 $f_j(x_j)$ 可以单独可视化
+3. **自动调参**：`mgcv::gam()` 自动选择每个 $f_j$ 的光滑参数
+
+**代价**：假设了加性结构——忽略了变量间的交互效应。但在实践中通常是非常好的起点。
+
+*GAM ist skalierbar, interpretierbar, und automatisch abstimmbar — aber nimmt additive Struktur an.*
+:::
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心公式完全解读
+
+现在让我们重新审视开篇那个公式——每个组成部分你都认识了：
+
+$$
+\hat{f} = \underbrace{\arg\min_{f \in \mathcal{F}_K}}_{\text{在 K 维函数空间中搜索}} \left\{ \underbrace{\frac{1}{n}\sum_{i=1}^{n}\bigl(y_i - f(x_i)\bigr)^2}_{\text{数据拟合度（光滑化 §5）}} + \underbrace{\lambda \int_a^b \bigl|f''(x)\bigr|^2\,dx}_{\text{曲率惩罚（最小曲率性 §4）}} \right\}
+$$
+
+| 符号 / Symbol | 本章含义 / Bedeutung | 第一次遇到 / Wo eingeführt |
+|:--:|:---|:---|
+| $\mathcal{F}_K$ | 由 $K$ 个基函数张成的子空间 | §2 基表示 |
+| $n$ | 数据点个数 | §1 三种问题 |
+| $(y_i - f(x_i))^2$ | 每个点的平方误差 | §5 光滑化 |
+| $\frac{1}{n}\sum$ | 平均——MSE | §5 光滑化 |
+| $\int \|f''\|^2\,dx$ | 曲率惩罚 | §4 最小曲率性 |
+| $\lambda$ | 偏差-方差调节旋钮 | §5 偏差-方差 |
+| $\arg\min$ | 在函数空间中寻找最优解 | §5 光滑化 |
+
+## 概念引入的逻辑链
+
+```{r}
+#| label: fig-concept-chain
+#| fig-cap: "知识逻辑链：每一步都由上一步的问题驱动 | Logikkette: Jeder Schritt durch ein Problem motiviert"
+#| fig-width: 12
+#| fig-height: 7.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("概念逻辑链 | Logikkette der Konzepte", cex.main = 1.4, col.main = "#1E293B")
+
+# 节点位置
+nx <- c(2, 2, 5, 5, 5, 8.5, 8.5, 11)
+ny <- c(7, 5.5, 7, 5.5, 4, 7, 5.5, 5.5)
+
+labels <- c("插值问题\n无穷多解", "基表示\n线性方程组",
+            "多项式基\n条件数爆炸", "正交基\nRunge现象", "样条\nB样条基",
+            "光滑化\n偏差-方差", "惩罚光滑\nP样条/GAM", "多维扩展\n维数诅咒→GAM")
+fills <- c("#DBEAFE","#FEF3C7","#FEE2E2","#FCE7F3","#E0E7FF","#D1FAE5","#F0FDF4","#FDF2F8")
+borders_c <- c("#2563EB","#D97706","#DC2626","#DB2777","#6366F1","#16A34A","#15803D","#DB2777")
+
+w <- 1.2; h <- 0.65
+for (i in 1:8) {
+  rect(nx[i]-w, ny[i]-h, nx[i]+w, ny[i]+h, col = fills[i], border = borders_c[i], lwd = 2)
+  text(nx[i], ny[i], labels[i], cex = 0.7, font = 2, col = "#1E293B")
+}
+
+# 箭头
+arr <- function(from, to, label = "", label_pos = "above") {
+  dx <- nx[to] - nx[from]; dy <- ny[to] - ny[from]
+  len <- sqrt(dx^2 + dy^2)
+  x0 <- nx[from] + dx/len * w; y0 <- ny[from] + dy/len * h * 0.8
+  x1 <- nx[to] - dx/len * w;   y1 <- ny[to] - dy/len * h * 0.8
+  arrows(x0, y0, x1, y1, col = "#64748B", lwd = 1.8, length = 0.1)
+  if (nchar(label) > 0) {
+    mx <- (x0+x1)/2; my <- (y0+y1)/2
+    off <- if (label_pos == "above") 0.25 else -0.25
+    text(mx, my + off, label, col = "#EA580C", cex = 0.6, font = 3)
+  }
+}
+
+arr(1, 2, "如何限制解空间?")
+arr(2, 3, "最简单的基")
+arr(3, 4, "换正交基")
+arr(4, 5, "分段代替全局")
+arr(2, 5, "")
+arr(5, 6, "数据有噪声!")
+arr(6, 7, "惩罚代替选K")
+arr(7, 8, "推广到高维")
+
+# 底部注释
+text(6, 0.8, "每一步都是被「上一步的局限」逼出来的！",
+     col = "#DC2626", cex = 1, font = 2)
+text(6, 0.3, "Jeder Schritt wird durch die Grenzen des vorherigen Schritts motiviert!",
+     col = "#64748B", cex = 0.75, font = 3)
+```
+
+## 方法总结
+
+| 方法 / Methode | 基系统 / Basissystem | 参数量 / Parameter | 适用场景 / Anwendung |
+|:---:|:---|:---:|:---|
+| 多项式插值 | 单项式 $x^{k-1}$ | $n$ | 理论分析，$n$ 很小 |
+| 样条插值 | B 样条 | $m + q$ | 无噪声精确数据 |
+| 回归样条 | B 样条 ($K < n$) | $K$ | 有噪声，需选 $K$ |
+| P 样条 ⭐ | B 样条 + 惩罚 | $K$ (有效自由度 $< K$) | **实用标准方法** |
+| GAM ⭐ | 加性 B 样条 | $pK$ | **多维数据标准方法** |
+
+{{< pagebreak >}}
+
+# 附录：德语-中文-英语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 核心概念
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Funktionsapproximation | 函数逼近 | function approximation |
+| die Interpolation | 插值 | interpolation |
+| die Glättung | 光滑化 | smoothing |
+| die Basisfunktion | 基函数 | basis function |
+| der Basiskoeffizient | 基系数 | basis coefficient |
+| die Basisdarstellung | 基表示 | basis representation |
+| die Basismatrix | 基矩阵 | basis (design) matrix |
+
+## 多项式相关
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Polynominterpolation | 多项式插值 | polynomial interpolation |
+| die Monombasis | 单项式基 | monomial basis |
+| die Vandermonde-Matrix | Vandermonde 矩阵 | Vandermonde matrix |
+| die Konditionszahl | 条件数 | condition number |
+| das Runge-Phänomen | Runge 现象 | Runge's phenomenon |
+| die orthogonale Basis | 正交基 | orthogonal basis |
+
+## 样条相关
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| der Spline | 样条 | spline |
+| der B-Spline | B 样条 | B-spline |
+| der kubische Spline | 三次样条 | cubic spline |
+| der natürliche Spline | 自然样条 | natural spline |
+| die Knoten (Pl.) | 节点 | knots |
+| die Gitterschrittweite | 网格步长 | mesh size |
+| die Cox-de Boor-Rekursion | Cox-de Boor 递推 | Cox-de Boor recursion |
+| der lokale Träger | 局部支撑 | local/compact support |
+| die Bandmatrix | 带状矩阵 | band matrix |
+
+## 光滑化与模型选择
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Regression | 回归 | regression |
+| die Methode der kleinsten Quadrate | 最小二乘法 | least squares method |
+| der Bias | 偏差 | bias |
+| die Varianz | 方差 | variance |
+| der Bias-Varianz-Tradeoff | 偏差-方差权衡 | bias-variance tradeoff |
+| die Überanpassung | 过拟合 | overfitting |
+| die Unteranpassung | 欠拟合 | underfitting |
+| die Kreuzvalidierung | 交叉验证 | cross-validation |
+| die Penalisierung / Regularisierung | 惩罚 / 正则化 | penalization / regularization |
+| der P-Spline | P 样条 | P-spline |
+| das generalisierte additive Modell (GAM) | 广义加性模型 | generalized additive model |
+
+## 多维扩展
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Tensorproduktbasis | 张量积基 | tensor product basis |
+| der Fluch der Dimensionalität | 维数诅咒 | curse of dimensionality |
+| die additive Struktur | 加性结构 | additive structure |
+| die Wechselwirkung / Interaktion | 交互效应 | interaction effect |
+:::
