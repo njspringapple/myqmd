@@ -1,0 +1,1312 @@
+---
+title: "张量与多重线性映射"
+subtitle: "从像素到AI：理解高维数据的数学语言 | Von Pixeln zu KI: Die mathematische Sprache hochdimensionaler Daten"
+author: "数学基础"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+# 全局配色方案 | Globales Farbschema
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  teal     = "#0D9488",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+想象你用手机拍了一张照片。这张照片在计算机里是什么？一堆数字！一张 $224 \times 224$ 的彩色图片包含约 **15 万个数字**。如果你要同时处理 32 张图片呢？那就是 **480 万个数字**——而且它们不是随意堆放的，而是有着精确的多维结构。
+
+*Stellen Sie sich vor, Sie fotografieren mit Ihrem Handy. Was ist dieses Bild im Computer? Ein Haufen Zahlen! Ein $224 \times 224$ Farbbild enthält ca. 150.000 Zahlen. Und wenn Sie 32 Bilder gleichzeitig verarbeiten? Das sind 4,8 Millionen Zahlen — mit einer präzisen mehrdimensionalen Struktur.*
+
+**矩阵** 已经不够用了——我们需要它的高维推广：**张量**。而要理解张量上的运算，我们首先需要理解什么是 **多重线性映射**。
+
+本章将带你完成从 **线性映射** 到 **张量世界** 的全部旅程：
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图：从线性到多重线性，从矩阵到张量 | Lernroadmap: Von linear zu multilinear, von Matrizen zu Tensoren"
+#| dev: "ragg_png"
+#| code-fold: true
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 10), ylim = c(0, 7), axes = FALSE, 
+     xlab = "", ylab = "", main = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# 路径 / Pfad
+steps_x <- c(1, 3, 5, 7, 9)
+steps_y <- c(5.5, 5.5, 5.5, 5.5, 5.5)
+arrows(steps_x[-5] + 0.7, steps_y[-5], steps_x[-1] - 0.7, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("多重线性\n映射", "张量\n定义与应用", 
+               "外积与\n张量积", "Kronecker\n积", 
+               "向量空间\n的张量积")
+labels_de <- c("Multilineare\nAbbildungen", "Tensoren\nDefinition", 
+               "Äußeres &\nTensorprodukt", "Kronecker-\nProdukt", 
+               "Tensorprodukt\nvon Vektorräumen")
+colors <- c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#E0E7FF", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DC2626", "#6366F1", "#16A34A")
+
+for (i in 1:5) {
+  rect(steps_x[i] - 0.7, steps_y[i] - 0.9, steps_x[i] + 0.7, steps_y[i] + 0.9,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.2, labels_cn[i], cex = 0.72, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.52, col = "#64748B", font = 3)
+}
+
+# 难度箭头 / Schwierigkeitspfeil
+arrows(0.5, 1.5, 9.5, 1.5, col = "#DC2626", lwd = 2, length = 0.15)
+text(5, 1.9, "抽象程度递增 | Zunehmende Abstraktion  >>>", cex = 0.85, col = "#DC2626")
+
+# 触发标签 / Trigger
+triggers <- c("", "维度!", "组合?", "展平!", "空间!")
+for (i in 2:5) {
+  text(steps_x[i] - 1, steps_y[i] + 1.3, triggers[i],
+       cex = 0.7, col = "#EA580C", font = 2)
+}
+
+for (i in 1:5) {
+  text(steps_x[i] - 0.5, steps_y[i] + 0.75, paste0("§", i), 
+       cex = 0.6, col = borders[i], font = 2)
+}
+```
+
+**最终目标 | Endziel**：理解为什么 **张量积** 是将低维结构组合成高维结构的自然工具——以及它在深度学习、统计学和数值计算中无处不在的原因。
+
+::: {.callout-tip icon="false"}
+## 📋 预备知识 | Voraussetzungen
+
+本章假设你已经熟悉以下内容：向量空间与子空间、基与维数、线性映射、内积、矩阵乘法、外积 $\mathbf{v} \otimes \mathbf{w} = \mathbf{v}\mathbf{w}^T$，以及 span 的概念。
+
+*Dieses Kapitel setzt Vertrautheit mit folgenden Themen voraus: Vektorräume, Basen, lineare Abbildungen, Skalarprodukte, Matrixmultiplikation und das äußere Produkt.*
+:::
+
+{{< pagebreak >}}
+
+# 多重线性映射：当一个输入不够用 {#sec-multilinear}
+
+> **Multilineare Abbildungen: Wenn ein Eingang nicht reicht**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie in diesem Abschnitt lernen
+
+- 从 **线性映射** 到 **多重线性映射** 的自然过渡
+- 多重线性映射的 **精确定义**
+- 为什么多重线性映射 **不是** 线性映射
+- 多重线性映射的 **表示定理**——张量的雏形
+:::
+
+## 从面积说起：一个你已经认识的双线性映射
+
+> **Vom Flächeninhalt ausgehend: Eine bilineare Abbildung, die Sie bereits kennen**
+
+之前我们学过线性映射：一个向量 $\mathbf{v} \in V$ 映射到另一个向量 $\mathbf{w} \in W$。但现实中，很多运算需要 **同时接受两个或多个输入**。
+
+最简单的例子就是矩形的面积：
+
+$$
+f: \mathbb{R} \times \mathbb{R} \to \mathbb{R}, \quad (x, y) \mapsto xy
+$$
+
+直觉上，"长 $\times$ 宽 = 面积"再自然不过了。但这个函数 $f$ 是线性的吗？
+
+```{r}
+#| label: fig-area-not-linear
+#| fig-cap: "矩形面积：同时放大长和宽2倍，面积变为4倍而非2倍——不是线性！| Rechteckfläche: Verdoppelt man beide Seiten, vervierfacht sich die Fläche — nicht linear!"
+#| fig-height: 4
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 14), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title("面积函数：线性 vs 双线性 | Flächenfunktion: Linear vs. Bilinear",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 原始矩形 / Ursprüngliches Rechteck
+rect(0.5, 0.5, 3.5, 2.5, col = adjustcolor("#2563EB", 0.2), border = "#2563EB", lwd = 2)
+text(2, 1.5, "x·y", cex = 1, font = 2, col = "#2563EB")
+text(2, 0.1, "x", cex = 0.85, col = "#2563EB")
+text(0.1, 1.5, "y", cex = 0.85, col = "#2563EB", srt = 90)
+text(2, 3.0, "原始 | Original", cex = 0.8, col = "#64748B")
+
+# 双倍矩形 / Verdoppeltes Rechteck
+rect(5.5, 0.5, 11.5, 4.5, col = adjustcolor("#DC2626", 0.15), border = "#DC2626", lwd = 2)
+text(8.5, 2.5, "2x · 2y = 4xy", cex = 1, font = 2, col = "#DC2626")
+text(8.5, 0.1, "2x", cex = 0.85, col = "#DC2626")
+text(5.1, 2.5, "2y", cex = 0.85, col = "#DC2626", srt = 90)
+text(8.5, 5.0, "面积 × 4，不是 × 2！", cex = 0.9, font = 2, col = "#DC2626")
+text(8.5, 5.5, "Fläche × 4, nicht × 2!", cex = 0.7, col = "#DC2626", font = 3)
+
+# 箭头 / Pfeil
+arrows(3.8, 2.0, 5.2, 2.5, col = "#EA580C", lwd = 2, length = 0.12)
+text(4.5, 2.8, "×2 两边\nbeide ×2", cex = 0.7, col = "#EA580C")
+```
+
+当 $c = 2$ 时，$f(2x, 2y) = 4xy = 4f(x,y)$。如果 $f$ 是线性的，应该是 $f(2x, 2y) = 2f(x,y)$。所以 $f$ **不是线性的**！
+
+*Für $c = 2$ gilt $f(2x, 2y) = 4xy \neq 2f(x,y)$. Also ist $f$ **nicht** linear!*
+
+但如果我们 **固定一个参数**，情况就不同了：
+
+- 固定 $y$：$f(x_1 + x_2, y) = (x_1 + x_2)y = x_1 y + x_2 y = f(x_1, y) + f(x_2, y)$ ✓
+- 固定 $y$：$f(cx, y) = (cx)y = c(xy) = cf(x, y)$ ✓
+- 固定 $x$：同理 ✓
+
+这就是 **双线性** 的含义——**每个参数单独看都是线性的**。
+
+## 正式定义：多重线性映射
+
+> **Formale Definition: Multilineare Abbildung**
+
+::: {.callout-important icon="false"}
+## 📐 定义：多重线性映射 | Definition: Multilineare Abbildung
+
+设 $V_1, \ldots, V_n, W$ 为向量空间。映射 $f: V_1 \times \cdots \times V_n \to W$ 称为 **多重线性的（multilinear）**，如果对每个 $i = 1, \ldots, n$，当其他参数固定时，$f$ 关于第 $i$ 个参数是线性的：
+
+$$
+f(\mathbf{v}_1, \ldots, c\mathbf{v}_i + c'\mathbf{v}'_i, \ldots, \mathbf{v}_n) = c \cdot f(\mathbf{v}_1, \ldots, \mathbf{v}_i, \ldots, \mathbf{v}_n) + c' \cdot f(\mathbf{v}_1, \ldots, \mathbf{v}'_i, \ldots, \mathbf{v}_n)
+$$
+
+对所有 $c, c' \in \mathbb{R}$ 和 $\mathbf{v}_i, \mathbf{v}'_i \in V_i$ 成立。
+
+当 $n = 2$ 时，称为 **双线性映射（bilineare Abbildung）**。
+:::
+
+一个立即可以得到的重要性质是：只要某个输入为零向量，输出就一定为零。这是因为 $f(\mathbf{v}_1, \ldots, 0 \cdot \mathbf{v}_i, \ldots, \mathbf{v}_n) = 0 \cdot f(\mathbf{v}_1, \ldots, \mathbf{v}_i, \ldots, \mathbf{v}_n) = \mathbf{0}$。
+
+## 你已经认识的多重线性映射
+
+> **Multilineare Abbildungen, die Sie bereits kennen**
+
+```{r}
+#| label: fig-examples-multilinear
+#| fig-cap: "三个你已经认识的双线性映射 | Drei bilineare Abbildungen, die Sie bereits kennen"
+#| fig-height: 3.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2, 0.5))
+plot(NULL, xlim = c(0, 15), ylim = c(0, 4), axes = FALSE, xlab = "", ylab = "")
+title("常见的双线性映射 | Häufige bilineare Abbildungen",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 例1：实数乘法 / Reelle Multiplikation
+rect(0.2, 1, 4.8, 3.5, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(2.5, 3.0, "实数乘法 | Multiplikation", cex = 0.8, font = 2, col = "#2563EB")
+text(2.5, 2.2, expression((x[1]*","*x[2]) %->% x[1]*x[2]), cex = 0.85, col = "#1E293B")
+text(2.5, 1.4, expression(R %*% R %->% R), cex = 0.75, col = "#64748B")
+
+# 例2：内积 / Skalarprodukt
+rect(5.2, 1, 9.8, 3.5, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(7.5, 3.0, "内积 | Skalarprodukt", cex = 0.8, font = 2, col = "#D97706")
+text(7.5, 2.2, expression((v*","*w) %->% group(langle,list(v,w),rangle)), cex = 0.85, col = "#1E293B")
+text(7.5, 1.4, expression(V %*% V %->% R), cex = 0.75, col = "#64748B")
+
+# 例3：矩阵乘法 / Matrixmultiplikation
+rect(10.2, 1, 14.8, 3.5, col = "#FEE2E2", border = "#DC2626", lwd = 2)
+text(12.5, 3.0, "矩阵乘法 | Matrixmult.", cex = 0.8, font = 2, col = "#DC2626")
+text(12.5, 2.2, expression((A*","*B) %->% AB), cex = 0.85, col = "#1E293B")
+text(12.5, 1.4, expression(R^{m %*% k} %*% R^{k %*% n} %->% R^{m %*% n}), cex = 0.72, col = "#64748B")
+```
+
+**例 1（实数乘法）：** $f: \mathbb{R} \times \mathbb{R} \to \mathbb{R}$，$(x_1, x_2) \mapsto x_1 x_2$。我们在面积的例子中已经验证过它是双线性的。
+
+**例 2（内积）：** $f: V \times V \to \mathbb{R}$，$(\mathbf{v}_1, \mathbf{v}_2) \mapsto \langle \mathbf{v}_1, \mathbf{v}_2 \rangle$。利用内积的分配律和齐次性：
+
+$$
+\langle c\mathbf{v}_1 + c'\mathbf{v}_2, \mathbf{v}_3 \rangle = c\langle \mathbf{v}_1, \mathbf{v}_3 \rangle + c'\langle \mathbf{v}_2, \mathbf{v}_3 \rangle
+$$
+
+第二个参数同理（由对称性）。
+
+**例 3（矩阵乘法）：** $f: \mathbb{R}^{m \times k} \times \mathbb{R}^{k \times n} \to \mathbb{R}^{m \times n}$，$(A, B) \mapsto AB$。固定 $B$：$(A_1 + A_2)B = A_1 B + A_2 B$；固定 $A$：$A(B_1 + B_2) = AB_1 + AB_2$。双线性！
+
+```{r}
+#| label: bilinear-verify
+#| code-fold: false
+
+# 验证矩阵乘法的双线性性 | Bilinearität der Matrixmultiplikation verifizieren
+set.seed(42)
+A1 <- matrix(rnorm(6), 2, 3)
+A2 <- matrix(rnorm(6), 2, 3)
+B  <- matrix(rnorm(12), 3, 4)
+c1 <- 2.5; c2 <- -1.3
+
+# 左边 | Linke Seite
+lhs <- (c1 * A1 + c2 * A2) %*% B
+
+# 右边 | Rechte Seite
+rhs <- c1 * (A1 %*% B) + c2 * (A2 %*% B)
+
+cat("最大差异 | Max. Differenz:", max(abs(lhs - rhs)), "\n")
+cat("双线性性成立！ | Bilinearität bestätigt! ✓\n")
+```
+
+## 多重线性映射的表示定理
+
+> **Darstellungssatz multilinearer Abbildungen**
+
+线性映射可以用 **矩阵** 来表示。那多重线性映射呢？
+
+::: {.callout-important icon="false"}
+## 📐 定理：多重线性映射的表示 | Darstellungssatz
+
+映射 $T: \mathbb{R}^{n_1} \times \cdots \times \mathbb{R}^{n_k} \to \mathbb{R}^m$ 是多重线性的，当且仅当存在唯一的实系数
+
+$$
+A = (a_{i_1, \ldots, i_k, j} : 1 \leq i_1 \leq n_1, \ldots, 1 \leq i_k \leq n_k, 1 \leq j \leq m)
+$$
+
+使得
+
+$$
+T(\mathbf{x}^{(1)}, \ldots, \mathbf{x}^{(k)}) = \sum_{i_1=1}^{n_1} \cdots \sum_{i_k=1}^{n_k} \sum_{j=1}^{m} a_{i_1, \ldots, i_k, j}\; x_{i_1}^{(1)} \cdots x_{i_k}^{(k)}\; \mathbf{e}_j
+$$
+
+其中 $\mathbf{e}_j$ 是 $\mathbb{R}^m$ 的第 $j$ 个标准基向量。
+:::
+
+令 $k = 1$（即只有一个输入向量），系数就是 $a_{i,j}$——这正是 **矩阵**！
+
+$$
+T(\mathbf{x}) = \sum_{i=1}^{n} \sum_{j=1}^{m} a_{i,j} \, x_i \, \mathbf{e}_j = A\mathbf{x}
+$$
+
+当 $k > 1$ 时，系数有 **多个下标** $a_{i_1, \ldots, i_k, j}$——矩阵不够用了，我们需要 **张量**！
+
+{{< pagebreak >}}
+
+# 张量：矩阵的高维推广 {#sec-tensor}
+
+> **Tensoren: Die höherdimensionale Verallgemeinerung von Matrizen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 张量的 **精确定义** 和 **阶** 的概念
+- 从标量、向量、矩阵到张量的 **统一视角**
+- 张量在 **深度学习** 中的核心应用
+:::
+
+## 定义：张量
+
+> **Definition: Tensor**
+
+::: {.callout-important icon="false"}
+## 📐 定义：张量 | Definition: Tensor
+
+**张量（Tensor）** 是一个有序的实数集合
+
+$$
+A = (a_{i_1, \ldots, i_k} : 1 \leq i_1 \leq n_1, \ldots, 1 \leq i_k \leq n_k) \in \mathbb{R}^{n_1 \times \cdots \times n_k}
+$$
+
+数 $k$ 称为张量的 **阶（Ordnung）**。
+:::
+
+你其实早就认识张量了——只是不知道它叫这个名字：
+
+```{r}
+#| label: fig-tensor-hierarchy
+#| fig-cap: "张量的层级：从标量到高阶张量 | Tensorhierarchie: Vom Skalar zum höherstufigen Tensor"
+#| fig-height: 4.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 16), ylim = c(0, 5.5), axes = FALSE, xlab = "", ylab = "")
+title("从标量到张量——你已经认识的「老朋友」| Vom Skalar zum Tensor",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 0阶：标量 / 0. Ordnung: Skalar
+rect(0.3, 2.5, 3, 4.5, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(1.65, 4.0, "0 阶", cex = 0.8, font = 2, col = "#2563EB")
+text(1.65, 3.4, "标量 | Skalar", cex = 0.7, col = "#1E293B")
+text(1.65, 2.8, expression(a %in% R), cex = 0.75, col = "#64748B")
+
+# 1阶：向量 / 1. Ordnung: Vektor
+rect(3.5, 2.5, 6.2, 4.5, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(4.85, 4.0, "1 阶", cex = 0.8, font = 2, col = "#D97706")
+text(4.85, 3.4, "向量 | Vektor", cex = 0.7, col = "#1E293B")
+text(4.85, 2.8, expression(a[i] %in% R^n), cex = 0.75, col = "#64748B")
+
+# 2阶：矩阵 / 2. Ordnung: Matrix
+rect(6.7, 2.5, 9.4, 4.5, col = "#FEE2E2", border = "#DC2626", lwd = 2)
+text(8.05, 4.0, "2 阶", cex = 0.8, font = 2, col = "#DC2626")
+text(8.05, 3.4, "矩阵 | Matrix", cex = 0.7, col = "#1E293B")
+text(8.05, 2.8, expression(a[ij] %in% R^{m %*% n}), cex = 0.75, col = "#64748B")
+
+# 3阶：三阶张量 / 3. Ordnung: Tensor
+rect(9.9, 2.5, 12.6, 4.5, col = "#E0E7FF", border = "#6366F1", lwd = 2)
+text(11.25, 4.0, "3 阶", cex = 0.8, font = 2, col = "#6366F1")
+text(11.25, 3.4, "张量 | Tensor", cex = 0.7, col = "#1E293B")
+text(11.25, 2.8, expression(a[ijk] %in% R^{l %*% m %*% n}), cex = 0.7, col = "#64748B")
+
+# k阶：一般张量 / k. Ordnung
+rect(13.1, 2.5, 15.8, 4.5, col = "#D1FAE5", border = "#16A34A", lwd = 2)
+text(14.45, 4.0, "k 阶", cex = 0.8, font = 2, col = "#16A34A")
+text(14.45, 3.4, "一般张量", cex = 0.7, col = "#1E293B")
+text(14.45, 2.8, expression(a[i[1]*"..."*i[k]]), cex = 0.7, col = "#64748B")
+
+# 箭头 / Pfeile
+for (xx in c(3.1, 6.3, 9.5, 12.7)) {
+  arrows(xx, 3.5, xx + 0.3, 3.5, col = "#94A3B8", lwd = 2, length = 0.1)
+}
+
+# 下方注释 / Anmerkung
+text(8, 1.5, "下标数量 = 阶数：矩阵有 2 个下标（行, 列），所以是 2 阶张量",
+     cex = 0.85, col = "#475569")
+text(8, 0.8, "Anzahl der Indizes = Ordnung: Matrix hat 2 Indizes (Zeile, Spalte) → Tensor 2. Ordnung",
+     cex = 0.7, col = "#94A3B8", font = 3)
+```
+
+一个 $(4 \times 4)$ 矩阵包含 $4^2 = 16$ 个数；一个 $(4 \times 4 \times 4)$ 张量包含 $4^3 = 64$ 个数。所有 $(n_1 \times \cdots \times n_k)$-张量的集合 $\mathbb{R}^{n_1 \times \cdots \times n_k}$，配上逐元素加法和标量乘法，构成一个 **向量空间**。
+
+```{r}
+#| label: tensor-basic-demo
+#| code-fold: false
+
+# 在 R 中，张量就是多维数组 | In R ist ein Tensor ein mehrdimensionales Array
+
+# 2阶张量 = 矩阵 | Tensor 2. Ordnung = Matrix
+A_matrix <- matrix(1:12, nrow = 3, ncol = 4)
+cat("2阶张量（矩阵）的维度:", dim(A_matrix), "\n")
+cat("元素个数:", prod(dim(A_matrix)), "\n\n")
+
+# 3阶张量 | Tensor 3. Ordnung
+A_tensor3 <- array(1:24, dim = c(2, 3, 4))
+cat("3阶张量的维度:", dim(A_tensor3), "\n")
+cat("元素个数:", prod(dim(A_tensor3)), "\n")
+cat("访问元素 A[2,1,3] =", A_tensor3[2, 1, 3], "\n\n")
+
+# 4阶张量 | Tensor 4. Ordnung
+A_tensor4 <- array(rnorm(32 * 224 * 224 * 3), dim = c(32, 224, 224, 3))
+cat("4阶张量（图像批次）的维度:", dim(A_tensor4), "\n")
+cat("元素个数:", format(prod(dim(A_tensor4)), big.mark = ","), "\n")
+```
+
+## 应用：深度学习中的张量
+
+> **Anwendung: Tensoren im Deep Learning**
+
+张量不是抽象的数学玩具——它是现代 AI 处理数据的基本单元。
+
+```{r}
+#| label: fig-dl-tensors
+#| fig-cap: "深度学习中的张量层级：从单个像素到卷积特征图 | Tensorhierarchie im Deep Learning: Vom Pixel zur Feature Map"
+#| fig-height: 6
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 15), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("深度学习中的张量 | Tensoren im Deep Learning",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 例1：RGB图像 / RGB-Bild
+rect(0.3, 5, 4.7, 7.5, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(2.5, 7.0, "RGB 彩色图像", cex = 0.85, font = 2, col = "#2563EB")
+text(2.5, 6.3, expression(bold(I) %in% R^{224 %*% 224 %*% 3}), cex = 0.8, col = "#1E293B")
+text(2.5, 5.6, "3阶张量 ≈ 15万个数", cex = 0.7, col = "#64748B")
+text(2.5, 5.2, "Tensor 3. Ordnung", cex = 0.6, col = "#94A3B8", font = 3)
+
+# 例2：图像批次 / Bildbatch
+rect(5.3, 5, 9.7, 7.5, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(7.5, 7.0, "图像批次 (CNN)", cex = 0.85, font = 2, col = "#D97706")
+text(7.5, 6.3, expression(bold(B) %in% R^{32 %*% 224 %*% 224 %*% 3}), cex = 0.8, col = "#1E293B")
+text(7.5, 5.6, "4阶张量 ≈ 480万个数", cex = 0.7, col = "#64748B")
+text(7.5, 5.2, "Tensor 4. Ordnung", cex = 0.6, col = "#94A3B8", font = 3)
+
+# 例3：特征图 / Feature Map
+rect(10.3, 5, 14.7, 7.5, col = "#FEE2E2", border = "#DC2626", lwd = 2)
+text(12.5, 7.0, "卷积特征图", cex = 0.85, font = 2, col = "#DC2626")
+text(12.5, 6.3, expression(R^{32 %*% 56 %*% 56 %*% 64}), cex = 0.8, col = "#1E293B")
+text(12.5, 5.6, "空间↓ 通道↑", cex = 0.7, col = "#64748B")
+text(12.5, 5.2, "Raum ↓ Kanäle ↑", cex = 0.6, col = "#94A3B8", font = 3)
+
+# 箭头 / Pfeile
+arrows(4.9, 6.25, 5.1, 6.25, col = "#94A3B8", lwd = 2, length = 0.1)
+arrows(9.9, 6.25, 10.1, 6.25, col = "#94A3B8", lwd = 2, length = 0.1)
+text(5.0, 6.7, "×32", cex = 0.7, col = "#EA580C", font = 2)
+text(10.0, 6.7, "卷积层", cex = 0.7, col = "#EA580C", font = 2)
+
+# 维度解释 / Dimensionserklärung
+rect(2, 1.0, 13, 4.2, col = adjustcolor("#E0E7FF", 0.5), border = "#6366F1", lwd = 1.5)
+text(7.5, 3.8, "4阶张量 B 的 4 个维度 | 4 Dimensionen des Tensors 4. Ordnung", 
+     cex = 0.9, font = 2, col = "#6366F1")
+text(7.5, 3.1, "第 1 维：批大小（32 张图同时处理）| Batch-Größe", cex = 0.75, col = "#1E293B")
+text(7.5, 2.5, "第 2 维：高度（224 像素）| Höhe", cex = 0.75, col = "#1E293B")
+text(7.5, 1.9, "第 3 维：宽度（224 像素）| Breite", cex = 0.75, col = "#1E293B")
+text(7.5, 1.3, "第 4 维：颜色通道（R, G, B = 3）| Farbkanäle", cex = 0.75, col = "#1E293B")
+```
+
+```{r}
+#| label: rgb-pixel-demo
+#| code-fold: false
+
+# 模拟一个小型 RGB 图像 | Simulation eines kleinen RGB-Bildes
+set.seed(42)
+小图 <- array(0, dim = c(4, 4, 3))  # 4×4 像素, 3 个通道 (R, G, B)
+
+# 左上角偏红，右下角偏蓝 | Links oben: rot, rechts unten: blau
+for (i in 1:4) {
+  for (j in 1:4) {
+    小图[i, j, 1] <- max(0, 255 - 40 * (i + j))  # Red 从左上到右下递减
+    小图[i, j, 2] <- 80                             # Green 恒定
+    小图[i, j, 3] <- min(255, 40 * (i + j))        # Blue 从左上到右下递增
+  }
+}
+
+cat("这个 3 阶张量的维度:", dim(小图), "\n")
+cat("总元素数:", prod(dim(小图)), "\n\n")
+cat("红色通道 (R) 切片:\n")
+print(小图[,,1])
+cat("\n蓝色通道 (B) 切片:\n")
+print(小图[,,3])
+```
+
+::: {.callout-tip icon="false"}
+## 🤔 想一想 | Denken Sie nach
+
+为什么张量运算在 AI 中如此重要？因为 Google 专门为张量运算设计了 **TPU（Tensor Processing Unit）**，NVIDIA 在 GPU 里加入了 **Tensor Cores**。张量不仅是数学概念，更是推动 AI 发展的核心硬件加速对象。
+
+*Google hat eigens für Tensoroperationen die TPU entwickelt, NVIDIA hat Tensor Cores in GPUs integriert. Tensoren sind nicht nur ein mathematisches Konzept, sondern der Kern der Hardware-Beschleunigung für KI.*
+:::
+
+{{< pagebreak >}}
+
+# 外积与张量积：组合低维结构 {#sec-tensor-product}
+
+> **Äußeres Produkt und Tensorprodukt: Niedrigdimensionale Strukturen kombinieren**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **外积**：从两个向量生成一个矩阵
+- 外积矩阵的 **几何直觉** 和 **关键性质**
+- **张量积**：外积的高维推广
+- 张量积的 **具体计算** 示例
+:::
+
+## 外积：从两个向量到一个矩阵
+
+> **Äußeres Produkt: Von zwei Vektoren zu einer Matrix**
+
+给定 $\mathbf{v} \in \mathbb{R}^m$ 和 $\mathbf{w} \in \mathbb{R}^n$，它们的 **外积** 定义为：
+
+$$
+\mathbf{v} \otimes \mathbf{w} := \mathbf{v}\mathbf{w}^\top = \begin{pmatrix} v_1 w_1 & \cdots & v_1 w_n \\ \vdots & & \vdots \\ v_m w_1 & \cdots & v_m w_n \end{pmatrix} \in \mathbb{R}^{m \times n}
+$$
+
+注意与 **内积** 的对比——内积是两个相同维度的向量产生一个标量 $\langle \mathbf{v}, \mathbf{w} \rangle = \mathbf{v}^\top \mathbf{w} \in \mathbb{R}$；外积是两个（可能不同维度的）向量产生一个矩阵。
+
+```{r}
+#| label: outer-product-demo
+#| code-fold: false
+
+# 外积示例 | Beispiel: Äußeres Produkt
+v <- c(1, 2)
+w <- c(-2, 3, -11)
+
+# 外积 = v %*% t(w) 或 outer(v, w)
+外积 <- v %o% w  # R 中 %o% 即外积
+
+cat("v =", v, "\n")
+cat("w =", w, "\n\n")
+cat("v ⊗ w =\n")
+print(外积)
+cat("\n维度:", dim(外积), "(2×3 矩阵)\n")
+cat("秩 (rank):", qr(外积)$rank, "\n")
+```
+
+## 外积的关键性质
+
+> **Schlüsseleigenschaften des äußeren Produkts**
+
+外积矩阵 $\mathbf{v} \otimes \mathbf{w}$ 具有非常特殊的结构。
+
+**性质 1：秩为 1。** 所有列都是 $\mathbf{v}$ 的倍数（被 $w_j$ 缩放），所有行都是 $\mathbf{w}^\top$ 的倍数（被 $v_i$ 缩放）。因此 $\text{rank}(\mathbf{v} \otimes \mathbf{w}) = 1$（只要 $\mathbf{v} \neq \mathbf{0}$ 且 $\mathbf{w} \neq \mathbf{0}$）。
+
+**性质 2：作为线性映射的几何意义。** 当外积矩阵作用于向量 $\mathbf{x}$ 时：
+
+$$
+(\mathbf{v} \otimes \mathbf{w})\mathbf{x} = \mathbf{v}\mathbf{w}^\top\mathbf{x} = \mathbf{v} \langle \mathbf{w}, \mathbf{x} \rangle
+$$
+
+这意味着：先用 $\mathbf{w}$ 和 $\mathbf{x}$ 做内积得到一个标量，再用这个标量缩放 $\mathbf{v}$。所以像空间是一维的 $\text{col}(\mathbf{v} \otimes \mathbf{w}) = \text{span}(\mathbf{v})$，核空间是与 $\mathbf{w}$ 正交的超平面 $\ker(\mathbf{v} \otimes \mathbf{w}) = \{\mathbf{x} : \mathbf{w}^\top \mathbf{x} = 0\}$。
+
+```{r}
+#| label: fig-outer-product-geometry
+#| fig-cap: "外积的几何：先投影到 w 方向，再沿 v 方向缩放 | Geometrie: Erst auf w projizieren, dann entlang v skalieren"
+#| fig-height: 4.5
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(-1, 10), ylim = c(-1, 6), axes = FALSE, xlab = "", ylab = "")
+title("外积作为线性映射的几何 | Geometrie des äußeren Produkts als lineare Abbildung",
+      cex.main = 1.2, col.main = "#1E293B")
+
+# 输入空间 / Eingangsraum
+text(2, 5.5, expression("输入空间" ~ R^n ~ "| Eingangsraum"), cex = 0.9, font = 2, col = "#2563EB")
+arrows(0.5, 1, 3.5, 4, col = "#16A34A", lwd = 2.5, length = 0.12)
+text(3.7, 4.2, expression(bold(x)), col = "#16A34A", cex = 1.2, font = 2)
+arrows(0.5, 1, 2, 3.5, col = "#D97706", lwd = 2.5, length = 0.12)
+text(2.2, 3.7, expression(bold(w)), col = "#D97706", cex = 1.2, font = 2)
+
+# 投影 / Projektion
+segments(3.5, 4, 2.3, 2.9, col = "#EA580C", lwd = 1.5, lty = 3)
+points(2.3, 2.9, pch = 16, col = "#EA580C", cex = 1)
+text(3.3, 3.2, expression(group(langle, list(bold(w), bold(x)), rangle)), 
+     col = "#EA580C", cex = 0.85)
+
+# 步骤标注 / Schrittbeschriftung
+text(4.8, 3.5, "步骤 1: 内积", cex = 0.8, font = 2, col = "#EA580C")
+text(4.8, 3.0, expression(group(langle, list(bold(w), bold(x)), rangle) %in% R), 
+     cex = 0.75, col = "#EA580C")
+
+# 箭头到输出 / Pfeil zum Ausgang
+arrows(5.5, 3.0, 6.5, 3.0, col = "#94A3B8", lwd = 2, length = 0.12)
+
+# 输出空间 / Ausgangsraum
+text(8, 5.5, expression("输出空间" ~ R^m ~ "| Ausgangsraum"), cex = 0.9, font = 2, col = "#DC2626")
+arrows(7, 1, 9, 4.5, col = "#DC2626", lwd = 2.5, length = 0.12)
+text(9.2, 4.7, expression(bold(v)), col = "#DC2626", cex = 1.2, font = 2)
+
+# 结果 / Ergebnis
+arrows(7, 1, 8.2, 3.1, col = "#9333EA", lwd = 3, length = 0.12)
+text(8.5, 3.3, expression(group(langle, list(bold(w), bold(x)), rangle) %.% bold(v)),
+     col = "#9333EA", cex = 0.85, font = 2)
+
+text(7, 2.0, "步骤 2: 缩放 v", cex = 0.8, font = 2, col = "#9333EA")
+```
+
+## 外积的重要应用
+
+> **Wichtige Anwendungen des äußeren Produkts**
+
+外积不只是一个数学定义——它在多个领域都是核心工具。
+
+**SVD（奇异值分解）：** 任何矩阵 $A$ 都可以分解为秩 1 矩阵的加权和：
+
+$$
+A = U_r \Sigma_r V_r^\top = \sum_{i=1}^{r} \sigma_i \, \mathbf{u}_i \otimes \mathbf{v}_i
+$$
+
+**协方差矩阵：** $\text{Cov}(\mathbf{x}) = \mathbb{E}[\mathbf{x} \otimes \mathbf{x}] - \mathbb{E}[\mathbf{x}] \otimes \mathbb{E}[\mathbf{x}]$
+
+**注意力机制（Attention）：** $\text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{1}{\sqrt{d_k}} Q K^\top \right) V$（其中 $QK^\top$ 本质上是批量外积）
+
+```{r}
+#| label: svd-outer-product-demo
+#| code-fold: false
+
+# SVD = 秩1矩阵（外积）的加权和 | SVD = gewichtete Summe von Rang-1-Matrizen
+set.seed(42)
+A <- matrix(c(3, 1, 1, 3, 2, 0), nrow = 2, ncol = 3)
+cat("原始矩阵 A (2×3):\n"); print(A)
+cat("秩:", qr(A)$rank, "\n\n")
+
+svd_A <- svd(A)
+
+# 重建：A = σ₁(u₁ ⊗ v₁) + σ₂(u₂ ⊗ v₂)
+A_reconstructed <- svd_A$d[1] * (svd_A$u[,1] %o% svd_A$v[,1]) +
+                   svd_A$d[2] * (svd_A$u[,2] %o% svd_A$v[,2])
+
+cat("σ₁ =", round(svd_A$d[1], 3), ", σ₂ =", round(svd_A$d[2], 3), "\n\n")
+cat("重建误差 | Rekonstruktionsfehler:", max(abs(A - A_reconstructed)), "\n")
+cat("SVD 将矩阵分解为秩1外积的和 ✓\n")
+```
+
+## 张量积：外积的高维推广
+
+> **Tensorprodukt: Verallgemeinerung des äußeren Produkts auf höhere Ordnungen**
+
+::: {.callout-important icon="false"}
+## 📐 定义：张量积 | Definition: Tensorprodukt
+
+两个张量 $A \in \mathbb{R}^{m_1 \times \cdots \times m_p}$ 和 $B \in \mathbb{R}^{n_1 \times \cdots \times n_q}$ 的 **张量积** 为：
+
+$$
+C = A \otimes B \in \mathbb{R}^{m_1 \times \cdots \times m_p \times n_1 \times \cdots \times n_q}
+$$
+
+其元素为 $c_{i_1, \ldots, i_p, j_1, \ldots, j_q} = a_{i_1, \ldots, i_p} \cdot b_{j_1, \ldots, j_q}$。
+
+特别地，两个向量的张量积就是外积（$p = q = 1$）。
+:::
+
+张量积是 **双线性** 的：$(c\mathbf{v}) \otimes \mathbf{w} = c(\mathbf{v} \otimes \mathbf{w}) = \mathbf{v} \otimes (c\mathbf{w})$。
+
+## 具体计算：三个向量的张量积
+
+> **Konkretes Beispiel: Tensorprodukt dreier Vektoren**
+
+```{r}
+#| label: tensor-product-3vec
+#| code-fold: false
+
+# 三个向量的张量积 | Tensorprodukt dreier Vektoren
+u <- c(1, 2)
+v <- c(3, 5)
+w <- c(7, 11)
+
+# T = u ⊗ v ⊗ w ∈ R^{2×2×2}
+# T[i,j,k] = u[i] * v[j] * w[k]
+T_tensor <- array(0, dim = c(2, 2, 2))
+for (i in 1:2) {
+  for (j in 1:2) {
+    for (k in 1:2) {
+      T_tensor[i, j, k] <- u[i] * v[j] * w[k]
+    }
+  }
+}
+
+cat("u =", u, "\n")
+cat("v =", v, "\n")
+cat("w =", w, "\n\n")
+
+cat("T = u ⊗ v ⊗ w ∈ R^{2×2×2}\n\n")
+
+cat("切片 T[,,1]（k=1, w_k = 7）:\n")
+print(T_tensor[,,1])
+cat("= 7 × (u ⊗ v) =\n")
+print(7 * (u %o% v))
+
+cat("\n切片 T[,,2]（k=2, w_k = 11）:\n")
+print(T_tensor[,,2])
+cat("= 11 × (u ⊗ v) =\n")
+print(11 * (u %o% v))
+
+cat("\n每个切片都是 u⊗v 的标量倍！ | Jede Scheibe ist ein Skalarmultipel von u⊗v! ✓\n")
+cat("这就是秩1张量的特征 | Das ist die Eigenschaft eines Rang-1-Tensors.\n")
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+形如 $\mathbf{u} \otimes \mathbf{v} \otimes \mathbf{w}$ 的张量是 **秩 1 张量**——它的所有信息都由三个向量决定。一般的 3 阶张量需要多个秩 1 张量的 **和** 来表示，就像一般矩阵需要多个秩 1 矩阵（外积）的和来表示一样（SVD！）。
+
+*Ein Tensor der Form $\mathbf{u} \otimes \mathbf{v} \otimes \mathbf{w}$ hat Rang 1. Ein allgemeiner Tensor 3. Ordnung benötigt eine Summe mehrerer Rang-1-Tensoren — genau wie bei der SVD für Matrizen.*
+:::
+
+{{< pagebreak >}}
+
+# Kronecker 积：张量积的矩阵版本 {#sec-kronecker}
+
+> **Kronecker-Produkt: Die Matrixversion des Tensorprodukts**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- Kronecker 积的 **定义和计算**
+- Kronecker 积与张量积的 **联系和区别**
+- **分块对角矩阵** 和 **可分离协方差** 等实际应用
+:::
+
+## 定义：Kronecker 积
+
+> **Definition: Kronecker-Produkt**
+
+::: {.callout-important icon="false"}
+## 📐 定义：Kronecker 积 | Definition: Kronecker-Produkt
+
+两个矩阵 $A \in \mathbb{R}^{m \times n}$ 和 $B \in \mathbb{R}^{p \times q}$ 的 **Kronecker 积** 定义为：
+
+$$
+A \otimes B = \begin{pmatrix} a_{11}B & \cdots & a_{1n}B \\ \vdots & & \vdots \\ a_{m1}B & \cdots & a_{mn}B \end{pmatrix} \in \mathbb{R}^{mp \times nq}
+$$
+
+即把 $A$ 的每个元素替换为 $a_{ij}B$ 这个子矩阵块。
+:::
+
+::: {.callout-warning icon="false"}
+## ⚠️ 符号警告 | Symbolwarnung
+
+符号 $\otimes$ 有双重含义——**张量积** 和 **Kronecker 积**！它们的结果不同（张量积产生高阶张量，Kronecker 积产生矩阵），但包含的信息相同，只是排列方式不同。
+
+*Das Symbol $\otimes$ hat eine Doppelbedeutung — Tensorprodukt und Kronecker-Produkt! Die Ergebnisse sind verschieden (Tensor vs. Matrix), aber die enthaltene Information ist dieselbe — nur anders angeordnet.*
+:::
+
+```{r}
+#| label: kronecker-demo
+#| code-fold: false
+
+# Kronecker 积示例 | Kronecker-Produkt Beispiel
+A <- matrix(c(1, 2, 0, 5), nrow = 2, ncol = 2)
+B <- matrix(c(3, 0, -1, 0, 2, 0, 0, 0, -1), nrow = 3, ncol = 3)
+
+cat("A (2×2):\n"); print(A)
+cat("\nB (3×3):\n"); print(B)
+
+K <- kronecker(A, B)
+cat("\nA ⊗ B (6×6):\n"); print(K)
+cat("\n维度:", dim(K), "= (2·3) × (2·3)\n")
+```
+
+```{r}
+#| label: fig-kronecker-structure
+#| fig-cap: "Kronecker 积的分块结构：每个 a_ij 都被替换为 a_ij·B | Blockstruktur: Jedes a_ij wird durch a_ij·B ersetzt"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 15), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("Kronecker 积的分块结构 | Blockstruktur des Kronecker-Produkts",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# A 矩阵 / Matrix A
+rect(0.5, 5.5, 2.5, 7.5, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(1.5, 7.8, "A (2×2)", cex = 0.85, font = 2, col = "#2563EB")
+text(1.1, 7.0, "1", cex = 0.9, col = "#1E293B"); text(1.9, 7.0, "0", cex = 0.9, col = "#94A3B8")
+text(1.1, 6.0, "2", cex = 0.9, col = "#1E293B"); text(1.9, 6.0, "5", cex = 0.9, col = "#1E293B")
+
+# ⊗ 符号
+text(3.2, 6.5, expression(symbol("\304")), cex = 2, col = "#EA580C")
+text(3.2, 6.5, "⊗", cex = 1.5, col = "#EA580C", font = 2)
+
+# B 矩阵 / Matrix B
+rect(4, 5.2, 6.5, 7.8, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(5.25, 8.1, "B (3×3)", cex = 0.85, font = 2, col = "#D97706")
+text(4.5, 7.3, "3",  cex = 0.7); text(5.25, 7.3, "0",  cex = 0.7); text(6.0, 7.3, "0",  cex = 0.7)
+text(4.5, 6.5, "0",  cex = 0.7); text(5.25, 6.5, "2",  cex = 0.7); text(6.0, 6.5, "0",  cex = 0.7)
+text(4.5, 5.7, "-1", cex = 0.7); text(5.25, 5.7, "0",  cex = 0.7); text(6.0, 5.7, "-1", cex = 0.7)
+
+# = 符号
+text(7.3, 6.5, "=", cex = 1.5, col = "#1E293B", font = 2)
+
+# 结果矩阵 / Ergebnismatrix
+rect(8, 3.5, 14.5, 7.8, col = adjustcolor("#FEE2E2", 0.3), border = "#DC2626", lwd = 2)
+text(11.25, 8.1, "A ⊗ B (6×6)", cex = 0.85, font = 2, col = "#DC2626")
+
+# 四个子块 / Vier Unterblöcke
+rect(8.1, 5.7, 11.2, 7.7, col = adjustcolor("#2563EB", 0.08), border = "#2563EB", lwd = 1, lty = 2)
+text(9.65, 6.7, "1·B", cex = 0.85, font = 2, col = "#2563EB")
+
+rect(11.3, 5.7, 14.4, 7.7, col = adjustcolor("#94A3B8", 0.08), border = "#94A3B8", lwd = 1, lty = 2)
+text(12.85, 6.7, "0·B", cex = 0.85, font = 2, col = "#94A3B8")
+
+rect(8.1, 3.6, 11.2, 5.6, col = adjustcolor("#D97706", 0.08), border = "#D97706", lwd = 1, lty = 2)
+text(9.65, 4.6, "2·B", cex = 0.85, font = 2, col = "#D97706")
+
+rect(11.3, 3.6, 14.4, 5.6, col = adjustcolor("#16A34A", 0.08), border = "#16A34A", lwd = 1, lty = 2)
+text(12.85, 4.6, "5·B", cex = 0.85, font = 2, col = "#16A34A")
+
+# 注释 / Anmerkung
+text(7.5, 2.3, "张量积 → 4阶张量 (2×2×3×3)，66 个数", cex = 0.8, col = "#6366F1")
+text(7.5, 1.5, "Kronecker积 → 矩阵 (6×6)，36 个数——同一批数据，不同排列方式",
+     cex = 0.8, col = "#6366F1")
+text(7.5, 0.7, "Tensorprodukt → Tensor (2×2×3×3); Kronecker → Matrix (6×6) — gleiche Daten, andere Anordnung",
+     cex = 0.65, col = "#94A3B8", font = 3)
+```
+
+## Kronecker 积 vs 张量积
+
+> **Kronecker-Produkt vs. Tensorprodukt**
+
+对于 $A \in \mathbb{R}^{m \times n}$，$B \in \mathbb{R}^{p \times q}$：
+
+张量积产生 **4 阶张量** $C \in \mathbb{R}^{m \times n \times p \times q}$，其元素为 $c_{i_1, i_2, j_1, j_2} = a_{i_1, i_2} \cdot b_{j_1, j_2}$。Kronecker 积产生 **矩阵** $D \in \mathbb{R}^{mp \times nq}$，其元素为 $d_{(i_1-1)p+j_1,\; (i_2-1)q+j_2} = a_{i_1, i_2} \cdot b_{j_1, j_2}$。两者包含相同的数据，Kronecker 积本质上是张量积的"展平"版本。
+
+::: {.callout-warning icon="false"}
+## ⚠️ 注意 | Achtung
+
+一般来说 $A \otimes B \neq B \otimes A$，Kronecker 积 **不满足交换律**！
+
+*Im Allgemeinen gilt $A \otimes B \neq B \otimes A$ — das Kronecker-Produkt ist **nicht** kommutativ!*
+:::
+
+```{r}
+#| label: kronecker-not-commutative
+#| code-fold: false
+
+# 验证不可交换性 | Nicht-Kommutativität verifizieren
+A <- matrix(c(1, 0, 2, 5), 2, 2)
+B <- matrix(c(3, 0, -1, 2), 2, 2)
+
+cat("A ⊗ B:\n"); print(kronecker(A, B))
+cat("\nB ⊗ A:\n"); print(kronecker(B, A))
+cat("\nA ⊗ B == B ⊗ A?", all(kronecker(A, B) == kronecker(B, A)), "\n")
+```
+
+## 应用 1：分块对角矩阵
+
+> **Anwendung 1: Blockdiagonalmatrizen**
+
+Kronecker 积有一个非常实用的特殊情况——当其中一个因子是单位矩阵时，结果是 **分块对角矩阵**：
+
+$$
+I_n \otimes S = \begin{pmatrix} S & & \\ & \ddots & \\ & & S \end{pmatrix}_{np \times np}
+$$
+
+```{r}
+#| label: block-diag-demo
+#| code-fold: false
+
+# 分块对角矩阵 | Blockdiagonalmatrix
+S <- matrix(c(2, 1, 1, 3), 2, 2)
+I3 <- diag(3)
+
+block_diag <- kronecker(I3, S)
+cat("I₃ ⊗ S (6×6):\n")
+print(block_diag)
+cat("\n对角线上有 3 个 S 块！ | 3 Blöcke S auf der Diagonalen! ✓\n")
+```
+
+## 应用 2：可分离协方差
+
+> **Anwendung 2: Separierbare Kovarianz**
+
+在时空数据分析中，一个核心建模假设是 **可分离协方差**。假设你在 $m$ 个位置、$n$ 个时间点收集了数据，完整的协方差矩阵 $\Sigma \in \mathbb{R}^{mn \times mn}$ 需要估计 $mn(mn+1)/2$ 个参数。如果假设时间和空间相互独立，可以将其分解为 $\Sigma = \Sigma_T \otimes \Sigma_S$——只需估计 $m(m+1)/2 + n(n+1)/2$ 个参数！
+
+```{r}
+#| label: separable-covariance
+#| code-fold: false
+
+# 可分离协方差示例 | Beispiel: Separierbare Kovarianz
+# 2 个位置 × 2 个时间点 | 2 Orte × 2 Zeitpunkte
+Sigma_T <- matrix(c(1.0, 0.8, 0.8, 1.0), 2, 2)  # 时间协方差 | Zeitkovarianz
+Sigma_S <- matrix(c(2.0, 0.5, 0.5, 2.0), 2, 2)  # 空间协方差 | Raumkovarianz
+
+Sigma <- kronecker(Sigma_T, Sigma_S)
+
+cat("时间协方差 Σ_T:\n"); print(Sigma_T)
+cat("\n空间协方差 Σ_S:\n"); print(Sigma_S)
+cat("\n完整协方差 Σ = Σ_T ⊗ Σ_S (4×4):\n"); print(Sigma)
+
+cat("\n解读 | Interpretation:\n")
+cat("  Σ[1,1] = 2.0：位置1在时间1的方差\n")
+cat("  Σ[1,3] = 1.6 = 0.8 × 2.0：位置1在不同时间点之间的协方差\n")
+
+# 参数节省 | Parametersparnis
+m <- 2; n <- 2
+full_params <- m * n * (m * n + 1) / 2
+sep_params  <- m * (m + 1) / 2 + n * (n + 1) / 2
+cat("\n完整协方差参数数:", full_params, "\n")
+cat("可分离协方差参数数:", sep_params, "\n")
+cat("节省:", round((1 - sep_params/full_params) * 100, 1), "% 参数!\n")
+```
+
+```{r}
+#| label: fig-param-savings
+#| fig-cap: "可分离协方差的参数节省随数据规模急剧增长 | Parametersparnis der separierbaren Kovarianz wächst dramatisch"
+#| fig-height: 4.5
+
+m_vals <- 2:20
+n_val <- 10
+
+full_params_vec <- (m_vals * n_val) * (m_vals * n_val + 1) / 2
+sep_params_vec  <- m_vals * (m_vals + 1) / 2 + n_val * (n_val + 1) / 2
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(m_vals, full_params_vec, type = "l", col = "#DC2626", lwd = 2.5,
+     xlab = paste0("空间维度 m （时间维度 n 固定为 ", n_val, "）| Raumdimension m"),
+     ylab = "参数数量 | Anzahl der Parameter",
+     main = "完整 vs 可分离协方差的参数数量 | Volle vs. separierbare Kovarianz",
+     cex.lab = 1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(m_vals, sep_params_vec, col = "#16A34A", lwd = 2.5)
+
+legend("topleft",
+       legend = c(
+         expression("完整协方差" ~ O(m^2*n^2)),
+         expression("可分离协方差" ~ O(m^2 + n^2))
+       ),
+       col = c("#DC2626", "#16A34A"), lwd = 2.5, bty = "n", cex = 0.95)
+```
+
+还有一个极其重要的 Kronecker 积公式在矩阵方程向量化中不断出现：
+
+$$
+\text{vec}(AXB) = (B^\top \otimes A)\,\text{vec}(X)
+$$
+
+这个公式将矩阵方程 $AXB = C$ 转化为标准的线性方程组——这就是 Kronecker 积在数值线性代数中的核心地位。
+
+{{< pagebreak >}}
+
+# 向量空间的张量积：构建高维世界 {#sec-vs-tensor}
+
+> **Tensorprodukt von Vektorräumen: Höherdimensionale Welten konstruieren**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **向量空间的张量积** 的定义和直觉
+- 为什么 $V \otimes W \neq \{\mathbf{v} \otimes \mathbf{w}\}$
+- **张量积基** 和 **维数公式**
+- 应用：从一元多项式构造多元多项式
+:::
+
+## 从元素到空间：关键的抽象跳跃
+
+> **Vom Element zum Raum: Der entscheidende Abstraktionssprung**
+
+到目前为止，我们讨论的是 **具体的张量积运算**——两个向量（或张量）的乘积。现在我们要做一个抽象跳跃：不是两个 *元素* 的积，而是两个 *空间* 的积。
+
+::: {.callout-important icon="false"}
+## 📐 定义：向量空间的张量积 | Definition: Tensorprodukt von Vektorräumen
+
+设 $V$ 和 $W$ 是两个向量空间。它们的 **张量积** $V \otimes W$ 定义为：
+
+$$
+V \otimes W = \text{span}\{\mathbf{v} \otimes \mathbf{w} : \mathbf{v} \in V, \; \mathbf{w} \in W\}
+$$
+
+其中 $(\mathbf{v}, \mathbf{w}) \mapsto \mathbf{v} \otimes \mathbf{w}$ 是双线性映射。
+:::
+
+**双线性性** 意味着：$(c\mathbf{v}) \otimes \mathbf{w} = c(\mathbf{v} \otimes \mathbf{w}) = \mathbf{v} \otimes (c\mathbf{w})$，且 $(\mathbf{v}_1 + \mathbf{v}_2) \otimes \mathbf{w} = \mathbf{v}_1 \otimes \mathbf{w} + \mathbf{v}_2 \otimes \mathbf{w}$。
+
+最简单的例子：$\mathbb{R}^m \otimes \mathbb{R}^n = \mathbb{R}^{m \times n}$——两个向量空间的张量积就是所有 $m \times n$ 矩阵的空间！
+
+## 为什么 $V \otimes W$ 不只是 $\{\mathbf{v} \otimes \mathbf{w}\}$
+
+> **Warum $V \otimes W$ mehr ist als nur $\{\mathbf{v} \otimes \mathbf{w}\}$**
+
+这是最关键也最容易混淆的一点。让我们用一个具体例子来说明。
+
+```{r}
+#| label: not-all-rank1
+#| code-fold: false
+
+# 单位矩阵 I₂ 属于 R² ⊗ R²，但它不是单个外积！
+# Einheitsmatrix I₂ ∈ R² ⊗ R², aber KEIN einzelnes äußeres Produkt!
+
+I2 <- diag(2)
+cat("单位矩阵 I₂:\n"); print(I2)
+cat("秩:", qr(I2)$rank, "≠ 1\n")
+cat("→ 不能写成单个 v ⊗ w（因为秩 1 矩阵的秩 = 1）!\n\n")
+
+# 但它可以写成两个外积的和！
+# Aber es ist die SUMME zweier äußerer Produkte!
+e1 <- c(1, 0); e2 <- c(0, 1)
+cat("I₂ = e₁⊗e₁ + e₂⊗e₂:\n")
+print(e1 %o% e1 + e2 %o% e2)
+cat("\n✓ I₂ 属于 span{v⊗w}，即 I₂ ∈ V ⊗ W\n")
+```
+
+```{r}
+#| label: fig-space-vs-element
+#| fig-cap: "关键区分：单个张量积（秩1）vs 张量积空间（全部秩）| Schlüsselunterscheidung: Einzelnes Tensorprodukt (Rang 1) vs. Tensorproduktraum (alle Ränge)"
+#| fig-height: 4
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 14), ylim = c(0, 5), axes = FALSE, xlab = "", ylab = "")
+title("v⊗w（元素）vs V⊗W（空间）| Element vs. Raum",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 左：元素 / Links: Element
+rect(0.5, 1, 6, 4.5, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(3.25, 4.0, expression(bold(v) %*% bold(w) ~ "（单个张量积）"), cex = 0.85, font = 2, col = "#2563EB")
+text(3.25, 3.2, "结果是一个秩1矩阵", cex = 0.8, col = "#1E293B")
+text(3.25, 2.4, "Ergebnis: eine Rang-1-Matrix", cex = 0.7, col = "#64748B", font = 3)
+text(3.25, 1.5, expression("例: " * bgroup("(", atop(1, 0), ")") * bgroup("(", list(1, 0), ")") == bgroup("(", atop(list(1,0), list(0,0)), ")")),
+     cex = 0.75, col = "#475569")
+
+# 右：空间 / Rechts: Raum
+rect(7, 1, 13.5, 4.5, col = "#FEE2E2", border = "#DC2626", lwd = 2)
+text(10.25, 4.0, expression(V %*% W ~ "（张量积空间）"), cex = 0.85, font = 2, col = "#DC2626")
+text(10.25, 3.2, "包含所有秩的矩阵", cex = 0.8, col = "#1E293B")
+text(10.25, 2.4, "enthält Matrizen aller Ränge", cex = 0.7, col = "#64748B", font = 3)
+text(10.25, 1.5, expression("例: " * I[2] == e[1] %*% e[1] + e[2] %*% e[2] ~ "(秩2)"),
+     cex = 0.75, col = "#475569")
+
+# ⊂ 符号
+text(6.5, 2.75, "⊂", cex = 2, col = "#EA580C", font = 2)
+```
+
+一般地，任何矩阵 $A \in \mathbb{R}^{m \times n}$ 都可以通过 SVD 写成最多 $\min(m, n)$ 个秩 1 矩阵的和：
+
+$$
+A = \sum_{i=1}^{r} \sigma_i \, \mathbf{u}_i \otimes \mathbf{v}_i, \quad r = \text{rank}(A)
+$$
+
+因此 $\mathbb{R}^m \otimes \mathbb{R}^n = \mathbb{R}^{m \times n}$ 确实是全部矩阵的空间，而不仅仅是秩 1 矩阵。
+
+## 张量积基与维数
+
+> **Tensorproduktbasis und Dimension**
+
+::: {.callout-important icon="false"}
+## 📐 定理：张量积基 | Satz: Tensorproduktbasis
+
+若 $\mathcal{B}_V = \{\mathbf{v}_1, \ldots, \mathbf{v}_m\}$ 和 $\mathcal{B}_W = \{\mathbf{w}_1, \ldots, \mathbf{w}_n\}$ 分别是 $V$ 和 $W$ 的基，则
+
+$$
+\mathcal{B}_{V \otimes W} = \{\mathbf{v}_i \otimes \mathbf{w}_j : 1 \leq i \leq m, \; 1 \leq j \leq n\}
+$$
+
+是 $V \otimes W$ 的基。特别地：
+
+$$
+\dim(V \otimes W) = \dim(V) \cdot \dim(W)
+$$
+:::
+
+```{r}
+#| label: tensor-basis-demo
+#| code-fold: false
+
+# 验证维数公式 | Dimensionsformel verifizieren
+# R³ ⊗ R⁴ = R^{3×4}
+dim_V <- 3; dim_W <- 4
+
+cat("dim(V) =", dim_V, "\n")
+cat("dim(W) =", dim_W, "\n")
+cat("dim(V ⊗ W) =", dim_V, "×", dim_W, "=", dim_V * dim_W, "\n\n")
+
+# 张量积基的元素 | Elemente der Tensorproduktbasis
+cat("张量积基有", dim_V * dim_W, "个元素:\n")
+for (i in 1:dim_V) {
+  for (j in 1:dim_W) {
+    e_i <- rep(0, dim_V); e_i[i] <- 1
+    e_j <- rep(0, dim_W); e_j[j] <- 1
+    cat(sprintf("  e_%d ⊗ e_%d → %d×%d 矩阵，第(%d,%d)位为1\n", i, j, dim_V, dim_W, i, j))
+  }
+}
+```
+
+## 应用：从一元多项式构造多元多项式
+
+> **Anwendung: Von univariaten zu multivariaten Polynomen**
+
+张量积基的一个美妙应用是 **从一元函数空间构造多元函数空间**。
+
+设 $P_1 = \{p(x) = a_0 + a_1 x : a_0, a_1 \in \mathbb{R}\}$ 是 $[0,1]$ 上次数 $\leq 1$ 的多项式空间，基为 $\mathcal{B} = \{1, x\}$，维数为 2。
+
+张量积基 $\mathcal{B} \otimes \mathcal{B}$ 产生 **二元多项式** 的基函数 $\phi_1(x,y) = 1$，$\phi_2(x,y) = x$，$\phi_3(x,y) = y$，$\phi_4(x,y) = xy$。维数为 $2 \times 2 = 4$。
+
+```{r}
+#| label: fig-tensor-polynomial
+#| fig-cap: "张量积基构造的二元多项式 f(x,y) = 2 + 3x - y + 5xy | Durch Tensorproduktbasis konstruiertes bivariates Polynom"
+#| fig-height: 5.5
+
+# 二元多项式 f(x,y) = 2 + 3x - y + 5xy
+# Bivariates Polynom
+f_poly <- function(x, y) 2 + 3*x - y + 5*x*y
+
+x_seq <- seq(0, 1, length.out = 50)
+y_seq <- seq(0, 1, length.out = 50)
+z_mat <- outer(x_seq, y_seq, f_poly)
+
+par(bg = "#F8FAFC", mar = c(1, 1, 3, 1))
+persp(x_seq, y_seq, z_mat,
+      theta = 35, phi = 25,
+      col = adjustcolor("#2563EB", 0.3), border = adjustcolor("#2563EB", 0.5),
+      xlab = "x", ylab = "y", zlab = "f(x,y)",
+      main = "二元多项式 f(x,y) = 2·1 + 3·x - 1·y + 5·xy",
+      cex.main = 1.1, col.main = "#1E293B",
+      ticktype = "detailed")
+```
+
+```{r}
+#| label: tensor-polynomial-verify
+#| code-fold: false
+
+# 验证：任意 (x,y) 处的函数值 = 基函数的线性组合
+# Verifikation: f(x,y) = Linearkombination der Basisfunktionen
+x0 <- 0.7; y0 <- 0.4
+coeffs <- c(2, 3, -1, 5)
+
+# 四个基函数在 (x0, y0) 处的值
+basis_vals <- c(1, x0, y0, x0 * y0)
+
+cat("在 (x, y) = (", x0, ",", y0, ") 处:\n")
+cat("  φ₁ = 1  → 贡献:", coeffs[1], "×", basis_vals[1], "=", coeffs[1] * basis_vals[1], "\n")
+cat("  φ₂ = x  → 贡献:", coeffs[2], "×", basis_vals[2], "=", coeffs[2] * basis_vals[2], "\n")
+cat("  φ₃ = y  → 贡献:", coeffs[3], "×", basis_vals[3], "=", coeffs[3] * basis_vals[3], "\n")
+cat("  φ₄ = xy → 贡献:", coeffs[4], "×", basis_vals[4], "=", coeffs[4] * basis_vals[4], "\n")
+cat("  总和:", sum(coeffs * basis_vals), "\n")
+cat("  直接计算:", f_poly(x0, y0), "✓\n")
+```
+
+对于 $k$ 元、次数 $\leq d$ 的多项式，张量积基的维数为 $(d+1)^k$。这随 $k$ 指数增长——这就是著名的 **维数灾难（Fluch der Dimensionalität）**。实践中，稀疏网格等技术可以缓解这一问题。
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+张量积空间的 **泛性质（Universelle Eigenschaft）**：任何双线性映射 $f: V \times W \to Z$ 都可以唯一分解为 $f = \tilde{f} \circ \otimes$，其中 $\tilde{f}: V \otimes W \to Z$ 是线性的。
+
+$$
+V \times W \xrightarrow{\otimes} V \otimes W \xrightarrow{\tilde{f}} Z
+$$
+
+换句话说，**张量积把双线性问题转化为线性问题**——这是整个构造最深刻的数学意义。
+
+*Das Tensorprodukt linearisiert bilineare Probleme — das ist seine tiefste mathematische Bedeutung.*
+:::
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 概念逻辑链
+
+```{r}
+#| label: fig-concept-chain
+#| fig-cap: "知识逻辑链：每一步都是被'更高维度'的需求逼出来的 | Logikkette: Jeder Schritt wird durch den Bedarf höherer Dimensionen motiviert"
+#| fig-width: 12
+#| fig-height: 8
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 9), axes = FALSE, xlab = "", ylab = "")
+title("概念逻辑链 | Logikkette der Konzepte", cex.main = 1.4, col.main = "#1E293B")
+
+# 节点 / Knoten
+nodes_x <- c(2, 6, 10, 2, 6, 10)
+nodes_y <- c(7.5, 7.5, 7.5, 4.5, 4.5, 4.5)
+labels_cn <- c("线性映射\n矩阵表示", "多重线性映射\n多个输入", "张量\n高维数组",
+               "外积\n向量→矩阵", "张量积 &\nKronecker积", "向量空间\n的张量积")
+colors_bg <- c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#E0E7FF", "#D1FAE5", "#FCE7F3")
+colors_bd <- c("#2563EB", "#D97706", "#DC2626", "#6366F1", "#16A34A", "#DB2777")
+
+for (i in 1:6) {
+  rect(nodes_x[i] - 1.5, nodes_y[i] - 0.8, nodes_x[i] + 1.5, nodes_y[i] + 0.8,
+       col = colors_bg[i], border = colors_bd[i], lwd = 2)
+  text(nodes_x[i], nodes_y[i], labels_cn[i], cex = 0.8, font = 2, col = "#1E293B")
+}
+
+# 箭头 / Pfeile
+arrows(3.6, 7.5, 4.4, 7.5, col = "#94A3B8", lwd = 2, length = 0.12)
+arrows(7.6, 7.5, 8.4, 7.5, col = "#94A3B8", lwd = 2, length = 0.12)
+arrows(2, 6.6, 2, 5.4, col = "#94A3B8", lwd = 2, length = 0.12)
+arrows(3.6, 4.5, 4.4, 4.5, col = "#94A3B8", lwd = 2, length = 0.12)
+arrows(7.6, 4.5, 8.4, 4.5, col = "#94A3B8", lwd = 2, length = 0.12)
+arrows(10, 6.6, 10, 5.4, col = "#94A3B8", lwd = 2, length = 0.12)
+
+# 触发词 / Trigger
+text(4, 7.9, "多个输入!", cex = 0.7, col = "#EA580C", font = 3)
+text(8, 7.9, "需要表示!", cex = 0.7, col = "#EA580C", font = 3)
+text(1.3, 6.0, "特殊情况", cex = 0.7, col = "#EA580C", font = 3)
+text(4, 4.9, "高维推广", cex = 0.7, col = "#EA580C", font = 3)
+text(8, 4.9, "抽象化!", cex = 0.7, col = "#EA580C", font = 3)
+text(10.8, 6.0, "组合!", cex = 0.7, col = "#EA580C", font = 3)
+
+# 底部总结 / Zusammenfassung
+rect(1, 1.5, 11, 3.0, col = adjustcolor("#FEF3C7", 0.5), border = "#D97706", lwd = 1.5)
+text(6, 2.6, "核心思想：张量积将低维结构组合成高维结构", cex = 0.95, font = 2, col = "#1E293B")
+text(6, 2.0, "Kernidee: Das Tensorprodukt kombiniert niedrigdimensionale Strukturen", 
+     cex = 0.75, col = "#64748B", font = 3)
+```
+
+## 核心概念速查表
+
+| 概念 / Konzept | 输入 / Eingang | 输出 / Ausgang | 关键性质 / Schlüsseleigenschaft |
+|:---:|:---:|:---:|:---|
+| 线性映射 | $\mathbf{v} \in V$ | $\mathbf{w} \in W$ | $f(a\mathbf{v} + b\mathbf{v}') = af(\mathbf{v}) + bf(\mathbf{v}')$ |
+| 多重线性映射 | $(\mathbf{v}_1, \ldots, \mathbf{v}_n) \in V_1 \times \cdots \times V_n$ | $\mathbf{w} \in W$ | 每个参数单独线性 |
+| 外积 | $\mathbf{v} \in \mathbb{R}^m$, $\mathbf{w} \in \mathbb{R}^n$ | $\mathbf{v}\mathbf{w}^\top \in \mathbb{R}^{m \times n}$ | 秩 1，双线性 |
+| 张量积（元素） | $A \in \mathbb{R}^{m_1 \times \cdots \times m_p}$, $B \in \mathbb{R}^{n_1 \times \cdots \times n_q}$ | $C \in \mathbb{R}^{m_1 \times \cdots \times m_p \times n_1 \times \cdots \times n_q}$ | $c_{I,J} = a_I \cdot b_J$ |
+| Kronecker 积 | $A \in \mathbb{R}^{m \times n}$, $B \in \mathbb{R}^{p \times q}$ | $D \in \mathbb{R}^{mp \times nq}$ | 张量积的展平 |
+| 张量积空间 | $V$, $W$ | $V \otimes W$ | $\dim(V \otimes W) = \dim(V) \cdot \dim(W)$ |
+
+## 应用总结
+
+| 领域 / Bereich | 用到的概念 / Verwendetes Konzept | 具体应用 / Konkrete Anwendung |
+|:---:|:---:|:---|
+| 深度学习 | 张量 | 图像批次 $\in \mathbb{R}^{B \times H \times W \times C}$ |
+| SVD | 外积 | $A = \sum_i \sigma_i \mathbf{u}_i \otimes \mathbf{v}_i$ |
+| 统计学 | Kronecker 积 | 可分离协方差 $\Sigma_T \otimes \Sigma_S$ |
+| 注意力机制 | 外积 | $QK^\top$ 计算相似度矩阵 |
+| 数值分析 | 张量积基 | 多元函数的张量基样条 |
+| 矩阵方程 | Kronecker 积 | $\text{vec}(AXB) = (B^\top \otimes A)\text{vec}(X)$ |
+
+::: {.callout-tip icon="false"}
+## 🔮 下节预告 | Vorschau
+
+下一章我们将学习 **高级微分学**——多元函数的导数如何用线性映射来理解，以及这如何为深度学习中的反向传播奠定基础。
+
+*Im nächsten Kapitel lernen wir fortgeschrittene Differentialrechnung — wie Ableitungen mehrdimensionaler Funktionen als lineare Abbildungen verstanden werden können.*
+:::
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 核心概念
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| der Tensor (Pl: die Tensoren) | 张量 | tensor |
+| die Ordnung (eines Tensors) | 阶 / 阶数 | order / rank |
+| die multilineare Abbildung | 多重线性映射 | multilinear map |
+| die bilineare Abbildung | 双线性映射 | bilinear map |
+| das äußere Produkt | 外积 | outer product |
+| das Skalarprodukt | 内积 / 标量积 | inner product / scalar product |
+
+## 张量积相关
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| das Tensorprodukt | 张量积 | tensor product |
+| das Kronecker-Produkt | Kronecker 积 | Kronecker product |
+| die Tensorproduktbasis | 张量积基 | tensor product basis |
+| der Rang (einer Matrix / eines Tensors) | 秩 | rank |
+| die Rang-1-Matrix | 秩 1 矩阵 | rank-1 matrix |
+| die Blockdiagonalmatrix | 分块对角矩阵 | block diagonal matrix |
+
+## 线性代数
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| der Vektorraum | 向量空间 | vector space |
+| die Basis (Pl: die Basen) | 基 | basis |
+| die Dimension | 维数 | dimension |
+| der Spaltenraum | 列空间 | column space |
+| der Kern (einer Abbildung) | 核 / 零空间 | kernel / null space |
+| die Singulärwertzerlegung (SVD) | 奇异值分解 | singular value decomposition |
+
+## 应用领域
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Kovarianzmatrix | 协方差矩阵 | covariance matrix |
+| die separierbare Kovarianz | 可分离协方差 | separable covariance |
+| die Vektorisierung | 向量化 | vectorization |
+| der Fluch der Dimensionalität | 维数灾难 | curse of dimensionality |
+| das neuronale Netz | 神经网络 | neural network |
+| der Aufmerksamkeitsmechanismus | 注意力机制 | attention mechanism |
+| die dünn besetzte Gitter | 稀疏网格 | sparse grids |
+:::

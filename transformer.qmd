@@ -1,0 +1,1357 @@
+---
+title: "第二章：Transformer 从零开始"
+subtitle: "一步步搭建注意力机制 | Aufmerksamkeitsmechanismus Schritt für Schritt"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+execute:
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 10, fig.height = 6,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+# ============================================================
+# 全局超参数（后续各节统一使用）
+# ============================================================
+D_MODEL <- 8   # 嵌入维度（演示用）
+N_HEADS <- 2   # 注意力头数
+
+palette_main <- list(
+  blue   = "#2563EB", red    = "#DC2626", green  = "#16A34A",
+  orange = "#EA580C", purple = "#9333EA", gray   = "#6B7280",
+  bg_light = "#F8FAFC", bg_warn = "#FEF3C7"
+)
+
+# ============================================================
+# 核心工具函数（全文复用）
+# ============================================================
+
+# 1. 行级 Softmax（数值稳定版）
+#    注：R 矩阵减向量时按列方向循环，当向量长度 = nrow(X) 时
+#    X - v 等价于逐行减 v[i]，此处正确利用此特性。
+softmax_rows <- function(X) {
+  X_stable <- X - apply(X, 1, max)   # 每行减去行最大值，防止 exp 溢出
+  exp_X    <- exp(X_stable)
+  exp_X / rowSums(exp_X)
+}
+
+# 2. 位置编码
+#    PE(pos, 2i)   = sin(pos / 10000^(2i/d_model))
+#    PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
+#    R 1-index 下：列 k（奇数）对应公式 2i，其中 i = (k-1)/2
+#    同一对 sin/cos 共用相同分母 10000^((k-1)/d_model)
+create_position_encoding <- function(max_len, d_model) {
+  pos <- 0:(max_len - 1)          # 0-indexed 位置
+  PE  <- matrix(0, max_len, d_model)
+  for (k in seq(1, d_model, by = 2)) {
+    denom    <- 10000^((k - 1) / d_model)
+    PE[, k]  <- sin(pos / denom)
+    if (k + 1 <= d_model)
+      PE[, k + 1] <- cos(pos / denom)
+  }
+  return(PE)
+}
+
+# 3. 层归一化（总体方差，即除以 n 而非 n-1）
+#    LayerNorm(x) = (x - μ) / sqrt(σ² + ε)
+#    R 默认 sd() 用 n-1（样本方差），此处手动实现总体方差
+layer_norm <- function(X, eps = 1e-6) {
+  mu    <- rowMeans(X)
+  X_ctr <- sweep(X, 1, mu, "-")          # 中心化
+  sigma <- sqrt(rowMeans(X_ctr^2) + eps) # 总体标准差
+  sweep(X_ctr, 1, sigma, "/")
+}
+
+# 4. Xavier 初始化
+xavier_init <- function(rows, cols) {
+  matrix(rnorm(rows * cols, sd = sqrt(2 / (rows + cols))), rows, cols)
+}
+
+# 5. 注意力热力图绘制函数（封装复用）
+#    attn[i, j] = 第 i 个 Query 对第 j 个 Key 的权重
+plot_attention_heatmap <- function(attn, labels, title = "") {
+  n <- nrow(attn)
+  # 翻转行，使第 1 个 Query 在图上方（image y 轴从下到上）
+  m <- attn[n:1, ]
+  image(
+    x = seq(0, 1, length.out = n),
+    y = seq(0, 1, length.out = n),
+    z = t(m),
+    col  = colorRampPalette(c("white", "#DBEAFE", "#2563EB", "#1E40AF"))(100),
+    axes = FALSE, main = title, cex.main = 1.1, col.main = "#1E293B"
+  )
+  axis(1, at = seq(0, 1, length.out = n), labels = labels, las = 2, cex.axis = 0.9)
+  axis(2, at = seq(0, 1, length.out = n), labels = rev(labels), las = 2, cex.axis = 0.9)
+  mtext("Key（被关注的词）",    side = 1, line = 3.5, cex = 0.85)
+  mtext("Query（发起关注的词）", side = 2, line = 3.5, cex = 0.85)
+  # 数值标注
+  for (i in 1:n) {
+    for (j in 1:n) {
+      val   <- attn[i, j]
+      x_pos <- if (n > 1) (j - 1) / (n - 1) else 0.5
+      y_pos <- if (n > 1) (n - i) / (n - 1) else 0.5
+      text(x_pos, y_pos, sprintf("%.2f", val), cex = 0.8,
+           col = ifelse(val > 0.3, "white", "#1E293B"))
+    }
+  }
+}
+```
+
+{{< pagebreak >}}
+
+# 引言：为什么需要 Transformer？ {.unnumbered}
+
+> **Einleitung: Warum brauchen wir den Transformer?**
+
+想象你在翻译一句话："**The cat sat on the mat because it was tired.**"
+
+这里的 "it" 指的是什么？是 cat 还是 mat？
+
+**人类一眼就知道是 cat**——因为 mat（垫子）不会累。但计算机怎么知道？
+
+```{r}
+#| label: fig-motivation
+#| fig-cap: "语言理解的核心挑战：远距离依赖 | Kernherausforderung: Langstreckenabhängigkeiten"
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2, 1))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 5), axes = FALSE, xlab = "", ylab = "")
+title("'it' 指的是谁？| Worauf bezieht sich 'it'?",
+      cex.main = 1.4, col.main = "#1E293B")
+
+words <- c("The", "cat", "sat", "on", "the", "mat", "because", "it", "was", "tired")
+x_pos <- seq(0.5, 11.5, length.out = 10)
+
+for (i in seq_along(words)) {
+  highlight <- i %in% c(2, 8)
+  rect(x_pos[i] - 0.45, 2.8, x_pos[i] + 0.45, 3.5,
+       col    = ifelse(highlight, "#FEE2E2", "#E0E7FF"),
+       border = ifelse(highlight, "#DC2626", "#6366F1"), lwd = 2)
+  text(x_pos[i], 3.15, words[i], cex = 0.9, font = 2, col = "#1E293B")
+}
+
+# it → cat 的注意力连线
+arrows(x_pos[8], 3.5, x_pos[2], 3.5, col = "#DC2626", lwd = 3,
+       length = 0.15, code = 1)
+text(mean(x_pos[c(2, 8)]), 4.2, "注意力！| Aufmerksamkeit!",
+     col = "#DC2626", cex = 1.2, font = 2)
+
+text(6, 1.5, "Transformer 的核心能力：让每个词都能「看到」句子中所有其他词",
+     col = "#475569", cex = 1)
+text(6, 0.8, "Kernfähigkeit: Jedes Wort kann alle anderen Wörter im Satz 'sehen'",
+     col = "#64748B", cex = 0.85, font = 3)
+```
+
+::: {.callout-note icon="false"}
+## 🎯 本章你将学到 | Was Sie in diesem Kapitel lernen
+
+1. **词嵌入**：如何把文字变成数字向量
+2. **位置编码**：如何告知模型词的顺序
+3. **注意力机制**：Transformer 的核心——Query, Key, Value
+4. **多头注意力**：为什么需要多个「视角」
+5. **完整 Transformer 层**：残差连接 + 层归一化 + 前馈网络
+6. **训练过程**：让模型学会简单的语言规律
+:::
+
+{{< pagebreak >}}
+
+# 第一步：把文字变成数字 {#sec-embedding}
+
+> **Schritt 1: Text in Zahlen umwandeln**
+
+计算机只认识数字。第一步：把每个词映射为一个 **向量**（一串数字）。
+
+## 词汇表与索引
+
+```{r}
+#| label: vocab-setup
+#| code-fold: false
+
+# 小型词汇表（索引从 0 开始，与主流深度学习框架一致）
+vocab     <- c("<PAD>", "猫", "狗", "坐", "在", "垫子", "上", "因为", "它", "累", "了")
+vocab_size <- length(vocab)
+
+word_to_idx <- setNames(seq_along(vocab) - 1L, vocab)  # 词 → 0-based 索引
+idx_to_word <- setNames(vocab, seq_along(vocab) - 1L)  # 索引 → 词
+
+cat("词汇表（共", vocab_size, "个词）| Vokabular:\n")
+for (w in vocab) cat(sprintf("  %-6s → %d\n", w, word_to_idx[w]))
+```
+
+## 词嵌入矩阵
+
+每个词对应嵌入矩阵的一行——一个**可学习的向量**，每个维度可理解为词的某种潜在"属性"。
+
+```{r}
+#| label: embedding-demo
+#| code-fold: false
+
+set.seed(42)
+d_model <- D_MODEL   # 使用全局超参数 8
+
+# 嵌入矩阵：vocab_size × d_model（行 = 词，列 = 维度）
+E <- matrix(rnorm(vocab_size * d_model, sd = 0.5),
+            nrow = vocab_size, ncol = d_model,
+            dimnames = list(vocab, paste0("d", 1:d_model)))
+
+cat("嵌入矩阵 E 的形状：", nrow(E), "×", ncol(E),
+    "（词汇量 × 嵌入维度）\n\n")
+cat("'猫' 的向量：\n"); print(round(E["猫", ], 3))
+cat("\n'狗' 的向量：\n"); print(round(E["狗", ], 3))
+```
+
+```{r}
+#| label: fig-embedding-visual
+#| fig-cap: "词嵌入的 2D 投影：相似的词在向量空间中靠近 | 2D-Projektion der Wortvektoren"
+
+pca_res <- prcomp(E, scale. = FALSE)
+coords  <- pca_res$x[, 1:2]
+
+# 按语义类别着色
+cat_colors <- c(
+  "#94A3B8",  # <PAD>
+  "#DC2626", "#DC2626",  # 猫, 狗
+  "#16A34A", "#16A34A", "#2563EB", "#2563EB",  # 坐,在,垫子,上
+  "#9333EA",  # 因为
+  "#EA580C",  # 它
+  "#16A34A", "#16A34A"   # 累,了
+)
+
+par(bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+plot(coords, type = "n",
+     xlab = "主成分 1 | PC1", ylab = "主成分 2 | PC2",
+     main = "词向量的 2D PCA 投影 | 2D-PCA-Projektion",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (i in seq_len(vocab_size)) {
+  points(coords[i, 1], coords[i, 2], pch = 16, col = cat_colors[i], cex = 2.2)
+  text(coords[i, 1], coords[i, 2] + diff(range(coords[,2])) * 0.04,
+       vocab[i], col = cat_colors[i], cex = 0.9, font = 2)
+}
+
+legend("topright",
+       legend = c("动物", "动作/形容", "位置", "连词", "代词"),
+       col    = c("#DC2626", "#16A34A", "#2563EB", "#9333EA", "#EA580C"),
+       pch = 16, bty = "n", cex = 0.9)
+```
+
+## 句子 → 矩阵
+
+> **Satz → Matrix**
+
+一个句子的向量表示 = 将各词的嵌入向量**按行堆叠**成矩阵。
+
+```{r}
+#| label: tokenize-and-embed
+#| code-fold: false
+
+# 贪心最长匹配分词器（处理「垫子」等多字词）
+tokenize <- function(sentence, vocab) {
+  real_vocab <- sort(vocab[vocab != "<PAD>"],
+                     decreasing = FALSE)          # 去掉 PAD
+  # 按长度降序排列，优先匹配较长词
+  real_vocab <- real_vocab[order(nchar(real_vocab), decreasing = TRUE)]
+  tokens <- character(0)
+  i <- 1L
+  n <- nchar(sentence)
+  while (i <= n) {
+    matched <- FALSE
+    for (v in real_vocab) {
+      len <- nchar(v)
+      if (i + len - 1L <= n && substr(sentence, i, i + len - 1L) == v) {
+        tokens  <- c(tokens, v)
+        i       <- i + len
+        matched <- TRUE
+        break
+      }
+    }
+    if (!matched) i <- i + 1L  # 跳过未知字符
+  }
+  tokens
+}
+
+# 将词序列转为嵌入矩阵
+words_to_matrix <- function(words, E) {
+  idx <- word_to_idx[words] + 1L   # 0-based → 1-based
+  X   <- E[idx, , drop = FALSE]
+  rownames(X) <- words
+  X
+}
+
+# 示例
+sentence <- "猫坐在垫子上"
+tokens   <- tokenize(sentence, vocab)
+X        <- words_to_matrix(tokens, E)
+
+cat("句子：", sentence, "\n")
+cat("分词：", paste(tokens, collapse = " | "), "\n")
+cat("矩阵形状（seq_len × d_model）：", nrow(X), "×", ncol(X), "\n\n")
+print(round(X, 2))
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键概念 | Schlüsselkonzept
+
+**一个句子 = 一个矩阵**
+
+- 每一**行** = 一个词的向量表示（维度 = `d_model`）
+- **行数** = 句子长度（`seq_len`）
+- 后续所有运算都以这个矩阵为输入
+
+*Ein Satz = eine Matrix. Jede Zeile = ein Wortvektor.*
+:::
+
+{{< pagebreak >}}
+
+# 第二步：位置编码 {#sec-position}
+
+> **Schritt 2: Positionskodierung**
+
+词嵌入有个问题：**它不包含顺序信息**！
+
+- "猫 吃 鱼" 与 "鱼 吃 猫" 的词向量集合完全相同
+- 但语义截然不同！
+
+**解决方案**：给每个位置叠加一个独特的"位置信号"。
+
+## 正弦位置编码
+
+Transformer 原论文（Vaswani et al., 2017）采用三角函数：
+
+$$
+PE_{(pos,\, 2i)}   = \sin\!\left(\frac{pos}{10000^{2i/d_{model}}}\right), \quad
+PE_{(pos,\, 2i+1)} = \cos\!\left(\frac{pos}{10000^{2i/d_{model}}}\right)
+$$
+
+其中 $pos$ 为词在句子中的位置（0-indexed），$i$ 为维度索引（0-indexed）。
+
+**为什么选三角函数？**
+
+- 每个位置的编码**唯一**
+- 相邻位置编码**平滑过渡**（相似度随距离单调递减）
+- 不同频率的正弦波组合，使模型能区分近距离与远距离的位置关系
+
+```{r}
+#| label: fig-position-encoding
+#| fig-cap: "位置编码热力图：每个位置都有独特的「指纹」 | Heatmap der Positionskodierung"
+#| fig-height: 5
+
+PE_vis <- create_position_encoding(max_len = 50, d_model = 32)
+
+par(bg = "#F8FAFC", mar = c(4, 4, 3, 2))
+image(
+  x = seq(0, 1, length.out = 50),
+  y = seq(0, 1, length.out = 32),
+  z = PE_vis,
+  col  = colorRampPalette(c("#2563EB", "white", "#DC2626"))(100),
+  axes = FALSE,
+  main = "位置编码热力图 | Positionskodierung Heatmap",
+  cex.main = 1.3, col.main = "#1E293B",
+  xlab = "", ylab = ""
+)
+axis(1, at = c(0, 0.25, 0.5, 0.75, 1), labels = c(1, 13, 25, 38, 50), cex.axis = 0.9)
+axis(2, at = c(0, 0.33, 0.67, 1),      labels = c(1, 11, 22, 32),     cex.axis = 0.9)
+mtext("位置 pos | Position", side = 1, line = 2.5, cex = 1)
+mtext("维度 2i  | Dimension", side = 2, line = 2.5, cex = 1)
+
+mtext("← 低频（捕捉远距离关系）       高频（捕捉近距离关系）→",
+      side = 1, line = 3.8, cex = 0.8, col = "#475569")
+```
+
+```{r}
+#| label: add-position
+#| code-fold: false
+
+# 生成句子用的位置编码
+PE <- create_position_encoding(max_len = 20, d_model = d_model)
+
+# 词嵌入 + 位置编码（逐元素相加）
+X_pos <- X + PE[seq_len(nrow(X)), ]
+
+cat("加入位置编码后：\n")
+cat("  形状不变：", dim(X_pos), "\n")
+cat("  但每个词现在「知道」自己所在的位置了！\n\n")
+
+# 验证前两个词的位置编码差异
+cat("位置 1 的编码（前 4 维）：", round(PE[1, 1:4], 3), "\n")
+cat("位置 2 的编码（前 4 维）：", round(PE[2, 1:4], 3), "\n")
+cat("→ 每个位置都有独特的编码\n")
+```
+
+{{< pagebreak >}}
+
+# 第三步：注意力机制的核心 {#sec-attention}
+
+> **Schritt 3: Der Kern des Aufmerksamkeitsmechanismus**
+
+## 直觉：Query, Key, Value
+
+想象你在图书馆找书：
+
+```{r}
+#| label: fig-qkv-intuition
+#| fig-cap: "QKV 的图书馆比喻 | Die Bibliotheks-Analogie für QKV"
+#| fig-height: 4.5
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2, 1))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title("注意力机制的直觉 | Intuition des Aufmerksamkeitsmechanismus",
+      cex.main = 1.3, col.main = "#1E293B")
+
+draw_box <- function(xl, xr, yb, yt, bg, border, title, sub1, sub2) {
+  rect(xl, yb, xr, yt, col = bg, border = border, lwd = 2)
+  text((xl+xr)/2, yt - 0.35, title, font = 2, col = border, cex = 1.05)
+  text((xl+xr)/2, (yb+yt)/2 - 0.1, sub1, col = "#475569", cex = 0.85)
+  text((xl+xr)/2, yb + 0.25, sub2, col = "#64748B", cex = 0.72, font = 3)
+}
+
+draw_box(0.3, 3.5, 3.6, 5.4, "#DBEAFE", "#2563EB",
+         "Query (Q)", "你的需求",       "\"我想找机器学习的书\"")
+draw_box(4.2, 7.5, 3.6, 5.4, "#FEF3C7", "#D97706",
+         "Key (K)",   "书脊上的标签",   "\"数学\", \"AI\", \"编程\"...")
+draw_box(8.2, 11.5, 3.6, 5.4, "#D1FAE5", "#16A34A",
+         "Value (V)", "书的内容",       "实际读取的信息")
+
+arrows(3.5, 4.5, 4.2, 4.5, lwd = 2, col = "#64748B", length = 0.1)
+text(3.85, 4.8, "匹配", col = "#64748B", cex = 0.8)
+arrows(7.5, 4.5, 8.2, 4.5, lwd = 2, col = "#64748B", length = 0.1)
+text(7.85, 4.8, "取出", col = "#64748B", cex = 0.8)
+
+rect(0.5, 0.4, 11.5, 3.0, col = "#F8FAFC", border = "#E2E8F0", lwd = 1)
+text(6, 2.5, "在 Transformer 中：", font = 2, col = "#1E293B", cex = 1)
+text(6, 1.9, "Q = 当前词「想找」什么信息",          col = "#2563EB", cex = 0.9)
+text(6, 1.4, "K = 每个词「能提供」什么信息（用于匹配）", col = "#D97706", cex = 0.9)
+text(6, 0.9, "V = 每个词「实际携带」的信息（用于输出）", col = "#16A34A", cex = 0.9)
+```
+
+## 数学推导：四步计算
+
+### Step 1：线性投影得到 Q, K, V
+
+$$
+Q = XW_Q, \quad K = XW_K, \quad V = XW_V
+$$
+
+其中 $W_Q, W_K, W_V \in \mathbb{R}^{d_{model} \times d_k}$ 是可学习的权重矩阵，$d_k$ 为投影后的维度。
+
+```{r}
+#| label: qkv-projection
+#| code-fold: false
+
+d_k <- d_model   # 单头演示时令 d_k = d_model = 8
+
+set.seed(123)
+W_Q <- matrix(rnorm(d_model * d_k, sd = 0.3), d_model, d_k)
+W_K <- matrix(rnorm(d_model * d_k, sd = 0.3), d_model, d_k)
+W_V <- matrix(rnorm(d_model * d_k, sd = 0.3), d_model, d_k)
+
+Q <- X_pos %*% W_Q   # (seq_len × d_k)
+K <- X_pos %*% W_K
+V <- X_pos %*% W_V
+
+cat("输入 X 形状 ：", dim(X_pos), "\n")
+cat("Q / K / V 形状：", dim(Q), "（seq_len × d_k）\n")
+```
+
+### Step 2：计算注意力分数并缩放
+
+$$
+\text{scores} = \frac{QK^\top}{\sqrt{d_k}}
+$$
+
+**为什么除以 $\sqrt{d_k}$？**
+
+$QK^\top$ 的每个元素是 $d_k$ 个随机变量之积的求和。若 $Q,K$ 各元素方差为 1，则 $QK^\top$ 元素的方差约为 $d_k$，标准差约为 $\sqrt{d_k}$。不缩放时，$d_k$ 较大会导致 softmax 输入值极端，梯度趋近于 0（**梯度消失**）。
+
+```{r}
+#| label: attention-scores
+#| code-fold: false
+
+scores        <- Q %*% t(K)               # (seq_len × seq_len)
+scores_scaled <- scores / sqrt(d_k)       # 缩放
+
+cat("缩放前分数范围：[", round(min(scores), 2), ",", round(max(scores), 2), "]\n")
+cat("缩放后分数范围：[", round(min(scores_scaled), 2), ",", round(max(scores_scaled), 2), "]\n")
+cat("（缩放后数值更稳定，有利于 softmax 计算）\n")
+```
+
+### Step 3：Softmax 得到注意力权重
+
+$$
+\text{Attention Weights} = \operatorname{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)
+$$
+
+对矩阵**逐行**做 softmax，每行求和为 1——形成概率分布。
+
+```{r}
+#| label: softmax-attention
+#| code-fold: false
+
+attention_weights <- softmax_rows(scores_scaled)
+
+cat("注意力权重矩阵（每行和为 1）：\n")
+print(round(attention_weights, 3))
+cat("\n验证每行之和：", round(rowSums(attention_weights), 8), "\n")
+```
+
+```{r}
+#| label: fig-attention-heatmap
+#| fig-cap: "注意力权重热力图 | Aufmerksamkeits-Heatmap"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(5, 5, 3, 2))
+plot_attention_heatmap(attention_weights, rownames(X),
+                       title = "注意力权重 | Aufmerksamkeitsgewichte")
+```
+
+### Step 4：加权求和得到输出
+
+$$
+\text{output} = \text{Attention Weights} \cdot V
+$$
+
+每个词的输出 = 所有词的 Value 向量按注意力权重加权平均。
+
+```{r}
+#| label: attention-output
+#| code-fold: false
+
+attn_output <- attention_weights %*% V
+
+cat("注意力输出形状：", dim(attn_output), "\n")
+cat("（与输入 X 形状相同，但每个词已融合其他词的信息）\n\n")
+cat("'猫' 词向量对比：\n")
+cat("  原始输入：   ", round(X_pos[1, ], 2), "\n")
+cat("  注意力输出：", round(attn_output[1, ], 2), "\n")
+```
+
+## 封装：完整 Self-Attention 函数
+
+```{r}
+#| label: self-attention-function
+#| code-fold: false
+
+self_attention <- function(X, W_Q, W_K, W_V) {
+  Q <- X %*% W_Q
+  K <- X %*% W_K
+  V <- X %*% W_V
+  d_k <- ncol(Q)
+
+  attn_weights <- softmax_rows((Q %*% t(K)) / sqrt(d_k))
+  output       <- attn_weights %*% V
+
+  list(output = output, attention_weights = attn_weights, Q = Q, K = K, V = V)
+}
+
+res <- self_attention(X_pos, W_Q, W_K, W_V)
+cat("Self-Attention 完成！输出形状：", dim(res$output), "\n")
+```
+
+::: {.callout-tip icon="false"}
+## 📐 维度追踪 | Dimensionsverfolgung
+
+| 步骤 | 操作 | 维度 |
+|:-----|:-----|:-----|
+| 输入 | $X$ | $(L,\; d_{model})$ |
+| 投影 | $Q = XW_Q$ | $(L,\; d_k)$ |
+| 投影 | $K = XW_K,\; V = XW_V$ | $(L,\; d_k)$ |
+| 分数 | $QK^\top / \sqrt{d_k}$ | $(L,\; L)$ |
+| 权重 | $\operatorname{softmax}(\cdot)$ | $(L,\; L)$ — 每行和为 1 |
+| 输出 | $\text{weights} \cdot V$ | $(L,\; d_k)$ |
+
+*$L$ = `seq_len`（序列长度），最终输出形状与输入一致（当 $d_k = d_{model}$）。*
+:::
+
+{{< pagebreak >}}
+
+# 第四步：多头注意力 {#sec-multihead}
+
+> **Schritt 4: Multi-Head Attention**
+
+单个注意力头只能学习**一种**关注模式。语言中同时存在多种关系：语法、语义、指代……
+
+**解决方案**：并行运行 $h$ 个头，每个头各学一种模式，最后拼接融合。
+
+$$
+\text{MultiHead}(X) = \operatorname{Concat}(\text{head}_1,\ldots,\text{head}_h)\, W^O
+$$
+$$
+\text{head}_i = \operatorname{Attention}(XW_Q^i,\; XW_K^i,\; XW_V^i)
+$$
+
+每个头的 $d_k = d_{model} / h$，保证拼接后维度仍为 $d_{model}$。
+
+```{r}
+#| label: fig-multihead-intuition
+#| fig-cap: "多头注意力：每个头关注不同的关系 | Unterschiedliche Aufmerksamkeitsmuster"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2, 1))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 7), axes = FALSE, xlab = "", ylab = "")
+title("多头注意力的直觉 | Intuition der Multi-Head Attention",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 输入框
+rect(0.3, 2.8, 1.8, 4.2, col = "#F3F4F6", border = "#6B7280", lwd = 2)
+text(1.05, 3.75, "X", font = 2, cex = 1.3, col = "#1E293B")
+text(1.05, 3.2,  "输入", cex = 0.8, col = "#64748B")
+
+head_info <- list(
+  list(y = 5.8, col = "#DC2626", lbl = "头1: 语法关系",  de = "Syntaktisch"),
+  list(y = 4.6, col = "#16A34A", lbl = "头2: 语义相似",  de = "Semantisch"),
+  list(y = 3.4, col = "#2563EB", lbl = "头3: 指代关系",  de = "Referenz"),
+  list(y = 2.2, col = "#9333EA", lbl = "头4: 位置距离",  de = "Positionell")
+)
+
+for (hi in head_info) {
+  arrows(1.8, 3.5, 3.5, hi$y, length = 0.08, col = "#94A3B8", lwd = 1.5)
+  rect(3.5, hi$y - 0.45, 6.5, hi$y + 0.45,
+       col = adjustcolor(hi$col, 0.15), border = hi$col, lwd = 2)
+  text(5, hi$y + 0.12, hi$lbl, font = 2, col = hi$col, cex = 0.85)
+  text(5, hi$y - 0.2, hi$de, col = adjustcolor(hi$col, 0.7), cex = 0.7, font = 3)
+  arrows(6.5, hi$y, 8.0, 3.5, length = 0.08, col = "#94A3B8", lwd = 1.5)
+}
+
+# Concat 框
+rect(8.0, 2.8, 9.5, 4.2, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(8.75, 3.75, "Concat", font = 2, cex = 0.85, col = "#D97706")
+text(8.75, 3.2,  "拼接",   cex = 0.8,  col = "#64748B")
+
+# 输出投影
+arrows(9.5, 3.5, 10.2, 3.5, length = 0.1, col = "#94A3B8", lwd = 2)
+rect(10.2, 2.8, 11.7, 4.2, col = "#D1FAE5", border = "#16A34A", lwd = 2)
+text(10.95, 3.75, expression(W^O), font = 2, cex = 1, col = "#16A34A")
+text(10.95, 3.2, "输出投影", cex = 0.75, col = "#64748B")
+```
+
+## 多头注意力实现
+
+```{r}
+#| label: multihead-attention
+#| code-fold: false
+
+multi_head_attention <- function(X, W_Q_list, W_K_list, W_V_list, W_O) {
+  n_h <- length(W_Q_list)
+  heads <- lapply(seq_len(n_h), function(h)
+    self_attention(X, W_Q_list[[h]], W_K_list[[h]], W_V_list[[h]])$output
+  )
+  concat_out  <- do.call(cbind, heads)  # (seq_len × n_h*d_k_per_head)
+  final_out   <- concat_out %*% W_O    # (seq_len × d_model)
+  
+  attn_weights <- lapply(seq_len(n_h), function(h)
+    self_attention(X, W_Q_list[[h]], W_K_list[[h]], W_V_list[[h]])$attention_weights
+  )
+  list(output = final_out, attention_weights = attn_weights)
+}
+
+# 参数设置
+n_heads      <- N_HEADS               # 2 个头
+d_k_per_head <- d_model / n_heads     # 每头维度 = 4
+
+cat("参数设置：\n")
+cat("  d_model      =", d_model, "\n")
+cat("  n_heads      =", n_heads, "\n")
+cat("  d_k_per_head =", d_k_per_head, "（= d_model / n_heads）\n\n")
+
+set.seed(456)
+W_Q_list <- W_K_list <- W_V_list <- vector("list", n_heads)
+for (h in seq_len(n_heads)) {
+  W_Q_list[[h]] <- matrix(rnorm(d_model * d_k_per_head, sd = 0.3), d_model, d_k_per_head)
+  W_K_list[[h]] <- matrix(rnorm(d_model * d_k_per_head, sd = 0.3), d_model, d_k_per_head)
+  W_V_list[[h]] <- matrix(rnorm(d_model * d_k_per_head, sd = 0.3), d_model, d_k_per_head)
+}
+W_O <- matrix(rnorm(d_model * d_model, sd = 0.3), d_model, d_model)  # (n_h*d_k × d_model)
+
+mha_res <- multi_head_attention(X_pos, W_Q_list, W_K_list, W_V_list, W_O)
+
+cat("多头注意力完成！\n")
+cat("  输入形状：", dim(X_pos), "\n")
+cat("  输出形状：", dim(mha_res$output), "（与输入维度一致 ✓）\n")
+```
+
+```{r}
+#| label: fig-multihead-comparison
+#| fig-cap: "两个注意力头学到的不同关注模式 | Unterschiedliche Muster der zwei Köpfe"
+#| fig-height: 4
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(5, 5, 3, 2))
+for (h in seq_len(n_heads)) {
+  plot_attention_heatmap(
+    mha_res$attention_weights[[h]],
+    rownames(X),
+    title = paste0("头 ", h, " | Head ", h)
+  )
+}
+par(mfrow = c(1, 1))
+```
+
+{{< pagebreak >}}
+
+# 第五步：完整的 Transformer 层 {#sec-full-layer}
+
+> **Schritt 5: Eine vollständige Transformer-Schicht**
+
+一个完整的 Transformer **编码器层**由两个子层组成，每个子层都套用：
+
+$$
+\text{子层输出} = \operatorname{LayerNorm}(X + \operatorname{Sublayer}(X))
+$$
+
+这被称为**残差连接**（Residual Connection）：将输入绕过子层后与输出相加，有效缓解深层网络中的梯度消失。
+
+```{r}
+#| label: fig-transformer-layer
+#| fig-cap: "Transformer 编码器层结构 | Transformer-Encoder-Schicht"
+#| fig-height: 7
+
+# 修复：使用具名参数，消除 ... 歧义
+draw_rect <- function(xl, xr, yb, yt, bg, border_col, lbl,
+                      sub_lbl = NULL, txt_col = NULL) {
+  if (is.null(txt_col)) txt_col <- border_col
+  rect(xl, yb, xr, yt, col = bg, border = border_col, lwd = 2)
+  y_lbl <- if (is.null(sub_lbl)) (yb + yt) / 2 else (yb + yt) / 2 + 0.18
+  text((xl + xr) / 2, y_lbl, lbl, col = txt_col, cex = 0.9, font = 2)
+  if (!is.null(sub_lbl))
+    text((xl + xr) / 2, (yb + yt) / 2 - 0.18,
+         sub_lbl, col = "#64748B", cex = 0.75)
+}
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 11), axes = FALSE, xlab = "", ylab = "")
+title("Transformer 编码器层 | Transformer-Encoder-Schicht",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# ── 输入 ──────────────────────────────────────────────
+draw_rect(3.5, 6.5, 0.3, 1.1, "#F3F4F6", "#6B7280", "输入 X")
+arrows(5, 1.1, 5, 1.8, length = 0.1, lwd = 2, col = "#64748B")
+
+# ── 多头注意力 ────────────────────────────────────────
+draw_rect(3.0, 7.0, 1.8, 3.0,
+          "#DBEAFE", "#2563EB", "Multi-Head Attention",
+          sub_lbl = "多头自注意力")
+
+# 残差线 1（绕过注意力子层）
+lines(c(2.5, 2.5), c(0.7, 3.5), col = "#DC2626", lwd = 2, lty = 2)
+arrows(2.5, 3.5, 3.5, 3.5, length = 0.1, col = "#DC2626", lwd = 2)
+text(1.7, 1.9, "残差\nAdd", col = "#DC2626", cex = 0.75, font = 3)
+
+# ── Add & Norm 1 ──────────────────────────────────────
+draw_rect(3.5, 6.5, 3.2, 4.0, "#FEF3C7", "#D97706", "Add & LayerNorm")
+arrows(5, 4.0, 5, 4.7, length = 0.1, lwd = 2, col = "#64748B")
+
+# ── 前馈网络 ──────────────────────────────────────────
+draw_rect(3.0, 7.0, 4.7, 5.9,
+          "#D1FAE5", "#16A34A", "Feed-Forward Network",
+          sub_lbl = "FFN: ReLU(xW\u2081+b\u2081)W\u2082+b\u2082")
+
+# 残差线 2（绕过 FFN 子层）
+lines(c(7.5, 7.5), c(3.6, 6.4), col = "#DC2626", lwd = 2, lty = 2)
+arrows(7.5, 6.4, 6.5, 6.4, length = 0.1, col = "#DC2626", lwd = 2)
+text(8.3, 5.0, "残差\nAdd", col = "#DC2626", cex = 0.75, font = 3)
+
+# ── Add & Norm 2 ──────────────────────────────────────
+draw_rect(3.5, 6.5, 6.1, 6.9, "#FEF3C7", "#D97706", "Add & LayerNorm")
+arrows(5, 6.9, 5, 7.6, length = 0.1, lwd = 2, col = "#64748B")
+
+# ── 输出 ──────────────────────────────────────────────
+draw_rect(3.5, 6.5, 7.6, 8.4, "#F3F4F6", "#6B7280", "输出")
+
+# ── 公式说明 ──────────────────────────────────────────
+text(5, 9.5,
+     expression(FFN(x) == max(0, xW[1] + b[1]) %*% W[2] + b[2]),
+     cex = 1.0, col = "#475569")
+text(5, 10.4,
+     "每个子层：输出 = LayerNorm(输入 + Sublayer(输入))",
+     cex = 0.85, col = "#64748B")
+```
+
+## 层归一化
+
+**注意**：标准 LayerNorm 使用**总体方差**（除以 $n$），而 R 内置 `sd()` 使用**样本方差**（除以 $n-1$）。这里我们手动实现总体版本。
+
+```{r}
+#| label: layer-norm-demo
+#| code-fold: false
+
+# 验证 layer_norm 实现
+X_normed <- layer_norm(X_pos)
+
+# 计算总体标准差（验证归一化效果）
+pop_sd <- function(x) sqrt(mean((x - mean(x))^2))
+
+cat("层归一化后：\n")
+cat("  每个 token 的均值：  ", round(rowMeans(X_normed), 8), "\n")
+cat("  每个 token 的总体标准差：", round(apply(X_normed, 1, pop_sd), 4), "\n")
+cat("  ✓ 均值≈0，标准差≈1\n")
+```
+
+## 前馈网络
+
+$$
+\text{FFN}(x) = \operatorname{ReLU}(xW_1 + b_1)W_2 + b_2
+$$
+
+```{r}
+#| label: ffn-demo
+#| code-fold: false
+
+# 前馈网络（干净版本）
+feed_forward <- function(X, W1, b1, W2, b2) {
+  # 第一层：线性变换 + 偏置
+  pre    <- sweep(X %*% W1, 2, b1, "+")   # (seq_len × d_ff)
+  # ReLU：用逐元素乘法代替 pmax，保持矩阵维度不变
+  hidden <- pre * (pre > 0)               # (seq_len × d_ff)
+  # 第二层：线性变换 + 偏置
+  sweep(hidden %*% W2, 2, b2, "+")        # (seq_len × d_model)
+}
+
+d_ff <- 4 * d_model   # FFN 隐藏层维度（通常是 d_model 的 4 倍）
+
+set.seed(789)
+W1_ff <- xavier_init(d_model, d_ff)
+b1_ff <- numeric(d_ff)
+W2_ff <- xavier_init(d_ff, d_model)
+b2_ff <- numeric(d_model)
+
+ffn_out <- feed_forward(X_normed, W1_ff, b1_ff, W2_ff, b2_ff)
+cat("FFN 输入：", dim(X_normed), "→ 输出：", dim(ffn_out),
+    "（维度不变，但特征被非线性变换）\n")
+```
+
+## 完整 Transformer 编码器层
+
+```{r}
+#| label: transformer-encoder-layer
+#| code-fold: false
+
+transformer_encoder_layer <- function(X, W_Q_list, W_K_list, W_V_list, W_O,
+                                       W1_ff, b1_ff, W2_ff, b2_ff) {
+  # 子层 1：多头注意力 + 残差 + LayerNorm
+  attn_res <- multi_head_attention(X, W_Q_list, W_K_list, W_V_list, W_O)
+  X1 <- layer_norm(X + attn_res$output)
+
+  # 子层 2：前馈网络 + 残差 + LayerNorm
+  ffn_res <- feed_forward(X1, W1_ff, b1_ff, W2_ff, b2_ff)
+  X2 <- layer_norm(X1 + ffn_res)
+
+  list(output = X2, attention_weights = attn_res$attention_weights)
+}
+
+layer_res <- transformer_encoder_layer(
+  X_pos, W_Q_list, W_K_list, W_V_list, W_O,
+  W1_ff, b1_ff, W2_ff, b2_ff
+)
+
+cat("Transformer 编码器层完成！\n")
+cat("  输入形状：", dim(X_pos), "\n")
+cat("  输出形状：", dim(layer_res$output), "（维度不变 ✓）\n")
+```
+
+{{< pagebreak >}}
+
+# 第六步：训练一个微型语言模型 {#sec-training}
+
+> **Schritt 6: Ein kleines Sprachmodell trainieren**
+
+现在将所有组件组合起来，训练一个能**预测下一个词**的模型。
+
+## 任务与超参数
+
+**任务**：给定句子的前 $t$ 个词，预测第 $t+1$ 个词（语言模型的标准训练目标）。
+
+```{r}
+#| label: training-setup
+#| code-fold: false
+
+set.seed(2024)
+
+# 训练专用词汇表（更小，便于观察学习效果）
+vocab_train    <- c("<PAD>", "猫", "狗", "吃", "鱼", "肉", "很", "开心")
+vocab_size_t   <- length(vocab_train)
+w2i <- setNames(seq_along(vocab_train) - 1L, vocab_train)  # 词 → 0-based 索引
+
+# 训练句子（4 句，覆盖两种动物、两种动作）
+train_sents <- list(
+  c("猫", "吃", "鱼"),
+  c("狗", "吃", "肉"),
+  c("猫", "很", "开心"),
+  c("狗", "很", "开心")
+)
+
+cat("训练数据：\n")
+for (s in train_sents) cat(" ", paste(s, collapse = " → "), "\n")
+
+# 超参数（比演示节大一倍）
+dm   <- 16L   # d_model
+nh   <- 2L    # n_heads
+dk   <- dm / nh       # d_k per head = 8
+dff  <- 4L * dm       # d_ff = 64
+mlen <- 10L           # max_len
+
+cat("\n模型超参数：\n")
+cat("  vocab_size =", vocab_size_t, "| d_model =", dm,
+    "| n_heads =", nh, "| d_k =", dk, "| d_ff =", dff, "\n")
+```
+
+## 模型初始化
+
+```{r}
+#| label: model-init
+#| code-fold: false
+
+init_model <- function(vocab_size, d_model, n_heads, d_ff, max_len) {
+  d_k <- d_model / n_heads
+
+  list(
+    E     = xavier_init(vocab_size, d_model),           # 词嵌入
+    PE    = create_position_encoding(max_len, d_model),  # 位置编码（固定）
+
+    # 多头注意力（每头独立投影矩阵）
+    W_Q   = lapply(seq_len(n_heads), \(.) xavier_init(d_model, d_k)),
+    W_K   = lapply(seq_len(n_heads), \(.) xavier_init(d_model, d_k)),
+    W_V   = lapply(seq_len(n_heads), \(.) xavier_init(d_model, d_k)),
+    W_O   = xavier_init(n_heads * d_k, d_model),
+
+    # 前馈网络
+    W1_ff = xavier_init(d_model, d_ff),
+    b1_ff = numeric(d_ff),
+    W2_ff = xavier_init(d_ff, d_model),
+    b2_ff = numeric(d_model),
+
+    # 输出层（隐层 → 词表概率）
+    W_out = xavier_init(d_model, vocab_size),
+    b_out = numeric(vocab_size)
+  )
+}
+
+model <- init_model(vocab_size_t, dm, nh, dff, mlen)
+
+# 参数量统计
+count_params <- function(m) {
+  sum(sapply(c("E", "W_O", "W1_ff", "b1_ff", "W2_ff", "b2_ff", "W_out", "b_out"),
+             \(nm) length(m[[nm]]))) +
+    sum(sapply(seq_along(m$W_Q), \(h) length(m$W_Q[[h]]) + length(m$W_K[[h]]) + length(m$W_V[[h]])))
+}
+
+cat("模型初始化完成。总参数量：", count_params(model), "\n")
+```
+
+## 因果掩码与前向传播
+
+> **Kausale Maskierung und Vorwärtsdurchlauf**
+
+训练语言模型时，位置 $t$ 的词**不能**"偷看"未来（位置 $t+1, t+2, \ldots$）。
+通过在注意力分数中加入**因果掩码**（将未来位置设为 $-\infty$）实现。
+
+$$
+\text{CausalMask}_{ij} = \begin{cases} 0 & j \le i \\ -\infty & j > i \end{cases}
+$$
+
+```{r}
+#| label: forward-pass
+#| code-fold: false
+
+# 因果掩码：下三角（含对角线）为 0，上三角为 -Inf
+causal_mask <- function(n) {
+  m <- matrix(-Inf, n, n)
+  m[lower.tri(m, diag = TRUE)] <- 0
+  m
+}
+
+# 带因果掩码的单头注意力
+masked_self_attn <- function(X, W_Q, W_K, W_V) {
+  Q <- X %*% W_Q;  K <- X %*% W_K;  V <- X %*% W_V
+  d_k <- ncol(Q);  n  <- nrow(X)
+  scores <- (Q %*% t(K)) / sqrt(d_k) + causal_mask(n)
+  list(output = softmax_rows(scores) %*% V,
+       weights = softmax_rows(scores))
+}
+
+# 前向传播
+forward <- function(words, model) {
+  idx <- w2i[words] + 1L
+  X   <- model$E[idx, , drop = FALSE]
+  L   <- nrow(X);  d <- ncol(X)
+
+  # 词嵌入 + 位置编码
+  X <- X + model$PE[seq_len(L), seq_len(d)]
+
+  # 多头注意力（因果掩码）
+  heads <- lapply(seq_along(model$W_Q), \(h)
+    masked_self_attn(X, model$W_Q[[h]], model$W_K[[h]], model$W_V[[h]])$output
+  )
+  attn_out <- do.call(cbind, heads) %*% model$W_O
+  X1 <- layer_norm(X + attn_out)
+
+  # 前馈网络
+  ffn_out <- feed_forward(X1, model$W1_ff, model$b1_ff, model$W2_ff, model$b2_ff)
+  X2 <- layer_norm(X1 + ffn_out)
+
+  # 输出层 → 概率
+  logits <- sweep(X2 %*% model$W_out, 2, model$b_out, "+")
+  probs  <- t(apply(logits, 1, function(r) { r <- r - max(r); e <- exp(r); e / sum(e) }))
+
+  list(probs = probs, X2 = X2)
+}
+
+# 快速测试
+test_res <- forward(c("猫", "吃"), model)
+cat("前向传播测试：输出概率矩阵形状 =", dim(test_res$probs), "\n")
+cat("（行 = 每个位置，列 = 词表概率；每行和为 1）\n")
+cat("验证第 1 行概率和：", round(sum(test_res$probs[1, ]), 8), "\n")
+```
+
+## 损失函数与训练循环
+
+使用**交叉熵损失**：
+
+$$
+\mathcal{L} = -\frac{1}{N}\sum_{t=1}^{N} \log P(\text{目标词}_t \mid \text{前缀}_t)
+$$
+
+训练使用**数值梯度**（有限差分逼近）演示梯度下降原理。
+实际中，框架（PyTorch/TensorFlow）通过**反向传播**自动计算精确梯度，效率高数千倍。
+
+```{r}
+#| label: training-loop
+#| code-fold: false
+
+# 计算损失
+compute_loss <- function(model, sents) {
+  total <- 0;  n <- 0L
+  for (s in sents) {
+    res <- forward(s, model)
+    for (i in seq_len(length(s) - 1L)) {
+      t_idx <- w2i[s[i + 1L]] + 1L
+      total <- total - log(max(res$probs[i, t_idx], 1e-10))
+      n <- n + 1L
+    }
+  }
+  total / n
+}
+
+# 数值梯度训练
+# 每轮只更新 E（词嵌入）、W_out（输出权重）、b_out（输出偏置）
+# 这三组参数直接决定「什么词嵌入被映射为多高的预测概率」
+train <- function(model, sents, n_epochs = 30, lr = 0.4, eps = 1e-5) {
+  loss_hist <- numeric(n_epochs)
+
+  for (ep in seq_len(n_epochs)) {
+    loss_hist[ep] <- compute_loss(model, sents)
+    if (ep == 1 || ep %% 5 == 0)
+      cat(sprintf("Epoch %3d | Loss: %.4f\n", ep, loss_hist[ep]))
+
+    # 更新辅助函数（数值梯度 + 梯度下降）
+    update_param <- function(param) {
+      for (k in seq_along(param)) {
+        orig <- param[k]
+        param[k] <- orig + eps;  lp <- compute_loss(model, sents)
+        param[k] <- orig - eps;  lm <- compute_loss(model, sents)
+        param[k] <- orig - lr * (lp - lm) / (2 * eps)
+      }
+      param
+    }
+
+    model$E     <- update_param(model$E)
+    model$W_out <- update_param(model$W_out)
+    model$b_out <- update_param(model$b_out)
+  }
+
+  list(model = model, loss = loss_hist)
+}
+
+cat("========== 开始训练 ==========\n")
+cat("学习率:", 0.4, "  迭代次数:", 30,
+    "  更新参数: E + W_out + b_out\n\n")
+train_res <- train(model, train_sents, n_epochs = 30, lr = 0.4)
+model     <- train_res$model
+cat("\n训练完成！\n")
+```
+
+```{r}
+#| label: fig-training-loss
+#| fig-cap: "训练损失曲线：模型逐渐学会预测下一个词 | Trainingsverlust"
+#| fig-height: 4.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 2))
+plot(train_res$loss, type = "o", col = "#2563EB", lwd = 2.5, pch = 16, cex = 0.8,
+     xlab = "迭代次数 | Epoch", ylab = "交叉熵损失 | Cross-Entropy Loss",
+     main = "训练过程 | Trainingsverlauf",
+     ylim = c(0, max(train_res$loss) * 1.05),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 标注初始和最终损失
+text(1,  train_res$loss[1],
+     sprintf("初始 %.3f", train_res$loss[1]),
+     pos = 4, col = "#DC2626", cex = 0.9, font = 2)
+text(length(train_res$loss), tail(train_res$loss, 1),
+     sprintf("最终 %.3f", tail(train_res$loss, 1)),
+     pos = 2, col = "#16A34A", cex = 0.9, font = 2)
+
+# 参考：随机猜测的损失 = log(vocab_size)
+abline(h = log(vocab_size_t), col = "#94A3B8", lty = 2, lwd = 1.5)
+text(length(train_res$loss) * 0.6, log(vocab_size_t) + 0.05,
+     sprintf("随机猜测基线 = log(%d) ≈ %.2f", vocab_size_t, log(vocab_size_t)),
+     col = "#94A3B8", cex = 0.8)
+```
+
+## 测试模型
+
+```{r}
+#| label: test-model
+#| code-fold: false
+
+predict_next <- function(input_words, model, top_k = 3) {
+  res        <- forward(input_words, model)
+  last_probs <- res$probs[nrow(res$probs), ]
+  top_idx    <- order(last_probs, decreasing = TRUE)[seq_len(top_k)]
+
+  cat("输入：「", paste(input_words, collapse = " "), "」→ 预测下一个词：\n")
+  for (i in top_idx)
+    cat(sprintf("    %-5s %.1f%%\n", vocab_train[i], last_probs[i] * 100))
+  cat("\n")
+}
+
+cat("========== 测试结果 ==========\n\n")
+predict_next(c("猫", "吃"), model)
+predict_next(c("狗", "吃"), model)
+predict_next(c("猫", "很"), model)
+predict_next(c("狗", "很"), model)
+```
+
+```{r}
+#| label: fig-learned-attention
+#| fig-cap: "训练后的注意力模式（第 1 头） | Gelernte Aufmerksamkeitsmuster nach dem Training"
+#| fig-height: 4
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(5, 5, 3, 2))
+
+for (ex in list(c("猫", "吃", "鱼"), c("狗", "很", "开心"))) {
+  idx <- w2i[ex] + 1L
+  X_t <- model$E[idx, , drop = FALSE]
+  L   <- nrow(X_t)
+  X_t <- X_t + model$PE[seq_len(L), ]
+  attn_w <- masked_self_attn(X_t, model$W_Q[[1]], model$W_K[[1]], model$W_V[[1]])$weights
+  plot_attention_heatmap(attn_w, ex, title = paste(ex, collapse = " "))
+}
+
+par(mfrow = c(1, 1))
+```
+
+{{< pagebreak >}}
+
+# 总结：Transformer 的全貌 {#sec-summary}
+
+> **Zusammenfassung: Das Gesamtbild des Transformers**
+
+```{r}
+#| label: fig-transformer-complete
+#| fig-cap: "Transformer 完整架构 | Vollständige Transformer-Architektur"
+#| fig-height: 9
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2, 1))
+plot(NULL, xlim = c(0, 14), ylim = c(0, 12), axes = FALSE, xlab = "", ylab = "")
+title("Transformer 完整架构 | Vollständige Transformer-Architektur",
+      cex.main = 1.4, col.main = "#1E293B")
+
+# ===== 左：处理流程 =====
+mkr <- function(xl, xr, yb, yt, bg, border, lbl, sub = NULL) {
+  rect(xl, yb, xr, yt, col = bg, border = border, lwd = 2)
+  text((xl+xr)/2, if (is.null(sub)) (yb+yt)/2 else (yb+yt)/2 + 0.15,
+       lbl, font = 2, col = border, cex = 0.85)
+  if (!is.null(sub))
+    text((xl+xr)/2, (yb+yt)/2 - 0.2, sub, col = "#64748B", cex = 0.72)
+}
+
+mkr(3.5, 6.5, 0.3, 1.1, "#F3F4F6", "#6B7280", "输入序列")
+arrows(5, 1.1, 5, 1.8, length=.1, lwd=2, col="#64748B")
+mkr(3.5, 6.5, 1.8, 2.6, "#E0E7FF", "#6366F1", "词嵌入 E[word]")
+arrows(5, 2.6, 5, 3.1, length=.1, lwd=2, col="#64748B")
+mkr(3.5, 6.5, 3.1, 3.9, "#FCE7F3", "#DB2777", "位置编码 PE", "sin/cos 叠加")
+text(5, 4.35, "+", font=2, cex=1.5, col="#1E293B")
+arrows(5, 4.6, 5, 5.1, length=.1, lwd=2, col="#64748B")
+
+rect(2.5, 7.5, 5.0, 9.5, col="#F8FAFC", border="#94A3B8", lwd=2, lty=2)
+text(5, 9.85, "× N 层", font=2, col="#64748B", cex=0.9)
+mkr(3.0, 7.0, 7.8, 9.3, "#DBEAFE", "#2563EB", "Multi-Head Attention", "Add & Norm")
+arrows(5, 7.8, 5, 7.1, length=.1, lwd=2, col="#64748B")
+mkr(3.0, 7.0, 5.4, 7.1, "#D1FAE5", "#16A34A", "Feed-Forward Network", "Add & Norm")
+arrows(5, 9.3, 5, 9.9, length=.1, lwd=2, col="#64748B")
+mkr(3.5, 6.5, 9.9, 10.7, "#FEE2E2", "#DC2626", "输出层 + Softmax")
+
+# ===== 右：核心公式 =====
+rect(8.0, 13.8, 0.3, 11.2, col="#FFFBEB", border="#D97706", lwd=2)
+text(10.9, 10.8, "核心公式 | Kernformeln", font=2, col="#D97706", cex=1.05)
+
+fml <- function(y, bold_lbl, expr_txt) {
+  text(8.3, y + 0.35, bold_lbl, font=2, col="#1E293B", cex=0.85, pos=4)
+  text(8.3, y - 0.05, expr_txt,         col="#475569", cex=0.78, pos=4)
+}
+fml(9.8,  "词嵌入：",     "X = E[indices]")
+fml(8.7,  "位置编码：",   "PE(p,2i) = sin(p / 10000^(2i/d))")
+fml(7.5,  "注意力：",     "Attn(Q,K,V) = softmax(QKᵀ/√dₖ)·V")
+fml(6.3,  "多头：",       "MHA = Concat(head₁,…,headₕ)·Wᴼ")
+fml(5.1,  "前馈：",       "FFN(x) = ReLU(xW₁+b₁)W₂+b₂")
+fml(3.9,  "层归一化：",   "LN(x) = (x−μ) / √(σ²+ε)")
+fml(2.7,  "残差连接：",   "xₒᵤₜ = LN(x + Sublayer(x))")
+fml(1.5,  "损失函数：",   "ℒ = −(1/N) Σ log P(targetₜ | prefixₜ)")
+```
+
+## 你学到的数学在这里
+
+::: {.callout-important icon="false"}
+## 📐 数学知识的应用 | Mathematische Konzepte im Transformer
+
+| 数学领域 | 在 Transformer 中的体现 |
+|:---------|:------------------------|
+| **线性代数** | 矩阵乘法实现所有线性变换：$Q = XW_Q$，$K = XW_K$，注意力输出 $= A \cdot V$ |
+| **数学分析** | 三角函数构造位置编码；ReLU 引入非线性；链式法则支撑反向传播 |
+| **概率论** | Softmax 将分数转为概率分布；交叉熵 $-\log P$ 作为损失函数 |
+| **数值分析** | 缩放因子 $\sqrt{d_k}$ 控制梯度尺度；总体方差归一化保证训练稳定 |
+
+:::
+
+## 下一步可以探索
+
+1. **实现完整反向传播**：用链式法则手推每个参数的梯度，替代慢速的数值梯度
+2. **添加解码器**：实现完整的编码器–解码器（Encoder–Decoder）架构，用于翻译任务
+3. **阅读原论文**：*"Attention Is All You Need"*（Vaswani et al., 2017）
+4. **使用 PyTorch / JAX**：用工业级自动微分框架训练更大的模型
+5. **探索变体**：BERT（双向编码器）、GPT（自回归解码器）、T5（文本到文本）
+
+{{< pagebreak >}}
+
+# 附录：核心代码汇总 {.appendix}
+
+> **Anhang: Kerncodes auf einen Blick**
+
+```{r}
+#| label: code-summary
+#| code-fold: false
+#| eval: false
+
+# ============================================================
+# Transformer 核心组件（完整、可运行版本）
+# ============================================================
+
+# 1. 行级 Softmax（数值稳定）
+softmax_rows <- function(X) {
+  X <- X - apply(X, 1, max)
+  e <- exp(X)
+  e / rowSums(e)
+}
+
+# 2. 正弦位置编码
+create_position_encoding <- function(max_len, d_model) {
+  pos <- 0:(max_len - 1)
+  PE  <- matrix(0, max_len, d_model)
+  for (k in seq(1, d_model, by = 2)) {
+    denom   <- 10000^((k - 1) / d_model)
+    PE[, k] <- sin(pos / denom)
+    if (k + 1 <= d_model) PE[, k + 1] <- cos(pos / denom)
+  }
+  PE
+}
+
+# 3. 层归一化（总体方差）
+layer_norm <- function(X, eps = 1e-6) {
+  mu    <- rowMeans(X)
+  X_ctr <- sweep(X, 1, mu, "-")
+  sigma <- sqrt(rowMeans(X_ctr^2) + eps)
+  sweep(X_ctr, 1, sigma, "/")
+}
+
+# 4. 因果掩码（防止模型看到未来词）
+causal_mask <- function(n) {
+  m <- matrix(-Inf, n, n)
+  m[lower.tri(m, diag = TRUE)] <- 0
+  m
+}
+
+# 5. 带因果掩码的自注意力
+masked_self_attn <- function(X, W_Q, W_K, W_V) {
+  Q <- X %*% W_Q;  K <- X %*% W_K;  V <- X %*% W_V
+  n <- nrow(X);    d_k <- ncol(Q)
+  scores <- (Q %*% t(K)) / sqrt(d_k) + causal_mask(n)
+  A <- softmax_rows(scores)
+  list(output = A %*% V, weights = A)
+}
+
+# 6. 多头注意力
+multi_head_attention <- function(X, W_Q_list, W_K_list, W_V_list, W_O) {
+  heads <- lapply(seq_along(W_Q_list), \(h)
+    masked_self_attn(X, W_Q_list[[h]], W_K_list[[h]], W_V_list[[h]])$output
+  )
+  do.call(cbind, heads) %*% W_O
+}
+
+# 7. 前馈网络
+feed_forward <- function(X, W1, b1, W2, b2) {
+  hidden <- pmax(0, sweep(X %*% W1, 2, b1, "+"))
+  sweep(hidden %*% W2, 2, b2, "+")
+}
+
+# 8. 完整 Transformer 编码器层
+transformer_layer <- function(X, W_Q_list, W_K_list, W_V_list, W_O,
+                               W1_ff, b1_ff, W2_ff, b2_ff) {
+  attn_out <- multi_head_attention(X, W_Q_list, W_K_list, W_V_list, W_O)
+  X1 <- layer_norm(X + attn_out)
+  ffn_out <- feed_forward(X1, W1_ff, b1_ff, W2_ff, b2_ff)
+  layer_norm(X1 + ffn_out)
+}
+```
+
+{{< pagebreak >}}
+
+# 附录：中德英术语表 {.appendix}
+
+> **Anhang: Glossar Chinesisch–Deutsch–Englisch**
+
+| 中文 | Deutsch | English |
+|:-----|:--------|:--------|
+| Transformer 模型 | der Transformer | Transformer |
+| 注意力机制 | der Aufmerksamkeitsmechanismus | Attention Mechanism |
+| 自注意力 | die Selbstaufmerksamkeit | Self-Attention |
+| 多头注意力 | die Multi-Head-Aufmerksamkeit | Multi-Head Attention |
+| 查询 / 键 / 值 | Abfrage / Schlüssel / Wert | Query / Key / Value |
+| 词嵌入 | die Worteinbettung | Word Embedding |
+| 位置编码 | die Positionskodierung | Positional Encoding |
+| 层归一化 | die Schichtnormalisierung | Layer Normalization |
+| 残差连接 | die Residualverbindung | Residual Connection |
+| 前馈网络 | das vorwärtsgerichtete Netz | Feed-Forward Network |
+| 因果掩码 | die kausale Maskierung | Causal Masking |
+| 缩放点积注意力 | skaliertes Skalarprodukt | Scaled Dot-Product Attention |
+| 编码器 / 解码器 | Encoder / Decoder | Encoder / Decoder |
+| 交叉熵损失 | der Kreuzentropieverlust | Cross-Entropy Loss |
+| 梯度下降 | der Gradientenabstieg | Gradient Descent |
+| 反向传播 | die Rückwärtspropagation | Backpropagation |
+```
+
+---
+
+**主要修正说明（供参考）：**
+
+**数学正确性：** `layer_norm` 改用 `sweep` + `rowMeans` 实现总体方差（$\sigma^2 = \frac{1}{n}\sum(x_i-\mu)^2$），而非 R 内置 `sd()` 的样本方差（$n-1$ 分母），两者在 $d_{model}=8$ 时相差约 7%；位置编码改为只循环维度（去掉双重循环），逻辑更清晰且与论文公式一一对应。
+
+**代码正确性：** 添加了贪心最长匹配分词器，正确处理"垫子"等多字词；`feed_forward` 统一用 `sweep` 处理偏置，消除广播歧义；`plot_attention_heatmap` 封装为独立函数，通过 `image(t(m))` + 坐标映射正确显示 Query/Key 轴，并处理 $n=1$ 的除零边界情况；训练循环改为直接在函数内修改参数并返回，符合 R 值语义。
+
+**逻辑一致性：** 全文统一用 `d_model`/`n_heads`/`d_k_per_head` 命名，删除所有调试 `cat()`；训练只更新 $E$、$W_{out}$、$b_{out}$ 并附上理由说明；图表轴标签与矩阵方向严格对应。

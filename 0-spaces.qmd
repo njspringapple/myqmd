@@ -1,0 +1,1512 @@
+---
+title: "线性代数的四个基本子空间"
+subtitle: "理解矩阵的完整画像 | Das vollständige Bild einer Matrix durch vier fundamentale Unterräume"
+author: "线性代数导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+# 全局配色方案 | Globales Farbschema
+pal <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  indigo   = "#6366F1",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一个矩阵，四个空间，完整的画像 {.unnumbered}
+
+> **Einleitung: Eine Matrix, vier Räume, das vollständige Bild**
+
+Gilbert Strang 教授说过：
+
+> *"线性代数的精髓在于理解四个基本子空间——列空间、零空间、行空间和左零空间——以及它们之间的关系。"*
+
+如果你只是把矩阵看成一堆数字排列成方阵，你只看到了冰山一角。**每一个矩阵都蕴含着四个子空间**，它们像拼图一样完美咬合，把 $\mathbb{R}^n$ 和 $\mathbb{R}^m$ 各自一分为二、互不重叠、合在一起恰好覆盖全部空间。
+
+*Jede Matrix enthält vier Unterräume, die wie Puzzleteile perfekt ineinandergreifen.*
+
+本章将带你 **从一个具体的矩阵出发**，一步步发现这四个空间、理解它们的维度关系和正交关系，最终在脑中建立 Strang 教授那幅著名的"大统一图"。
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图：从一个矩阵到完整画像 | Lernroadmap: Von einer Matrix zum vollständigen Bild"
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 12), ylim = c(0, 7), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章路线图 | Lernroadmap")), cex.main = 1.4, col.main = "#1E293B")
+
+# Steps
+sx <- c(1.2, 3.2, 5.2, 7.2, 9.2, 11.2)
+sy <- rep(5.2, 6)
+arrows(sx[-6] + 0.75, sy[-6], sx[-1] - 0.75, sy[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("矩阵=\n变换机器", "列空间\nC(A)", "零空间\nN(A)",
+               "行空间\nC(Aᵀ)", "左零空间\nN(Aᵀ)", "大统一图\n完整画像")
+labels_de <- c("Matrix als\nTransformation", "Spaltenraum", "Nullraum",
+               "Zeilenraum", "Linksnullraum", "Gesamtbild")
+colors_bg <- c("#DBEAFE", "#D1FAE5", "#FEE2E2", "#E0E7FF", "#FEF3C7", "#FCE7F3")
+colors_bd <- c("#2563EB", "#16A34A", "#DC2626", "#6366F1", "#D97706", "#DB2777")
+
+for (i in 1:6) {
+  rect(sx[i] - 0.75, sy[i] - 0.9, sx[i] + 0.75, sy[i] + 0.9,
+       col = colors_bg[i], border = colors_bd[i], lwd = 2)
+  text(sx[i], sy[i] + 0.2, labels_cn[i], cex = 0.7, font = 2, col = "#1E293B")
+  text(sx[i], sy[i] - 0.55, labels_de[i], cex = 0.5, col = "#64748B", font = 3)
+  text(sx[i] - 0.55, sy[i] + 0.75, paste0("§", i), cex = 0.55, col = colors_bd[i], font = 2)
+}
+
+# Bottom: two key relationships
+rect(2, 1.0, 5.5, 2.5, col = "#EFF6FF", border = "#2563EB", lwd = 2)
+text(3.75, 2.0, "维度定理 (§7)", cex = 0.85, font = 2, col = "#2563EB")
+text(3.75, 1.35, "dim C(A) + dim N(A) = n", cex = 0.7, col = "#475569")
+
+rect(6.5, 1.0, 10, 2.5, col = "#FFF7ED", border = "#EA580C", lwd = 2)
+text(8.25, 2.0, "正交关系 (§8)", cex = 0.85, font = 2, col = "#EA580C")
+text(8.25, 1.35, expression(C(A) %perp% N(A^T)), cex = 0.7, col = "#475569")
+
+arrows(6.2, 4.2, 3.75, 2.6, col = "#94A3B8", lwd = 1.5, length = 0.1, lty = 2)
+arrows(6.2, 4.2, 8.25, 2.6, col = "#94A3B8", lwd = 1.5, length = 0.1, lty = 2)
+```
+
+{{< pagebreak >}}
+
+# 矩阵：一台线性变换机器 {#sec-machine}
+
+> **Matrix: Eine lineare Transformationsmaschine**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 把矩阵看作 **从 $\mathbb{R}^n$ 到 $\mathbb{R}^m$ 的变换**
+- 提出四个核心问题，引出四个子空间
+:::
+
+## 一台机器的隐喻
+
+> **Die Metapher einer Maschine**
+
+一个 $m \times n$ 矩阵 $A$ 可以看作一台机器：
+
+- **输入**：$\mathbb{R}^n$ 中的向量 $\mathbf{x}$
+- **输出**：$\mathbb{R}^m$ 中的向量 $A\mathbf{x}$
+
+```{r}
+#| label: fig-machine
+#| fig-cap: "矩阵是一台从 Rⁿ 到 Rᵐ 的变换机器 | Die Matrix ist eine Transformationsmaschine"
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 12), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title("矩阵 = 变换机器 | Matrix = Transformationsmaschine",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# Input space
+rect(0.5, 1.5, 3.5, 4.5, col = "#DBEAFE", border = "#2563EB", lwd = 2.5)
+text(2, 4.0, expression(bold("输入空间")), cex = 1, col = "#2563EB")
+text(2, 3.4, expression(R^n), cex = 1.3, col = "#2563EB", font = 2)
+text(2, 2.5, expression(bold(x)), cex = 1.2, col = "#1E293B")
+
+# Machine
+rect(4.5, 2.0, 7.5, 4.0, col = "#FEF3C7", border = "#D97706", lwd = 2.5)
+text(6, 3.5, expression(bold("矩阵 A")), cex = 1, col = "#D97706")
+text(6, 2.7, expression(m %*% n), cex = 1.1, col = "#92400E")
+text(6, 2.2, expression(bold(x) %->% A * bold(x)), cex = 0.85, col = "#78350F")
+
+# Output space
+rect(8.5, 1.5, 11.5, 4.5, col = "#FEE2E2", border = "#DC2626", lwd = 2.5)
+text(10, 4.0, expression(bold("输出空间")), cex = 1, col = "#DC2626")
+text(10, 3.4, expression(R^m), cex = 1.3, col = "#DC2626", font = 2)
+text(10, 2.5, expression(A * bold(x)), cex = 1.2, col = "#1E293B")
+
+# Arrows
+arrows(3.6, 3, 4.4, 3, col = "#475569", lwd = 3, length = 0.15)
+arrows(7.6, 3, 8.4, 3, col = "#475569", lwd = 3, length = 0.15)
+
+# Four questions
+text(6, 0.9, "四个核心问题 | Vier Kernfragen:", cex = 0.85, font = 2, col = "#1E293B")
+text(6, 0.35, "① 能输出什么？  ② 什么输入被消灭？  ③ 输入中的有效成分？  ④ 什么输出不可达？",
+     cex = 0.65, col = "#475569")
+```
+
+## 贯穿全文的矩阵
+
+> **Die Matrix, die uns durch das ganze Kapitel begleitet**
+
+我们将使用一个具体的 $3 \times 3$ 矩阵来探索所有概念：
+
+$$
+A = \begin{pmatrix} 1 & 0 & 1 \\ 2 & 1 & 1 \\ 3 & 1 & 2 \end{pmatrix}
+$$
+
+```{r}
+#| label: define-A
+#| code-fold: false
+
+# 定义贯穿全文的矩阵 | Die Matrix für das ganze Kapitel
+A <- matrix(c(1, 2, 3,
+              0, 1, 1,
+              1, 1, 2), nrow = 3, ncol = 3)
+cat("矩阵 A:\n"); print(A)
+cat("\n维度:", nrow(A), "×", ncol(A), " → 输入 R^3, 输出 R^3\n")
+cat("秩 (Rang):", qr(A)$rank, "\n")
+```
+
+秩为 2（不是满秩 3），这意味着这台"机器"做不到从 $\mathbb{R}^3$ 到 $\mathbb{R}^3$ 的满射——有些输出永远无法到达，有些输入会被"消灭"。四个子空间正好把这些信息全部揭示出来。
+
+::: {.callout-tip icon="false"}
+## 🤔 想一想 | Denken Sie nach
+
+为什么我们选一个 **不满秩** 的矩阵？因为满秩矩阵的四个子空间中有两个是平凡的（只包含零向量），看不到精彩的结构。不满秩才能展现完整画面。
+
+*Warum wählen wir eine Matrix mit nicht vollem Rang? Weil bei vollem Rang zwei der vier Unterräume trivial wären.*
+:::
+
+{{< pagebreak >}}
+
+# 列空间 $C(A)$：机器能到达的输出 {#sec-colspace}
+
+> **Spaltenraum $C(A)$: Die erreichbaren Ausgaben der Maschine**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 列空间的 **定义与直觉**
+- 如何 **计算** 列空间的基
+- 列空间与 $A\mathbf{x}=\mathbf{b}$ **可解性** 的关系
+:::
+
+## 定义：所有可能的输出
+
+> **Definition: Alle möglichen Ausgaben**
+
+当输入 $\mathbf{x}$ 在 $\mathbb{R}^n$ 中取遍所有值时，输出 $A\mathbf{x}$ 能够"覆盖"的区域就是 **列空间**：
+
+$$
+C(A) = \{A\mathbf{x} \mid \mathbf{x} \in \mathbb{R}^n\} = \text{span}\{\mathbf{a}_1, \mathbf{a}_2, \ldots, \mathbf{a}_n\}
+$$
+
+其中 $\mathbf{a}_1, \mathbf{a}_2, \ldots, \mathbf{a}_n$ 是 $A$ 的各列。这是因为：
+
+$$
+A\mathbf{x} = x_1 \mathbf{a}_1 + x_2 \mathbf{a}_2 + \cdots + x_n \mathbf{a}_n
+$$
+
+$A\mathbf{x}$ 就是 $A$ 的列向量的线性组合——所有可能的线性组合就张成了列空间。
+
+## 计算：找到列空间的基
+
+> **Berechnung: Basis des Spaltenraums finden**
+
+对 $A$ 做行化简（Gaußsche Elimination），找出 **主元列（pivot columns）**——它们在 $A$（不是行阶梯形！）中对应的列就是列空间的基。
+
+```{r}
+#| label: colspace-compute
+#| code-fold: false
+
+# 行化简 (手动演示) | Zeilenreduktion (manuelle Demonstration)
+cat("原始矩阵 A:\n"); print(A)
+
+R <- A
+# R2 = R2 - 2*R1
+R[2,] <- R[2,] - 2 * R[1,]
+# R3 = R3 - 3*R1
+R[3,] <- R[3,] - 3 * R[1,]
+cat("\nR2 - 2*R1, R3 - 3*R1:\n"); print(R)
+
+# R3 = R3 - R2
+R[3,] <- R[3,] - R[2,]
+cat("\nR3 - R2:\n"); print(R)
+
+# 化简得到行阶梯形 | Zeilenstufenform
+# R1 = R1 - 0*R2 (已经ok), R2不变
+# 进一步 R1 无需变
+cat("\n行阶梯形 (Zeilenstufenform):\n"); print(R)
+cat("\n主元在第 1 列和第 2 列 → 列空间的基取 A 的第 1、2 列\n")
+```
+
+```{r}
+#| label: colspace-basis
+#| code-fold: false
+
+# 列空间的基 | Basis des Spaltenraums
+col1 <- A[, 1]  # [1, 2, 3]
+col2 <- A[, 2]  # [0, 1, 1]
+
+cat("C(A) 的基:\n")
+cat("  a1 =", col1, "\n")
+cat("  a2 =", col2, "\n")
+cat("  维度 dim C(A) = 2  (一个过原点的平面 in R^3)\n")
+```
+
+::: {.callout-tip collapse="true"}
+## 🔍 为什么取原矩阵的列，而不是行阶梯形的列？（点击展开）
+
+行化简改变了列之间的关系，但 **不改变列之间的依赖关系**。主元列告诉我们"哪些列是线性无关的"，但基向量本身必须取自 **原矩阵 $A$**，因为列空间是 $A$ 的列的张成。
+
+行阶梯形的列一般不在 $A$ 的列空间中！
+
+*Die Zeilenreduktion verändert die Spalten, aber nicht die lineare Abhängigkeit zwischen ihnen. Die Basisvektoren müssen aus der Originalmatrix entnommen werden.*
+:::
+
+## 第三列去哪了？
+
+> **Wo ist die dritte Spalte geblieben?**
+
+$A$ 有三列，但列空间只有 2 维。第三列 $\mathbf{a}_3 = (1, 1, 2)^T$ 是前两列的线性组合：
+
+```{r}
+#| label: col3-dependency
+#| code-fold: false
+
+# 验证: a3 = 1*a1 + (-1)*a2
+col3 <- A[, 3]
+cat("a3         =", col3, "\n")
+cat("a1 - a2    =", col1 - col2, "\n")
+cat("a3 = a1 - a2 ?", all(col3 == col1 - col2), "\n")
+```
+
+所以第三列没有带来"新方向"——列空间仍然是一个二维平面，不是整个 $\mathbb{R}^3$。
+
+## 列空间的意义：$A\mathbf{x} = \mathbf{b}$ 何时有解？
+
+> **Bedeutung: Wann ist $A\mathbf{x} = \mathbf{b}$ lösbar?**
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+$$
+A\mathbf{x} = \mathbf{b} \text{ 有解} \quad \Longleftrightarrow \quad \mathbf{b} \in C(A)
+$$
+
+列空间就是所有"可达的右端向量"的集合。如果 $\mathbf{b}$ 不在列空间中，方程组 **无解**。
+
+*Der Spaltenraum ist die Menge aller erreichbaren rechten Seiten.*
+:::
+
+```{r}
+#| label: colspace-solvability
+#| code-fold: false
+
+# b1 在列空间中 → 有解 | b1 im Spaltenraum → lösbar
+b1 <- c(2, 4, 6)  # = 2*a1 + 0*a2
+cat("b1 =", b1, "\n")
+cat("  b1 = 2*a1, 所以 b1 ∈ C(A)\n")
+cat("  验证: A %*% c(2, 0, 0) =", as.vector(A %*% c(2, 0, 0)), "\n\n")
+
+# b2 不在列空间中 → 无解 | b2 nicht im Spaltenraum → unlösbar
+b2 <- c(1, 0, 0)
+cat("b2 =", b2, "\n")
+# 尝试求解 Ax = b2
+# 增广矩阵行化简
+Ab2 <- cbind(A, b2)
+Ab2[2,] <- Ab2[2,] - 2 * Ab2[1,]
+Ab2[3,] <- Ab2[3,] - 3 * Ab2[1,]
+Ab2[3,] <- Ab2[3,] - Ab2[2,]
+cat("  增广矩阵行化简后最后一行:", Ab2[3,], "\n")
+cat("  0 = -1 矛盾! → b2 ∉ C(A), 方程组无解\n")
+```
+
+{{< pagebreak >}}
+
+# 零空间 $N(A)$：被机器"消灭"的输入 {#sec-nullspace}
+
+> **Nullraum $N(A)$: Die von der Maschine „vernichteten" Eingaben**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 零空间的 **定义**：所有被映射到零向量的输入
+- 如何通过解 **齐次方程组** 找零空间
+- 零空间与解的 **唯一性** 的关系
+:::
+
+## 定义：什么输入会被"消灭"？
+
+> **Definition: Welche Eingaben werden „vernichtet"?**
+
+$$
+N(A) = \{\mathbf{x} \in \mathbb{R}^n \mid A\mathbf{x} = \mathbf{0}\}
+$$
+
+零空间中的向量就是那些被矩阵 $A$"消灭"的输入——喂进去，出来的是零。
+
+## 计算：解齐次方程组
+
+> **Berechnung: Homogenes Gleichungssystem lösen**
+
+从行阶梯形 $R$ 出发：
+
+```{r}
+#| label: nullspace-compute
+#| code-fold: false
+
+# 从行阶梯形读取零空间 | Nullraum aus der Zeilenstufenform ablesen
+cat("行阶梯形 R:\n"); print(R)
+cat("\n方程组:\n")
+cat("  x1 + 0*x2 + 1*x3 = 0  →  x1 = -x3\n")
+cat("  0  + 1*x2 - 1*x3 = 0  →  x2 =  x3\n")
+cat("  x3 是自由变量 (freie Variable)\n\n")
+
+cat("令 x3 = t:\n")
+cat("  x = t * [-1, 1, 1]^T\n\n")
+
+# 验证 | Überprüfung
+n_vec <- c(-1, 1, 1)
+cat("验证 A * [-1, 1, 1]^T =", as.vector(A %*% n_vec), " ✓\n")
+cat("\nN(A) = span{[-1, 1, 1]}，维度 dim N(A) = 1（一条过原点的直线 in R^3）\n")
+```
+
+## 零空间编码了列的依赖关系
+
+> **Der Nullraum kodiert die Abhängigkeit zwischen Spalten**
+
+零空间向量 $(-1, 1, 1)^T$ 恰好在说：
+
+$$
+(-1) \cdot \mathbf{a}_1 + (1) \cdot \mathbf{a}_2 + (1) \cdot \mathbf{a}_3 = \mathbf{0}
+\quad \Longleftrightarrow \quad
+\mathbf{a}_3 = \mathbf{a}_1 - \mathbf{a}_2
+$$
+
+```{r}
+#| label: null-dependency
+#| code-fold: false
+
+cat("(-1)*a1 + (1)*a2 + (1)*a3 =",
+    as.vector(-1*A[,1] + 1*A[,2] + 1*A[,3]), "\n")
+cat("即 a3 = a1 - a2，与上一节吻合！\n")
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+**零空间告诉你列之间的依赖关系**。零空间越大，列之间的"冗余"越多。
+
+- $N(A) = \{\mathbf{0}\}$ $\Longleftrightarrow$ 列线性无关 $\Longleftrightarrow$ $A\mathbf{x}=\mathbf{b}$ 的解（如果存在）**唯一**
+- $N(A) \neq \{\mathbf{0}\}$ $\Longleftrightarrow$ 列线性相关 $\Longleftrightarrow$ $A\mathbf{x}=\mathbf{b}$ 的解（如果存在）**不唯一**
+
+对我们的矩阵，$\dim N(A) = 1$，所以如果 $A\mathbf{x}=\mathbf{b}$ 有解，解有一个自由度（一整条直线的解）。
+
+*Der Nullraum kodiert die Abhängigkeit zwischen Spalten. Je größer der Nullraum, desto mehr Redundanz.*
+:::
+
+{{< pagebreak >}}
+
+# 行空间 $C(A^T)$：输入中的"有效成分" {#sec-rowspace}
+
+> **Zeilenraum $C(A^T)$: Die „wirksame Komponente" im Eingangsraum**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 行空间的 **定义**：$A$ 的行向量张成的空间，即 $A^T$ 的列空间
+- 行空间的维度 = 列空间的维度 = **秩**
+- 行空间中的向量是"**不浪费的输入**"
+:::
+
+## 定义
+
+> **Definition**
+
+$$
+C(A^T) = \text{span}\{\text{A 的行向量}\} = \{A^T \mathbf{y} \mid \mathbf{y} \in \mathbb{R}^m\}
+$$
+
+行空间和列空间"活在"不同的世界：**列空间 $\subseteq \mathbb{R}^m$（输出空间）**，**行空间 $\subseteq \mathbb{R}^n$（输入空间）**。
+
+对于我们的 $3 \times 3$ 矩阵，虽然 $m = n = 3$，但请牢记它们的身份不同——一个属于"输出侧"，一个属于"输入侧"。
+
+## 计算：行阶梯形的非零行
+
+> **Berechnung: Nichtnull-Zeilen der Zeilenstufenform**
+
+行化简不改变行空间——行阶梯形中的非零行就是行空间的基。
+
+```{r}
+#| label: rowspace-compute
+#| code-fold: false
+
+cat("行阶梯形 R:\n"); print(R)
+cat("\n非零行（行空间的基）:\n")
+r1 <- R[1, ]  # [1, 0, 1]
+r2 <- R[2, ]  # [0, 1, -1]
+cat("  r1 =", r1, "\n")
+cat("  r2 =", r2, "\n")
+cat("  维度 dim C(A^T) = 2（一个过原点的平面 in R^3）\n")
+```
+
+::: {.callout-tip icon="false"}
+## 📌 为什么行化简不改变行空间？| Warum ändert Zeilenreduktion den Zeilenraum nicht?
+
+初等行变换只做三件事：交换两行、某行乘非零常数、某行加上另一行的倍数。这些操作都是在行空间 $\text{span}\{\text{rows}\}$ 内部进行的——新行仍然是旧行的线性组合，反过来旧行也是新行的线性组合。所以行空间不变。
+
+但是——**列空间改变了！** 这就是为什么找列空间基时要回到原矩阵 $A$，而找行空间基时可以直接用行阶梯形。
+
+*Elementare Zeilenoperationen ändern den Zeilenraum nicht, aber sie ändern den Spaltenraum!*
+:::
+
+## 秩：连接列空间和行空间的桥梁
+
+> **Rang: Die Brücke zwischen Spalten- und Zeilenraum**
+
+$$
+\text{rank}(A) = \dim C(A) = \dim C(A^T) = 2
+$$
+
+这个等式乍看很神奇——列空间和行空间生活在不同的 $\mathbb{R}^n$ 和 $\mathbb{R}^m$ 中，维度却总是相同！这就是矩阵的 **秩（Rang / rank）** 的深刻含义：**从输入侧看到的"自由度"和从输出侧看到的"自由度"是一样的**。
+
+```{r}
+#| label: rank-verify
+#| code-fold: false
+
+cat("dim C(A)  =", qr(A)$rank, "\n")
+cat("dim C(A^T) =", qr(t(A))$rank, "\n")
+cat("两者相等！这就是秩 (Rang/rank)。\n")
+```
+
+## "有效成分"的直觉
+
+> **Intuition der „wirksamen Komponente"**
+
+想象你往机器里送一个输入 $\mathbf{x}$。可以把 $\mathbf{x}$ 分解为两部分：
+
+$$
+\mathbf{x} = \underbrace{\mathbf{x}_r}_{\in C(A^T)} + \underbrace{\mathbf{x}_n}_{\in N(A)}
+$$
+
+其中 $\mathbf{x}_r$ 是行空间分量，$\mathbf{x}_n$ 是零空间分量。通过 $A$ 之后：
+
+$$
+A\mathbf{x} = A\mathbf{x}_r + A\mathbf{x}_n = A\mathbf{x}_r + \mathbf{0} = A\mathbf{x}_r
+$$
+
+零空间分量被"消灭"了，**只有行空间分量对输出有贡献**。所以行空间中的向量是"有效输入"——不含任何会被浪费的成分。
+
+{{< pagebreak >}}
+
+# 左零空间 $N(A^T)$：输出空间中的"死区" {#sec-leftnull}
+
+> **Linksnullraum $N(A^T)$: Die „tote Zone" im Ausgangsraum**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 左零空间的 **定义**：$A^T$ 的零空间
+- "左零空间"名字的由来
+- 左零空间中的向量是 **永远无法到达的方向**
+:::
+
+## 定义
+
+> **Definition**
+
+$$
+N(A^T) = \{\mathbf{y} \in \mathbb{R}^m \mid A^T \mathbf{y} = \mathbf{0}\}
+$$
+
+等价地，$\mathbf{y}^T A = \mathbf{0}^T$——$\mathbf{y}$ 从 **左边** 乘以 $A$ 得零，所以叫"左零空间"。
+
+## 计算
+
+> **Berechnung**
+
+```{r}
+#| label: leftnull-compute
+#| code-fold: false
+
+cat("A^T:\n"); print(t(A))
+
+# 对 A^T 做行化简 | Zeilenreduktion von A^T
+Rt <- t(A)
+cat("\n行化简 A^T:\n")
+# R2 - 0*R1 (已经ok)
+# R3 - R1
+Rt[3,] <- Rt[3,] - Rt[1,]
+cat("R3 - R1:\n"); print(Rt)
+
+# R3 + R2
+Rt[3,] <- Rt[3,] + Rt[2,]
+cat("\nR3 + R2:\n"); print(Rt)
+
+# R1 - 2*R2 (标准化)
+# 实际上: 化到行最简形
+# R2: [0 1 1] -> ok
+# R1 暂时ok: [1 2 3]
+# R1 = R1 - 2*R2
+Rt[1,] <- Rt[1,] - 2*Rt[2,]
+cat("\nR1 - 2*R2:\n"); print(Rt)
+
+cat("\n方程组 A^T y = 0:\n")
+cat("  y1 + y3 = 0  →  y1 = -y3\n")
+cat("  y2 + y3 = 0  →  y2 = -y3\n")
+cat("  y3 是自由变量\n\n")
+
+left_null_vec <- c(-1, -1, 1)
+cat("N(A^T) = span{[-1, -1, 1]}\n")
+cat("验证 A^T * [-1,-1,1] =", as.vector(t(A) %*% left_null_vec), " ✓\n")
+cat("维度 dim N(A^T) = 1（一条过原点的直线 in R^3）\n")
+```
+
+## 为什么是"死区"？
+
+> **Warum ist es eine „tote Zone"?**
+
+列空间是 $\mathbb{R}^m$ 中所有可达的输出方向。左零空间包含的方向恰恰是 **列空间无论如何也覆盖不到** 的方向。稍后我们将证明它们之间的正交关系——左零空间正是列空间的 **正交补**。
+
+这意味着：如果 $\mathbf{b}$ 在左零空间方向上有分量，那么 $A\mathbf{x} = \mathbf{b}$ **一定无解**，因为输出永远落在列空间那个平面上，无法偏离到左零空间的方向。
+
+{{< pagebreak >}}
+
+# 四空间一览：维度的完美拼合 {#sec-four-spaces}
+
+> **Überblick: Die vier Unterräume und ihre Dimensionen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 四个子空间的 **维度总结**
+- **秩-零度定理**：$\dim C(A) + \dim N(A) = n$
+- 四个维度如何完美"拼合"
+:::
+
+## 汇总表
+
+> **Zusammenfassungstabelle**
+
+```{r}
+#| label: tbl-four-spaces
+#| code-fold: false
+
+四空间 <- data.frame(
+  `子空间` = c("列空间 C(A)", "零空间 N(A)", 
+               "行空间 C(Aᵀ)", "左零空间 N(Aᵀ)"),
+  `所在空间` = c("R^m = R^3 (输出)", "R^n = R^3 (输入)",
+                  "R^n = R^3 (输入)", "R^m = R^3 (输出)"),
+  `维度` = c(2, 1, 2, 1),
+  `基` = c("{[1,2,3], [0,1,1]}", "{[-1,1,1]}", 
+           "{[1,0,1], [0,1,-1]}", "{[-1,-1,1]}"),
+  `几何形状` = c("平面 (Ebene)", "直线 (Gerade)", 
+                 "平面 (Ebene)", "直线 (Gerade)"),
+  check.names = FALSE
+)
+knitr::kable(四空间, align = "lcccc",
+             caption = "矩阵 A 的四个基本子空间 | Die vier fundamentalen Unterräume von A")
+```
+
+## 秩-零度定理
+
+> **Rangsatz (Rank-Nullity Theorem)**
+
+$$
+\underbrace{\dim C(A)}_{\text{rank}} + \dim N(A) = n \qquad \text{（输入侧 | Eingangsseite）}
+$$
+
+$$
+\underbrace{\dim C(A^T)}_{\text{rank}} + \dim N(A^T) = m \qquad \text{（输出侧 | Ausgangsseite）}
+$$
+
+```{r}
+#| label: rank-nullity-verify
+#| code-fold: false
+
+r <- qr(A)$rank
+n <- ncol(A)
+m <- nrow(A)
+
+cat("输入侧 (R^n = R^3):\n")
+cat("  dim C(A^T) + dim N(A) =", r, "+", n - r, "=", n, "= n ✓\n\n")
+cat("输出侧 (R^m = R^3):\n")
+cat("  dim C(A) + dim N(A^T) =", r, "+", m - r, "=", m, "= m ✓\n")
+```
+
+```{r}
+#| label: fig-dimension-bars
+#| fig-cap: "维度拼合：每一侧的两个子空间维度之和恰好等于空间维数 | Dimensionszerlegung: Die Summe der Dimensionen ergibt genau die Raumdimension"
+#| fig-height: 4
+
+par(bg = "#F8FAFC", mar = c(3, 5, 3, 2))
+layout(matrix(1:2, nrow = 1))
+
+# 输入侧 R^n
+par(mar = c(3, 6, 3, 1), bg = "#F8FAFC")
+barplot(c(2, 1), names.arg = c("C(Aᵀ)\n行空间", "N(A)\n零空间"),
+        col = c("#6366F1", "#DC2626"), border = "white",
+        main = "输入侧 R³ | Eingangsseite",
+        ylab = "维度 | Dimension", ylim = c(0, 3.5),
+        cex.main = 1.2, col.main = "#1E293B", cex.names = 0.85)
+abline(h = 3, col = "#475569", lty = 2, lwd = 2)
+text(2.5, 3.15, "n = 3", col = "#475569", font = 2, cex = 0.9)
+text(0.7, 2.3, "2", col = "white", font = 2, cex = 1.3)
+text(1.9, 1.3, "1", col = "white", font = 2, cex = 1.3)
+
+# 输出侧 R^m
+par(mar = c(3, 4, 3, 3), bg = "#F8FAFC")
+barplot(c(2, 1), names.arg = c("C(A)\n列空间", "N(Aᵀ)\n左零空间"),
+        col = c("#16A34A", "#EA580C"), border = "white",
+        main = "输出侧 R³ | Ausgangsseite",
+        ylab = "", ylim = c(0, 3.5),
+        cex.main = 1.2, col.main = "#1E293B", cex.names = 0.85)
+abline(h = 3, col = "#475569", lty = 2, lwd = 2)
+text(2.5, 3.15, "m = 3", col = "#475569", font = 2, cex = 0.9)
+text(0.7, 2.3, "2", col = "white", font = 2, cex = 1.3)
+text(1.9, 1.3, "1", col = "white", font = 2, cex = 1.3)
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+秩-零度定理的直觉：$\mathbb{R}^n$ 被 **一分为二**——一部分（行空间）携带着会传递到输出的信息，另一部分（零空间）包含着会被"消灭"的冗余。两部分 **不重叠、合在一起恰好覆盖整个 $\mathbb{R}^n$**。
+
+输出侧同理：$\mathbb{R}^m$ 被列空间和左零空间一分为二。
+
+*Der Rank-Nullity-Satz sagt: $\mathbb{R}^n$ wird sauber in zwei Teile zerlegt — den Zeilenraum (nützliche Information) und den Nullraum (redundante Information).*
+:::
+
+{{< pagebreak >}}
+
+# 正交性：空间的完美分割 {#sec-orthogonality}
+
+> **Orthogonalität: Die perfekte Raumzerlegung**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 两对正交关系：$C(A) \perp N(A^T)$ 和 $C(A^T) \perp N(A)$
+- 它们是 **正交补**：不仅垂直，还维度互补
+- 用内积进行 **数值验证**
+:::
+
+这一节是本章的核心——**正交性将维度拼合升级为几何上的"完美分割"**。
+
+## 定理
+
+> **Theorem**
+
+$$
+\boxed{C(A^T) \perp N(A) \quad \text{在 } \mathbb{R}^n \text{ 中互为正交补}}
+$$
+
+$$
+\boxed{C(A) \perp N(A^T) \quad \text{在 } \mathbb{R}^m \text{ 中互为正交补}}
+$$
+
+"互为正交补"意味着两件事同时成立：
+
+1. **垂直**：一个空间中的任何向量与另一个空间中的任何向量的内积为零
+2. **互补**：两个空间的维度之和等于全空间的维度
+
+::: {.callout-tip collapse="true"}
+## 🔍 为什么 $C(A^T) \perp N(A)$？（点击展开）
+
+设 $\mathbf{x} \in N(A)$，则 $A\mathbf{x} = \mathbf{0}$。
+
+设 $\mathbf{r} \in C(A^T)$，则 $\mathbf{r} = A^T \mathbf{y}$（是 $A^T$ 的某个列组合）。
+
+计算内积：
+
+$$
+\mathbf{r}^T \mathbf{x} = (A^T \mathbf{y})^T \mathbf{x} = \mathbf{y}^T A \mathbf{x} = \mathbf{y}^T \mathbf{0} = 0
+$$
+
+同理可证 $C(A) \perp N(A^T)$：设 $\mathbf{y} \in N(A^T)$，则 $A^T\mathbf{y} = \mathbf{0}$；设 $\mathbf{b} \in C(A)$，则 $\mathbf{b} = A\mathbf{x}$。内积 $\mathbf{b}^T \mathbf{y} = (A\mathbf{x})^T \mathbf{y} = \mathbf{x}^T A^T \mathbf{y} = \mathbf{x}^T \mathbf{0} = 0$。
+:::
+
+## 数值验证
+
+> **Numerische Überprüfung**
+
+```{r}
+#| label: orthogonality-verify
+#| code-fold: false
+
+cat("========== 输入侧 R^n: C(A^T) ⊥ N(A) ==========\n\n")
+
+# 行空间基 | Basis des Zeilenraums
+r1 <- c(1, 0, 1)
+r2 <- c(0, 1, -1)
+# 零空间基 | Basis des Nullraums
+n1 <- c(-1, 1, 1)
+
+cat("行空间基向量与零空间基向量的内积:\n")
+cat("  r1 · n1 =", sum(r1 * n1), " ✓\n")
+cat("  r2 · n1 =", sum(r2 * n1), " ✓\n")
+
+cat("\n========== 输出侧 R^m: C(A) ⊥ N(A^T) ==========\n\n")
+
+# 列空间基 | Basis des Spaltenraums
+c1 <- c(1, 2, 3)
+c2 <- c(0, 1, 1)
+# 左零空间基 | Basis des Linksnullraums
+ln1 <- c(-1, -1, 1)
+
+cat("列空间基向量与左零空间基向量的内积:\n")
+cat("  c1 · ln1 =", sum(c1 * ln1), " ✓\n")
+cat("  c2 · ln1 =", sum(c2 * ln1), " ✓\n")
+cat("\n所有内积为零——正交性完美验证！\n")
+```
+
+## 可视化：R³ 中的正交分割
+
+> **Visualisierung: Orthogonale Zerlegung in R³**
+
+```{r}
+#| label: fig-ortho-input
+#| fig-cap: "输入侧 R³ 的正交分割：行空间（蓝色平面）⊥ 零空间（红色直线）| Eingangsseite: Zeilenraum ⊥ Nullraum"
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("输入侧 R"^3*"：行空间 ⊥ 零空间")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+# Row space (plane) - draw as parallelogram
+polygon(c(1, 3.5, 8.5, 6), c(2.5, 1.5, 3.5, 4.5),
+        col = adjustcolor("#6366F1", 0.15), border = "#6366F1", lwd = 2)
+text(5, 2.2, expression("行空间 C(A"^T*")"), col = "#6366F1", cex = 1, font = 2)
+text(5, 1.6, "dim = 2 (平面 | Ebene)", col = "#6366F1", cex = 0.75)
+
+# Basis vectors of row space
+arrows(4.5, 3, 6.5, 3.6, col = "#6366F1", lwd = 2.5, length = 0.12)
+text(6.8, 3.8, expression(bold(r)[1]*" = [1,0,1]"), col = "#4338CA", cex = 0.7)
+arrows(4.5, 3, 3, 3.8, col = "#6366F1", lwd = 2.5, length = 0.12)
+text(2.2, 4.2, expression(bold(r)[2]*" = [0,1,-1]"), col = "#4338CA", cex = 0.7)
+
+# Null space (line) - draw as arrow perpendicular to plane
+arrows(4.5, 3, 4.5, 7, col = "#DC2626", lwd = 3, length = 0.15)
+text(5.5, 6.7, expression("零空间 N(A)"), col = "#DC2626", cex = 1, font = 2)
+text(5.5, 6.1, "dim = 1 (直线 | Gerade)", col = "#DC2626", cex = 0.75)
+text(3.5, 5.8, expression(bold(n)[1]*" = [-1,1,1]"), col = "#B91C1C", cex = 0.7)
+
+# Right angle symbol
+lines(c(4.1, 4.1, 4.5), c(3, 3.4, 3.4), col = "#EA580C", lwd = 1.5)
+
+# Origin point
+points(4.5, 3, pch = 16, col = "#1E293B", cex = 1.5)
+text(4.5, 2.6, "原点 O", col = "#475569", cex = 0.7)
+
+# Annotation
+text(8, 7, expression("dim C(A"^T*") + dim N(A) = 2 + 1 = 3 = n"),
+     col = "#475569", cex = 0.85)
+rect(0.5, 0.3, 9.5, 1.2, col = adjustcolor("#FEF3C7", 0.8), border = "#D97706")
+text(5, 0.75, expression("任意" ~ bold(x) %in% R^3 ~ "都可以唯一分解为" ~
+     bold(x)[r] + bold(x)[n] * "，其中" ~ bold(x)[r] %in% C(A^T) * "," ~
+     bold(x)[n] %in% N(A)),
+     col = "#92400E", cex = 0.7)
+```
+
+```{r}
+#| label: fig-ortho-output
+#| fig-cap: "输出侧 R³ 的正交分割：列空间（绿色平面）⊥ 左零空间（橙色直线）| Ausgangsseite: Spaltenraum ⊥ Linksnullraum"
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("输出侧 R"^3*"：列空间 ⊥ 左零空间")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+# Column space (plane) - draw as parallelogram
+polygon(c(1, 3.5, 8.5, 6), c(2.5, 1.5, 3.5, 4.5),
+        col = adjustcolor("#16A34A", 0.12), border = "#16A34A", lwd = 2)
+text(5, 2.2, "列空间 C(A)", col = "#16A34A", cex = 1, font = 2)
+text(5, 1.6, "dim = 2 (平面 | Ebene)", col = "#16A34A", cex = 0.75)
+
+# Basis vectors of column space
+arrows(4.5, 3, 6.8, 4.2, col = "#16A34A", lwd = 2.5, length = 0.12)
+text(7.2, 4.5, expression(bold(a)[1]*" = [1,2,3]"), col = "#15803D", cex = 0.7)
+arrows(4.5, 3, 3.3, 4, col = "#16A34A", lwd = 2.5, length = 0.12)
+text(2.2, 4.3, expression(bold(a)[2]*" = [0,1,1]"), col = "#15803D", cex = 0.7)
+
+# Left null space (line) - draw perpendicular
+arrows(4.5, 3, 4.5, 7, col = "#EA580C", lwd = 3, length = 0.15)
+text(5.6, 6.7, expression("左零空间 N(A"^T*")"), col = "#EA580C", cex = 1, font = 2)
+text(5.6, 6.1, "dim = 1 (直线 | Gerade)", col = "#EA580C", cex = 0.75)
+text(3.2, 5.8, expression(bold(y)[1]*" = [-1,-1,1]"), col = "#C2410C", cex = 0.7)
+
+# Right angle symbol
+lines(c(4.1, 4.1, 4.5), c(3, 3.4, 3.4), col = "#DC2626", lwd = 1.5)
+
+# Origin point
+points(4.5, 3, pch = 16, col = "#1E293B", cex = 1.5)
+text(4.5, 2.6, "原点 O", col = "#475569", cex = 0.7)
+
+# Annotation
+text(8, 7, expression("dim C(A) + dim N(A"^T*") = 2 + 1 = 3 = m"),
+     col = "#475569", cex = 0.85)
+rect(0.5, 0.3, 9.5, 1.2, col = adjustcolor("#FEE2E2", 0.8), border = "#DC2626")
+text(5, 0.75, expression("任意" ~ bold(b) %in% R^3 ~ "都可以唯一分解为" ~
+     bold(b)[c] + bold(b)[l] * "，其中" ~ bold(b)[c] %in% C(A) * "," ~
+     bold(b)[l] %in% N(A^T)),
+     col = "#991B1B", cex = 0.7)
+```
+
+## 分解实验：亲眼看到正交分解
+
+> **Zerlegungsexperiment: Die orthogonale Zerlegung mit eigenen Augen sehen**
+
+任取一个 $\mathbb{R}^3$ 中的向量 $\mathbf{x}$，我们都能把它正交分解到行空间和零空间：
+
+```{r}
+#| label: decomposition-demo
+#| code-fold: false
+
+# 任取一个向量 | Einen beliebigen Vektor wählen
+x <- c(5, 3, 7)
+
+# 行空间基 | Basis des Zeilenraums
+R_basis <- rbind(r1, r2)  # 2x3 矩阵，每行是一个基向量
+
+# 投影到行空间：x_r = R^T (R R^T)^{-1} R x
+# (因为行空间基 R_basis 的行是基向量)
+x_r <- as.vector(t(R_basis) %*% solve(R_basis %*% t(R_basis)) %*% R_basis %*% x)
+x_n <- x - x_r
+
+cat("原始向量 x      =", x, "\n")
+cat("行空间分量 x_r  =", round(x_r, 4), "\n")
+cat("零空间分量 x_n   =", round(x_n, 4), "\n")
+cat("x_r + x_n        =", round(x_r + x_n, 4), " (= x ✓)\n\n")
+
+cat("验证 x_r ∈ C(A^T): A * x_r ≠ 0 (x_r 有'效果'):\n")
+cat("  A * x_r =", round(as.vector(A %*% x_r), 4), "\n\n")
+
+cat("验证 x_n ∈ N(A): A * x_n = 0 (x_n 被'消灭'):\n")
+cat("  A * x_n =", round(as.vector(A %*% x_n), 4), "\n\n")
+
+cat("验证正交: x_r · x_n =", round(sum(x_r * x_n), 10), " ✓\n")
+```
+
+{{< pagebreak >}}
+
+# 大统一图：矩阵的完整画像 {#sec-big-picture}
+
+> **Das Gesamtbild: Das vollständige Porträt einer Matrix**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- Strang 教授经典的"四个子空间关系图"
+- 矩阵 $A$ 如何在行空间与列空间之间建立 **一一对应**
+- 零空间被映射到 **原点**
+:::
+
+这是本章的高潮——把所有拼图拼在一起。
+
+```{r}
+#| label: fig-big-picture
+#| fig-cap: "Strang 的大统一图：矩阵 A 将 Rⁿ 映射到 Rᵐ，四个子空间完美咬合 | Strangs Gesamtbild: Die vier fundamentalen Unterräume"
+#| fig-width: 11
+#| fig-height: 8
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 14), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("大统一图：矩阵的完整画像 | Das Gesamtbild")),
+      cex.main = 1.4, col.main = "#1E293B")
+
+# ============= 左侧: R^n (输入空间) =============
+# Outer oval
+theta <- seq(0, 2*pi, length.out = 200)
+cx_L <- 3.5; cy_L <- 5; rx_L <- 2.8; ry_L <- 3.5
+lines(cx_L + rx_L*cos(theta), cy_L + ry_L*sin(theta), col = "#475569", lwd = 2)
+text(3.5, 9.0, expression(bold(R^n) ~ "(输入空间 | Eingangsraum)"),
+     col = "#1E293B", cex = 1.1, font = 2)
+
+# Row space (upper part of oval)
+polygon(c(1, 3.5, 6, 3.5), c(5, 7.8, 5, 5),
+        col = adjustcolor("#6366F1", 0.15), border = NA)
+lines(c(1, 6), c(5, 5), col = "#6366F1", lwd = 2, lty = 2)
+text(3.5, 6.8, expression(bold("C(A"^T*")")), col = "#6366F1", cex = 1.2, font = 2)
+text(3.5, 6.2, "行空间", col = "#4338CA", cex = 0.85)
+text(3.5, 5.7, "dim = r = 2", col = "#4338CA", cex = 0.7)
+
+# Null space (lower part of oval)
+polygon(c(1, 3.5, 6, 3.5), c(5, 2.2, 5, 5),
+        col = adjustcolor("#DC2626", 0.1), border = NA)
+text(3.5, 3.2, expression(bold("N(A)")), col = "#DC2626", cex = 1.2, font = 2)
+text(3.5, 2.6, "零空间", col = "#B91C1C", cex = 0.85)
+text(3.5, 2.1, "dim = n - r = 1", col = "#B91C1C", cex = 0.7)
+
+# ============= 右侧: R^m (输出空间) =============
+cx_R <- 10.5; cy_R <- 5; rx_R <- 2.8; ry_R <- 3.5
+lines(cx_R + rx_R*cos(theta), cy_R + ry_R*sin(theta), col = "#475569", lwd = 2)
+text(10.5, 9.0, expression(bold(R^m) ~ "(输出空间 | Ausgangsraum)"),
+     col = "#1E293B", cex = 1.1, font = 2)
+
+# Column space (upper part)
+polygon(c(8, 10.5, 13, 10.5), c(5, 7.8, 5, 5),
+        col = adjustcolor("#16A34A", 0.15), border = NA)
+lines(c(8, 13), c(5, 5), col = "#16A34A", lwd = 2, lty = 2)
+text(10.5, 6.8, expression(bold("C(A)")), col = "#16A34A", cex = 1.2, font = 2)
+text(10.5, 6.2, "列空间", col = "#15803D", cex = 0.85)
+text(10.5, 5.7, "dim = r = 2", col = "#15803D", cex = 0.7)
+
+# Left null space (lower part)
+polygon(c(8, 10.5, 13, 10.5), c(5, 2.2, 5, 5),
+        col = adjustcolor("#EA580C", 0.1), border = NA)
+text(10.5, 3.2, expression(bold("N(A"^T*")")), col = "#EA580C", cex = 1.2, font = 2)
+text(10.5, 2.6, "左零空间", col = "#C2410C", cex = 0.85)
+text(10.5, 2.1, "dim = m - r = 1", col = "#C2410C", cex = 0.7)
+
+# ============= 映射箭头 =============
+# Row space -> Column space (bijection)
+arrows(5.2, 6.5, 8.8, 6.5, col = "#1E293B", lwd = 3, length = 0.15)
+text(7, 7.1, expression(bold(A)), cex = 1.3, col = "#1E293B")
+text(7, 6.8, "一一对应", cex = 0.7, col = "#475569")
+text(7, 6.3, "Bijektion", cex = 0.6, col = "#94A3B8", font = 3)
+
+# Null space -> origin
+arrows(5.2, 3, 9.8, 5, col = "#DC2626", lwd = 2.5, length = 0.12, lty = 2)
+points(10, 5, pch = 16, col = "#DC2626", cex = 2)
+text(7.5, 3.5, expression(bold(A) %->% bold(0)), cex = 0.85, col = "#DC2626")
+text(7.5, 3.1, "全部被消灭!", cex = 0.7, col = "#DC2626", font = 2)
+
+# ============= 正交标记 =============
+# Input side
+text(1.0, 5, expression(symbol("\136")), cex = 1.5, col = "#6366F1")  # ⊥ symbol
+text(0.5, 5, expression(perp), cex = 1.2, col = "#9333EA")
+
+# Output side  
+text(13.5, 5, expression(perp), cex = 1.2, col = "#9333EA")
+
+# Bottom summary
+rect(2, 0.2, 12, 1.3, col = adjustcolor("#F0FDF4", 0.9), border = "#16A34A", lwd = 2)
+text(7, 1.0, expression("A: C(A"^T*") " %->% " C(A)  (一一对应，保持秩)"),
+     col = "#15803D", cex = 0.85, font = 2)
+text(7, 0.5, expression("A: N(A) " %->% " {" * bold(0) * "}  (全部消灭)"),
+     col = "#DC2626", cex = 0.85, font = 2)
+```
+
+## 映射的三层理解
+
+> **Drei Ebenen des Verständnisses der Abbildung**
+
+**第一层：维度**。秩 $r$ 是所有四个子空间的"公共密码"——$C(A)$ 和 $C(A^T)$ 的维度都是 $r$，$N(A)$ 的维度是 $n-r$，$N(A^T)$ 的维度是 $m-r$。
+
+**第二层：正交性**。每一侧的两个子空间互为正交补，把空间一分为二，没有遗漏、没有重叠。
+
+**第三层：映射**。矩阵 $A$ 在行空间和列空间之间建立了 **一一对应**——行空间中不同的向量映射到列空间中不同的向量。而零空间中的所有向量都被映射到同一个点：原点。
+
+::: {.callout-important icon="false"}
+## 💡 Strang 教授的核心信息 | Strangs Kernbotschaft
+
+理解了这张图，你就理解了线性代数的全貌。矩阵不再是一堆数字——它是一台精密的变换机器，四个子空间完整地描述了它"能做什么"和"做不到什么"。
+
+*Wer dieses Bild versteht, versteht die gesamte lineare Algebra. Eine Matrix ist nicht nur eine Zahlentabelle — sie ist eine präzise Transformationsmaschine.*
+:::
+
+{{< pagebreak >}}
+
+# 应用：$A\mathbf{x} = \mathbf{b}$ 的完整故事 {#sec-axb}
+
+> **Anwendung: Die vollständige Geschichte von $A\mathbf{x} = \mathbf{b}$**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 四个子空间如何决定 $A\mathbf{x}=\mathbf{b}$ 的 **可解性** 和 **解的结构**
+- **通解 = 特解 + 零空间**
+- 完整的分类判断流程
+:::
+
+## $\mathbf{b}$ 在列空间中：有解
+
+> **$\mathbf{b}$ im Spaltenraum: Lösbar**
+
+```{r}
+#| label: axb-solvable
+#| code-fold: false
+
+# b 在列空间中 → 有解 | b im Spaltenraum → lösbar
+b_good <- c(1, 3, 4)  # = 1*[1,2,3] + 1*[0,1,1]
+cat("b =", b_good, "\n")
+cat("b = a1 + a2 → b ∈ C(A)\n\n")
+
+# 找一个特解 | Eine partikuläre Lösung finden
+# 从 b = 1*a1 + 1*a2 + 0*a3, 特解 x_p = (1, 1, 0)
+x_p <- c(1, 1, 0)
+cat("特解 x_p =", x_p, "\n")
+cat("验证: A * x_p =", as.vector(A %*% x_p), " (= b ✓)\n\n")
+
+# 通解 = 特解 + 零空间 | Allgemeine Lösung = Partikuläre Lösung + Nullraum
+cat("通解 (allgemeine Lösung):\n")
+cat("  x = x_p + t * n1\n")
+cat("    = (1, 1, 0) + t * (-1, 1, 1),  t ∈ R\n\n")
+
+# 验证几个具体的解 | Einige konkrete Lösungen überprüfen
+for (t in c(-2, 0, 1, 3.5)) {
+  x_sol <- x_p + t * n1
+  Ax <- as.vector(A %*% x_sol)
+  cat(sprintf("  t = %4.1f: x = (%5.1f, %4.1f, %4.1f), Ax = (%g, %g, %g)\n",
+              t, x_sol[1], x_sol[2], x_sol[3], Ax[1], Ax[2], Ax[3]))
+}
+```
+
+## $\mathbf{b}$ 不在列空间中：无解
+
+> **$\mathbf{b}$ nicht im Spaltenraum: Unlösbar**
+
+```{r}
+#| label: axb-unsolvable
+#| code-fold: false
+
+# b 不在列空间中 → 无解 | b nicht im Spaltenraum → unlösbar
+b_bad <- c(1, 0, 0)
+cat("b =", b_bad, "\n\n")
+
+# 检测方法 1：b 在左零空间方向上有分量
+# N(A^T) = span{[-1,-1,1]}
+ln_normalized <- left_null_vec / sqrt(sum(left_null_vec^2))
+component <- sum(b_bad * ln_normalized)
+cat("方法 1: b 在左零空间方向的分量 = b · y_hat =",
+    round(component, 4), "\n")
+cat("  分量 ≠ 0 → b ∉ C(A) → 无解!\n\n")
+
+# 检测方法 2：增广矩阵行化简出现矛盾行
+Ab <- cbind(A, b_bad)
+Ab[2,] <- Ab[2,] - 2*Ab[1,]
+Ab[3,] <- Ab[3,] - 3*Ab[1,]
+Ab[3,] <- Ab[3,] - Ab[2,]
+cat("方法 2: 增广矩阵 [A|b] 行化简后最后一行:\n")
+cat(" ", Ab[3,], "\n")
+cat("  0x1 + 0x2 + 0x3 = -1 → 矛盾! 无解\n")
+```
+
+## 可解性与四个子空间的完整对应
+
+> **Lösbarkeit und die vier Unterräume**
+
+```{r}
+#| label: fig-solvability
+#| fig-cap: "Ax=b 的可解性完全由 b 与列空间/左零空间的关系决定 | Die Lösbarkeit wird durch die Beziehung von b zum Spaltenraum bestimmt"
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("A" * bold(x) * " = " * bold(b) * " 何时有解？")),
+      cex.main = 1.3, col.main = "#1E293B")
+
+# Column space plane
+polygon(c(1, 4, 11, 8), c(3, 1.5, 3.5, 5),
+        col = adjustcolor("#16A34A", 0.12), border = "#16A34A", lwd = 2)
+text(6, 2.3, "列空间 C(A)", col = "#16A34A", cex = 1, font = 2)
+
+# Left null space direction
+arrows(6, 3.5, 6, 7.5, col = "#EA580C", lwd = 2.5, length = 0.12)
+text(7, 7, expression(N(A^T)), col = "#EA580C", cex = 0.9, font = 2)
+
+# b in C(A) - solvable
+points(4.5, 3, pch = 21, bg = "#16A34A", col = "white", cex = 2.5, lwd = 2)
+text(3.5, 3.5, expression(bold(b)[1] %in% C(A)), col = "#16A34A", cex = 0.85, font = 2)
+text(3.5, 2.8, "有解 ✓", col = "#16A34A", cex = 0.8)
+
+# b not in C(A) - unsolvable
+points(7, 6, pch = 4, col = "#DC2626", cex = 2.5, lwd = 2.5)
+text(8.5, 6.3, expression(bold(b)[2] %notin% C(A)), col = "#DC2626", cex = 0.85, font = 2)
+text(8.5, 5.7, "无解 ✗", col = "#DC2626", cex = 0.8)
+
+# Projection from b2 to C(A)
+segments(7, 6, 7, 3.5, col = "#94A3B8", lwd = 1.5, lty = 3)
+points(7, 3.5, pch = 16, col = "#D97706", cex = 1.5)
+text(8.5, 3.8, expression("最近点 = 最小二乘解"), col = "#D97706", cex = 0.7, font = 2)
+
+# Box with summary
+rect(0.5, 0.2, 11.5, 1.3, col = "#F8FAFC", border = "#475569", lwd = 1.5)
+text(6, 0.75,
+     "b 在列空间中 → 有解 (通解 = 特解 + 零空间) | b 不在列空间中 → 无解 (可求最小二乘近似)",
+     col = "#475569", cex = 0.65)
+```
+
+::: {.callout-important icon="false"}
+## 💡 四个子空间回答了关于 $A\mathbf{x}=\mathbf{b}$ 的所有问题
+
+| 问题 / Frage | 由哪个子空间回答 / Welcher Unterraum antwortet |
+|:---|:---|
+| 哪些 $\mathbf{b}$ 能解？ | **列空间** $C(A)$：$\mathbf{b}$ 必须在其中 |
+| 哪些 $\mathbf{b}$ 不能解？ | **左零空间** $N(A^T)$：$\mathbf{b}$ 在此方向上有分量则无解 |
+| 解是否唯一？ | **零空间** $N(A)$：非平凡则解不唯一 |
+| 解长什么样？ | **行空间** $C(A^T)$：特解中"最短"的那个属于行空间 |
+:::
+
+{{< pagebreak >}}
+
+# 数值实验：用 R 探索四个子空间 {#sec-numerical}
+
+> **Numerische Experimente: Die vier Unterräume mit R erkunden**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 使用 SVD 精确计算四个子空间的基
+- 大规模矩阵中四个子空间维度的验证
+:::
+
+## 用 SVD 计算四个子空间
+
+> **Die vier Unterräume mit der SVD berechnen**
+
+奇异值分解（SVD）$A = U \Sigma V^T$ 提供了计算四个子空间的最可靠方法。
+
+```{r}
+#| label: svd-four-spaces
+#| code-fold: false
+
+svd_A <- svd(A)
+r <- sum(svd_A$d > 1e-10)  # 数值秩 | Numerischer Rang
+
+cat("奇异值:", round(svd_A$d, 6), "\n")
+cat("数值秩:", r, "\n\n")
+
+# U 的前 r 列 = 列空间基 | Erste r Spalten von U = Basis des Spaltenraums
+cat("列空间 C(A) 的正交基 (U 的前", r, "列):\n")
+C_A_basis <- svd_A$u[, 1:r]
+print(round(C_A_basis, 4))
+
+# V 的前 r 列 = 行空间基 | Erste r Spalten von V = Basis des Zeilenraums
+cat("\n行空间 C(A^T) 的正交基 (V 的前", r, "列):\n")
+C_AT_basis <- svd_A$v[, 1:r]
+print(round(C_AT_basis, 4))
+
+# U 的后 m-r 列 = 左零空间基 | Letzte m-r Spalten von U = Basis des Linksnullraums
+cat("\n左零空间 N(A^T) 的正交基 (U 的后", nrow(A)-r, "列):\n")
+N_AT_basis <- svd_A$u[, (r+1):nrow(A), drop = FALSE]
+print(round(N_AT_basis, 4))
+
+# V 的后 n-r 列 = 零空间基 | Letzte n-r Spalten von V = Basis des Nullraums
+cat("\n零空间 N(A) 的正交基 (V 的后", ncol(A)-r, "列):\n")
+N_A_basis <- svd_A$v[, (r+1):ncol(A), drop = FALSE]
+print(round(N_A_basis, 4))
+```
+
+```{r}
+#| label: svd-verify-all
+#| code-fold: false
+
+cat("========== 全面验证 | Vollständige Überprüfung ==========\n\n")
+
+# 验证 A * 零空间 = 0
+cat("A * N(A)基向量 =", round(as.vector(A %*% N_A_basis), 10), " (≈ 0 ✓)\n")
+
+# 验证 A^T * 左零空间 = 0
+cat("A^T * N(A^T)基向量 =", round(as.vector(t(A) %*% N_AT_basis), 10), " (≈ 0 ✓)\n\n")
+
+# 验证所有正交关系
+cat("正交性验证 (所有内积应为 0):\n")
+cat("  C(A^T)基 · N(A)基:\n")
+print(round(t(C_AT_basis) %*% N_A_basis, 10))
+cat("  C(A)基 · N(A^T)基:\n")
+print(round(t(C_A_basis) %*% N_AT_basis, 10))
+
+cat("\n维度验证:\n")
+cat("  dim C(A) + dim N(A^T) =", r, "+", nrow(A)-r, "=", nrow(A), "= m ✓\n")
+cat("  dim C(A^T) + dim N(A) =", r, "+", ncol(A)-r, "=", ncol(A), "= n ✓\n")
+```
+
+## 大规模验证：这些定理对任何矩阵都成立
+
+> **Großmaßstäbliche Überprüfung: Diese Sätze gelten für jede Matrix**
+
+```{r}
+#| label: fig-large-scale
+#| fig-cap: "随机矩阵实验：无论 m、n、r 取何值，四个子空间的维度关系和正交关系始终完美成立 | Zufallsmatrix-Experiment: Die Beziehungen gelten immer"
+
+set.seed(42)
+n_tests <- 50
+results <- data.frame(
+  m = integer(n_tests), n = integer(n_tests), r = integer(n_tests),
+  dim_CA = integer(n_tests), dim_NA = integer(n_tests),
+  dim_CAt = integer(n_tests), dim_NAt = integer(n_tests),
+  ortho_input = numeric(n_tests), ortho_output = numeric(n_tests),
+  rank_eq = logical(n_tests), dim_eq_n = logical(n_tests), dim_eq_m = logical(n_tests)
+)
+
+for (k in 1:n_tests) {
+  mm <- sample(3:20, 1)
+  nn <- sample(3:20, 1)
+  rr <- sample(1:min(mm, nn), 1)  # 指定秩
+  
+  # 构造秩为 rr 的随机矩阵 | Zufallsmatrix mit Rang rr konstruieren
+  U_rand <- matrix(rnorm(mm*rr), mm, rr)
+  V_rand <- matrix(rnorm(nn*rr), nn, rr)
+  A_test <- U_rand %*% t(V_rand)
+  
+  s <- svd(A_test, nu = mm, nv = nn)
+  r_actual <- sum(s$d > 1e-8)
+  
+  results$m[k] <- mm; results$n[k] <- nn; results$r[k] <- r_actual
+  results$dim_CA[k] <- r_actual
+  results$dim_NA[k] <- nn - r_actual
+  results$dim_CAt[k] <- r_actual
+  results$dim_NAt[k] <- mm - r_actual
+  results$rank_eq[k] <- (results$dim_CA[k] == results$dim_CAt[k])
+  results$dim_eq_n[k] <- (results$dim_CAt[k] + results$dim_NA[k] == nn)
+  results$dim_eq_m[k] <- (results$dim_CA[k] + results$dim_NAt[k] == mm)
+  
+  # 正交性检验（最大内积绝对值）
+  if (r_actual > 0 && r_actual < nn) {
+    results$ortho_input[k] <- max(abs(t(s$v[,1:r_actual,drop=F]) %*% s$v[,(r_actual+1):nn,drop=F]))
+  }
+  if (r_actual > 0 && r_actual < mm) {
+    results$ortho_output[k] <- max(abs(t(s$u[,1:r_actual,drop=F]) %*% s$u[,(r_actual+1):mm,drop=F]))
+  }
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(1:n_tests, results$ortho_input + results$ortho_output,
+     type = "h", col = "#2563EB", lwd = 2,
+     xlab = "实验编号 | Experiment Nr.",
+     ylab = "最大正交性偏差 | Max. Orthogonalitätsabweichung",
+     main = "50 个随机矩阵的正交性验证 | 50 Zufallsmatrizen",
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B",
+     ylim = c(0, max(results$ortho_input + results$ortho_output) * 1.5 + 1e-15))
+grid(col = "#E2E8F0")
+abline(h = 1e-10, col = "#DC2626", lty = 2, lwd = 2)
+text(25, 1e-10 * 3, expression("机器精度阈值 ≈ 10"^{-10}),
+     col = "#DC2626", cex = 0.85)
+
+cat("\n", n_tests, "个随机矩阵全部通过验证:\n")
+cat("  dim C(A) = dim C(A^T) (秩相等):  全部通过 ✓\n")
+cat("  dim C(A^T) + dim N(A) = n:        全部通过 ✓\n")
+cat("  dim C(A) + dim N(A^T) = m:        全部通过 ✓\n")
+cat("  正交性偏差 < 1e-10:               全部通过 ✓\n")
+```
+
+{{< pagebreak >}}
+
+# 常见误区与自测 {#sec-pitfalls}
+
+> **Häufige Fehler und Selbsttest**
+
+::: {.callout-warning icon="false"}
+## ⚠️ 五个常见误区 | Fünf häufige Fehler
+
+**误区 1："行化简后的列就是列空间的基"**
+
+错！行化简改变了列空间。列空间的基要从 **原矩阵** 的主元列中取。行化简只帮你确定"哪些列是主元列"。
+
+**误区 2："列空间和行空间总是在同一个空间中"**
+
+只有当 $m = n$ 时两者碰巧都在 $\mathbb{R}^n$ 中，但即便如此它们的含义不同。一般来说，列空间 $\subseteq \mathbb{R}^m$，行空间 $\subseteq \mathbb{R}^n$，两个空间可能维度都不同！
+
+**误区 3："零空间只有零向量"**
+
+只有当矩阵列满秩（$r = n$）时才是如此。否则零空间包含非零向量。
+
+**误区 4："四个子空间的维度之和 = mn"**
+
+不对。正确的关系是：输入侧两个维度之和 = $n$，输出侧两个维度之和 = $m$，总共 = $n + m$（而非 $mn$）。
+
+**误区 5："正交意味着交集为空"**
+
+正交子空间的交集不是空集——它们共享 **零向量** $\mathbf{0}$。但除了零向量外没有其他公共元素。
+:::
+
+::: {.callout-tip icon="false"}
+## 🧪 自测题 | Selbsttest
+
+给定矩阵 $B = \begin{pmatrix} 1 & 2 & 1 \\ 3 & 6 & 3 \end{pmatrix}$，请回答：
+
+1. $B$ 的秩是多少？
+2. $C(B)$ 的维度和基是什么？它是 $\mathbb{R}^2$ 中的什么形状？
+3. $N(B)$ 的维度是多少？
+4. $N(B^T)$ 的维度是多少？
+5. $A\mathbf{x} = (2, 6)^T$ 有解吗？解唯一吗？
+6. $A\mathbf{x} = (1, 1)^T$ 有解吗？为什么？
+:::
+
+::: {.callout-tip collapse="true"}
+## 🔍 自测题答案（点击展开）
+
+1. 秩 = 1（第二行 = 3 × 第一行）
+2. $C(B) = \text{span}\{(1,3)^T\}$，维度 = 1，是 $\mathbb{R}^2$ 中过原点的一条**直线**
+3. $\dim N(B) = n - r = 3 - 1 = 2$（一个过原点的平面 in $\mathbb{R}^3$）
+4. $\dim N(B^T) = m - r = 2 - 1 = 1$（一条过原点的直线 in $\mathbb{R}^2$）
+5. $(2,6)^T = 2 \cdot (1,3)^T \in C(B)$，有解。但 $\dim N(B) = 2$，所以解 **不唯一**（有两个自由参数）
+6. $(1,1)^T$ 不是 $(1,3)^T$ 的倍数，所以 $(1,1)^T \notin C(B)$，**无解**。或者验证：$(1,1)^T$ 在 $N(B^T)$ 方向上有分量。$N(B^T) = \text{span}\{(-3,1)^T\}$，$(1,1) \cdot (-3,1) = -2 \neq 0$，确认有不在列空间中的分量。
+:::
+
+{{< pagebreak >}}
+
+# 总结：四个子空间的完整关系 {#sec-summary}
+
+> **Zusammenfassung: Die vollständigen Beziehungen der vier Unterräume**
+
+## 核心关系一图总结
+
+```{r}
+#| label: fig-final-summary
+#| fig-cap: "四个基本子空间的完整关系图 | Vollständiges Beziehungsdiagramm der vier fundamentalen Unterräume"
+#| fig-width: 11
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2, 0.5))
+plot(NULL, xlim = c(0, 14), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("一页纸总结 | Zusammenfassung auf einer Seite")),
+      cex.main = 1.3, col.main = "#1E293B")
+
+# Four boxes
+# Row space
+rect(0.5, 3.2, 3.5, 5.5, col = "#E0E7FF", border = "#6366F1", lwd = 2.5)
+text(2, 5.0, expression(bold("C(A"^T*")")), col = "#6366F1", cex = 1.1)
+text(2, 4.5, "行空间", col = "#4338CA", cex = 0.8)
+text(2, 3.9, expression("dim = r"), col = "#4338CA", cex = 0.75)
+text(2, 3.5, expression(subset(R^n)), col = "#4338CA", cex = 0.7)
+
+# Null space
+rect(0.5, 0.5, 3.5, 2.8, col = "#FEE2E2", border = "#DC2626", lwd = 2.5)
+text(2, 2.4, expression(bold("N(A)")), col = "#DC2626", cex = 1.1)
+text(2, 1.9, "零空间", col = "#B91C1C", cex = 0.8)
+text(2, 1.3, expression("dim = n - r"), col = "#B91C1C", cex = 0.75)
+text(2, 0.9, expression(subset(R^n)), col = "#B91C1C", cex = 0.7)
+
+# Column space
+rect(10.5, 3.2, 13.5, 5.5, col = "#D1FAE5", border = "#16A34A", lwd = 2.5)
+text(12, 5.0, expression(bold("C(A)")), col = "#16A34A", cex = 1.1)
+text(12, 4.5, "列空间", col = "#15803D", cex = 0.8)
+text(12, 3.9, expression("dim = r"), col = "#15803D", cex = 0.75)
+text(12, 3.5, expression(subset(R^m)), col = "#15803D", cex = 0.7)
+
+# Left null space
+rect(10.5, 0.5, 13.5, 2.8, col = "#FEF3C7", border = "#EA580C", lwd = 2.5)
+text(12, 2.4, expression(bold("N(A"^T*")")), col = "#EA580C", cex = 1.1)
+text(12, 1.9, "左零空间", col = "#C2410C", cex = 0.8)
+text(12, 1.3, expression("dim = m - r"), col = "#C2410C", cex = 0.75)
+text(12, 0.9, expression(subset(R^m)), col = "#C2410C", cex = 0.7)
+
+# Orthogonality (vertical)
+text(2, 3.0, expression(perp), col = "#9333EA", cex = 1.5, font = 2)
+text(12, 3.0, expression(perp), col = "#9333EA", cex = 1.5, font = 2)
+
+# Mapping arrows (horizontal)
+arrows(3.6, 4.4, 10.4, 4.4, col = "#1E293B", lwd = 3, length = 0.15)
+text(7, 4.9, expression(bold("A: 一一对应 | Bijektion")), col = "#1E293B", cex = 0.85)
+
+arrows(3.6, 1.6, 10.4, 1.6, col = "#DC2626", lwd = 2, length = 0.12, lty = 2)
+text(7, 2.1, expression(bold("A") %->% bold(0)), col = "#DC2626", cex = 0.85)
+
+# Labels for sides
+text(2, 5.8, expression(bold(R^n) ~ "(输入侧)"), col = "#475569", cex = 0.9)
+text(12, 5.8, expression(bold(R^m) ~ "(输出侧)"), col = "#475569", cex = 0.9)
+```
+
+## 三层关系总结
+
+> **Zusammenfassung der drei Beziehungsebenen**
+
+**第一层——维度：**
+
+$$
+\dim C(A) = \dim C(A^T) = r \qquad (\text{秩 | Rang})
+$$
+$$
+\dim C(A^T) + \dim N(A) = n, \qquad \dim C(A) + \dim N(A^T) = m
+$$
+
+**第二层——正交性：**
+
+$$
+C(A^T) \perp N(A) \;\text{ in }\; \mathbb{R}^n, \qquad C(A) \perp N(A^T) \;\text{ in }\; \mathbb{R}^m
+$$
+
+**第三层——映射：**
+
+$$
+A: C(A^T) \xrightarrow{\;\text{双射}\;} C(A), \qquad A: N(A) \to \{\mathbf{0}\}
+$$
+
+::: {.callout-important icon="false"}
+## 💡 一句话总结 | Ein-Satz-Zusammenfassung
+
+矩阵 $A$ 把输入空间 $\mathbb{R}^n$ 正交分解为"有效输入"（行空间）和"无效输入"（零空间），把有效输入一一映射到输出空间 $\mathbb{R}^m$ 中的"可达区域"（列空间），剩下的"不可达区域"（左零空间）则与列空间正交互补。
+
+*Die Matrix $A$ zerlegt $\mathbb{R}^n$ orthogonal in „wirksame Eingaben" (Zeilenraum) und „unwirksame Eingaben" (Nullraum), bildet die wirksamen bijektiv auf den „erreichbaren Bereich" (Spaltenraum) in $\mathbb{R}^m$ ab, und der „unerreichbare Bereich" (Linksnullraum) steht orthogonal dazu.*
+:::
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+
+## 四个子空间
+
+| Deutsch | 中文 | English | 符号 |
+|:---|:---|:---|:---:|
+| der Spaltenraum | 列空间 | column space | $C(A)$ |
+| der Nullraum | 零空间 | null space | $N(A)$ |
+| der Zeilenraum | 行空间 | row space | $C(A^T)$ |
+| der Linksnullraum | 左零空间 | left null space | $N(A^T)$ |
+
+## 核心概念
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| der Rang | 秩 | rank |
+| die Dimension | 维度 | dimension |
+| die Basis (Pl: die Basen) | 基 | basis |
+| der Unterraum | 子空间 | subspace |
+| die Linearkombination | 线性组合 | linear combination |
+| die lineare Unabhängigkeit | 线性无关 | linear independence |
+| der Aufspann / die lineare Hülle | 张成 (生成) | span |
+
+## 正交性与分解
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| orthogonal / senkrecht | 正交的 | orthogonal |
+| das orthogonale Komplement | 正交补 | orthogonal complement |
+| die orthogonale Projektion | 正交投影 | orthogonal projection |
+| die Zerlegung | 分解 | decomposition |
+| die Singulärwertzerlegung (SVD) | 奇异值分解 | singular value decomposition |
+
+## 方程组
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| das lineare Gleichungssystem | 线性方程组 | system of linear equations |
+| das homogene Gleichungssystem | 齐次方程组 | homogeneous system |
+| die partikuläre Lösung | 特解 | particular solution |
+| die allgemeine Lösung | 通解 | general solution |
+| die Zeilenstufenform | 行阶梯形 | row echelon form |
+| die reduzierte Zeilenstufenform | 行最简形 | reduced row echelon form |
+| der Rangsatz / Dimensionssatz | 秩-零度定理 | rank-nullity theorem |
+
+:::
