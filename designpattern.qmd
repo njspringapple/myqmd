@@ -31,6 +31,13 @@ format:
 ---
 
 ```{python}
+#| echo: false
+import matplotlib.pyplot as plt
+plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'PingFang SC', 'Heiti SC']
+plt.rcParams['axes.unicode_minus'] = False
+```
+
+```{python}
 #| label: setup
 #| include: false
 
@@ -232,7 +239,6 @@ plt.show()
 ```{python}
 #| label: singleton-demo
 #| code-fold: false
-
 class DatabaseConnection:
     """Singleton 模式：确保全局只有一个数据库连接实例"""
     _instance = None
