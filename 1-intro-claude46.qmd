@@ -153,7 +153,7 @@ $$
 # 5 houses: perfect linear relationship / 5 Häuser: perfekte lineare Beziehung
 house_data <- data.frame(
   ID = paste0("House ", 1:5),
-  `Area (m2)` = c(50, 80, 100, 120, 150),
+  `Area (m2)` = c(30, 80, 100, 120, 150),
   `Price (万元)` = c(150, 240, 300, 360, 450),
   check.names = FALSE
 )
@@ -165,7 +165,7 @@ knitr::kable(house_data, align = "ccc",
 #| label: fig-perfect-scatter
 #| fig-cap: "5 套房子的面积-价格散点图——它们完美地排成一条直线！ | Die 5 Punkte liegen perfekt auf einer Geraden!"
 
-Area_perfect <- c(50, 80, 100, 120, 150)
+Area_perfect <- c(30, 80, 100, 120, 150)
 Price_perfect <- c(150, 240, 300, 360, 450)
 
 par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
