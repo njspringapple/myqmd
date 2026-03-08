@@ -1,0 +1,1003 @@
+---
+title: "第十章：Requirements Engineering"
+subtitle: "需求分析与规格说明 | Anforderungsanalyse und -spezifikation"
+author: "Softwaretechnik WS 25/26"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    font_list = candidates.get(system, candidates['Linux'])
+    valid_fonts = [f for f in font_list if f in available_fonts]
+    if valid_fonts:
+        plt.rcParams['font.sans-serif'] = valid_fonts + ['DejaVu Sans']
+        plt.rcParams['font.monospace'] = valid_fonts + ['Consolas', 'Courier New', 'DejaVu Sans Mono']
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+COLORS = {
+    'primary': '#2E86AB',
+    'secondary': '#A23B72',
+    'success': '#2E8B57',
+    'warning': '#E8871E',
+    'danger': '#C1292E',
+    'info': '#5B8C5A',
+    'light': '#F5F5F5',
+    'dark': '#2C3E50',
+    'neutral': '#7F8C8D',
+    'highlight': '#F39C12',
+    'purple': '#8E44AD',
+    'teal': '#1ABC9C',
+    'pink': '#E91E63',
+    'indigo': '#3F51B5',
+    'deep_orange': '#FF5722',
+    'blue_light': '#D6EAF8',
+    'green_light': '#D5F5E3',
+    'red_light': '#FDEDEC',
+    'yellow_light': '#FEF9E7',
+    'purple_light': '#F3E5F5',
+    'orange_light': '#FDEBD0',
+    'teal_light': '#D1F2EB',
+    'pink_light': '#FCE4EC',
+    'indigo_light': '#E8EAF6',
+    # Functional
+    'func_color': '#1565C0',
+    'nonfunc_color': '#C62828',
+    'domain_color': '#2E7D32',
+    # RE process
+    'elicit': '#0277BD',
+    'analyze': '#6A1B9A',
+    'specify': '#EF6C00',
+    'validate': '#00695C',
+    # Notation
+    'natural': '#3949AB',
+    'structured': '#00838F',
+    'graphical': '#D84315',
+    'mathematical': '#4E342E',
+    # Storage
+    'doc_color': '#5C6BC0',
+    'wiki_color': '#26A69A',
+    'tool_color': '#FF7043',
+}
+```
+
+# 回顾与本章目标 | Recap und Ziel
+
+::: {.callout-note}
+## 前几章要点 (Zusammenfassung bisheriger Kapitel)
+
+**People Management**：Maslow 需求层次与 SDT 自我决定理论 (能力感/自主性/归属感)、有效沟通 (Minto 金字塔/四耳模型)、Big Five 人格特质。**Teamwork**：Google Project Aristotle 发现心理安全 (Psychologische Sicherheit) 是团队成功的首要因素；Edmondson 三步框架；开放式与封闭式问题。
+:::
+
+::: {.callout-important}
+## 本章目标 (Ziel dieser Vorlesung)
+
+在本章结束时，你将理解需求工程 (Requirements Engineering) 的完整流程——从需求的分类与获取，到需求规格说明的编写方法，再到需求的存储与验证。你将掌握如何避免需求的歧义性，以及如何用不同的表示法 (Notation) 来精确描述系统行为。
+:::
+
+```{python}
+#| label: fig-chapter-overview
+#| fig-cap: "本章概览 | Kapiteluebersicht"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('第十章 Requirements Engineering -- 概览 | Ueberblick', fontsize=15, fontweight='bold')
+
+sections = [
+    {'title': 'Recap\n需求回顾', 'sub': '功能/非功能需求\n歧义性问题', 'marker': 'R',
+     'color': COLORS['primary'], 'x': 2.0},
+    {'title': '需求规格说明\nSpezifikation', 'sub': '自然语言/结构化\n图形/数学', 'marker': 'S',
+     'color': COLORS['warning'], 'x': 5.5},
+    {'title': '需求存储\nSpeicherung', 'sub': '文档/Wiki\n项目管理工具', 'marker': 'P',
+     'color': COLORS['purple'], 'x': 9.0},
+    {'title': '需求验证\nValidierung', 'sub': '评审/原型\n测试用例', 'marker': 'V',
+     'color': COLORS['success'], 'x': 12.5},
+]
+
+for s in sections:
+    card = mpatches.FancyBboxPatch((s['x'] - 1.5, 0.5), 3.0, 4.5,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=s['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    marker_circle = plt.Circle((s['x'], 4.5), 0.35, facecolor=s['color'], edgecolor='white', linewidth=2)
+    ax.add_patch(marker_circle)
+    ax.text(s['x'], 4.5, s['marker'], ha='center', va='center', fontsize=12,
+            fontweight='bold', color='white')
+
+    ax.text(s['x'], 3.4, s['title'], ha='center', fontsize=10, fontweight='bold',
+            color=s['color'], linespacing=1.3)
+    ax.text(s['x'], 1.6, s['sub'], ha='center', fontsize=8.5, color='#555', linespacing=1.3)
+
+for i in range(len(sections) - 1):
+    ax.annotate('', xy=(sections[i+1]['x'] - 1.6, 2.8),
+        xytext=(sections[i]['x'] + 1.6, 2.8),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+# Recap：需求工程基础 | Grundlagen
+
+## 在流程中的定位 | Einordnung im Prozess
+
+Requirements Engineering 回答的核心问题是：**我们应该实现什么？** (*Was sollen wir implementieren?*) 这是软件开发流程中最早也是最关键的环节之一。如果需求不明确、不完整或相互矛盾，后续的设计、实现和测试都将建立在不稳固的基础之上。
+
+## 需求分类 | Anforderungskategorien
+
+```{python}
+#| label: fig-req-categories
+#| fig-cap: "需求分类 | Anforderungskategorien"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('需求分类 | Anforderungskategorien', fontsize=15, fontweight='bold')
+
+# Functional requirements
+func_card = mpatches.FancyBboxPatch((0.5, 3.0), 6.0, 5.5,
+    boxstyle="round,pad=0.2", facecolor='white', edgecolor=COLORS['func_color'], linewidth=3)
+ax.add_patch(func_card)
+ax.text(3.5, 7.8, '[F] 功能性需求', ha='center', fontsize=13, fontweight='bold',
+        color=COLORS['func_color'])
+ax.text(3.5, 7.2, 'Funktionale Anforderungen', ha='center', fontsize=10,
+        color=COLORS['func_color'])
+
+func_items = [
+    '单个系统功能及其输入/输出\n(Einzelne Systemfunktionen, Ein-/Ausgaben)',
+    '异常情况及其处理\n(Ausnahmen und ihre Behandlung)',
+    '信息需求\n(Informationsanforderungen)',
+]
+for i, item in enumerate(func_items):
+    y = 6.0 - i * 1.2
+    ax.text(1.0, y, '*', fontsize=12, color=COLORS['func_color'], fontweight='bold')
+    ax.text(1.5, y, item, fontsize=8, color='#444', linespacing=1.3)
+
+# Non-functional requirements
+nonfunc_card = mpatches.FancyBboxPatch((7.5, 3.0), 6.0, 5.5,
+    boxstyle="round,pad=0.2", facecolor='white', edgecolor=COLORS['nonfunc_color'], linewidth=3)
+ax.add_patch(nonfunc_card)
+ax.text(10.5, 7.8, '[NF] 非功能性需求', ha='center', fontsize=13, fontweight='bold',
+        color=COLORS['nonfunc_color'])
+ax.text(10.5, 7.2, 'Nichtfunktionale Anforderungen', ha='center', fontsize=10,
+        color=COLORS['nonfunc_color'])
+
+nonfunc_items = [
+    '故障安全 / 访问控制\n(Ausfallsicherheit / Zugriffssteuerung)',
+    '响应时间 / 内存使用\n(Antwortzeiten / Speichernutzung)',
+    '数据格式\n(Datenformate)',
+]
+for i, item in enumerate(nonfunc_items):
+    y = 6.0 - i * 1.2
+    ax.text(8.0, y, '*', fontsize=12, color=COLORS['nonfunc_color'], fontweight='bold')
+    ax.text(8.5, y, item, fontsize=8, color='#444', linespacing=1.3)
+
+# Common note
+note_box = mpatches.FancyBboxPatch((2.0, 0.5), 10.0, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(note_box)
+ax.text(7.0, 1.8, '!! 重要 | Wichtig', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['highlight'])
+ax.text(7.0, 1.0, '非功能性需求往往影响系统的整体结构 | 需求之间可能相互冲突\n'
+        'Betreffen haeufig die Gesamtstruktur des Systems | Anforderungen koennen im Konflikt stehen',
+        ha='center', fontsize=9, color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+功能性需求 (Funktionale Anforderungen) 描述系统应该提供的具体功能，包括每个功能的输入、输出、异常情况及其处理方式，以及信息需求。非功能性需求 (Nichtfunktionale Anforderungen) 涉及系统的质量属性，例如故障安全性、访问控制、响应时间、内存使用和数据格式等。非功能性需求往往影响系统的整体架构，而且不同的需求之间可能存在相互冲突。
+
+## 歧义性需求 | Mehrdeutige Anforderungen
+
+### 案例分析 | Fallanalyse
+
+```{python}
+#| label: fig-ambiguity-example
+#| fig-cap: "歧义性需求案例：门诊预约列表 | Beispiel mehrdeutiger Anforderungen"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('歧义性需求案例 | Beispiel: Mehrdeutige Anforderungen', fontsize=14, fontweight='bold')
+
+# Original ambiguous requirement
+orig_box = mpatches.FancyBboxPatch((0.5, 7.5), 13.0, 2.0,
+    boxstyle="round,pad=0.2", facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(orig_box)
+ax.text(7.0, 8.8, '[X] 歧义需求 | Mehrdeutige Anforderung', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['danger'])
+ax.text(7.0, 7.9, '"用户应该能够搜索门诊所有医生预约的列表"',
+        ha='center', fontsize=9.5, color='#444', fontstyle='italic')
+
+# Improved version
+impr_box = mpatches.FancyBboxPatch((0.5, 2.5), 13.0, 4.5,
+    boxstyle="round,pad=0.2", facecolor=COLORS['green_light'], edgecolor=COLORS['success'], linewidth=2)
+ax.add_patch(impr_box)
+ax.text(7.0, 6.3, '[OK] 改进后的需求 | Verbesserte Anforderung', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['success'])
+
+improved_lines = [
+    '(1) 表格显示所有预约列表，包含以下列：',
+    '    姓名、名字、预约地点、预约日期',
+    '(2) 搜索栏允许用户在上述四列中搜索文本',
+]
+for i, line in enumerate(improved_lines):
+    ax.text(1.5, 5.4 - i * 0.6, line, fontsize=9, color='#444', family='monospace')
+
+# Intentionally open details
+ax.text(7.0, 3.3, '故意留下的开放细节 | Absichtlich offene Implementierungsdetails:', ha='center',
+        fontsize=9, fontweight='bold', color=COLORS['success'])
+open_details = [
+    '搜索栏位置和可见性 | Position und Sichtbarkeit der Suchleiste',
+    '无限滚动还是分页? | Ewig scrollend oder Pagination?',
+    '即时搜索还是点击按钮? | Sofortige Suche oder nach Klick?',
+    '简单文本搜索还是正则? | Einfache Textsuche oder Regex?',
+]
+for i, detail in enumerate(open_details):
+    ax.text(3.0, 2.7 - i * 0.45 + 0.3, '  -  ' + detail, fontsize=8, color='#666')
+
+# Arrow
+ax.annotate('', xy=(7.0, 7.0), xytext=(7.0, 7.4),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+ax.text(8.0, 7.1, '改进 | Verbesserung', fontsize=9, color=COLORS['neutral'],
+        fontweight='bold')
+
+# Bottom note
+note_box = mpatches.FancyBboxPatch((1.0, 0.3), 12.0, 1.5, boxstyle="round,pad=0.1",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(note_box)
+ax.text(7.0, 1.3, '!! 需求规格不是实现指令 (Keine Implementierungsanweisungen)', ha='center',
+        fontsize=10, fontweight='bold', color=COLORS['highlight'])
+ax.text(7.0, 0.7, '只描述外部可观察行为 | 技术/架构只在影响行为时才提及',
+        ha='center', fontsize=9, color='#555')
+
+plt.tight_layout()
+plt.show()
+```
+
+原始需求"用户应该能够搜索门诊所有医生预约的列表"是模糊的，用户和开发者可能产生完全不同的理解。改进后的版本明确了两个组件（表格和搜索栏）以及具体的数据列。同时，它有意留下了一些实现细节（如搜索栏位置、分页方式等），因为这些属于实现决策而非需求描述。
+
+### 量化主观需求 | Subjektive Anforderungen quantifizieren
+
+```{python}
+#| label: fig-quantify-subjective
+#| fig-cap: "将主观需求量化 | Subjektive Anforderungen quantifizieren"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+# Left: Vague
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('[X] 模糊需求 | Vage Anforderung', fontsize=12, fontweight='bold',
+             color=COLORS['danger'])
+
+vague_box = mpatches.FancyBboxPatch((0.5, 1.0), 9.0, 6.5, boxstyle="round,pad=0.2",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(vague_box)
+
+ax.text(5.0, 6.5, '"系统应该简单易用,', ha='center', fontsize=10,
+        color='#444', fontstyle='italic')
+ax.text(5.0, 5.8, '用户错误应该被最小化"', ha='center', fontsize=10,
+        color='#444', fontstyle='italic')
+
+ax.text(5.0, 4.2, '问题 | Probleme:', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['danger'])
+problems = ['"简单" -- 如何定义?', '"最小化" -- 达到什么程度?', '何时算达标? 如何测量?']
+for i, p in enumerate(problems):
+    ax.text(1.5, 3.2 - i * 0.7, '?  ' + p, fontsize=9, color=COLORS['danger'])
+
+# Right: Quantified
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('[OK] 量化需求 | Quantifizierte Anforderung', fontsize=12, fontweight='bold',
+             color=COLORS['success'])
+
+quant_box = mpatches.FancyBboxPatch((0.5, 1.0), 9.0, 6.5, boxstyle="round,pad=0.2",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['success'], linewidth=2)
+ax.add_patch(quant_box)
+
+quant_lines = [
+    '经过两小时培训后,',
+    '医护人员应能独立完成:',
+    '',
+    '1. 创建新患者档案',
+    '2. 在日历中添加新预约',
+    '3. 搜索/查看/取消预约',
+    '',
+    '错误输入率不超过',
+    '平均 2 次/小时系统使用',
+]
+for i, line in enumerate(quant_lines):
+    y = 6.8 - i * 0.6
+    weight = 'bold' if i in [7, 8] else 'normal'
+    ax.text(1.2, y, line, fontsize=8.5, color='#444', fontweight=weight)
+
+plt.tight_layout()
+plt.show()
+```
+
+将"简单易用"和"错误最小化"等主观描述转化为可测量的标准——例如"经过两小时培训后能独立完成特定操作"以及"错误率不超过每小时 2 次"——是编写高质量需求规格的关键技能。
+
+## 需求定义中的困难 | Schwierigkeiten
+
+```{python}
+#| label: fig-difficulties
+#| fig-cap: "需求定义中的常见困难 | Schwierigkeiten in der Anforderungsdefinition"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('需求定义中的困难 | Schwierigkeiten in der Anforderungsdefinition',
+             fontsize=14, fontweight='bold')
+
+difficulties = [
+    {'zh': '需求可能有歧义', 'de': 'Mehrdeutigkeit',
+     'color': '#E53935', 'x': 2.5, 'y': 6.0},
+    {'zh': '利益相关者不知道\n自己想要什么', 'de': 'Stakeholder wissen nicht,\nwas sie wollen',
+     'color': '#D81B60', 'x': 7.0, 'y': 6.0},
+    {'zh': '利益相关者的领域知识\n带来隐含需求', 'de': 'Implizite Anforderungen\ndurch Domaenenwissen',
+     'color': '#8E24AA', 'x': 11.5, 'y': 6.0},
+    {'zh': '不同利益相关者\n有不同的期望', 'de': 'Unterschiedliche\nVorstellungen',
+     'color': '#5E35B1', 'x': 2.5, 'y': 2.5},
+    {'zh': '需求在项目过程中\n不断变化', 'de': 'Anforderungen aendern\nsich im Laufe des Projekts',
+     'color': '#1E88E5', 'x': 7.0, 'y': 2.5},
+    {'zh': '动态环境', 'de': 'Dynamisches Umfeld',
+     'color': '#00897B', 'x': 11.5, 'y': 2.5},
+]
+
+for d in difficulties:
+    card = mpatches.FancyBboxPatch((d['x'] - 1.8, d['y'] - 1.2), 3.6, 2.6,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=d['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(d['x'], d['y'] + 0.7, d['zh'], ha='center', fontsize=9, fontweight='bold',
+            color=d['color'], linespacing=1.3)
+    ax.text(d['x'], d['y'] - 0.5, d['de'], ha='center', fontsize=7.5, color='#666',
+            linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+需求定义面临六大常见困难：需求本身的歧义性；利益相关者往往不清楚自己真正需要什么；领域专家的隐含知识导致未被明确说明的需求；不同利益相关者对同一系统有不同的期望；需求在项目过程中不断演变；以及外部动态环境带来的不确定性。
+
+## 需求获取技术 | Techniken zur Anforderungserhebung
+
+```{python}
+#| label: fig-elicitation-techniques
+#| fig-cap: "需求获取技术 | Techniken zur Anforderungserhebung"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('需求获取技术 | Techniken zur Anforderungserhebung', fontsize=14, fontweight='bold')
+
+techniques = [
+    {'zh': '访谈', 'de': 'Interviews', 'color': '#1565C0', 'x': 1.5, 'y': 5.5},
+    {'zh': '民族志观察', 'de': 'Ethnografie', 'color': '#4527A0', 'x': 4.5, 'y': 5.5},
+    {'zh': '研讨会\n(投票/优先级排序)', 'de': 'Workshops mit\nVoting/Priorisierung',
+     'color': '#AD1457', 'x': 7.5, 'y': 5.5},
+    {'zh': '问卷调查', 'de': 'Umfragen', 'color': '#00695C', 'x': 10.5, 'y': 5.5},
+    {'zh': '用户画像', 'de': 'Personas', 'color': '#E65100', 'x': 3.0, 'y': 2.0},
+    {'zh': '设计思维', 'de': 'Design Thinking', 'color': '#827717', 'x': 7.0, 'y': 2.0},
+    {'zh': '分析现有文档\n/遗留系统', 'de': 'Bestehende Doku /\nAltsysteme analysieren',
+     'color': '#37474F', 'x': 11.0, 'y': 2.0},
+]
+
+for t in techniques:
+    card = mpatches.FancyBboxPatch((t['x'] - 1.3, t['y'] - 1.0), 2.6, 2.2,
+        boxstyle="round,pad=0.12", facecolor='white', edgecolor=t['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(t['x'], t['y'] + 0.5, t['zh'], ha='center', fontsize=9, fontweight='bold',
+            color=t['color'], linespacing=1.3)
+    ax.text(t['x'], t['y'] - 0.5, t['de'], ha='center', fontsize=7.5, color='#666',
+            linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+需求获取的核心技术包括：访谈 (Interviews) 直接与利益相关者对话获取需求；民族志 (Ethnografie) 通过观察用户实际工作流程来发现隐含需求；研讨会 (Workshops) 借助投票或优先级排序来集体确定需求；问卷调查 (Umfragen) 用于大范围收集意见；用户画像 (Personas) 帮助理解典型用户的需求与行为模式；设计思维 (Design Thinking) 以用户为中心进行创新性需求探索；分析现有文档或遗留系统 (Altsysteme analysieren) 也是重要的需求来源。
+
+## User Stories | 用户故事
+
+```{python}
+#| label: fig-user-stories
+#| fig-cap: "User Stories 的两种形式 | Zwei Formen von User Stories"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 8))
+
+# Left: Story format
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('作为故事 | Als Story', fontsize=12, fontweight='bold', color=COLORS['primary'])
+
+story_box = mpatches.FancyBboxPatch((0.5, 0.5), 9.0, 8.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=2.5)
+ax.add_patch(story_box)
+
+ax.text(5.0, 7.8, '模板 | Template:', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['primary'])
+
+parts = [
+    ('Als', '[角色 / Rolle]', COLORS['danger']),
+    ('moechte ich', '[功能 / Funktionalitaet]', COLORS['primary']),
+    ('um', '[效益 / Nutzen]', COLORS['success']),
+    ('zu erzielen.', '', COLORS['dark']),
+]
+y = 6.5
+for de, zh, color in parts:
+    ax.text(1.5, y, de, fontsize=10, fontweight='bold', color=color)
+    if zh:
+        ax.text(5.5, y, zh, fontsize=9, color=color, fontstyle='italic')
+    y -= 0.8
+
+# Example
+ex_box = mpatches.FancyBboxPatch((1.0, 1.0), 8.0, 2.5, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor=COLORS['primary'], linewidth=1, linestyle='--')
+ax.add_patch(ex_box)
+ax.text(5.0, 3.0, '示例 | Beispiel:', ha='center', fontsize=9, fontweight='bold',
+        color=COLORS['primary'])
+ax.text(5.0, 2.2, '作为 [医护人员],\n我想要 [搜索患者预约],\n以便 [快速找到需要的信息]。',
+        ha='center', fontsize=8.5, color='#444', linespacing=1.4)
+
+# Right: Scenario format
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('作为场景 | Als Szenario', fontsize=12, fontweight='bold', color=COLORS['purple'])
+
+scen_box = mpatches.FancyBboxPatch((0.5, 0.5), 9.0, 8.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['purple_light'], edgecolor=COLORS['purple'], linewidth=2.5)
+ax.add_patch(scen_box)
+
+ax.text(5.0, 7.8, '模板 | Template:', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['purple'])
+
+scenario_parts = [
+    ('Initiale Annahme:', '初始假设'),
+    ('Normal:', '正常流程'),
+    ('Was falsch laufen kann:', '可能出错的地方'),
+    ('Andere Aktivitaeten:', '其他活动'),
+    ('Systemzustand bei\nBeendigung:', '结束时系统状态'),
+]
+y = 6.8
+for de, zh in scenario_parts:
+    ax.text(1.2, y, de, fontsize=9, fontweight='bold', color=COLORS['purple'])
+    ax.text(6.5, y, zh, fontsize=8.5, color='#666')
+    y -= 1.1
+
+plt.tight_layout()
+plt.show()
+```
+
+User Stories 有两种常见形式。**故事形式**使用"作为 [角色]，我想要 [功能]，以便 [效益]"的模板，简洁地描述需求的主体、功能和价值。**场景形式**则更加详细，包括初始假设 (Initiale Annahme)、正常流程 (Normal)、可能出错的情况 (Was falsch laufen kann)、其他活动 (Andere Aktivitaeten) 和结束时的系统状态 (Systemzustand bei Beendigung)。
+
+# 需求规格说明 | Anforderungsspezifikation (Kapitel 4.4)
+
+## 需求的详细程度 | Detailstufen von Anforderungen
+
+```{python}
+#| label: fig-detail-levels
+#| fig-cap: "需求的不同详细程度 | Detailstufen von Anforderungen"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('需求的详细程度 | Detailstufen von Anforderungen', fontsize=14, fontweight='bold')
+
+levels = [
+    {
+        'zh': '高层需求 (用户需求)', 'de': 'Benutzeranforderungen',
+        'desc': '面向客户和管理层\n自然语言/图形描述\nFuer Kunden und Management',
+        'color': '#1565C0', 'x': 2.5, 'w': 4.0
+    },
+    {
+        'zh': '系统需求', 'de': 'Systemanforderungen',
+        'desc': '详细的功能描述\n系统架构师/开发者使用\nDetaillierte Beschreibung',
+        'color': '#6A1B9A', 'x': 7.0, 'w': 6.0
+    },
+    {
+        'zh': '软件设计规格', 'de': 'Software-Designspezifikation',
+        'desc': '最详细的技术描述\n作为实现基础\nAls Basis fuer Implementierung',
+        'color': '#C62828', 'x': 11.5, 'w': 8.0
+    },
+]
+
+for i, lv in enumerate(levels):
+    y_pos = 4.0
+    card = mpatches.FancyBboxPatch((lv['x'] - 1.8, y_pos - 1.5), 3.6, 3.5,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=lv['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    ax.text(lv['x'], y_pos + 1.3, lv['zh'], ha='center', fontsize=10, fontweight='bold',
+            color=lv['color'])
+    ax.text(lv['x'], y_pos + 0.7, lv['de'], ha='center', fontsize=8.5, color=lv['color'])
+    ax.text(lv['x'], y_pos - 0.5, lv['desc'], ha='center', fontsize=7.5, color='#555',
+            linespacing=1.4)
+
+    # Detail level indicator
+    bar_y = 1.5
+    bar_w = lv['w']
+    bar_x = lv['x'] - bar_w / 2
+    bar = mpatches.FancyBboxPatch((bar_x, bar_y), bar_w, 0.4,
+        boxstyle="round,pad=0.02", facecolor=lv['color'], edgecolor='white', linewidth=1, alpha=0.6)
+    ax.add_patch(bar)
+
+ax.text(7.0, 0.8, '详细程度 | Detailgrad', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['neutral'])
+ax.annotate('', xy=(12.5, 0.8), xytext=(1.5, 0.8),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+
+for i in range(len(levels) - 1):
+    ax.annotate('', xy=(levels[i+1]['x'] - 2.0, 4.0),
+        xytext=(levels[i]['x'] + 2.0, 4.0),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=1.5))
+
+plt.tight_layout()
+plt.show()
+```
+
+需求可以在不同的详细程度上进行规格说明。**用户需求 (Benutzeranforderungen)** 面向客户和管理层，用自然语言和图形描述。**系统需求 (Systemanforderungen)** 提供更详细的功能描述，供系统架构师和开发者使用。**软件设计规格 (Software-Designspezifikation)** 是最详细的技术描述，作为实现的直接基础。
+
+## 需求规格说明的表示法 | Notationen
+
+```{python}
+#| label: fig-notations
+#| fig-cap: "需求规格说明的四种表示法 | Vier Notationen fuer Anforderungsspezifikationen"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('需求规格说明的表示法 | Notationen fuer Anforderungsspezifikationen',
+             fontsize=14, fontweight='bold')
+
+notations = [
+    {
+        'zh': '自然语言', 'de': 'Natuerliche\nSprache',
+        'desc': '自由文本描述\n最易理解\n但容易产生歧义',
+        'marker': 'NL',
+        'color': COLORS['natural'], 'x': 2.0
+    },
+    {
+        'zh': '结构化自然语言', 'de': 'Strukturierte\nnatuerliche Sprache',
+        'desc': '使用标准模板\n限制语言自由度\n减少歧义',
+        'marker': 'SN',
+        'color': COLORS['structured'], 'x': 5.5
+    },
+    {
+        'zh': '图形表示法', 'de': 'Grafische\nNotationen',
+        'desc': 'SysML, BPMN\nUML, 自由图表\nWireframes',
+        'marker': 'GN',
+        'color': COLORS['graphical'], 'x': 9.0
+    },
+    {
+        'zh': '数学规格说明', 'de': 'Mathematische\nSpezifikationen',
+        'desc': '数学函数\n状态自动机\n集合, 逻辑',
+        'marker': 'MS',
+        'color': COLORS['mathematical'], 'x': 12.5
+    },
+]
+
+for n in notations:
+    card = mpatches.FancyBboxPatch((n['x'] - 1.5, 1.0), 3.0, 7.0,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=n['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    marker_circle = plt.Circle((n['x'], 7.3), 0.4, facecolor=n['color'],
+                                edgecolor='white', linewidth=2)
+    ax.add_patch(marker_circle)
+    ax.text(n['x'], 7.3, n['marker'], ha='center', va='center', fontsize=10,
+            fontweight='bold', color='white')
+
+    ax.text(n['x'], 6.2, n['zh'], ha='center', fontsize=11, fontweight='bold', color=n['color'])
+    ax.text(n['x'], 5.2, n['de'], ha='center', fontsize=9, color=n['color'], linespacing=1.3)
+    ax.text(n['x'], 3.2, n['desc'], ha='center', fontsize=8, color='#555', linespacing=1.5)
+
+# Spectrum
+ax.annotate('', xy=(13.5, 0.5), xytext=(0.5, 0.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+ax.text(0.5, 0.15, '易于理解 | Leicht verstaendlich', fontsize=8, color=COLORS['natural'])
+ax.text(13.5, 0.15, '精确无歧义 | Praezise & eindeutig', fontsize=8, color=COLORS['mathematical'],
+        ha='right')
+
+plt.tight_layout()
+plt.show()
+```
+
+四种表示法形成一个从易理解到精确无歧义的光谱。**自然语言 (Natuerliche Sprache)** 最容易被所有利益相关者理解，但最容易产生歧义。**结构化自然语言 (Strukturierte natuerliche Sprache)** 通过标准模板限制语言自由度来减少歧义。**图形表示法 (Grafische Notationen)** 包括 SysML、BPMN、UML 和 Wireframes 等。**数学规格说明 (Mathematische Spezifikationen)** 使用数学函数、状态自动机、集合和逻辑来达到最高精确度。
+
+### 自然语言规格说明 | Natuerliche Sprache
+
+::: {.callout-tip}
+## 自然语言需求编写准则 (Richtlinien)
+
+1. **确定标准格式** (Standardformat festlegen)：所有需求统一使用同一格式。
+
+2. **明确标记约束力** (Verbindlichkeit markieren)：强制性需求用"必须" (muss) 标记，可选需求用"应该" (sollte) 标记。
+
+3. **避免专业术语** (Fachjargon vermeiden)：缩写和首字母缩略词在使用前必须重新引入和定义。
+
+4. **提供理由** (Begruendung geben)：每条需求都应包含其必要性的理由——为什么这条需求重要？是谁提出的？
+:::
+
+标准格式的常见例子包括场景 (Szenarios)、每个从句另起一行的 User Stories、以及 Bug 报告和改进建议的标准模板。
+
+### 结构化自然语言 | Strukturierte Natuerliche Sprache
+
+```{python}
+#| label: fig-structured-nl
+#| fig-cap: "结构化自然语言模板示例 | Beispiel: Strukturierte natuerliche Sprache"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('结构化自然语言模板 | Strukturierte natuerliche Sprache',
+             fontsize=14, fontweight='bold')
+
+# Template card
+template_box = mpatches.FancyBboxPatch((0.5, 0.5), 11.0, 8.0,
+    boxstyle="round,pad=0.25", facecolor='white', edgecolor=COLORS['structured'], linewidth=3)
+ax.add_patch(template_box)
+
+fields = [
+    ('Anforderung-ID:', 'REQ-001', 7.5),
+    ('Bezeichnung:', '预约搜索功能 | Terminsuchfunktion', 6.8),
+    ('Beschreibung:', '用户可以搜索门诊预约列表\n(siehe detaillierte Beschreibung)', 5.8),
+    ('Quelle:', '访谈 #3 | Interview #3, Dr. Mueller', 4.8),
+    ('Prioritaet:', '必须 (Muss)', 4.1),
+    ('Abhaengigkeiten:', 'REQ-003 (Datenbank-Zugang)', 3.4),
+    ('Akzeptanzkriterium:', '搜索结果在 <2s 内显示\nSuchergebnisse in <2s angezeigt', 2.4),
+    ('Version:', '1.0 (2025-12-10)', 1.3),
+]
+
+for label, value, y in fields:
+    label_box = mpatches.FancyBboxPatch((1.0, y - 0.3), 3.2, 0.6,
+        boxstyle="round,pad=0.03", facecolor=COLORS['structured'] + '20',
+        edgecolor=COLORS['structured'], linewidth=0.5)
+    ax.add_patch(label_box)
+    ax.text(1.2, y, label, fontsize=8.5, fontweight='bold', color=COLORS['structured'])
+    ax.text(4.5, y, value, fontsize=8.5, color='#444', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+结构化自然语言通过预定义的模板字段（如需求 ID、描述、来源、优先级、依赖关系、验收标准和版本号）来规范需求的书写格式。每个字段都有明确的含义，减少了歧义的可能性。
+
+### 图形表示法 | Grafische Notationen
+
+```{python}
+#| label: fig-graphical-notations
+#| fig-cap: "图形表示法的常见类型 | Haeufige grafische Notationen"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('图形表示法 | Grafische Notationen', fontsize=14, fontweight='bold')
+
+graph_types = [
+    {'zh': 'SysML / BPMN', 'desc': '系统和流程建模\nSystem- und\nProzessmodellierung',
+     'color': '#D84315', 'x': 2.0},
+    {'zh': 'UML', 'desc': '用例图 / 类图\n活动图 / 序列图\n(下节课详述)',
+     'color': '#6A1B9A', 'x': 5.3},
+    {'zh': 'Wireframes', 'desc': 'UI 设计原型\n界面布局草图\nUI-Design Prototypen',
+     'color': '#00695C', 'x': 8.6},
+    {'zh': '自由图表', 'desc': '工作流程图\n服务架构需求\nFreie Diagramme',
+     'color': '#37474F', 'x': 11.9},
+]
+
+for g in graph_types:
+    card = mpatches.FancyBboxPatch((g['x'] - 1.5, 0.5), 3.0, 5.8,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=g['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(g['x'], 5.5, g['zh'], ha='center', fontsize=11, fontweight='bold', color=g['color'])
+    ax.text(g['x'], 3.2, g['desc'], ha='center', fontsize=8.5, color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+图形表示法在需求规格说明中有广泛应用。SysML 和 BPMN 用于系统和流程建模。UML (统一建模语言) 包括用例图、类图、活动图和序列图等多种图表类型，将在下节课详细介绍。Wireframes 用于 UI 设计的界面布局原型。自由图表则可以灵活地可视化工作流程或服务架构需求。
+
+## 需求规格说明的内容原则 | Inhaltsprinzipien
+
+::: {.callout-important}
+## 核心原则 (Kernprinzip)
+
+**理想情况**：需求规格说明只描述从外部可观察到的行为 (Nur von aussen wahrnehmbares Verhalten)。
+
+**现实情况**：技术和架构会影响可实现的行为。在必要时提及技术约束以解释需求决策，但在不损失信息的情况下应尽量避免。
+
+**需求规格说明不是实现指令** (Keine Implementierungsanweisungen)。
+:::
+
+# 需求的存储 | Speicherung von Anforderungen
+
+```{python}
+#| label: fig-storage-methods
+#| fig-cap: "需求存储方式 | Speicherung von Anforderungen"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('需求存储方式 | Speicherung von Anforderungen', fontsize=14, fontweight='bold')
+
+storage = [
+    {
+        'zh': '文档', 'de': 'Dokumente',
+        'tools': 'Word, PDF',
+        'pros': '熟悉的工具\n适合正式文档',
+        'cons': '版本管理困难\n难以追踪变更',
+        'color': COLORS['doc_color'], 'x': 2.5
+    },
+    {
+        'zh': 'Wiki', 'de': 'Wikis',
+        'tools': 'Confluence, GitLab Wiki\nNotion, Coda',
+        'pros': '协作编辑\n版本历史',
+        'cons': '结构可能混乱\n搜索可能不便',
+        'color': COLORS['wiki_color'], 'x': 7.0
+    },
+    {
+        'zh': '项目管理工具', 'de': 'Projektmanagement-Tools',
+        'tools': 'Jira, GitLab Issues\nGitHub Issues',
+        'pros': '可追踪状态\n与开发流程集成',
+        'cons': '不适合长篇描述\n工具依赖',
+        'color': COLORS['tool_color'], 'x': 11.5
+    },
+]
+
+for s in storage:
+    card = mpatches.FancyBboxPatch((s['x'] - 2.0, 0.5), 4.0, 7.0,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=s['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    ax.text(s['x'], 7.0, s['zh'], ha='center', fontsize=13, fontweight='bold', color=s['color'])
+    ax.text(s['x'], 6.4, s['de'], ha='center', fontsize=10, color=s['color'])
+
+    # Tools
+    tools_box = mpatches.FancyBboxPatch((s['x'] - 1.7, 5.0), 3.4, 1.0,
+        boxstyle="round,pad=0.05", facecolor=s['color'] + '15', edgecolor=s['color'],
+        linewidth=0.5)
+    ax.add_patch(tools_box)
+    ax.text(s['x'], 5.5, s['tools'], ha='center', fontsize=8, color='#444', linespacing=1.3)
+
+    # Pros
+    ax.text(s['x'], 4.3, '[+] 优势:', fontsize=8.5, fontweight='bold', color=COLORS['success'],
+            ha='center')
+    ax.text(s['x'], 3.5, s['pros'], ha='center', fontsize=7.5, color='#555', linespacing=1.3)
+
+    # Cons
+    ax.text(s['x'], 2.5, '[-] 劣势:', fontsize=8.5, fontweight='bold', color=COLORS['danger'],
+            ha='center')
+    ax.text(s['x'], 1.7, s['cons'], ha='center', fontsize=7.5, color='#555', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+需求的存储方式主要有三类。**文档** (Word, PDF) 是传统方式，工具熟悉且适合正式文档，但版本管理和变更追踪困难。**Wiki** (Confluence, GitLab Wiki, Notion, Coda) 支持协作编辑和版本历史，但结构可能变得混乱。**项目管理工具** (Jira, GitLab Issues, GitHub Issues) 可以追踪需求状态并与开发流程集成，但不太适合长篇描述。
+
+课程中提到 GitLab Issue Boards 作为项目管理工具的具体示例 (参见 [gitlab.com/gitlab-org/gitlab/-/boards](https://gitlab.com/gitlab-org/gitlab/-/boards))。GitLab 的 Issue Board 允许团队以看板 (Kanban) 的形式可视化和管理 Issues，支持通过标签和里程碑来组织需求工作流。
+
+# 需求验证 | Validierung von Anforderungen
+
+```{python}
+#| label: fig-validation
+#| fig-cap: "需求验证方法 | Methoden zur Validierung von Anforderungen"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('需求验证方法 | Validierung von Anforderungen', fontsize=14, fontweight='bold')
+
+methods = [
+    {
+        'zh': '评审', 'de': 'Reviews',
+        'desc': '团队或外部专家\n审查需求文档\nPruefung durch Team\noder Experten',
+        'marker': '1', 'color': '#1565C0', 'x': 2.0
+    },
+    {
+        'zh': '原型反馈', 'de': 'Prototypen +\nFeedback',
+        'desc': '将原型交给\n客户/用户\n收集反馈\nFunktionierendes\nProgramm oder\nDesignprototyp',
+        'marker': '2', 'color': '#6A1B9A', 'x': 5.3
+    },
+    {
+        'zh': '推导测试用例', 'de': 'Testfaelle\nableiten',
+        'desc': '从需求推导出\n具体的测试用例\n验证可测试性\nTestbarkeit\nueberpruefen',
+        'marker': '3', 'color': '#00695C', 'x': 8.6
+    },
+]
+
+for m in methods:
+    card = mpatches.FancyBboxPatch((m['x'] - 1.8, 0.5), 3.6, 5.8,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=m['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    marker_circle = plt.Circle((m['x'], 5.8), 0.35, facecolor=m['color'],
+                                edgecolor='white', linewidth=2)
+    ax.add_patch(marker_circle)
+    ax.text(m['x'], 5.8, m['marker'], ha='center', va='center', fontsize=12,
+            fontweight='bold', color='white')
+
+    ax.text(m['x'], 4.8, m['zh'], ha='center', fontsize=12, fontweight='bold', color=m['color'])
+    ax.text(m['x'], 4.0, m['de'], ha='center', fontsize=9, color=m['color'], linespacing=1.3)
+    ax.text(m['x'], 2.2, m['desc'], ha='center', fontsize=8, color='#555', linespacing=1.4)
+
+# Feedback loop
+feedback_box = mpatches.FancyBboxPatch((10.5, 1.5), 3.0, 3.5,
+    boxstyle="round,pad=0.15", facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'],
+    linewidth=2)
+ax.add_patch(feedback_box)
+ax.text(12.0, 4.3, '反馈循环', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['highlight'])
+ax.text(12.0, 3.6, 'Feedback-Loop', ha='center', fontsize=9, color=COLORS['highlight'])
+ax.text(12.0, 2.5, '验证结果反馈\n到需求获取和\n规格说明阶段\nZurueck zu\nElicitation &\nSpezifikation',
+        ha='center', fontsize=7.5, color='#555', linespacing=1.3)
+
+ax.annotate('', xy=(10.4, 3.2), xytext=(8.8, 3.2),
+    arrowprops=dict(arrowstyle='<-', color=COLORS['highlight'], lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+需求验证是确保需求正确性和完整性的关键步骤。**评审 (Reviews)** 由团队或外部专家审查需求文档，发现逻辑错误、遗漏和不一致之处。**原型反馈** 将可运行的程序原型 (funktionierendes Programm) 或设计原型 (Designprototyp) 交给客户和用户，收集他们的反馈。**推导测试用例 (Testfaelle ableiten)** 从需求出发推导具体的测试用例，如果一条需求无法被测试，那么它很可能不够具体或存在歧义。验证的结果应反馈到需求获取和规格说明阶段，形成持续改进的循环。
+
+# 全章总结 | Gesamtzusammenfassung
+
+```{python}
+#| label: fig-full-summary
+#| fig-cap: "全章知识地图 | Gesamte Wissenslandkarte"
+
+fig, ax = plt.subplots(figsize=(15, 10))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('第十章 Requirements Engineering -- 知识地图\nKapitel 10: Wissenslandkarte',
+             fontsize=15, fontweight='bold')
+
+# Central theme
+center = mpatches.FancyBboxPatch((5.5, 4.5), 4.0, 2.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['dark'], edgecolor='white', linewidth=3)
+ax.add_patch(center)
+ax.text(7.5, 5.8, 'Requirements', ha='center', fontsize=13,
+        fontweight='bold', color='white')
+ax.text(7.5, 5.0, 'Engineering', ha='center', fontsize=12, color='white')
+
+# Surrounding topics
+topics = [
+    {'title': '需求分类\nKategorien', 'items': '功能性 [F]\n非功能性 [NF]\n冲突与优先级',
+     'color': COLORS['func_color'], 'x': 2.0, 'y': 8.5},
+    {'title': '歧义与困难\nMehrdeutigkeit', 'items': '主观表述量化\n隐含需求\n利益相关者分歧',
+     'color': COLORS['danger'], 'x': 7.5, 'y': 9.5},
+    {'title': '获取技术\nElicitation', 'items': '访谈 / 民族志\n研讨会 / Personas\n设计思维',
+     'color': COLORS['elicit'], 'x': 13.0, 'y': 8.5},
+    {'title': '规格表示法\nNotationen', 'items': '自然语言\n结构化 / 图形\n数学规格',
+     'color': COLORS['specify'], 'x': 13.0, 'y': 3.0},
+    {'title': '存储方式\nSpeicherung', 'items': '文档 / Wiki\nJira / GitLab Issues\nGitLab Boards',
+     'color': COLORS['purple'], 'x': 2.0, 'y': 3.0},
+    {'title': '验证方法\nValidierung', 'items': '评审 / 原型反馈\n测试用例推导\n反馈循环',
+     'color': COLORS['validate'], 'x': 7.5, 'y': 1.0},
+]
+
+for t in topics:
+    card = mpatches.FancyBboxPatch((t['x'] - 1.8, t['y'] - 1.2), 3.6, 2.6,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=t['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(t['x'], t['y'] + 0.8, t['title'], ha='center', fontsize=9,
+            fontweight='bold', color=t['color'], linespacing=1.3)
+    ax.text(t['x'], t['y'] - 0.5, t['items'], ha='center', fontsize=7.5,
+            color='#555', linespacing=1.3)
+
+    # Draw line to center
+    dx = 7.5 - t['x']
+    dy = 5.5 - t['y']
+    dist = (dx**2 + dy**2)**0.5
+    if dist > 0:
+        ux, uy = dx/dist, dy/dist
+        ax.plot([t['x'] + ux*2.0, 7.5 - ux*2.2],
+                [t['y'] + uy*1.5, 5.5 - uy*1.2],
+                color=t['color'], lw=1.5, linestyle='--', alpha=0.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: fig-re-process-flow
+#| fig-cap: "RE 完整流程 | Requirements Engineering Gesamtprozess"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 5.5)
+ax.axis('off')
+ax.set_title('Requirements Engineering 完整流程 | Gesamtprozess', fontsize=14, fontweight='bold')
+
+process_steps = [
+    {'zh': '需求获取\nElicitation', 'color': COLORS['elicit'], 'x': 2.0},
+    {'zh': '需求分析\nAnalyse', 'color': COLORS['analyze'], 'x': 5.0},
+    {'zh': '需求规格\nSpezifikation', 'color': COLORS['specify'], 'x': 8.0},
+    {'zh': '需求验证\nValidierung', 'color': COLORS['validate'], 'x': 11.0},
+]
+
+for s in process_steps:
+    card = mpatches.FancyBboxPatch((s['x'] - 1.3, 1.5), 2.6, 2.5,
+        boxstyle="round,pad=0.15", facecolor=s['color'], edgecolor='white',
+        linewidth=2, alpha=0.85)
+    ax.add_patch(card)
+    ax.text(s['x'], 2.8, s['zh'], ha='center', fontsize=10, fontweight='bold',
+            color='white', linespacing=1.3)
+
+for i in range(len(process_steps) - 1):
+    ax.annotate('', xy=(process_steps[i+1]['x'] - 1.4, 2.8),
+        xytext=(process_steps[i]['x'] + 1.4, 2.8),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2.5))
+
+# Feedback arrow
+ax.annotate('', xy=(2.0, 1.3), xytext=(11.0, 1.3),
+    arrowprops=dict(arrowstyle='->', color=COLORS['highlight'], lw=2,
+                    connectionstyle='arc3,rad=-0.3'))
+ax.text(6.5, 0.2, '反馈循环 | Feedback-Loop', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['highlight'])
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-tip}
+## 下周预告 | Ausblick naechste Woche
+
+**主题**：UML 建模 (Modellierung mit UML)
+
+**核心内容**：活动图 (Aktivitaetsdiagramme)、序列图 (Sequenzdiagramme)、用例图 (Use-Case-Diagramme)、类图 (Klassendiagramme)。
+
+**准备**：观看相关视频 (预计 12 月 23 日发布)。可选补充阅读：Software Engineering, Kapitel 5-5.4。无测验 (Kein Quiz)。
+:::

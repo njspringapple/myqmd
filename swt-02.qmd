@@ -1,0 +1,994 @@
+---
+title: "第二章：软件开发过程模型"
+subtitle: "瀑布 vs 迭代——纸飞机工厂的启示 | Entwicklungsprozesse — Softwaretechnik WS 25/26"
+author: "Softwaretechnik WS 25/26"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi', 'FangSong'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    font_list = candidates.get(system, candidates['Linux'])
+    valid_fonts = [f for f in font_list if f in available_fonts]
+    if valid_fonts:
+        plt.rcParams['font.sans-serif'] = valid_fonts
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+# ====== 全局样式：不使用任何 emoji ======
+COLORS = {
+    'primary': '#2E86AB',
+    'secondary': '#A23B72',
+    'success': '#2E8B57',
+    'warning': '#E8871E',
+    'danger': '#C1292E',
+    'info': '#5B8C5A',
+    'light': '#F0F0F0',
+    'waterfall': '#4A90D9',
+    'incremental': '#50C878',
+    'dark': '#2C3E50',
+}
+```
+
+# 回顾：软件工程的本质 | Recap
+
+::: {.callout-note}
+## 核心定义 (Kernbegriff)
+
+**软件工程 (Softwaretechnik)** 是一门**技术学科 (technische Disziplin)**，涵盖软件生产的**所有方面 (alle Aspekten)**。
+
+**目标 (Ziel)**：构建有价值的系统——在要求的质量内、在时间计划内、在预算内完成。
+
+**手工匠人的骄傲，而非完美主义 (Handwerksstolz statt Perfektionismus)**。
+:::
+
+## 软件工程的核心活动 | Kernaktivitaeten
+
+```{python}
+#| label: fig-activities-overview
+#| fig-cap: "软件工程核心活动总览 | Ueberblick der Kernaktivitaeten"
+
+fig, ax = plt.subplots(figsize=(12, 7))
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('软件工程核心活动与过程 | Kernaktivitaeten & Prozess',
+             fontsize=16, fontweight='bold', pad=20)
+
+# 定义活动区块（不用 emoji，用纯文本 + 颜色方块）
+activities = [
+    (1.5, 6.5, '需求分析\nAnforderungs-\nanalyse', '#A8D5E2'),
+    (4.0, 6.5, '规划\nPlanung', '#B8E0D2'),
+    (6.5, 6.5, '系统设计\nSystementwurf', '#D5C9DF'),
+    (1.5, 4.0, '组件设计\nKomponenten-\nentwurf', '#F0E6C8'),
+    (4.0, 4.0, '编程与测试\nProgrammierung\n(+Tests)', '#F5D5D5'),
+    (6.5, 4.0, '质量保证\nQualitaets-\nsicherung', '#C8E6C9'),
+    (4.0, 1.5, '变更管理\nAenderungs-\nmanagement', '#FFE0B2'),
+]
+
+for x, y, label, color in activities:
+    box = mpatches.FancyBboxPatch(
+        (x - 1.0, y - 0.8), 2.0, 1.6,
+        boxstyle="round,pad=0.15", facecolor=color,
+        edgecolor='#666666', linewidth=1.5
+    )
+    ax.add_patch(box)
+    ax.text(x, y, label, ha='center', va='center',
+            fontsize=9, fontweight='bold', color='#333333')
+
+# 右侧标注"过程"和"团队合作"
+ax.text(9.0, 6.0, '[过程]\nProzess', ha='center', va='center',
+        fontsize=12, fontweight='bold', color=COLORS['primary'],
+        bbox=dict(boxstyle='round,pad=0.4', facecolor='#E8F0FE', edgecolor=COLORS['primary']))
+ax.text(9.0, 3.0, '[团队合作]\nTeamwork', ha='center', va='center',
+        fontsize=12, fontweight='bold', color=COLORS['secondary'],
+        bbox=dict(boxstyle='round,pad=0.4', facecolor='#FCE4EC', edgecolor=COLORS['secondary']))
+
+plt.tight_layout()
+plt.show()
+```
+
+## 上周阅读材料回顾 | Lesestoff Recap
+
+```{python}
+#| label: fig-three-models
+#| fig-cap: "三种开发模型概览 | Drei Entwicklungsmodelle"
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 6))
+
+# --- 模型1: 瀑布模型 ---
+ax1 = axes[0]
+ax1.set_xlim(0, 10)
+ax1.set_ylim(0, 12)
+ax1.axis('off')
+ax1.set_title('1. 瀑布模型\nWasserfallmodell', fontsize=12, fontweight='bold',
+              color=COLORS['waterfall'])
+
+waterfall_phases = [
+    (2, 10, '需求定义'),
+    (3, 8.5, '系统与软件设计'),
+    (4, 7.0, '实现与模块测试'),
+    (5, 5.5, '集成与系统测试'),
+    (6, 4.0, '运维与维护'),
+]
+for x, y, label in waterfall_phases:
+    box = mpatches.FancyBboxPatch(
+        (x - 1.2, y - 0.5), 4.5, 1.0,
+        boxstyle="round,pad=0.1", facecolor='#D6EAF8', edgecolor=COLORS['waterfall'], lw=1.5
+    )
+    ax1.add_patch(box)
+    ax1.text(x + 1.05, y, label, ha='center', va='center', fontsize=8, fontweight='bold')
+
+for i in range(len(waterfall_phases) - 1):
+    x1, y1 = waterfall_phases[i][0] + 1.05, waterfall_phases[i][1] - 0.5
+    x2, y2 = waterfall_phases[i+1][0] + 1.05, waterfall_phases[i+1][1] + 0.5
+    ax1.annotate('', xy=(x2, y2), xytext=(x1, y1),
+                 arrowprops=dict(arrowstyle='->', color=COLORS['waterfall'], lw=1.5))
+
+# --- 模型2: 增量式开发 ---
+ax2 = axes[1]
+ax2.set_xlim(0, 10)
+ax2.set_ylim(0, 12)
+ax2.axis('off')
+ax2.set_title('2. 增量式开发\nInkrementelle Entwicklung', fontsize=12, fontweight='bold',
+              color=COLORS['incremental'])
+
+left_items = [
+    (2.5, 9.5, '规格说明\nSpezifikation'),
+    (2.5, 7.5, '开发\nEntwicklung'),
+    (2.5, 5.5, '验证\nValidierung'),
+]
+right_items = [
+    (7.5, 9.5, '初始版本'),
+    (7.5, 7.5, '中间版本'),
+    (7.5, 5.5, '最终版本'),
+]
+
+ax2.text(1.0, 10.8, '<<并行活动>>', fontsize=8, fontstyle='italic', color='#666')
+
+for x, y, label in left_items:
+    box = mpatches.FancyBboxPatch(
+        (x - 1.3, y - 0.5), 2.6, 1.0,
+        boxstyle="round,pad=0.1", facecolor='#D5F5E3', edgecolor=COLORS['incremental'], lw=1.5
+    )
+    ax2.add_patch(box)
+    ax2.text(x, y, label, ha='center', va='center', fontsize=8, fontweight='bold')
+
+for x, y, label in right_items:
+    box = mpatches.FancyBboxPatch(
+        (x - 1.3, y - 0.5), 2.6, 1.0,
+        boxstyle="round,pad=0.1", facecolor='#E8F8F5', edgecolor=COLORS['incremental'], lw=1)
+    ax2.add_patch(box)
+    ax2.text(x, y, label, ha='center', va='center', fontsize=8)
+
+# 箭头
+for lx, ly, _ in left_items:
+    ax2.annotate('', xy=(6.2, ly), xytext=(3.8, ly),
+                 arrowprops=dict(arrowstyle='->', color=COLORS['incremental'], lw=1))
+
+ax2.text(0.5, 7.5, '粗略\n描述', ha='center', va='center', fontsize=7,
+         bbox=dict(boxstyle='round', facecolor='#f9f9f9', edgecolor='#ccc'))
+ax2.annotate('', xy=(1.2, 7.5), xytext=(1.0, 7.5),
+             arrowprops=dict(arrowstyle='->', color='#999', lw=1))
+
+# --- 模型3: 复用导向 ---
+ax3 = axes[2]
+ax3.set_xlim(0, 10)
+ax3.set_ylim(0, 12)
+ax3.axis('off')
+ax3.set_title('3. 复用导向工程\nWiederverwendungs-\norientiertes SE', fontsize=11, fontweight='bold',
+              color=COLORS['warning'])
+
+reuse_steps = [
+    (5, 10.5, '需求规格说明', '#FFF3E0'),
+    (2.5, 8.5, '软件识别', '#FFF3E0'),
+    (7.5, 8.5, '需求修正', '#FFF3E0'),
+    (2.5, 6.5, '软件评估', '#FFF3E0'),
+    (5, 4.5, '组件调整', '#FFE0B2'),
+    (5, 2.5, '系统集成', '#FFE0B2'),
+]
+for x, y, label, c in reuse_steps:
+    box = mpatches.FancyBboxPatch(
+        (x - 1.5, y - 0.5), 3.0, 1.0,
+        boxstyle="round,pad=0.1", facecolor=c, edgecolor=COLORS['warning'], lw=1.2
+    )
+    ax3.add_patch(box)
+    ax3.text(x, y, label, ha='center', va='center', fontsize=8, fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+```
+
+# 纸飞机工厂：过程模型实战 | Papierflieger-Fabrik
+
+::: {.callout-tip}
+## 核心比喻 (Kernmetapher)
+
+今天我们"造软件"——其实是造纸飞机。原理完全相同：收集需求 -> 设计系统 -> 实现 -> 测试 -> 交付。
+:::
+
+## 第一部分：瀑布模型模拟 | Teil 1: Wasserfallmodell
+
+```{python}
+#| label: fig-waterfall-simulation
+#| fig-cap: "瀑布模型模拟：严格的阶段分离 | Wasserfallmodell-Simulation"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 12)
+ax.axis('off')
+ax.set_title('瀑布模型模拟流程 | Wasserfallmodell-Simulation', fontsize=15, fontweight='bold')
+
+# 阶段信息
+phases = [
+    (2, 10, 3, '第1阶段: 需求分析 & 设计', '3分钟', '#4A90D9',
+     '分析师 单独工作\n[不可与开发者沟通]\n编写规格说明+图纸'),
+    (5, 7.5, 6, '第2阶段: 实现', '6分钟', '#5DADE2',
+     '开发者 按说明构建\n[不可提问]\n[不可与测试员沟通]'),
+    (8, 5, 3, '第3阶段: 测试', '3分钟', '#85C1E9',
+     '测试员 测试所有飞机\n[不可自行修改]\n记录: 是否飞过4.5m'),
+]
+
+for x, y, duration, title, time_str, color, desc in phases:
+    # 主框
+    box = mpatches.FancyBboxPatch(
+        (x - 1.5, y - 1.2), 7, 2.4,
+        boxstyle="round,pad=0.2", facecolor=color, edgecolor='white',
+        alpha=0.2, linewidth=2
+    )
+    ax.add_patch(box)
+    # 标题
+    ax.text(x + 2, y + 0.7, title, fontsize=11, fontweight='bold', color=color, va='center')
+    # 时间
+    ax.text(x + 2, y + 0.1, f'[{time_str}]', fontsize=9, color='#666', va='center')
+    # 描述
+    ax.text(x + 2, y - 0.7, desc, fontsize=8, color='#555', va='center',
+            fontstyle='italic')
+    # 阶段编号圆圈
+    circle = plt.Circle((x - 0.5, y), 0.6, color=color, alpha=0.8)
+    ax.add_patch(circle)
+    ax.text(x - 0.5, y, str(phases.index((x, y, duration, title, time_str, color, desc)) + 1),
+            ha='center', va='center', fontsize=16, fontweight='bold', color='white')
+
+# 箭头连接
+ax.annotate('', xy=(5, 8.7), xytext=(4, 8.8),
+            arrowprops=dict(arrowstyle='->', color='#999', lw=2))
+ax.annotate('', xy=(8, 6.2), xytext=(7, 6.3),
+            arrowprops=dict(arrowstyle='->', color='#999', lw=2))
+
+# 核心规则
+ax.text(7, 2.5, '核心规则: 每个阶段必须结束后,下一个阶段才能开始!',
+        fontsize=11, fontweight='bold', color=COLORS['danger'],
+        ha='center', va='center',
+        bbox=dict(boxstyle='round,pad=0.5', facecolor='#FDEDEC', edgecolor=COLORS['danger']))
+ax.text(7, 1.5, 'Jede Phase muss abgeschlossen sein, bevor die naechste beginnt!',
+        fontsize=9, fontstyle='italic', color=COLORS['danger'], ha='center')
+
+plt.tight_layout()
+plt.show()
+```
+
+### 瀑布模型的角色分工 | Rollenverteilung
+
+```{python}
+#| label: fig-waterfall-roles
+#| fig-cap: "瀑布模型中的角色与限制 | Rollen und Einschraenkungen"
+
+fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+
+roles = [
+    {
+        'title': '分析师 (Analyst:in)',
+        'phase': '需求分析阶段 (3 Min)',
+        'tasks': ['决定飞机类型', '编写书面规格说明', '绘制带图纸的建造指南'],
+        'restrictions': ['禁止与开发者交流', '禁止自己建造或测试', '完全独立工作'],
+        'color': '#8E44AD',
+        'marker': 'P',
+    },
+    {
+        'title': '开发者 (Entwickler:innen)',
+        'phase': '实现阶段 (6 Min)',
+        'tasks': ['按指南建造飞机', '6分钟内尽可能多造'],
+        'restrictions': ['禁止与分析师交流', '禁止与测试员交流', '必须严格按说明执行'],
+        'color': '#2E86AB',
+        'marker': 's',
+    },
+    {
+        'title': '测试员 (Tester:in)',
+        'phase': '测试阶段 (3 Min)',
+        'tasks': ['测试全部飞机', '记录是否符合规格', '记录是否飞过4.5m', '编写缺陷报告'],
+        'restrictions': ['禁止自己修改飞机', '仅在测试阶段才接触飞机'],
+        'color': '#27AE60',
+        'marker': '^',
+    },
+]
+
+for ax, role in zip(axes, roles):
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.axis('off')
+
+    # 标题
+    ax.text(5, 9.3, role['title'], ha='center', va='center',
+            fontsize=13, fontweight='bold', color=role['color'])
+    ax.text(5, 8.5, role['phase'], ha='center', va='center',
+            fontsize=9, color='#666', fontstyle='italic')
+
+    # 职责
+    ax.text(5, 7.5, '-- 职责 (Aufgaben) --', ha='center', va='center',
+            fontsize=9, fontweight='bold', color='#333')
+    for i, task in enumerate(role['tasks']):
+        ax.text(1, 6.7 - i * 0.7, f'  + {task}', fontsize=8, color='#444', va='center')
+
+    # 限制
+    y_start = 6.7 - len(role['tasks']) * 0.7 - 0.5
+    ax.text(5, y_start, '-- 限制 (WICHTIG) --', ha='center', va='center',
+            fontsize=9, fontweight='bold', color=COLORS['danger'])
+    for i, r in enumerate(role['restrictions']):
+        ax.text(1, y_start - 0.7 - i * 0.7, f'  x {r}', fontsize=8,
+                color=COLORS['danger'], va='center')
+
+    # 外框
+    rect = mpatches.FancyBboxPatch(
+        (0.3, 0.5), 9.4, 9.0,
+        boxstyle="round,pad=0.2", facecolor='white',
+        edgecolor=role['color'], linewidth=2
+    )
+    ax.add_patch(rect)
+
+plt.tight_layout()
+plt.show()
+```
+
+### 瀑布模型的典型观察 | Typische Beobachtungen
+
+::: {.callout-warning}
+## 典型问题 (Typische Probleme)
+
+**"说明不清楚！" (Die Anleitung war unklar!)** — 纯文档导致的沟通损失 (Kommunikationsverlust durch reine Dokumentation)
+
+**"我知道不行，但不能说！" (Ich wusste, dass es nicht funktioniert, durfte aber nichts sagen!)** — 僵硬的阶段分离阻止了反馈 (Starre Phasentrennung verhindert Feedback)
+
+**"造了很多但几乎没有能飞的！" (Viele gebaut, kaum einer fliegt!)** — 错误被很晚才发现 (Fehler werden erst spaet entdeckt)
+
+**"分析师选了太复杂的飞机！" (Analyst hat zu komplexen Flieger gewaehlt!)** — 需求脱离实现现实 (Anforderungen ohne Umsetzungs-Realitaet)
+:::
+
+## 第二部分：增量式模型 | Teil 2: Inkrementelles Modell
+
+```{python}
+#| label: fig-incremental-model
+#| fig-cap: "增量式模型：Sprint 结构 | Inkrementelles Modell: Sprint-Struktur"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('增量式模型: 3个Sprint (各4分钟) | 3 Sprints a 4 Minuten',
+             fontsize=14, fontweight='bold')
+
+sprint_colors = ['#27AE60', '#2ECC71', '#58D68D']
+
+for sprint_num in range(3):
+    base_x = 0.5 + sprint_num * 5.0
+    base_y = 7.0
+
+    # Sprint 标题框
+    title_box = mpatches.FancyBboxPatch(
+        (base_x, base_y + 0.5), 4.2, 1.0,
+        boxstyle="round,pad=0.15",
+        facecolor=sprint_colors[sprint_num], edgecolor='white', alpha=0.9
+    )
+    ax.add_patch(title_box)
+    ax.text(base_x + 2.1, base_y + 1.0,
+            f'Sprint {sprint_num + 1}',
+            ha='center', va='center', fontsize=13, fontweight='bold', color='white')
+
+    # 三个子阶段
+    sub_phases = [
+        ('Planning (1 Min)', '#E8F8F5', '团队讨论: 造什么?'),
+        ('Build (2 Min)', '#D5F5E3', '共同构建飞机'),
+        ('Test (1 Min)', '#ABEBC6', '立即测试+反馈'),
+    ]
+
+    for i, (phase_name, color, desc) in enumerate(sub_phases):
+        y = base_y - 1.0 - i * 1.6
+        box = mpatches.FancyBboxPatch(
+            (base_x + 0.1, y - 0.3), 4.0, 1.2,
+            boxstyle="round,pad=0.1", facecolor=color,
+            edgecolor=sprint_colors[sprint_num], linewidth=1.2
+        )
+        ax.add_patch(box)
+        ax.text(base_x + 2.1, y + 0.35, phase_name,
+                ha='center', va='center', fontsize=9, fontweight='bold')
+        ax.text(base_x + 2.1, y - 0.05, desc,
+                ha='center', va='center', fontsize=7, color='#555')
+
+    # Sprint 之间的箭头
+    if sprint_num < 2:
+        ax.annotate('', xy=(base_x + 5.0, 5.5), xytext=(base_x + 4.3, 5.5),
+                     arrowprops=dict(arrowstyle='->', color='#999', lw=2))
+
+# 底部说明
+ax.text(7.5, 0.8, '核心变化: 所有人可以沟通! 角色灵活! 每轮可调整策略!',
+        ha='center', va='center', fontsize=11, fontweight='bold', color=COLORS['incremental'],
+        bbox=dict(boxstyle='round,pad=0.5', facecolor='#E8F8F5', edgecolor=COLORS['incremental']))
+ax.text(7.5, 0.1, 'Kommunikation erlaubt! Rollen flexibel! Strategie anpassbar!',
+        ha='center', va='center', fontsize=9, fontstyle='italic', color='#666')
+
+plt.tight_layout()
+plt.show()
+```
+
+### 角色变化 | Rollenaenderungen
+
+```{python}
+#| label: fig-role-changes
+#| fig-cap: "从瀑布到增量：角色转变 | Von Wasserfall zu Inkrementell: Rollenwandel"
+
+fig, ax = plt.subplots(figsize=(12, 5))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('角色转变对比 | Rollenwandel', fontsize=14, fontweight='bold')
+
+# 瀑布模型角色（左侧）
+ax.text(2.5, 5.2, '[ 瀑布模型 ]', ha='center', fontsize=12, fontweight='bold',
+        color=COLORS['waterfall'])
+waterfall_roles = [
+    (2.5, 4.0, '分析师\nAnalyst:in', '#D6EAF8'),
+    (1.2, 2.5, '开发者1\nEntwickler:in', '#D6EAF8'),
+    (3.8, 2.5, '开发者2\nEntwickler:in', '#D6EAF8'),
+    (2.5, 1.0, '测试员\nTester:in', '#D6EAF8'),
+]
+for x, y, label, c in waterfall_roles:
+    box = mpatches.FancyBboxPatch(
+        (x - 0.9, y - 0.4), 1.8, 0.8,
+        boxstyle="round,pad=0.1", facecolor=c, edgecolor=COLORS['waterfall'], lw=1.5
+    )
+    ax.add_patch(box)
+    ax.text(x, y, label, ha='center', va='center', fontsize=7, fontweight='bold')
+
+# 禁止沟通标记
+ax.text(2.5, 3.2, 'x 禁止沟通 x', ha='center', fontsize=8, color=COLORS['danger'],
+        fontweight='bold')
+ax.text(2.5, 1.7, 'x 禁止沟通 x', ha='center', fontsize=8, color=COLORS['danger'],
+        fontweight='bold')
+
+# 箭头（转变）
+ax.annotate('', xy=(7, 3), xytext=(5.5, 3),
+            arrowprops=dict(arrowstyle='->', color='#333', lw=3))
+ax.text(6.25, 3.5, '转变\nWandel', ha='center', fontsize=10, fontweight='bold')
+
+# 增量模型角色（右侧）
+ax.text(9.5, 5.2, '[ 增量式模型 ]', ha='center', fontsize=12, fontweight='bold',
+        color=COLORS['incremental'])
+
+ax.text(9.5, 4.0, 'Product Owner\n(原分析师)', ha='center', fontsize=9, fontweight='bold',
+        color=COLORS['incremental'],
+        bbox=dict(boxstyle='round,pad=0.3', facecolor='#D5F5E3', edgecolor=COLORS['incremental']))
+
+# Development Team 大框
+team_box = mpatches.FancyBboxPatch(
+    (7.5, 0.5), 4.0, 2.5,
+    boxstyle="round,pad=0.2", facecolor='#E8F8F5',
+    edgecolor=COLORS['incremental'], linewidth=2
+)
+ax.add_patch(team_box)
+ax.text(9.5, 2.7, 'Development Team (共同构建+测试)', ha='center',
+        fontsize=9, fontweight='bold', color=COLORS['incremental'])
+ax.text(8.3, 1.5, '开发者1', ha='center', fontsize=8,
+        bbox=dict(boxstyle='round', facecolor='white', edgecolor='#aaa'))
+ax.text(9.5, 1.5, '开发者2', ha='center', fontsize=8,
+        bbox=dict(boxstyle='round', facecolor='white', edgecolor='#aaa'))
+ax.text(10.7, 1.5, '测试员', ha='center', fontsize=8,
+        bbox=dict(boxstyle='round', facecolor='white', edgecolor='#aaa'))
+
+# 沟通箭头
+ax.annotate('', xy=(9.5, 3.5), xytext=(9.5, 2.9),
+            arrowprops=dict(arrowstyle='<->', color=COLORS['incremental'], lw=2))
+ax.text(10.5, 3.25, '<- 沟通OK ->', fontsize=7, color=COLORS['incremental'], fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+```
+
+# 文献中的实验结果 | Ergebnis aus der Literatur
+
+```{python}
+#| label: fig-literature-results
+#| fig-cap: "31个团队的实验数据对比 (Frydenberg, Yates, Kukesh) | Ergebnis aus 31 Teams"
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+# --- 图1：构建数量 ---
+ax1 = axes[0]
+models = ['瀑布模型\nWasserfall', '增量式模型\nInkrementell']
+planes_built = [13.5, 22]
+colors_bar = [COLORS['waterfall'], COLORS['incremental']]
+bars = ax1.bar(models, planes_built, color=colors_bar, width=0.5, edgecolor='white', linewidth=2)
+ax1.set_ylabel('平均构建数量 | Durchschnitt gebaut', fontsize=10)
+ax1.set_title('构建的飞机数量 | Gebaute Flieger', fontsize=12, fontweight='bold')
+ax1.set_ylim(0, 28)
+for bar, val in zip(bars, planes_built):
+    ax1.text(bar.get_x() + bar.get_width() / 2, val + 0.5, f'{val}',
+             ha='center', va='bottom', fontsize=14, fontweight='bold')
+ax1.text(0.7, 24, '+63%', fontsize=14, fontweight='bold', color=COLORS['incremental'],
+         ha='center')
+ax1.spines['top'].set_visible(False)
+ax1.spines['right'].set_visible(False)
+
+# --- 图2：成功率 ---
+ax2 = axes[1]
+success_rates = [47, 81]
+bars2 = ax2.bar(models, success_rates, color=colors_bar, width=0.5, edgecolor='white', linewidth=2)
+ax2.set_ylabel('成功率 (%) | Erfolgsrate (%)', fontsize=10)
+ax2.set_title('飞行成功率 | Erfolgsrate', fontsize=12, fontweight='bold')
+ax2.set_ylim(0, 100)
+for bar, val in zip(bars2, success_rates):
+    ax2.text(bar.get_x() + bar.get_width() / 2, val + 1.5, f'{val}%',
+             ha='center', va='bottom', fontsize=14, fontweight='bold')
+ax2.text(0.7, 90, '+72%', fontsize=14, fontweight='bold', color=COLORS['incremental'],
+         ha='center')
+ax2.spines['top'].set_visible(False)
+ax2.spines['right'].set_visible(False)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 模型优劣对比 | Zusammenfassung der Vor-/Nachteile
+
+```{python}
+#| label: fig-comparison-summary
+#| fig-cap: "两种模型优劣总结 | Zusammenfassung"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 11)
+ax.axis('off')
+
+# 瀑布模型（左侧）
+waterfall_box = mpatches.FancyBboxPatch(
+    (0.5, 0.5), 6, 10,
+    boxstyle="round,pad=0.3", facecolor='#EBF5FB',
+    edgecolor=COLORS['waterfall'], linewidth=2.5
+)
+ax.add_patch(waterfall_box)
+ax.text(3.5, 10, '瀑布模型 | Wasserfallmodell', ha='center', va='center',
+        fontsize=14, fontweight='bold', color=COLORS['waterfall'])
+ax.text(3.5, 9.3, '-- 适合稳定项目 (Fuer stabile Projekte) --', ha='center',
+        fontsize=9, fontstyle='italic', color='#666')
+
+# 优点（用 [+] 代替 emoji）
+advantages_w = [
+    '[+] 结构清晰 (Klare Struktur)',
+    '[+] 完整文档 (Vollstaendige Dokumentation)',
+    '[+] 可计划性 (Planbarkeit)',
+]
+for i, adv in enumerate(advantages_w):
+    ax.text(1.2, 8.2 - i * 0.6, adv, fontsize=9, color=COLORS['success'], fontweight='bold')
+
+# 缺点（用 [x] 代替 emoji）
+disadvantages_w = [
+    '[x] 不灵活 (Unflexibel)',
+    '[x] 反馈太晚 (Spaetes Feedback)',
+    '[x] 错误成本高 (Hohe Fehlerkosten)',
+    '[x] 沟通损失 (Kommunikationsverlust)',
+]
+for i, dis in enumerate(disadvantages_w):
+    ax.text(1.2, 5.8 - i * 0.6, dis, fontsize=9, color=COLORS['danger'], fontweight='bold')
+
+# 增量式模型（右侧）
+incr_box = mpatches.FancyBboxPatch(
+    (7.5, 0.5), 6, 10,
+    boxstyle="round,pad=0.3", facecolor='#E8F8F5',
+    edgecolor=COLORS['incremental'], linewidth=2.5
+)
+ax.add_patch(incr_box)
+ax.text(10.5, 10, '增量式模型 | Inkrementelles Modell', ha='center', va='center',
+        fontsize=14, fontweight='bold', color=COLORS['incremental'])
+ax.text(10.5, 9.3, '-- 适合创新项目 (Fuer innovative Projekte) --', ha='center',
+        fontsize=9, fontstyle='italic', color='#666')
+
+advantages_i = [
+    '[+] 早期反馈 (Fruehes Feedback)',
+    '[+] 灵活性 (Flexibilitaet)',
+    '[+] 风险最小化 (Risikominimierung)',
+    '[+] 团队积极性 (Team-Motivation)',
+]
+for i, adv in enumerate(advantages_i):
+    ax.text(8.2, 8.2 - i * 0.6, adv, fontsize=9, color=COLORS['success'], fontweight='bold')
+
+disadvantages_i = [
+    '[x] 难以规划 (Schwer planbar)',
+    '[x] 需要良好的客户联系',
+    '[x] 可能变得混乱 (Kann chaotisch werden)',
+]
+for i, dis in enumerate(disadvantages_i):
+    ax.text(8.2, 5.4 - i * 0.6, dis, fontsize=9, color=COLORS['danger'], fontweight='bold')
+
+# 底部：混合模型
+ax.text(7, 0.8, '> 混合模型 (Hybride Modelle): 粗略规划用瀑布, 具体开发用迭代 <',
+        ha='center', va='center', fontsize=10, fontweight='bold', color=COLORS['dark'],
+        bbox=dict(boxstyle='round,pad=0.4', facecolor='#F5F5F5', edgecolor='#999'))
+
+plt.tight_layout()
+plt.show()
+```
+
+# 错误成本曲线 | Kosten von Fehlern
+
+::: {.callout-important}
+## NASA/IBM 研究 (Boehm & Basili, 2001)
+
+如果在**需求阶段**修复一个错误花费 **1 Euro**，那么：在设计阶段花 **5 Euro**，在实现阶段花 **10 Euro**，在测试阶段花 **20 Euro**，在发布后花 **200 Euro**！
+:::
+
+```{python}
+#| label: fig-error-cost
+#| fig-cap: "错误修复成本随阶段指数增长 | Fehlerbehebungskosten steigen exponentiell"
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+phases = ['需求阶段\nAnforderung', '设计阶段\nDesign', '实现阶段\nImplement.',
+          '测试阶段\nTest', '发布后\nRelease']
+costs = [1, 5, 10, 20, 200]
+colors_cost = ['#27AE60', '#F1C40F', '#E67E22', '#E74C3C', '#8E44AD']
+
+bars = ax.bar(phases, costs, color=colors_cost, edgecolor='white', linewidth=2, width=0.6)
+
+for bar, cost in zip(bars, costs):
+    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 5,
+            f'{cost} Euro', ha='center', fontsize=12, fontweight='bold')
+
+ax.set_ylabel('相对修复成本 (Euro) | Relative Kosten', fontsize=11)
+ax.set_title('错误修复成本: 越晚发现越贵!\nFehlerbehebungskosten (Boehm & Basili, 2001)',
+             fontsize=13, fontweight='bold')
+ax.set_yscale('log')
+ax.set_ylim(0.5, 500)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+
+# 注释箭头
+ax.annotate('成本增长 200 倍!\n200x teurer!',
+            xy=(4, 200), xytext=(2.5, 150),
+            arrowprops=dict(arrowstyle='->', color=COLORS['danger'], lw=2),
+            fontsize=11, fontweight='bold', color=COLORS['danger'])
+
+plt.tight_layout()
+plt.show()
+```
+
+# 需求文档：Lastenheft 与 Pflichtenheft
+
+```{python}
+#| label: fig-lastenheft-pflichtenheft
+#| fig-cap: "Lastenheft vs Pflichtenheft 对比 | Vergleich"
+
+fig, ax = plt.subplots(figsize=(13, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('需求文档对比 | Lastenheft vs Pflichtenheft', fontsize=15, fontweight='bold')
+
+# Lastenheft（左）
+lh_box = mpatches.FancyBboxPatch(
+    (0.5, 0.5), 5.5, 6.5,
+    boxstyle="round,pad=0.3", facecolor='#FEF9E7', edgecolor='#F39C12', lw=2.5
+)
+ax.add_patch(lh_box)
+ax.text(3.25, 6.5, 'Lastenheft (需求规格书)', ha='center', fontsize=13, fontweight='bold',
+        color='#E67E22')
+ax.text(3.25, 5.7, '由客户/委托方编写', ha='center', fontsize=10, color='#666',
+        fontstyle='italic')
+
+lh_items = [
+    '描述: 做什么? 为什么做? (Was & Wofuer)',
+    '尽可能通用 (So allgemein wie moeglich)',
+    '仅在必要时限制 (So einschraenkend wie noetig)',
+    '受众: 承包方, 委托方, 利益相关者',
+]
+for i, item in enumerate(lh_items):
+    ax.text(1.0, 4.8 - i * 0.8, f'  > {item}', fontsize=8, color='#333')
+
+# Pflichtenheft（右）
+ph_box = mpatches.FancyBboxPatch(
+    (7.5, 0.5), 5.5, 6.5,
+    boxstyle="round,pad=0.3", facecolor='#EBF5FB', edgecolor='#2980B9', lw=2.5
+)
+ax.add_patch(ph_box)
+ax.text(10.25, 6.5, 'Pflichtenheft (解决方案书)', ha='center', fontsize=13, fontweight='bold',
+        color='#2E86AB')
+ax.text(10.25, 5.7, '由承包方/开发团队编写', ha='center', fontsize=10, color='#666',
+        fontstyle='italic')
+
+ph_items = [
+    '描述: 如何做? 用什么? (Wie & Womit)',
+    '具体描述如何实现需求',
+    '通常不含技术实现细节',
+    '是对 Lastenheft 的响应方案',
+]
+for i, item in enumerate(ph_items):
+    ax.text(8.0, 4.8 - i * 0.8, f'  > {item}', fontsize=8, color='#333')
+
+# 中间箭头
+ax.annotate('', xy=(7.5, 3.5), xytext=(6.0, 3.5),
+            arrowprops=dict(arrowstyle='->', color='#999', lw=3))
+ax.text(6.75, 4.0, '响应\nAntwort', ha='center', fontsize=9, fontweight='bold', color='#666')
+
+plt.tight_layout()
+plt.show()
+```
+
+# 应对变更 | Umgang mit Aenderungen
+
+::: {.callout-note}
+## 变更不可避免 (Aenderungen sind unvermeidlich)
+
+所有大型软件项目中变更都不可避免：系统需求变化（外部要求、竞争者、管理层），新技术带来新可能。变更通过"返工 (Rework)"增加成本。
+:::
+
+## 两种应对策略 | Zwei Ansaetze
+
+```{python}
+#| label: fig-change-strategies
+#| fig-cap: "应对变更的两种策略 | Zwei Strategien zum Umgang mit Aenderungen"
+
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('应对变更的两种策略 | Strategien gegen Aenderungskosten',
+             fontsize=14, fontweight='bold')
+
+# 策略1
+box1 = mpatches.FancyBboxPatch(
+    (0.5, 1), 5, 5.5,
+    boxstyle="round,pad=0.3", facecolor='#FDF2E9', edgecolor=COLORS['warning'], lw=2
+)
+ax.add_patch(box1)
+ax.text(3, 6, '策略1: 预测变更', ha='center', fontsize=12, fontweight='bold',
+        color=COLORS['warning'])
+ax.text(3, 5.2, 'Vorwegnahme von Aenderungen', ha='center', fontsize=9,
+        fontstyle='italic', color='#888')
+ax.text(3, 4.2, '通过预测可能的变更来减少成本', ha='center', fontsize=9, color='#555')
+methods1 = ['> 案例研究 (Fallstudien)', '> 风险管理 (Risikomanagement)', '> 原型开发 (Prototyping)']
+for i, m in enumerate(methods1):
+    ax.text(1.2, 3.0 - i * 0.7, m, fontsize=9, color='#444', fontweight='bold')
+
+# 策略2
+box2 = mpatches.FancyBboxPatch(
+    (6.5, 1), 5, 5.5,
+    boxstyle="round,pad=0.3", facecolor='#E8F8F5', edgecolor=COLORS['incremental'], lw=2
+)
+ax.add_patch(box2)
+ax.text(9, 6, '策略2: 容忍变更', ha='center', fontsize=12, fontweight='bold',
+        color=COLORS['incremental'])
+ax.text(9, 5.2, 'Toleranz der Aenderungen', ha='center', fontsize=9,
+        fontstyle='italic', color='#888')
+ax.text(9, 4.2, '让过程和软件易于适应变更', ha='center', fontsize=9, color='#555')
+methods2 = ['> 增量式开发 (Inkrementelle Entw.)', '> 可扩展架构 (Erweiterbare Architektur)']
+for i, m in enumerate(methods2):
+    ax.text(7.2, 3.0 - i * 0.7, m, fontsize=9, color='#444', fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+```
+
+# 软件原型 | Softwareprototypen
+
+::: {.callout-tip}
+## 原型 (Prototyp) 定义
+
+**原型**是软件系统的早期版本，用于**演示概念**和**获取认知** (Demonstration von Konzepten und Erkenntnisgewinnung)。
+
+应用领域包括：需求工程 (Requirements-Engineering) 中验证需求；系统设计 (Systementwurf) 中评估技术方案和用户界面。
+
+注意事项：对非功能需求（响应时间、内存）、可靠性和质量的期望应降低；错误处理可以忽略。
+:::
+
+## 原型 vs 软件增量 | Prototyp vs Software-Inkrement
+
+```{python}
+#| label: fig-prototype-vs-increment
+#| fig-cap: "原型与软件增量的区别 | Unterschied Prototyp und Software-Inkrement"
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+# 原型
+ax1 = axes[0]
+ax1.set_xlim(0, 10)
+ax1.set_ylim(0, 10)
+ax1.axis('off')
+
+proto_box = mpatches.FancyBboxPatch(
+    (0.5, 0.5), 9, 9,
+    boxstyle="round,pad=0.3", facecolor='#FDEDEC', edgecolor=COLORS['danger'], lw=2.5
+)
+ax1.add_patch(proto_box)
+ax1.text(5, 9, '原型 (Prototyp)', ha='center', fontsize=14, fontweight='bold',
+         color=COLORS['danger'])
+
+proto_items = [
+    ('目标', '评估/研究单一方面'),
+    ('Ziel', 'Einzelnen Aspekt evaluieren'),
+    ('性质', '常为一次性产品 (Wegwerfprodukt)'),
+    ('质量', '相应较低'),
+    ('比喻', '像裸露电路板的原型相机'),
+]
+for i, (key, val) in enumerate(proto_items):
+    ax1.text(1.5, 7.5 - i * 1.0, f'[{key}] {val}', fontsize=9, color='#444')
+
+# 软件增量
+ax2 = axes[1]
+ax2.set_xlim(0, 10)
+ax2.set_ylim(0, 10)
+ax2.axis('off')
+
+incr_box = mpatches.FancyBboxPatch(
+    (0.5, 0.5), 9, 9,
+    boxstyle="round,pad=0.3", facecolor='#E8F8F5', edgecolor=COLORS['incremental'], lw=2.5
+)
+ax2.add_patch(incr_box)
+ax2.text(5, 9, '软件增量 (Software-Inkrement)', ha='center', fontsize=14,
+         fontweight='bold', color=COLORS['incremental'])
+
+incr_items = [
+    ('目标', '向产品添加新功能'),
+    ('Ziel', 'Neue Funktionalitaet hinzufuegen'),
+    ('性质', '交付产品的组成部分'),
+    ('质量', '生产级质量'),
+    ('比喻', '像成品相机的迭代版本'),
+]
+for i, (key, val) in enumerate(incr_items):
+    ax2.text(1.5, 7.5 - i * 1.0, f'[{key}] {val}', fontsize=9, color='#444')
+
+plt.tight_layout()
+plt.show()
+```
+
+# 技术债务 | Technical Debt
+
+```{python}
+#| label: fig-technical-debt
+#| fig-cap: "技术债务的累积效应 | Akkumulationseffekt der Technical Debt"
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+sprints_x = np.arange(1, 11)
+# 无管理的技术债务
+debt_unmanaged = np.array([5, 12, 22, 35, 52, 73, 98, 128, 163, 205])
+# 有管理的技术债务
+debt_managed = np.array([5, 10, 13, 15, 16, 16, 15, 14, 13, 12])
+
+ax.fill_between(sprints_x, debt_unmanaged, alpha=0.3, color=COLORS['danger'])
+ax.plot(sprints_x, debt_unmanaged, 'o-', color=COLORS['danger'], linewidth=2.5,
+        markersize=8, label='未管理的技术债务 (unmanaged)')
+
+ax.fill_between(sprints_x, debt_managed, alpha=0.3, color=COLORS['incremental'])
+ax.plot(sprints_x, debt_managed, 's-', color=COLORS['incremental'], linewidth=2.5,
+        markersize=8, label='定期偿还的技术债务 (managed)')
+
+ax.set_xlabel('Sprint 编号 | Sprint-Nummer', fontsize=11)
+ax.set_ylabel('累计技术债务 (任意单位) | Kumulierte Tech Debt', fontsize=11)
+ax.set_title('技术债务对比：管理 vs 不管理\nTechnical Debt: Managed vs Unmanaged',
+             fontsize=13, fontweight='bold')
+ax.legend(fontsize=10, loc='upper left')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+
+ax.annotate('失控! (Ausser Kontrolle!)',
+            xy=(10, 205), xytext=(7, 180),
+            arrowprops=dict(arrowstyle='->', color=COLORS['danger'], lw=2),
+            fontsize=11, fontweight='bold', color=COLORS['danger'])
+
+ax.annotate('稳定可控\n(Stabil & kontrolliert)',
+            xy=(10, 12), xytext=(7, 60),
+            arrowprops=dict(arrowstyle='->', color=COLORS['incremental'], lw=2),
+            fontsize=10, fontweight='bold', color=COLORS['incremental'])
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-important}
+## Technical Debt 管理策略
+
+**技术债务 (Technical Debt)** 是由短期的、次优解决方案产生的额外成本、工作量和风险。
+
+管理方法：定期识别并记录技术债务；在开发过程中优先安排偿还（如每周/月固定时间）；将重构 (Refactoring) 作为开发的固定组成部分；在团队中培养意识以确保长期质量。**一定程度的技术债务是可以接受的。**
+:::
+
+# 关键收获 | Takeaways
+
+```{python}
+#| label: fig-takeaways
+#| fig-cap: "本章四大核心收获 | Vier Kern-Takeaways"
+
+fig, ax = plt.subplots(figsize=(12, 7))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('本章核心收获 | Kern-Takeaways', fontsize=16, fontweight='bold', pad=15)
+
+takeaways = [
+    {
+        'num': '1',
+        'title': '没有唯一正确的方法',
+        'subtitle': 'Es gibt nicht die eine richtige Methode',
+        'color': '#E74C3C',
+    },
+    {
+        'num': '2',
+        'title': '沟通 > 文档 (但文档仍然重要)',
+        'subtitle': 'Kommunikation > Dokumentation',
+        'color': '#F39C12',
+    },
+    {
+        'num': '3',
+        'title': '反馈要早、要频繁',
+        'subtitle': 'Feedback frueh und oft — spaete Fehler sind teuer',
+        'color': '#27AE60',
+    },
+    {
+        'num': '4',
+        'title': '迭代降低风险',
+        'subtitle': 'Iterationen reduzieren Risiko — kleine Schritte, haeufige Validierung',
+        'color': '#2E86AB',
+    },
+]
+
+for i, t in enumerate(takeaways):
+    y = 8.0 - i * 2.0
+    # 编号圆圈
+    circle = plt.Circle((1.5, y), 0.6, color=t['color'], alpha=0.9)
+    ax.add_patch(circle)
+    ax.text(1.5, y, t['num'], ha='center', va='center', fontsize=18,
+            fontweight='bold', color='white')
+    # 文本
+    ax.text(3, y + 0.25, t['title'], fontsize=13, fontweight='bold', color='#333')
+    ax.text(3, y - 0.35, t['subtitle'], fontsize=10, fontstyle='italic', color='#777')
+
+plt.tight_layout()
+plt.show()
+```
+
+---
+
+::: {.callout-note}
+## 下一讲预告 | Ausblick
+
+下一讲将继续项目管理主题，介绍支持增量式开发的**敏捷方法 (Agile Ansaetze)**：**极限编程 (Extreme Programming)** 和 **Scrum**。
+
+> "Individuals and interactions over processes and tools; Working software over comprehensive documentation; Customer collaboration over contract negotiation; Responding to change over following a plan."
+>
+> — *Manifesto for Agile Software Development, 2001*
+:::

@@ -1,0 +1,1199 @@
+---
+title: "第五章：敏捷方法 — Agile Methoden"
+subtitle: "Scrum 框架、角色、仪式与实践问题 | Scrum-Framework, Rollen, Zeremonien & Praktische Probleme"
+author: "Softwaretechnik WS 25/26"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    font_list = candidates.get(system, candidates['Linux'])
+    valid_fonts = [f for f in font_list if f in available_fonts]
+    if valid_fonts:
+        plt.rcParams['font.sans-serif'] = valid_fonts + ['DejaVu Sans']
+        plt.rcParams['font.monospace'] = valid_fonts + ['Consolas', 'Courier New', 'DejaVu Sans Mono']
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+COLORS = {
+    'primary': '#2E86AB',
+    'secondary': '#A23B72',
+    'success': '#2E8B57',
+    'warning': '#E8871E',
+    'danger': '#C1292E',
+    'info': '#5B8C5A',
+    'light': '#F5F5F5',
+    'dark': '#2C3E50',
+    'clean': '#27AE60',
+    'dirty': '#E74C3C',
+    'neutral': '#7F8C8D',
+    'highlight': '#F39C12',
+    'purple': '#8E44AD',
+    'scrum_blue': '#1A5276',
+    'scrum_green': '#1E8449',
+    'scrum_orange': '#D35400',
+    'scrum_red': '#922B21',
+    'blue_light': '#D6EAF8',
+    'green_light': '#D5F5E3',
+    'red_light': '#FDEDEC',
+    'yellow_light': '#FEF9E7',
+    'purple_light': '#F3E5F5',
+    'orange_light': '#FDEBD0',
+}
+```
+
+# 回顾 | Recap
+
+::: {.callout-note}
+## 前几章要点 (Zusammenfassung bisheriger Kapitel)
+
+**瀑布模型 (Wasserfallmodell)**：需求 → 设计 → 实现 → 测试 → 维护，线性流程。
+
+**增量式软件开发 (Inkrementelle Softwareentwicklung)**：分阶段交付可运行的产品增量。
+
+**面向复用的软件工程 (Wiederverwendungsorientiertes SE)**：利用现有组件加速开发。
+
+**软件活动 (Softwareaktivitäten)**：规格说明、开发、验证、演化。
+
+**应对变更 (Umgang mit Änderungen)**：原型 (Prototypen)、增量交付 (Inkrementelle Auslieferung)。
+
+**技术债务 (Technical Debt)**：短期妥协带来的长期维护成本。
+:::
+
+```{python}
+#| label: fig-recap-overview
+#| fig-cap: "前几章回顾 | Recap bisheriger Kapitel"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('前几章要点回顾 | Recap bisheriger Kapitel', fontsize=14, fontweight='bold')
+
+topics = [
+    {'title': '瀑布模型\nWasserfall', 'items': 'Linear\nPhasenbasiert', 'color': '#2E86AB', 'x': 2.0},
+    {'title': '增量式开发\nInkrementell', 'items': 'Schrittweise\nFrühe Lieferung', 'color': '#A23B72', 'x': 5.0},
+    {'title': '应对变更\nÄnderungen', 'items': 'Prototypen\nInkr. Auslieferung', 'color': '#E8871E', 'x': 8.0},
+    {'title': '技术债务\nTechnical Debt', 'items': 'Kurzfristiger Kompromiss\nLangfristige Kosten', 'color': '#2E8B57', 'x': 11.0},
+    {'title': 'Clean Code\nI + II', 'items': 'Namen, Kommentare\nFunktionen, Klassen\nFormatierung, Fehler', 'color': '#8E44AD', 'x': 14.0},
+]
+
+for t in topics:
+    card = mpatches.FancyBboxPatch(
+        (t['x'] - 1.4, 0.6), 2.8, 4.5,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=t['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    ax.text(t['x'], 4.4, t['title'], ha='center', va='center',
+            fontsize=10, fontweight='bold', color=t['color'])
+    ax.text(t['x'], 2.5, t['items'], ha='center', va='center',
+            fontsize=8.5, color='#555', linespacing=1.6)
+
+plt.tight_layout()
+plt.show()
+```
+
+# 敏捷宣言与原则 | Agiles Manifest und Prinzipien
+
+## 敏捷软件开发宣言 | Manifesto for Agile Software Development (2001)
+
+::: {.callout-important}
+## 敏捷宣言核心价值 (Kernwerte)
+
+> *We are uncovering better ways of developing software by doing it and helping others do it. Through this work we have come to value:*
+
+| 更高价值 (links) | 也有价值 (rechts) |
+|---|---|
+| **个体和互动** (Individuals & Interactions) | 流程和工具 (Processes & Tools) |
+| **可运行的软件** (Working Software) | 详尽的文档 (Comprehensive Documentation) |
+| **客户合作** (Customer Collaboration) | 合同谈判 (Contract Negotiation) |
+| **响应变化** (Responding to Change) | 遵循计划 (Following a Plan) |
+
+右侧的条目也有价值，但我们更重视左侧的条目。
+:::
+
+```{python}
+#| label: fig-agile-manifesto
+#| fig-cap: "敏捷宣言：左侧 > 右侧 | Agiles Manifest: Links > Rechts"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('敏捷宣言 | Agiles Manifest (2001)', fontsize=15, fontweight='bold')
+
+values = [
+    ('个体和互动\nIndividuals &\nInteractions', '流程和工具\nProcesses &\nTools'),
+    ('可运行的软件\nWorking\nSoftware', '详尽的文档\nComprehensive\nDocumentation'),
+    ('客户合作\nCustomer\nCollaboration', '合同谈判\nContract\nNegotiation'),
+    ('响应变化\nResponding\nto Change', '遵循计划\nFollowing\na Plan'),
+]
+
+for i, (left, right) in enumerate(values):
+    y = 6.8 - i * 1.6
+
+    # Left (valued more)
+    left_box = mpatches.FancyBboxPatch(
+        (0.5, y - 0.55), 5.5, 1.2,
+        boxstyle="round,pad=0.15", facecolor=COLORS['green_light'],
+        edgecolor=COLORS['clean'], linewidth=2.5
+    )
+    ax.add_patch(left_box)
+    ax.text(3.25, y, left, ha='center', va='center', fontsize=9, fontweight='bold', color=COLORS['scrum_green'])
+
+    # "over"
+    ax.text(7.0, y, 'over\n>', ha='center', va='center', fontsize=11, fontweight='bold', color=COLORS['highlight'])
+
+    # Right (also valued)
+    right_box = mpatches.FancyBboxPatch(
+        (8.0, y - 0.55), 5.5, 1.2,
+        boxstyle="round,pad=0.15", facecolor=COLORS['yellow_light'],
+        edgecolor=COLORS['neutral'], linewidth=1.5, linestyle='--'
+    )
+    ax.add_patch(right_box)
+    ax.text(10.75, y, right, ha='center', va='center', fontsize=9, color=COLORS['neutral'])
+
+plt.tight_layout()
+plt.show()
+```
+
+## 敏捷方法的原则 | Prinzipien agiler Methoden
+
+```{python}
+#| label: fig-agile-principles
+#| fig-cap: "敏捷方法的五大原则 | Fünf Prinzipien agiler Methoden"
+
+fig, ax = plt.subplots(figsize=(13, 6))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('敏捷方法原则 | Prinzipien agiler Methoden', fontsize=14, fontweight='bold')
+
+principles = [
+    {'zh': '客户参与', 'de': 'Einbeziehung\ndes Kunden', 'icon': '', 'x': 1.5, 'color': '#2E86AB'},
+    {'zh': '拥抱变化', 'de': 'Offen für\nÄnderungen', 'icon': '', 'x': 4.5, 'color': '#27AE60'},
+    {'zh': '人胜于流程', 'de': 'Menschen\nstatt Prozesse', 'icon': '', 'x': 7.5, 'color': '#E8871E'},
+    {'zh': '增量交付', 'de': 'Inkrementelle\nAuslieferung', 'icon': '', 'x': 10.5, 'color': '#8E44AD'},
+    {'zh': '简单至上', 'de': 'Einfachheit', 'icon': '', 'x': 13.5, 'color': '#C1292E'},
+]
+
+for p in principles:
+    card = mpatches.FancyBboxPatch(
+        (p['x'] - 1.2, 0.8), 2.4, 5.2,
+        boxstyle="round,pad=0.2", facecolor='white',
+        edgecolor=p['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    ax.text(p['x'], 5.3, p['icon'], ha='center', fontsize=24)
+    ax.text(p['x'], 4.0, p['zh'], ha='center', fontsize=11, fontweight='bold', color=p['color'])
+    ax.text(p['x'], 2.5, p['de'], ha='center', fontsize=9, color='#555', linespacing=1.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 极限编程的核心实践 | Praktiken aus Extreme Programming
+
+极限编程 (XP) 推广了许多今天常用的敏捷方法。课程内容将这些实践归纳为五组。
+
+**第一组：频繁发布与增量规划**——使用 User Stories 而非冗长的规格说明，频繁发布可运行版本，采用增量式计划。
+
+**第二组：客户深度参与**——客户在团队中积极工作，负责定义验收测试 (Akzeptanztests)。
+
+**第三组：结对编程与集体所有权**——实行结对编程 (Pair Programming)，代码归整个团队集体所有。
+
+**第四组：持续应对变化**——定期向客户发布，采用测试驱动开发 (TDD)，减少技术债务 (Refactoring)，持续集成新功能。
+
+**第五组：保持简单**——通过定期消除技术债务保持代码简洁，使用简单且聚焦的设计。
+
+## 测试驱动开发 | Test-Driven Development (TDD)
+
+::: {.callout-warning}
+## "Later is never" — 以后就是永远不会
+
+程序员宁可写代码也不愿写测试。"以后再写"往往等于"永远不写"。测试工作枯燥，所以只会写最少的——导致不完整的测试。
+
+**测试应该是一等公民 (first-class citizens)！**
+:::
+
+```{python}
+#| label: fig-tdd-cycle
+#| fig-cap: "TDD 循环：红-绿-重构 | TDD-Zyklus: Red-Green-Refactor"
+
+fig, ax = plt.subplots(figsize=(8, 8))
+ax.set_xlim(-5, 5)
+ax.set_ylim(-5, 5)
+ax.set_aspect('equal')
+ax.axis('off')
+ax.set_title('TDD 循环 | TDD-Zyklus', fontsize=15, fontweight='bold')
+
+# Draw cycle arrows
+angles = [90, 210, 330]
+labels_zh = ['写失败的测试\n(Red)', '写最少的代码\n使测试通过\n(Green)', '重构\n(Refactor)']
+labels_de = ['Failing Test\nschreiben', 'Minimaler Code\nzum Bestehen', 'Code\naufräumen']
+colors_tdd = ['#E74C3C', '#27AE60', '#3498DB']
+emojis = ['', '', '']
+
+radius = 3.2
+for i, (angle, zh, de, color, emoji) in enumerate(zip(angles, labels_zh, labels_de, colors_tdd, emojis)):
+    rad = np.radians(angle)
+    x = radius * np.cos(rad) * 0.85
+    y = radius * np.sin(rad) * 0.85
+
+    circle = plt.Circle((x, y), 1.3, facecolor='white', edgecolor=color, linewidth=3)
+    ax.add_patch(circle)
+    ax.text(x, y + 0.5, emoji, ha='center', va='center', fontsize=18)
+    ax.text(x, y - 0.15, zh, ha='center', va='center', fontsize=8, fontweight='bold', color=color,
+            linespacing=1.3)
+
+    # Arrow to next
+    next_angle = angles[(i + 1) % 3]
+    next_rad = np.radians(next_angle)
+    nx = radius * np.cos(next_rad) * 0.85
+    ny = radius * np.sin(next_rad) * 0.85
+
+    mid_angle = (angle + next_angle) / 2
+    if i == 0:
+        mid_angle = (angle + next_angle + 360) / 2
+    mid_rad = np.radians(mid_angle)
+
+    # Simple arrow along the arc
+    dx = nx - x
+    dy = ny - y
+    length = np.sqrt(dx**2 + dy**2)
+    start_x = x + dx / length * 1.4
+    start_y = y + dy / length * 1.4
+    end_x = nx - dx / length * 1.4
+    end_y = ny - dy / length * 1.4
+
+    ax.annotate('', xy=(end_x, end_y), xytext=(start_x, start_y),
+                arrowprops=dict(arrowstyle='->', color=color, lw=2.5,
+                                connectionstyle='arc3,rad=0.3'))
+
+ax.text(0, 0, 'TDD', ha='center', va='center', fontsize=16, fontweight='bold', color=COLORS['dark'])
+
+plt.tight_layout()
+plt.show()
+```
+
+## 结对编程 | Pair Programming
+
+```{python}
+#| label: fig-pair-programming
+#| fig-cap: "结对编程：Pilot 与 Copilot | Pair Programming: Pilot und Copilot"
+
+fig, ax = plt.subplots(figsize=(13, 6))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('结对编程 | Pair Programming', fontsize=14, fontweight='bold')
+
+# Pilot
+pilot_box = mpatches.FancyBboxPatch((0.5, 2.5), 5.0, 3.5, boxstyle="round,pad=0.2",
+                                     facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=2.5)
+ax.add_patch(pilot_box)
+ax.text(3.0, 5.5, 'Pilot', ha='center', fontsize=14, fontweight='bold', color=COLORS['primary'])
+ax.text(3.0, 4.5, '坐在键盘前\nSitzt an der Tastatur', ha='center', fontsize=10, color='#555')
+ax.text(3.0, 3.5, '编写 Copilot 指示的代码\nSchreibt Code nach\nAnweisungen', ha='center',
+        fontsize=9, color='#777', linespacing=1.4)
+
+# Copilot
+copilot_box = mpatches.FancyBboxPatch((7.5, 2.5), 5.0, 3.5, boxstyle="round,pad=0.2",
+                                       facecolor=COLORS['green_light'], edgecolor=COLORS['clean'], linewidth=2.5)
+ax.add_patch(copilot_box)
+ax.text(10.0, 5.5, 'Copilot', ha='center', fontsize=14, fontweight='bold', color=COLORS['clean'])
+ax.text(10.0, 4.5, '观察并指导\nBeobachtet und leitet an', ha='center', fontsize=10, color='#555')
+ax.text(10.0, 3.5, '给出指令和建议\nGibt Anweisungen', ha='center',
+        fontsize=9, color='#777', linespacing=1.4)
+
+# Swap arrow
+ax.annotate('', xy=(7.2, 4.2), xytext=(5.8, 4.2),
+             arrowprops=dict(arrowstyle='<->', color=COLORS['highlight'], lw=3))
+ax.text(6.5, 4.7, '每 ~20 min\n交换角色\nRollentausch', ha='center', fontsize=8,
+        fontweight='bold', color=COLORS['highlight'], linespacing=1.3)
+
+# Advantages
+adv_box = mpatches.FancyBboxPatch((0.5, 0.3), 12.0, 1.8, boxstyle="round,pad=0.15",
+                                   facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(adv_box)
+ax.text(6.5, 1.6, '优势 | Vorteile', ha='center', fontsize=10, fontweight='bold', color=COLORS['highlight'])
+ax.text(6.5, 0.9, '共同责任 & 知识共享 | 四眼原则避免错误 | 避免低价值重构 | 生产力不会降到 50%！',
+        ha='center', fontsize=9, color='#555')
+
+plt.tight_layout()
+plt.show()
+```
+
+结对编程中 Pilot 坐在键盘前，按 Copilot 的指令编写代码；Copilot 观察代码、提供指导和建议。两人大约每 20 分钟交换角色。其核心优势在于共同责任和知识在团队中的传播，四眼原则能有效减少错误，而两人共同决策也避免了低价值的重构。值得注意的是，生产力并不会降到 50%。
+
+# Scrum 框架 | Scrum-Framework
+
+## 参与者 | Teilnehmer:innen
+
+```{python}
+#| label: fig-scrum-roles
+#| fig-cap: "Scrum 角色与外部参与者 | Scrum-Rollen und externe Teilnehmer"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('Scrum 参与者 | Scrum Teilnehmer:innen', fontsize=15, fontweight='bold')
+
+# Scrum Team outer box
+team_box = mpatches.FancyBboxPatch((0.5, 2.5), 9.5, 6.0, boxstyle="round,pad=0.3",
+                                    facecolor='#EBF5FB', edgecolor=COLORS['scrum_blue'], linewidth=3)
+ax.add_patch(team_box)
+ax.text(5.25, 8.0, 'Scrum Team', fontsize=14, fontweight='bold', ha='center', color=COLORS['scrum_blue'])
+
+# Product Owner
+po_box = mpatches.FancyBboxPatch((1.0, 5.5), 3.5, 2.0, boxstyle="round,pad=0.15",
+                                  facecolor='white', edgecolor=COLORS['scrum_orange'], linewidth=2.5)
+ax.add_patch(po_box)
+ax.text(2.75, 7.0, 'Product Owner', ha='center', fontsize=10, fontweight='bold', color=COLORS['scrum_orange'])
+ax.text(2.75, 6.1, 'Product Backlog\n优先级排序\nPriorisierung', ha='center', fontsize=8, color='#555', linespacing=1.4)
+
+# Developers
+dev_box = mpatches.FancyBboxPatch((1.0, 3.0), 3.5, 2.0, boxstyle="round,pad=0.15",
+                                   facecolor='white', edgecolor=COLORS['primary'], linewidth=2.5)
+ax.add_patch(dev_box)
+ax.text(2.75, 4.5, 'Developers', ha='center', fontsize=10, fontweight='bold', color=COLORS['primary'])
+ax.text(2.75, 3.6, '共同决策工作分配\nGemeinsam planen\nund entwickeln', ha='center', fontsize=8, color='#555', linespacing=1.4)
+
+# Scrum Master
+sm_box = mpatches.FancyBboxPatch((5.5, 4.0), 4.0, 3.0, boxstyle="round,pad=0.15",
+                                  facecolor='white', edgecolor=COLORS['scrum_green'], linewidth=2.5)
+ax.add_patch(sm_box)
+ax.text(7.5, 6.5, 'Scrum Master', ha='center', fontsize=10, fontweight='bold', color=COLORS['scrum_green'])
+ax.text(7.5, 5.5, '维护 Scrum 流程\nScrum-Prozess\neinhalten & unterstützen', ha='center',
+        fontsize=8, color='#555', linespacing=1.4)
+ax.text(7.5, 4.5, '≠ 项目经理！\n≠ Projektmanager!', ha='center',
+        fontsize=9, fontweight='bold', color=COLORS['danger'])
+
+# External parties
+ext_box = mpatches.FancyBboxPatch((10.5, 3.0), 3.0, 5.0, boxstyle="round,pad=0.2",
+                                   facecolor=COLORS['yellow_light'], edgecolor=COLORS['neutral'], linewidth=2, linestyle='--')
+ax.add_patch(ext_box)
+ax.text(12.0, 7.5, '外部参与者\nDritte Parteien', ha='center', fontsize=10, fontweight='bold', color=COLORS['neutral'])
+
+externals = [('Stakeholder', 6.5), ('Kund:innen', 5.5), ('Manager', 4.5)]
+for name, y in externals:
+    ax.text(12.0, y, name, ha='center', fontsize=9, color='#666')
+
+# Sprint info box
+sprint_box = mpatches.FancyBboxPatch((0.5, 0.3), 13.0, 1.8, boxstyle="round,pad=0.15",
+                                      facecolor=COLORS['purple_light'], edgecolor=COLORS['purple'], linewidth=1.5)
+ax.add_patch(sprint_box)
+ax.text(7.0, 1.6, 'Sprint 规划 | Sprint Planning', ha='center', fontsize=11, fontweight='bold', color=COLORS['purple'])
+ax.text(7.0, 0.9, '团队共同决定 Sprint 中的任务和范围 → Sprint Backlog + Sprint Goal | Sprint 期间任务不变 | 固定时间盒',
+        ha='center', fontsize=8.5, color='#555')
+
+plt.tight_layout()
+plt.show()
+```
+
+### Scrum 团队 | Scrum Team
+
+Scrum 团队由三个角色组成：Product Owner 负责 Product Backlog 和任务优先级排序；Developers 共同决定谁在什么时候做什么；Scrum Master 负责维护和支持 Scrum 流程的执行。团队在 Sprint Planning 中共同决定 Sprint 的范围，结果是 Sprint Backlog 和一个 Sprint Goal（与下一个增量相关的总目标）。Sprint 期间任务不再变更，且 Sprint 始终有固定的时间长度。
+
+### 开发团队 | Development Team
+
+开发团队不仅共同承担代码责任，还共同决定谁在什么时候做什么。整个规划都在团队中完成（实践中通常由个人做准备工作）。团队通过 Sprint Planning、Review 和 Retrospective 积极参与并塑造整个流程。
+
+## Scrum Master vs. 项目经理 | Scrum Master vs. Projektmanager
+
+::: {.callout-warning}
+## 严格区分！(Strikte Unterscheidung!)
+
+课本（Kapitel 3.3）中提到 Scrum Master 常扮演项目经理角色。**在本课程中我们不接受这种混淆。**
+:::
+
+```{python}
+#| label: fig-sm-vs-pm
+#| fig-cap: "Scrum Master vs. 项目经理 | Scrum Master vs. Projektmanager"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+# Projektmanager
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('项目经理\nProjektmanager', fontsize=13, fontweight='bold', color=COLORS['primary'])
+
+pm_box = mpatches.FancyBboxPatch((0.5, 0.5), 9.0, 7.0, boxstyle="round,pad=0.2",
+                                  facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=2.5)
+ax.add_patch(pm_box)
+
+pm_items = [
+    ('', '规划、控制和管理项目资源', 'Planung, Steuerung, Verwaltung\nder Projektressourcen'),
+    ('', '团队规模规划', 'Planung von Teamgröße'),
+    ('', '预算分配', 'Budget-Allokation'),
+    ('', '风险管理', 'Risikomanagement'),
+]
+for i, (icon, zh, de) in enumerate(pm_items):
+    y = 6.5 - i * 1.5
+    ax.text(1.2, y, icon, fontsize=14)
+    ax.text(2.0, y + 0.1, zh, fontsize=9, fontweight='bold', color=COLORS['primary'])
+    ax.text(2.0, y - 0.35, de, fontsize=7.5, color='#777', linespacing=1.3)
+
+# Scrum Master
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('Scrum Master', fontsize=13, fontweight='bold', color=COLORS['scrum_green'])
+
+sm_box = mpatches.FancyBboxPatch((0.5, 0.5), 9.0, 7.0, boxstyle="round,pad=0.2",
+                                  facecolor=COLORS['green_light'], edgecolor=COLORS['scrum_green'], linewidth=2.5)
+ax.add_patch(sm_box)
+
+sm_items = [
+    ('', '规划、控制和维护 Scrum 流程', 'Planung, Steuerung, Einhaltung\ndes Scrum-Prozesses'),
+    ('', '不管理项目资源', 'Keinerlei Management\nvon Projektressourcen'),
+    ('', '主持 Daily Standup', 'Moderation des Daily Standup'),
+    ('', '保护团队免受额外任务', 'Verteidigt Team gegen\nzusätzliche Aufgaben'),
+]
+for i, (icon, zh, de) in enumerate(sm_items):
+    y = 6.5 - i * 1.5
+    ax.text(1.2, y, icon, fontsize=14)
+    ax.text(2.0, y + 0.1, zh, fontsize=9, fontweight='bold', color=COLORS['scrum_green'])
+    ax.text(2.0, y - 0.35, de, fontsize=7.5, color='#777', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 利益相关者 | Stakeholder
+
+::: {.callout-note}
+## 定义 (Definition)
+
+**Stakeholder** 是所有受产品结果影响、并对其成功有利害关系的个人或群体。
+:::
+
+```{python}
+#| label: fig-stakeholder-types
+#| fig-cap: "Stakeholder 类型 | Stakeholder-Typen"
+
+fig, ax = plt.subplots(figsize=(10, 8))
+ax.set_xlim(-5, 5)
+ax.set_ylim(-5, 5)
+ax.set_aspect('equal')
+ax.axis('off')
+ax.set_title('Stakeholder 类型 | Stakeholder-Typen', fontsize=14, fontweight='bold')
+
+# Center: Product
+center = plt.Circle((0, 0), 1.2, facecolor=COLORS['scrum_blue'], alpha=0.2, edgecolor=COLORS['scrum_blue'], linewidth=2.5)
+ax.add_patch(center)
+ax.text(0, 0.1, '\n产品\nProdukt', ha='center', va='center', fontsize=10, fontweight='bold', color=COLORS['scrum_blue'])
+
+# Stakeholder rings
+stakeholders = [
+    {'label': '最终用户\nEndnutzer', 'angle': 60, 'r': 3.2, 'color': '#27AE60', 'icon': ''},
+    {'label': '客户\nKund:innen', 'angle': 120, 'r': 3.2, 'color': '#2E86AB', 'icon': ''},
+    {'label': '投资者\nInvestoren', 'angle': 180, 'r': 3.2, 'color': '#E8871E', 'icon': ''},
+    {'label': '管理层\nManager', 'angle': 240, 'r': 3.2, 'color': '#8E44AD', 'icon': ''},
+    {'label': '监管机构\nRegulatoren', 'angle': 300, 'r': 3.2, 'color': '#C1292E', 'icon': ''},
+    {'label': '合作伙伴\nPartner', 'angle': 0, 'r': 3.2, 'color': '#1A5276', 'icon': ''},
+]
+
+for s in stakeholders:
+    rad = np.radians(s['angle'])
+    x = s['r'] * np.cos(rad)
+    y = s['r'] * np.sin(rad)
+
+    circle = plt.Circle((x, y), 1.0, facecolor='white', edgecolor=s['color'], linewidth=2)
+    ax.add_patch(circle)
+    ax.text(x, y + 0.35, s['icon'], ha='center', va='center', fontsize=16)
+    ax.text(x, y - 0.3, s['label'], ha='center', va='center', fontsize=7.5,
+            fontweight='bold', color=s['color'], linespacing=1.3)
+
+    # Arrow to center
+    dx = -x
+    dy = -y
+    length = np.sqrt(dx**2 + dy**2)
+    ax.annotate('', xy=(x * 0.35, y * 0.35), xytext=(x * 0.7, y * 0.7),
+                arrowprops=dict(arrowstyle='->', color=s['color'], lw=1.5, alpha=0.5))
+
+plt.tight_layout()
+plt.show()
+```
+
+# Scrum 流程 | Scrum-Prozess
+
+## Sprint 概览 | Sprint-Übersicht
+
+```{python}
+#| label: fig-sprint-cycle
+#| fig-cap: "Scrum Sprint 流程 | Scrum Sprint-Ablauf"
+
+fig, ax = plt.subplots(figsize=(16, 8))
+ax.set_xlim(0, 16)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('Scrum Sprint 完整流程 | Vollständiger Sprint-Ablauf', fontsize=15, fontweight='bold')
+
+# Product Backlog
+pb_box = mpatches.FancyBboxPatch((0.3, 3.0), 2.2, 4.0, boxstyle="round,pad=0.15",
+                                  facecolor=COLORS['orange_light'], edgecolor=COLORS['scrum_orange'], linewidth=2.5)
+ax.add_patch(pb_box)
+ax.text(1.4, 6.5, '', ha='center', fontsize=18)
+ax.text(1.4, 5.8, 'Product\nBacklog', ha='center', fontsize=9, fontweight='bold', color=COLORS['scrum_orange'],
+        linespacing=1.3)
+for i in range(5):
+    item = mpatches.FancyBboxPatch((0.6, 3.4 + i * 0.4), 1.6, 0.3,
+                                    boxstyle="round,pad=0.03",
+                                    facecolor='white', edgecolor=COLORS['scrum_orange'], linewidth=0.8)
+    ax.add_patch(item)
+
+# Arrow PB → Planning
+ax.annotate('', xy=(3.0, 5.0), xytext=(2.6, 5.0),
+             arrowprops=dict(arrowstyle='->', color='#555', lw=2))
+
+# Sprint Planning
+plan_box = mpatches.FancyBboxPatch((3.0, 4.0), 2.2, 2.2, boxstyle="round,pad=0.15",
+                                    facecolor=COLORS['purple_light'], edgecolor=COLORS['purple'], linewidth=2.5)
+ax.add_patch(plan_box)
+ax.text(4.1, 5.7, 'Sprint\nPlanning', ha='center', fontsize=10, fontweight='bold', color=COLORS['purple'],
+        linespacing=1.2)
+ax.text(4.1, 4.6, 'Sprint Backlog\n+ Sprint Goal', ha='center', fontsize=8, color='#666', linespacing=1.3)
+
+# Arrow Planning → Sprint
+ax.annotate('', xy=(5.7, 5.0), xytext=(5.3, 5.0),
+             arrowprops=dict(arrowstyle='->', color='#555', lw=2))
+
+# Sprint (big box)
+sprint_box = mpatches.FancyBboxPatch((5.7, 1.5), 5.0, 6.5, boxstyle="round,pad=0.2",
+                                      facecolor='#EBF5FB', edgecolor=COLORS['scrum_blue'], linewidth=3)
+ax.add_patch(sprint_box)
+ax.text(8.2, 7.5, 'Sprint (固定时间盒 | Feste Timebox)', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['scrum_blue'])
+
+# Development
+dev_box = mpatches.FancyBboxPatch((6.1, 4.5), 4.2, 2.5, boxstyle="round,pad=0.15",
+                                   facecolor='white', edgecolor=COLORS['primary'], linewidth=2)
+ax.add_patch(dev_box)
+ax.text(8.2, 6.5, '开发 | Entwicklung', ha='center', fontsize=10, fontweight='bold', color=COLORS['primary'])
+ax.text(8.2, 5.5, '团队协作开发\nTeam arbeitet zusammen', ha='center', fontsize=8.5, color='#555')
+
+# Daily Standup
+ds_box = mpatches.FancyBboxPatch((6.1, 2.0), 4.2, 2.0, boxstyle="round,pad=0.15",
+                                  facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=2)
+ax.add_patch(ds_box)
+ax.text(8.2, 3.5, 'Daily Standup', ha='center', fontsize=10, fontweight='bold', color=COLORS['highlight'])
+ax.text(8.2, 2.7, '做了什么？要做什么？有障碍？\nWas gemacht? Was geplant? Hindernisse?',
+        ha='center', fontsize=7.5, color='#555', linespacing=1.3)
+
+# Circular arrow between dev and standup
+ax.annotate('', xy=(10.0, 4.45), xytext=(10.0, 4.05),
+             arrowprops=dict(arrowstyle='<->', color=COLORS['highlight'], lw=1.5))
+
+# Arrow Sprint → Review
+ax.annotate('', xy=(11.2, 5.0), xytext=(10.8, 5.0),
+             arrowprops=dict(arrowstyle='->', color='#555', lw=2))
+
+# Sprint Review
+review_box = mpatches.FancyBboxPatch((11.2, 5.5), 2.2, 2.5, boxstyle="round,pad=0.15",
+                                      facecolor=COLORS['green_light'], edgecolor=COLORS['scrum_green'], linewidth=2.5)
+ax.add_patch(review_box)
+ax.text(12.3, 7.5, 'Sprint\nReview', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['scrum_green'], linespacing=1.2)
+ax.text(12.3, 6.4, '展示增量\nInkrement\npräsentieren', ha='center', fontsize=8, color='#555', linespacing=1.3)
+
+# Sprint Retrospective
+retro_box = mpatches.FancyBboxPatch((11.2, 2.0), 2.2, 2.8, boxstyle="round,pad=0.15",
+                                     facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2.5)
+ax.add_patch(retro_box)
+ax.text(12.3, 4.3, 'Sprint\nRetro', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['danger'], linespacing=1.2)
+ax.text(12.3, 3.1, '什么好？什么改？\nWas lief gut?\nWas anders?', ha='center', fontsize=8, color='#555',
+        linespacing=1.3)
+
+# Increment output
+inc_box = mpatches.FancyBboxPatch((13.8, 4.0), 1.8, 2.2, boxstyle="round,pad=0.15",
+                                   facecolor=COLORS['green_light'], edgecolor=COLORS['clean'], linewidth=2.5)
+ax.add_patch(inc_box)
+ax.text(14.7, 5.5, '', ha='center', fontsize=18)
+ax.text(14.7, 4.7, 'Inkrement\n增量', ha='center', fontsize=9, fontweight='bold',
+        color=COLORS['clean'], linespacing=1.3)
+
+ax.annotate('', xy=(13.8, 5.1), xytext=(13.5, 5.8),
+             arrowprops=dict(arrowstyle='->', color=COLORS['clean'], lw=2))
+
+# Feedback loop back to Product Backlog
+ax.annotate('', xy=(1.4, 2.8), xytext=(12.3, 1.8),
+             arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2, linestyle='--',
+                             connectionstyle='arc3,rad=0.2'))
+ax.text(7.0, 0.8, '← 反馈循环 / Feedback → 更新 Product Backlog', ha='center',
+        fontsize=9, color=COLORS['neutral'], fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+## Daily Standup 三问 | Die drei Standup-Fragen
+
+每次 Daily Standup 中，每位成员回答三个问题：
+
+**问题一**：自上次 Standup 以来，我做了什么？ (**Was habe ich seit dem letzten Standup gemacht?**)
+
+**问题二**：到下次 Standup 之前，我打算做什么？ (**Was werde ich bis zum nächsten Standup machen?**)
+
+**问题三**：有什么障碍或风险？ (**Welche Hindernisse oder Risiken gibt es?**)
+
+# 🎯 Paper City 实践 | Gruppenarbeit
+
+::: {.callout-tip}
+## Paper City 项目 — 课堂 Scrum 模拟
+
+目标：在纸上建造慕尼黑新城区！4 个 Sprint，体验完整的 Scrum 流程。
+
+**固定要求**：建筑只能建在城市地图 (A3 纸) 上，必须是三维的，重要特征（如入口）必须清晰可见。
+:::
+
+```{python}
+#| label: fig-paper-city-sprints
+#| fig-cap: "Paper City：4 个 Sprint 的结构 | Paper City: Struktur der 4 Sprints"
+
+fig, ax = plt.subplots(figsize=(15, 8))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('Paper City: Sprint 结构 | Sprint-Struktur', fontsize=15, fontweight='bold')
+
+sprint_colors = [COLORS['primary'], COLORS['scrum_green'], COLORS['scrum_orange'], COLORS['purple']]
+
+for i in range(4):
+    x = 1.0 + i * 3.5
+    color = sprint_colors[i]
+
+    # Sprint box
+    sbox = mpatches.FancyBboxPatch((x - 0.2, 0.5), 3.2, 8.0, boxstyle="round,pad=0.2",
+                                    facecolor='white', edgecolor=color, linewidth=2.5)
+    ax.add_patch(sbox)
+    ax.text(x + 1.4, 8.0, f'Sprint {i+1}', ha='center', fontsize=12, fontweight='bold', color=color)
+
+    # Phases
+    phases = [
+        ('Planning', '3 min', 7.0, COLORS['purple_light']),
+        ('开发 Entwicklung', '8 min', 5.2, COLORS['blue_light']),
+        ('Standup', '每 2 min', 4.0, COLORS['yellow_light']),
+        ('Review', '2 min', 2.8, COLORS['green_light']),
+        ('Retro', '2 min', 1.5, COLORS['red_light']),
+    ]
+
+    for label, dur, y, bg_color in phases:
+        pbox = mpatches.FancyBboxPatch((x, y - 0.35), 2.8, 0.75,
+                                        boxstyle="round,pad=0.05", facecolor=bg_color,
+                                        edgecolor='#ccc', linewidth=0.8)
+        ax.add_patch(pbox)
+        ax.text(x + 0.15, y, label, fontsize=7, va='center', fontweight='bold', color='#444')
+        ax.text(x + 2.65, y, dur, fontsize=6.5, va='center', ha='right', color='#888')
+
+    # Breaking news indicators
+    if i < 3:
+        ax.text(x + 1.4, 4.55, '突发新闻', ha='center', fontsize=7, color=COLORS['danger'],
+                fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+```
+
+## 突发新闻 | Eilmeldungen (Breaking News)
+
+在每个 Sprint 的开发阶段中，Product Owner 会收到各种突发消息——模拟真实项目中需求不断变化的现实：
+
+```{python}
+#| label: fig-breaking-news
+#| fig-cap: "各 Sprint 突发新闻 | Eilmeldungen pro Sprint"
+
+fig, ax = plt.subplots(figsize=(15, 9))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('突发新闻总览 | Eilmeldungen Übersicht', fontsize=14, fontweight='bold')
+
+sprint_news = [
+    {
+        'sprint': 'Sprint 1', 'color': COLORS['primary'], 'y_start': 8.5,
+        'news': [
+            ('交通安全法规', '所有建筑必须通过道路或人行道连通\nAlle Gebäude durch Straßen verbunden'),
+            ('选举在即', '老年选民大多反对该项目\nÄltere Wähler gegen Projekt'),
+            ('科技园竞争', '邻城宣布 Tech Hub 项目\nNachbarstadt Tech Hub'),
+        ]
+    },
+    {
+        'sprint': 'Sprint 2', 'color': COLORS['scrum_green'], 'y_start': 5.7,
+        'news': [
+            ('可持续交通', '公交和自行车基础设施获得奖励\nÖPNV und Fahrrad-Bonuspunkte'),
+            ('安全问题', '68% 居民天黑后感到不安全\n68% fühlen sich unsicher'),
+            ('绿化要求', '每栋建筑须有一块绿地\nJedes Gebäude braucht Grünfläche'),
+        ]
+    },
+    {
+        'sprint': 'Sprint 3', 'color': COLORS['scrum_orange'], 'y_start': 2.9,
+        'news': [
+            ('高端市场', '豪华装修可提价 15%\nPremium +15% Verkaufspreis'),
+            ('都市农业', 'Urban Gardening 趋势提高吸引力\nUrban Gardening Trend'),
+            ('邻里融合', '创新的社区整合方案优先审批\nNachbarschaftsintegration bevorzugt'),
+        ]
+    },
+]
+
+for s in sprint_news:
+    # Sprint label
+    label_box = mpatches.FancyBboxPatch((0.2, s['y_start'] - 0.3), 2.5, 0.7,
+                                         boxstyle="round,pad=0.1", facecolor=s['color'],
+                                         edgecolor=s['color'], linewidth=2)
+    ax.add_patch(label_box)
+    ax.text(1.45, s['y_start'] + 0.05, s['sprint'], ha='center', fontsize=11,
+            fontweight='bold', color='white')
+
+    for j, (icon_title, desc) in enumerate(s['news']):
+        x = 3.2 + j * 4.0
+        y = s['y_start']
+        news_box = mpatches.FancyBboxPatch((x - 0.2, y - 1.3), 3.6, 1.7,
+                                            boxstyle="round,pad=0.1", facecolor='white',
+                                            edgecolor=s['color'], linewidth=1.5)
+        ax.add_patch(news_box)
+        ax.text(x + 1.6, y + 0.05, icon_title, ha='center', fontsize=8.5,
+                fontweight='bold', color=s['color'])
+        ax.text(x + 1.6, y - 0.7, desc, ha='center', fontsize=7, color='#666', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+# Scrum 细节 | Scrum: Details
+
+::: {.callout-note}
+## 非考试内容 (Nicht klausurrelevant)
+本节内容为深入了解 Scrum 实践细节，不纳入考试范围。
+:::
+
+## Sprint Planning：工作量估算 | Aufwandsschätzung
+
+Sprint Planning 需回答三个核心问题：一个 Sprint 能放多少任务？一个任务的工作量是多少？团队一个 Sprint 能完成多少工作？
+
+### 估算度量 | Schätzmaße
+
+```{python}
+#| label: fig-estimation-scales
+#| fig-cap: "工作量估算度量 | Aufwandsschätzung: Maße"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('工作量估算度量 | Aufwandsschätzung: Maße', fontsize=14, fontweight='bold')
+
+scales = [
+    {
+        'title': '小时\nStunden',
+        'desc': '直接时间估算\nDirekte Zeitschätzung',
+        'example': '2h, 4h, 8h, 16h...',
+        'color': COLORS['primary'], 'x': 2.0, 'icon': ''
+    },
+    {
+        'title': 'Story Points\n故事点',
+        'desc': '相对工作量\nRelativer Aufwand',
+        'example': '1, 2, 3, 5, 8, 13, 21...\n(Fibonacci)',
+        'color': COLORS['scrum_green'], 'x': 5.5, 'icon': ''
+    },
+    {
+        'title': 'T-Shirt 尺寸\nT-Shirt-Größen',
+        'desc': '粗粒度分类\nGrobe Kategorien',
+        'example': 'XS, S, M, L, XL',
+        'color': COLORS['scrum_orange'], 'x': 9.0, 'icon': ''
+    },
+    {
+        'title': '奇特度量\nEsoterisch',
+        'desc': '有趣的替代方案\nKreative Alternativen',
+        'example': '犬种 Chihuahua→Wolfshund\n咖啡 Short→Venti',
+        'color': COLORS['purple'], 'x': 12.5, 'icon': ''
+    },
+]
+
+for s in scales:
+    card = mpatches.FancyBboxPatch(
+        (s['x'] - 1.5, 0.5), 3.0, 6.5,
+        boxstyle="round,pad=0.2", facecolor='white',
+        edgecolor=s['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    ax.text(s['x'], 6.5, s['icon'], ha='center', fontsize=22)
+    ax.text(s['x'], 5.5, s['title'], ha='center', fontsize=10,
+            fontweight='bold', color=s['color'], linespacing=1.3)
+    ax.text(s['x'], 4.0, s['desc'], ha='center', fontsize=8, color='#666', linespacing=1.3)
+    ax.text(s['x'], 2.3, s['example'], ha='center', fontsize=8, family='monospace',
+            color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+### 估算技术 | Schätztechniken
+
+估算可以由个人完成（Product Owner、经理、指定的开发人员根据感觉/经验或与参考任务对比估算），也可以由团队共同完成，例如使用 **Planning Poker**（每人同时出牌，差异大时讨论后重新估算）。
+
+## 速率 | Velocity
+
+::: {.callout-important}
+## 40 小时工作 ≠ 40 小时产出！
+
+**Velocity** 是一个 Sprint 中**实际完成的工作总量**（以 Story Points 或小时计），取多个 Sprint 的平均值。在团队稳定后经过几个 Sprint 趋于稳定。
+:::
+
+```{python}
+#| label: fig-velocity-chart
+#| fig-cap: "Velocity 趋势示例 | Velocity-Trend Beispiel"
+
+fig, ax = plt.subplots(figsize=(12, 5))
+
+sprints = [f'Sprint {i}' for i in range(1, 11)]
+velocity = [18, 24, 20, 28, 30, 32, 29, 31, 33, 30]
+avg_velocity = np.cumsum(velocity) / np.arange(1, len(velocity) + 1)
+
+bars = ax.bar(sprints, velocity, color=COLORS['primary'], alpha=0.7, edgecolor=COLORS['primary'], linewidth=1.5)
+ax.plot(sprints, avg_velocity, 'o-', color=COLORS['danger'], linewidth=2.5, markersize=6, label='累计平均 Velocity')
+
+# Highlight stabilization zone
+ax.axhspan(28, 33, alpha=0.1, color=COLORS['scrum_green'])
+ax.text(8.5, 33.5, '稳定区间 | Stabilisierungszone', fontsize=9,
+        color=COLORS['scrum_green'], fontweight='bold')
+
+ax.set_ylabel('Story Points', fontsize=11)
+ax.set_xlabel('Sprints', fontsize=11)
+ax.set_title('Velocity 趋势 | Velocity-Trend', fontsize=13, fontweight='bold')
+ax.legend(fontsize=9)
+ax.tick_params(axis='x', rotation=45)
+ax.grid(axis='y', alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 完成标准 | Definition of Done (DoD)
+
+::: {.callout-note}
+## 定义 (Definition)
+
+**Definition of Done (DoD)** 是一个标准清单，定义了一个 Backlog Item 被视为"完成"所必须满足的全部条件。
+:::
+
+## 燃尽图 | Burndown-Chart
+
+```{python}
+#| label: fig-burndown
+#| fig-cap: "燃尽图示例 | Burndown-Chart Beispiel"
+
+fig, ax = plt.subplots(figsize=(12, 6))
+
+days = np.arange(0, 11)
+total_sp = 60
+ideal = total_sp - (total_sp / 10) * days
+actual = [60, 58, 52, 50, 45, 42, 38, 30, 22, 12, 3]
+
+ax.plot(days, ideal, '--', color=COLORS['neutral'], linewidth=2, label='理想趋势 | Ideale Trend-Linie')
+ax.plot(days, actual, 'o-', color=COLORS['scrum_blue'], linewidth=2.5, markersize=7,
+        label='实际剩余 | Tatsächlich verbleibend')
+
+ax.fill_between(days, actual, ideal, where=[a > i for a, i in zip(actual, ideal)],
+                alpha=0.15, color=COLORS['danger'], label='落后 | Hinter dem Plan')
+ax.fill_between(days, actual, ideal, where=[a <= i for a, i in zip(actual, ideal)],
+                alpha=0.15, color=COLORS['clean'], label='领先 | Vor dem Plan')
+
+ax.set_xlabel('Sprint 天数 | Sprint-Tage', fontsize=11)
+ax.set_ylabel('剩余 Story Points | Verbleibende SP', fontsize=11)
+ax.set_title('Sprint 燃尽图 | Sprint Burndown-Chart', fontsize=13, fontweight='bold')
+ax.legend(fontsize=9, loc='upper right')
+ax.set_xticks(days)
+ax.set_xticklabels([f'Day {d}' for d in days])
+ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+燃尽图以图形方式展示 Sprint 中剩余的工作量。横轴表示时间（Sprint 中的天数或多个 Sprint），纵轴表示剩余工作量（Story Points 或小时），趋势线显示理想进度。
+
+## 时间盒 | Timeboxing
+
+```{python}
+#| label: fig-timeboxing
+#| fig-cap: "Scrum 中的时间盒 | Timeboxing in Scrum"
+
+fig, ax = plt.subplots(figsize=(13, 5))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('时间盒 | Timeboxing in Scrum', fontsize=14, fontweight='bold')
+
+timeboxes = [
+    {'title': 'Sprint', 'duration': '1-4 周\n1-4 Wochen', 'icon': '',
+     'desc': '固定时间后\n反思重新规划', 'x': 2.0, 'color': COLORS['scrum_blue']},
+    {'title': 'Daily Standup', 'duration': '~15 分钟\n~15 Minuten', 'icon': '',
+     'desc': '每日同步\n识别障碍', 'x': 5.5, 'color': COLORS['highlight']},
+    {'title': 'Sprint Planning', 'duration': '1-4 小时\n1-4 Stunden', 'icon': '',
+     'desc': '选择任务\n设定目标', 'x': 9.0, 'color': COLORS['purple']},
+    {'title': 'Spikes/Prototypen', 'duration': '按需\nNach Bedarf', 'icon': '',
+     'desc': 'Backlog Items\nkönnen timeboxed sein', 'x': 12.5, 'color': COLORS['scrum_green']},
+]
+
+for t in timeboxes:
+    card = mpatches.FancyBboxPatch(
+        (t['x'] - 1.5, 0.3), 3.0, 5.0,
+        boxstyle="round,pad=0.2", facecolor='white',
+        edgecolor=t['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    ax.text(t['x'], 4.8, t['icon'], ha='center', fontsize=20)
+    ax.text(t['x'], 3.9, t['title'], ha='center', fontsize=10, fontweight='bold', color=t['color'])
+    ax.text(t['x'], 3.0, t['duration'], ha='center', fontsize=9, color='#555', linespacing=1.3)
+    ax.text(t['x'], 1.5, t['desc'], ha='center', fontsize=8, color='#777', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+时间盒的核心优势在于：**聚焦重点**（Fokus auf das Wesentliche），减少收益递减的风险（diminishing Returns），以及**定期反思和重新聚焦**。
+
+# 实际问题 | Praktische Probleme
+
+::: {.callout-note}
+## 非考试内容 (Nicht klausurrelevant)
+基于 Ian Sommerville: Software Engineering, Kapitel 3.4
+:::
+
+```{python}
+#| label: fig-practical-problems
+#| fig-cap: "敏捷方法的实际问题 | Praktische Probleme agiler Methoden"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('敏捷方法的实际问题 | Praktische Probleme', fontsize=14, fontweight='bold')
+
+problems = [
+    {
+        'zh': '合同法律挑战', 'de': 'Juristische Anforderungen\nbei Vertragsgestaltung',
+        'solution': '敏捷固定价格\nAgiler Festpreis',
+        'icon': '', 'y': 9.0
+    },
+    {
+        'zh': '需求文档不足', 'de': 'Fehlende Dokumentation\nder Anforderungen',
+        'solution': '需平衡敏捷与文档\nBalance nötig',
+        'icon': '', 'y': 7.8
+    },
+    {
+        'zh': '维护场景不适用', 'de': 'Nur eingeschränkt auf\nWartung anwendbar',
+        'solution': '短期紧急修复不适合\n增量开发模型',
+        'icon': '', 'y': 6.6
+    },
+    {
+        'zh': '与刚性流程集成困难', 'de': 'Integration in starre\nProzesse (z.B. Maschinenbau)',
+        'solution': '需要额外的协调工作\nZusätzlicher Aufwand',
+        'icon': '', 'y': 5.4
+    },
+    {
+        'zh': '大项目需长期规划', 'de': 'Große Projekte erfordern\nlangfristige Planung',
+        'solution': '混合方法\nKombination möglich',
+        'icon': '', 'y': 4.2
+    },
+    {
+        'zh': '团队能力要求高', 'de': 'Hohes Können aller\nTeammitglieder erforderlich',
+        'solution': '不仅仅是编程\nNicht nur Programmieren',
+        'icon': '', 'y': 3.0
+    },
+    {
+        'zh': '外包单项活动困难', 'de': 'Aktivitäten schwer\nauszulagern',
+        'solution': '紧密协作是核心\nEnge Zusammenarbeit nötig',
+        'icon': '', 'y': 1.8
+    },
+]
+
+for p in problems:
+    # Icon
+    ax.text(0.5, p['y'], p['icon'], fontsize=16, va='center')
+
+    # Problem box
+    prob_box = mpatches.FancyBboxPatch((1.2, p['y'] - 0.45), 5.5, 0.95,
+                                        boxstyle="round,pad=0.08", facecolor=COLORS['red_light'],
+                                        edgecolor=COLORS['danger'], linewidth=1.2)
+    ax.add_patch(prob_box)
+    ax.text(1.5, p['y'] + 0.15, p['zh'], fontsize=8.5, fontweight='bold', color=COLORS['danger'])
+    ax.text(1.5, p['y'] - 0.2, p['de'], fontsize=7, color='#777', linespacing=1.2)
+
+    # Arrow
+    ax.annotate('', xy=(7.2, p['y']), xytext=(6.8, p['y']),
+                 arrowprops=dict(arrowstyle='->', color='#999', lw=1.5))
+
+    # Note
+    note_box = mpatches.FancyBboxPatch((7.3, p['y'] - 0.45), 6.3, 0.95,
+                                        boxstyle="round,pad=0.08", facecolor=COLORS['yellow_light'],
+                                        edgecolor=COLORS['highlight'], linewidth=1)
+    ax.add_patch(note_box)
+    ax.text(7.6, p['y'], p['solution'], fontsize=7.5, color='#555', va='center', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 计划驱动与敏捷的结合 | Kombination plangesteuerter und agiler Methoden
+
+对于需要长期资源规划（如三年跨度）的大型项目，可以将计划驱动方法与敏捷方法结合使用：先用类似瀑布模型的方式进行粗略的规格说明和系统设计，预留充足的变更风险空间，然后通过 Scrum 进行实际开发。当优先级变化或发现新需求时，分析其对长期计划的影响，必要时调整计划。
+
+```{python}
+#| label: fig-hybrid-approach
+#| fig-cap: "混合方法：计划驱动 + 敏捷 | Hybrid: Plangesteuert + Agil"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('混合方法 | Kombination plangesteuerter und agiler Methoden', fontsize=13, fontweight='bold')
+
+# Waterfall phase
+wf_box = mpatches.FancyBboxPatch((0.5, 2.0), 4.0, 3.0, boxstyle="round,pad=0.2",
+                                  facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=2.5)
+ax.add_patch(wf_box)
+ax.text(2.5, 4.3, '计划驱动阶段\nPlangesteuerte Phase', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['primary'], linespacing=1.3)
+ax.text(2.5, 3.0, '粗略规格说明 + 系统设计\nGrobe Spezifikation\n+ Systementwurf\n+ Risikopuffer', ha='center',
+        fontsize=8, color='#555', linespacing=1.3)
+
+# Arrow
+ax.annotate('', xy=(5.0, 3.5), xytext=(4.6, 3.5),
+             arrowprops=dict(arrowstyle='->', color='#555', lw=2.5))
+
+# Scrum sprints
+for i in range(4):
+    x = 5.2 + i * 2.2
+    color_cycle = [COLORS['scrum_blue'], COLORS['scrum_green'], COLORS['scrum_orange'], COLORS['purple']]
+    c = color_cycle[i]
+    s_box = mpatches.FancyBboxPatch((x, 2.0), 1.8, 3.0, boxstyle="round,pad=0.15",
+                                     facecolor='white', edgecolor=c, linewidth=2)
+    ax.add_patch(s_box)
+    ax.text(x + 0.9, 4.3, f'Sprint {i+1}', ha='center', fontsize=9, fontweight='bold', color=c)
+    ax.text(x + 0.9, 3.3, '\nScrum', ha='center', fontsize=9, color='#666')
+
+# Feedback loop
+ax.annotate('', xy=(2.5, 1.8), xytext=(12.5, 1.2),
+             arrowprops=dict(arrowstyle='->', color=COLORS['danger'], lw=2, linestyle='--',
+                             connectionstyle='arc3,rad=0.15'))
+ax.text(7.5, 0.7, '← 需求变更 → 评估影响 → 调整长期计划\nÄnderungen → Auswirkungsanalyse → Plan anpassen',
+        ha='center', fontsize=8, color=COLORS['danger'], fontstyle='italic', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+# 总结 | Zusammenfassung
+
+```{python}
+#| label: fig-summary
+#| fig-cap: "敏捷方法总结 | Zusammenfassung Agile Methoden"
+
+fig, ax = plt.subplots(figsize=(15, 9))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('敏捷方法 — 总结 | Agile Methoden — Zusammenfassung', fontsize=16, fontweight='bold')
+
+sections = [
+    {
+        'title': '敏捷宣言\nAgiles Manifest',
+        'points': '个体 > 流程\n软件 > 文档\n合作 > 合同\n变化 > 计划',
+        'color': COLORS['primary'], 'x': 2.0, 'y': 7.5, 'icon': ''
+    },
+    {
+        'title': 'XP 实践\nExtreme Programming',
+        'points': 'TDD\nPair Programming\n频繁发布\n集体所有权',
+        'color': COLORS['scrum_green'], 'x': 5.5, 'y': 7.5, 'icon': ''
+    },
+    {
+        'title': 'Scrum 角色\nScrum-Rollen',
+        'points': 'Product Owner\nDevelopers\nScrum Master\n≠ Projektmanager!',
+        'color': COLORS['scrum_orange'], 'x': 9.0, 'y': 7.5, 'icon': ''
+    },
+    {
+        'title': 'Scrum 仪式\nScrum-Events',
+        'points': 'Sprint Planning\nDaily Standup\nSprint Review\nRetrospective',
+        'color': COLORS['purple'], 'x': 12.5, 'y': 7.5, 'icon': ''
+    },
+    {
+        'title': 'Scrum 工件\nScrum-Artefakte',
+        'points': 'Product Backlog\nSprint Backlog\nSprint Goal\nBurndown Chart',
+        'color': COLORS['scrum_blue'], 'x': 3.5, 'y': 3.0, 'icon': ''
+    },
+    {
+        'title': '估算与速率\nSchätzung & Velocity',
+        'points': 'Story Points\nPlanning Poker\nVelocity 稳定化\nDefinition of Done',
+        'color': COLORS['highlight'], 'x': 7.5, 'y': 3.0, 'icon': ''
+    },
+    {
+        'title': '实际问题\nProbleme & Hybrid',
+        'points': '法律/合同挑战\n大项目需长期规划\n可与计划驱动结合',
+        'color': COLORS['danger'], 'x': 11.5, 'y': 3.0, 'icon': ''
+    },
+]
+
+for s in sections:
+    card = mpatches.FancyBboxPatch(
+        (s['x'] - 1.5, s['y'] - 2.0), 3.0, 4.0,
+        boxstyle="round,pad=0.2", facecolor='white',
+        edgecolor=s['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    ax.text(s['x'], s['y'] + 1.5, s['icon'], ha='center', fontsize=18)
+    ax.text(s['x'], s['y'] + 0.7, s['title'], ha='center', va='center',
+            fontsize=9, fontweight='bold', color=s['color'], linespacing=1.2)
+    ax.text(s['x'], s['y'] - 0.8, s['points'], ha='center', va='center',
+            fontsize=7.5, color='#555', linespacing=1.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-tip}
+## 下周预告 | Ausblick nächste Woche
+
+**主题**：Kanban — 另一种敏捷方法
+
+**核心概念**：持续改进 (Kontinuierliche Verbesserung)、工作流可视化 (Visualisierung des Workflows)、限制在制品数量 (WIP-Limits)。
+
+**阅读作业**（11 月 26 日前）：
+
+- David J. Anderson & Andy Carmichael: *Die Essenz von Kanban Kompakt*, dpunkt.verlag, 2018 — 前 30 页（含）
+- Kanban 基础 + 小测验 (Quiz)
+:::

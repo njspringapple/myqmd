@@ -1,0 +1,1243 @@
+---
+title: "第九章：People Management 与 Teamarbeit"
+subtitle: "动机、领导力、心理安全 | Motivation, Führung, Psychologische Sicherheit"
+author: "Softwaretechnik WS 25/26"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    font_list = candidates.get(system, candidates['Linux'])
+    valid_fonts = [f for f in font_list if f in available_fonts]
+    if valid_fonts:
+        plt.rcParams['font.sans-serif'] = valid_fonts + ['DejaVu Sans']
+        plt.rcParams['font.monospace'] = valid_fonts + ['Consolas', 'Courier New', 'DejaVu Sans Mono']
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+COLORS = {
+    'primary': '#2E86AB',
+    'secondary': '#A23B72',
+    'success': '#2E8B57',
+    'warning': '#E8871E',
+    'danger': '#C1292E',
+    'info': '#5B8C5A',
+    'light': '#F5F5F5',
+    'dark': '#2C3E50',
+    'neutral': '#7F8C8D',
+    'highlight': '#F39C12',
+    'purple': '#8E44AD',
+    'teal': '#1ABC9C',
+    'pink': '#E91E63',
+    'indigo': '#3F51B5',
+    'deep_orange': '#FF5722',
+    'blue_light': '#D6EAF8',
+    'green_light': '#D5F5E3',
+    'red_light': '#FDEDEC',
+    'yellow_light': '#FEF9E7',
+    'purple_light': '#F3E5F5',
+    'orange_light': '#FDEBD0',
+    'teal_light': '#D1F2EB',
+    'pink_light': '#FCE4EC',
+    'indigo_light': '#E8EAF6',
+    # SDT colors
+    'competence': '#2196F3',
+    'autonomy': '#4CAF50',
+    'relatedness': '#FF9800',
+    # Big Five colors
+    'openness': '#9C27B0',
+    'conscientiousness': '#2196F3',
+    'extraversion': '#FF9800',
+    'agreeableness': '#4CAF50',
+    'neuroticism': '#F44336',
+    # Leadership
+    'equality_c': '#00BCD4',
+    'respect_c': '#8BC34A',
+    'integration_c': '#FF5722',
+    'honesty_c': '#FFC107',
+    # Psychological Safety
+    'safety_green': '#43A047',
+    'safety_yellow': '#FDD835',
+    'safety_red': '#E53935',
+}
+```
+
+# 回顾与本章目标 | Recap & Ziel
+
+::: {.callout-note}
+## 前几章要点 (Zusammenfassung bisheriger Kapitel)
+
+**Git 内部机制**：对象模型 (Blob, Tree, Commit)、SHA-1 哈希、Branches 作为指针、Merge 与 Rebase 策略。
+:::
+
+::: {.callout-important}
+## 本章目标 (Ziel dieser Vorlesung)
+
+在本章结束时，你将了解软件开发中 People Management 的核心要素，理解团队有效工作的关键因素，以及如何在团队合作中主动塑造这些因素。
+
+*"It's safe to not know things — and admitting that is what makes you grow."*
+:::
+
+```{python}
+#| label: fig-chapter-overview
+#| fig-cap: "本章概览 | Kapitelübersicht"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('第九章 People Management 与 Teamarbeit | Überblick', fontsize=15, fontweight='bold')
+
+sections = [
+    {'title': '1. People\nManagement', 'sub': '目标与关键方面\nZiele & Aspekte', 'icon': '',
+     'color': COLORS['primary'], 'x': 2.0},
+    {'title': '1.1 动机\nMotivation', 'sub': 'Maslow, SDT\nUber vs. GitLab', 'icon': '',
+     'color': COLORS['warning'], 'x': 5.0},
+    {'title': '1.2 领导力\nFührung', 'sub': '沟通, 人格类型\nKommunikation, Big5', 'icon': '',
+     'color': COLORS['purple'], 'x': 8.0},
+    {'title': '2. 团队合作\nTeamwork', 'sub': 'Project Aristotle\n心理安全', 'icon': '',
+     'color': COLORS['safety_green'], 'x': 11.0},
+]
+
+for s in sections:
+    card = mpatches.FancyBboxPatch((s['x'] - 1.3, 0.5), 2.6, 4.5,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=s['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(s['x'], 4.5, s['icon'], ha='center', fontsize=22)
+    ax.text(s['x'], 3.3, s['title'], ha='center', fontsize=10, fontweight='bold',
+            color=s['color'], linespacing=1.3)
+    ax.text(s['x'], 1.7, s['sub'], ha='center', fontsize=8.5, color='#555', linespacing=1.3)
+
+for i in range(len(sections) - 1):
+    ax.annotate('', xy=(sections[i+1]['x'] - 1.4, 2.8),
+        xytext=(sections[i]['x'] + 1.4, 2.8),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+# People Management
+
+## People Management 的目标 | Ziele
+
+项目领导的核心任务可以归纳为三步：**找到** (Finden) 优秀的团队成员并招募他们；**留住** (Halten) 他们在团队中长期工作；**保持生产力** (Produktiv halten)，实现可持续的生产力。
+
+```{python}
+#| label: fig-pm-goals
+#| fig-cap: "People Management 三大目标 | Drei Ziele des People Management"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('People Management 的目标 | Ziele', fontsize=14, fontweight='bold')
+
+goals = [
+    {'title': '1. 找到\nFinden', 'desc': '招募优秀团队成员\nGute Teammitglieder\nrekrutieren',
+     'icon': '', 'color': COLORS['primary'], 'x': 3.0},
+    {'title': '2. 留住\nHalten', 'desc': '长期留在团队中\nIm Team behalten\n(langfristig)',
+     'icon': '', 'color': COLORS['success'], 'x': 7.0},
+    {'title': '3. 保持生产力\nProduktiv halten', 'desc': '实现可持续生产力\nNachhaltige Produktivität\nermöglichen',
+     'icon': '', 'color': COLORS['warning'], 'x': 11.0},
+]
+
+for g in goals:
+    card = mpatches.FancyBboxPatch((g['x'] - 1.8, 0.5), 3.6, 4.8,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=g['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(g['x'], 4.8, g['icon'], ha='center', fontsize=24)
+    ax.text(g['x'], 3.5, g['title'], ha='center', fontsize=12, fontweight='bold',
+            color=g['color'], linespacing=1.3)
+    ax.text(g['x'], 1.8, g['desc'], ha='center', fontsize=9, color='#555', linespacing=1.4)
+
+for i in range(len(goals) - 1):
+    ax.annotate('', xy=(goals[i+1]['x'] - 2.0, 3.0),
+        xytext=(goals[i]['x'] + 2.0, 3.0),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2.5))
+
+plt.tight_layout()
+plt.show()
+```
+
+## 重要方面 | Wichtige Aspekte
+
+People Management 有四个关键方面：**尊重** (Respekt)——重视每个人的个人资质；**匹配任务** (Passende Aufgaben)——考虑技能和期望；**激励** (Motivation)——正确激励员工；**领导** (Führung)——指导和支持员工。本章重点关注**激励**和**领导**两个方面，尊重将在后面的 Teamwork 部分回顾。
+
+## 动机理论 | Motivation {#sec-motivation}
+
+### 马斯洛需求层次 | Maslows Hierarchie
+
+```{python}
+#| label: fig-maslow
+#| fig-cap: "马斯洛需求层次理论 | Maslows Bedürfnishierarchie"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('马斯洛需求层次 | Maslows Bedürfnishierarchie', fontsize=15, fontweight='bold')
+
+levels = [
+    {'zh': '自我实现\nSelbstverwirklichung', 'color': '#9C27B0', 'y': 7.8, 'w': 3.0, 'type': '成长'},
+    {'zh': '尊重需求\nWertschätzung', 'color': '#2196F3', 'y': 6.2, 'w': 5.0, 'type': '缺失'},
+    {'zh': '社交需求\nSoziale Bedürfnisse', 'color': '#4CAF50', 'y': 4.6, 'w': 7.0, 'type': '缺失'},
+    {'zh': '安全需求\nSicherheit', 'color': '#FF9800', 'y': 3.0, 'w': 9.0, 'type': '缺失'},
+    {'zh': '生理需求\nPhysiologische Bedürfnisse', 'color': '#F44336', 'y': 1.4, 'w': 11.0, 'type': '缺失'},
+]
+
+for lv in levels:
+    x_start = (12 - lv['w']) / 2
+    box = mpatches.FancyBboxPatch((x_start, lv['y'] - 0.6), lv['w'], 1.2,
+        boxstyle="round,pad=0.1", facecolor=lv['color'], edgecolor='white', linewidth=2, alpha=0.85)
+    ax.add_patch(box)
+    ax.text(6.0, lv['y'], lv['zh'], ha='center', va='center', fontsize=10,
+            fontweight='bold', color='white', linespacing=1.3)
+
+# Labels
+ax.annotate('成长动机\nWachstums-\nmotivation', xy=(9.5, 7.8), fontsize=9,
+            color=COLORS['purple'], fontweight='bold', ha='center', linespacing=1.3)
+ax.annotate('缺失动机\nDefizit-\nmotivation', xy=(9.8, 3.5), fontsize=9,
+            color=COLORS['danger'], fontweight='bold', ha='center', linespacing=1.3)
+
+bracket_x = 11.2
+ax.plot([bracket_x, bracket_x], [1.0, 7.0], color=COLORS['danger'], lw=2)
+ax.plot([bracket_x - 0.1, bracket_x], [1.0, 1.0], color=COLORS['danger'], lw=2)
+ax.plot([bracket_x - 0.1, bracket_x], [7.0, 7.0], color=COLORS['danger'], lw=2)
+
+ax.plot([bracket_x, bracket_x], [7.4, 8.4], color=COLORS['purple'], lw=2)
+ax.plot([bracket_x - 0.1, bracket_x], [7.4, 7.4], color=COLORS['purple'], lw=2)
+ax.plot([bracket_x - 0.1, bracket_x], [8.4, 8.4], color=COLORS['purple'], lw=2)
+
+# Key points
+ax.text(6.0, 0.3, '特点：关注缺失动机 | 需求分层 | 低层需求必须先满足',
+        ha='center', fontsize=9, color=COLORS['neutral'], fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+马斯洛的需求层次理论关注**缺失动机** (Defizitmotivation)，认为需求按层级排列，低层需求必须先被满足。这个模型虽然经典，但有局限性——它假设了严格的层级关系。
+
+### 自我决定理论 (SDT) | Self-Determination Theory
+
+```{python}
+#| label: fig-sdt
+#| fig-cap: "自我决定理论 (SDT) | Self-Determination Theory"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('自我决定理论 (SDT) | Self-Determination Theory', fontsize=15, fontweight='bold')
+
+ax.text(7.0, 8.5, '内在动机的三大心理基本需求 | Drei psychologische Grundbedürfnisse',
+        ha='center', fontsize=11, color=COLORS['dark'], fontstyle='italic')
+
+needs = [
+    {
+        'zh': '能力感', 'de': 'Kompetenz',
+        'en': 'Competence',
+        'desc': '感到自己有效\n且有能力\nSich effektiv und\nfähig fühlen',
+        'icon': '', 'color': COLORS['competence'], 'x': 2.5
+    },
+    {
+        'zh': '自主性', 'de': 'Autonomie',
+        'en': 'Autonomy',
+        'desc': '能够自主行动\nSelbstbestimmt\nhandeln können',
+        'icon': '', 'color': COLORS['autonomy'], 'x': 7.0
+    },
+    {
+        'zh': '归属感', 'de': 'Verbundenheit',
+        'en': 'Relatedness',
+        'desc': '社交关系\n和归属感\nSoziale Beziehungen\nund Zugehörigkeit',
+        'icon': '', 'color': COLORS['relatedness'], 'x': 11.5
+    },
+]
+
+for n in needs:
+    card = mpatches.FancyBboxPatch((n['x'] - 2.0, 1.5), 4.0, 6.5,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=n['color'], linewidth=3)
+    ax.add_patch(card)
+
+    circle = plt.Circle((n['x'], 6.8), 0.6, facecolor=n['color'], edgecolor='white', linewidth=2, alpha=0.2)
+    ax.add_patch(circle)
+    ax.text(n['x'], 6.8, n['icon'], ha='center', fontsize=22)
+
+    ax.text(n['x'], 5.8, n['zh'], ha='center', fontsize=14, fontweight='bold', color=n['color'])
+    ax.text(n['x'], 5.2, n['de'], ha='center', fontsize=11, color=n['color'])
+    ax.text(n['x'], 4.6, f'({n["en"]})', ha='center', fontsize=9, color=COLORS['neutral'])
+
+    ax.text(n['x'], 3.2, n['desc'], ha='center', fontsize=9, color='#555', linespacing=1.5)
+
+# Key difference from Maslow
+diff_box = mpatches.FancyBboxPatch((1.5, 0.3), 11.0, 1.0, boxstyle="round,pad=0.1",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(diff_box)
+ax.text(7.0, 0.8, '与马斯洛的区别：关注成长动机 (Wachstumsmotivation) | 三者同时存在，非层级关系',
+        ha='center', fontsize=9.5, fontweight='bold', color=COLORS['highlight'])
+
+plt.tight_layout()
+plt.show()
+```
+
+SDT 由 Gagné 等人提出，聚焦于**成长动机** (Wachstumsmotivation)，认为三种基本心理需求是同时存在的，而不是像马斯洛那样的层级关系。当这三种需求都被满足时，人们会产生强烈的内在动机。
+
+### SDT 反面案例：Uber | Negativbeispiel
+
+```{python}
+#| label: fig-uber-negative
+#| fig-cap: "SDT 反面案例：Uber | Negativbeispiel Uber"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('SDT 反面案例：Uber 的算法管理 | Negativbeispiel: Algorithmisches Management',
+             fontsize=13, fontweight='bold', color=COLORS['danger'])
+
+dims = [
+    {
+        'name': '能力感 X\nKompetenz', 'color': COLORS['competence'],
+        'problem': '内部评分不断变化\n没有明确规则\nInterne Bewertung ändert\nsich ständig',
+        'x': 2.5
+    },
+    {
+        'name': '自主性 X\nAutonomie', 'color': COLORS['autonomy'],
+        'problem': '算法决定路线\n绕路 = 惩罚\nAlgorithmus bestimmt\nFahrtroute',
+        'x': 7.0
+    },
+    {
+        'name': '归属感 X\nVerbundenheit', 'color': COLORS['relatedness'],
+        'problem': '无上级，无同事联系\n只有 App\nKein Kontakt zu\nKolleg:innen',
+        'x': 11.5
+    },
+]
+
+for d in dims:
+    card = mpatches.FancyBboxPatch((d['x'] - 2.0, 2.5), 4.0, 5.0,
+        boxstyle="round,pad=0.2", facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(d['x'], 6.8, d['name'], ha='center', fontsize=11, fontweight='bold',
+            color=d['color'], linespacing=1.3)
+    ax.text(d['x'], 4.5, d['problem'], ha='center', fontsize=9, color='#555', linespacing=1.5)
+
+# Consequences
+cons_box = mpatches.FancyBboxPatch((1.0, 0.3), 12.0, 1.8, boxstyle="round,pad=0.15",
+    facecolor=COLORS['danger'], edgecolor=COLORS['danger'], linewidth=2, alpha=0.1)
+ax.add_patch(cons_box)
+cons_box2 = mpatches.FancyBboxPatch((1.0, 0.3), 12.0, 1.8, boxstyle="round,pad=0.15",
+    facecolor='none', edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(cons_box2)
+
+ax.text(7.0, 1.7, '后果 | Konsequenzen', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['danger'])
+ax.text(7.0, 0.8, '仅 8% 满意 | 6 个月后 75% 女性 / 65% 男性离职 → 高流动成本 + 低质量',
+        ha='center', fontsize=9.5, color=COLORS['danger'])
+
+plt.tight_layout()
+plt.show()
+```
+
+Uber 的算法管理在三个 SDT 维度上全面失败：评分规则不透明破坏了能力感，算法强制决定路线剥夺了自主性，缺乏人际联系损害了归属感。结果是仅 8% 的司机对工作满意，6 个月后约 65-75% 的司机离职。高流动率意味着高成本和低服务质量。
+
+### SDT 正面案例：GitLab | Positivbeispiel
+
+```{python}
+#| label: fig-gitlab-positive
+#| fig-cap: "SDT 正面案例：GitLab | Positivbeispiel GitLab"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('SDT 正面案例：GitLab（92% 满意度）| Positivbeispiel GitLab',
+             fontsize=13, fontweight='bold', color=COLORS['safety_green'])
+
+dims_gl = [
+    {
+        'name': '能力感 \nKompetenz', 'color': COLORS['competence'],
+        'examples': '全面的 Handbook\n(2000+ 页)\n广泛的权限\n💬 反馈文化',
+        'detail': '新开发者几乎总能在\nHandbook 中找到答案\n无需等待他人帮助',
+        'x': 2.5
+    },
+    {
+        'name': '自主性 \nAutonomie', 'color': COLORS['autonomy'],
+        'examples': '灵活工作时间\n"Manager of One"\nDRI 原则',
+        'detail': '"我要做" 替代 "要我做吗?"\n自主决定任务和优先级',
+        'x': 7.0
+    },
+    {
+        'name': '归属感 \nVerbundenheit', 'color': COLORS['relatedness'],
+        'examples': 'Coffee Chats\n团队 Retreats\n认可文化',
+        'detail': 'Donut Bot 每两周\n随机配对聊天\n#donut_be_strangers',
+        'x': 11.5
+    },
+]
+
+for d in dims_gl:
+    card = mpatches.FancyBboxPatch((d['x'] - 2.0, 1.0), 4.0, 7.5,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=d['color'], linewidth=3)
+    ax.add_patch(card)
+    ax.text(d['x'], 7.8, d['name'], ha='center', fontsize=11, fontweight='bold',
+            color=d['color'], linespacing=1.3)
+
+    ex_box = mpatches.FancyBboxPatch((d['x'] - 1.7, 4.5), 3.4, 2.5,
+        boxstyle="round,pad=0.08", facecolor=d['color'] + '15', edgecolor=d['color'],
+        linewidth=1, linestyle='--')
+    ax.add_patch(ex_box)
+    ax.text(d['x'], 5.8, d['examples'], ha='center', fontsize=8.5, color='#444', linespacing=1.5)
+
+    ax.text(d['x'], 2.8, d['detail'], ha='center', fontsize=8, color='#666',
+            linespacing=1.4, fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+GitLab 在三个维度上都表现出色：全面的 Handbook 和广泛权限支撑能力感；灵活工作制和 "Manager of One" 原则保障自主性；随机 Coffee Chat 和团队 Retreats 培育归属感。结果是 92% 的员工对工作满意。
+
+### SDT 对比总结 | Vergleich
+
+```{python}
+#| label: fig-sdt-comparison
+#| fig-cap: "Uber vs. GitLab：SDT 维度对比 | Vergleich der SDT-Dimensionen"
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+categories = ['能力感\nKompetenz', '自主性\nAutonomie', '归属感\nVerbundenheit']
+uber_scores = [1.5, 1.0, 1.0]
+gitlab_scores = [9.0, 9.5, 8.5]
+
+x = np.arange(len(categories))
+width = 0.35
+
+bars1 = ax.bar(x - width/2, uber_scores, width, label='Uber (8% 满意)',
+               color=COLORS['danger'], alpha=0.8, edgecolor='white', linewidth=1.5)
+bars2 = ax.bar(x + width/2, gitlab_scores, width, label='GitLab (92% 满意)',
+               color=COLORS['safety_green'], alpha=0.8, edgecolor='white', linewidth=1.5)
+
+ax.set_ylabel('满足程度 | Erfüllungsgrad', fontsize=11)
+ax.set_title('SDT 维度对比 | Vergleich der SDT-Dimensionen', fontsize=14, fontweight='bold')
+ax.set_xticks(x)
+ax.set_xticklabels(categories, fontsize=10)
+ax.set_ylim(0, 11)
+ax.legend(fontsize=10, loc='upper left')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+ax.grid(axis='y', alpha=0.3)
+
+for bar in bars1:
+    ax.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.3, 'X',
+            ha='center', va='bottom', fontsize=14)
+for bar in bars2:
+    ax.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.3, 'OK',
+            ha='center', va='bottom', fontsize=14)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 领导力 | Führung von Menschen {#sec-leadership}
+
+### 优秀领导的基本特征 | Grundcharakteristika guter Führung
+
+```{python}
+#| label: fig-leadership-basics
+#| fig-cap: "优秀领导的四大特征 | Vier kritische Faktoren (Sommerville)"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('优秀领导的四大特征 | Grundcharakteristika guter Führung (Sommerville)',
+             fontsize=13, fontweight='bold')
+
+traits = [
+    {
+        'zh': '平等', 'de': 'Gleichheit', 'icon': '',
+        'desc': '平等对待所有成员\n同等重视所有贡献\nAlle gleich behandeln',
+        'color': COLORS['equality_c'], 'x': 2.0
+    },
+    {
+        'zh': '尊重', 'de': 'Respekt', 'icon': '',
+        'desc': '尊重个人资质\n和能力\nIndividuelle Qualifikationen\nrespektieren',
+        'color': COLORS['respect_c'], 'x': 5.3
+    },
+    {
+        'zh': '融合', 'de': 'Integration', 'icon': '',
+        'desc': '创造所有人被倾听\n的环境\n重视新人意见\nNachwuchskräfte\nernst nehmen',
+        'color': COLORS['integration_c'], 'x': 8.6
+    },
+    {
+        'zh': '诚实', 'de': 'Ehrlichkeit', 'icon': '',
+        'desc': '公开讨论优缺点\n承认自己的\n知识盲区\nEigene Wissenslücken\nzugeben',
+        'color': COLORS['honesty_c'], 'x': 11.9
+    },
+]
+
+for t in traits:
+    card = mpatches.FancyBboxPatch((t['x'] - 1.5, 0.5), 3.0, 5.8,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=t['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(t['x'], 5.8, t['icon'], ha='center', fontsize=22)
+    ax.text(t['x'], 4.6, t['zh'], ha='center', fontsize=13, fontweight='bold', color=t['color'])
+    ax.text(t['x'], 4.0, t['de'], ha='center', fontsize=10, color=t['color'])
+    ax.text(t['x'], 2.3, t['desc'], ha='center', fontsize=8, color='#555', linespacing=1.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+Sommerville 强调管理者应关注四大关键因素。**平等 (Gleichheit)** 意味着平等对待所有成员，同等重视所有贡献。**尊重 (Respekt)** 要求尊重每个人的个人资质和能力，让每个人都能有所贡献。**融合 (Integration)** 是要创造一个所有人都被倾听的环境，包括新人。**诚实 (Ehrlichkeit)** 则要求公开讨论好与不好的方面，并承认自己的知识盲区。
+
+### 有效沟通 | Effektive Kommunikation
+
+::: {.callout-important}
+## 领导者的责任 (Aufgabe der Führungskraft)
+
+消除模糊性和不确定性。我们有责任确保人们知道：**我们对他们的期望是什么**，以及**他们可以对我们有什么样的期望**。
+:::
+
+### Minto 金字塔 | Minto Pyramide
+
+Minto 金字塔是一种用于高效书面沟通的方法，来源于 [Untools.co](https://untools.co/) 的思维工具集。Untools 网站收录了多种思维工具和框架，用于帮助解决问题、做出决策和理解系统。其中 Minto Pyramid 属于 **COMMUNICATION** 类别，旨在使沟通更高效、更清晰。
+
+```{python}
+#| label: fig-minto-pyramid
+#| fig-cap: "Minto 金字塔 | Minto Pyramide (Quelle: untools.co)"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('Minto 金字塔 — 高效书面沟通 | Minto Pyramide\n(来源: untools.co)',
+             fontsize=14, fontweight='bold')
+
+# Top: Main message
+top = mpatches.FancyBboxPatch((4.0, 7.5), 4.0, 1.8, boxstyle="round,pad=0.15",
+    facecolor=COLORS['danger'], edgecolor='white', linewidth=2, alpha=0.9)
+ax.add_patch(top)
+ax.text(6.0, 8.7, '核心结论 | Kernaussage', ha='center', fontsize=12,
+        fontweight='bold', color='white')
+ax.text(6.0, 7.9, '先给结论！', ha='center', fontsize=10, color='white')
+
+# Middle: Key Arguments
+mid_positions = [(1.5, 4.8), (4.5, 4.8), (7.5, 4.8)]
+mid_labels = ['论据 1\nArgument 1', '论据 2\nArgument 2', '论据 3\nArgument 3']
+
+for (x, y), label in zip(mid_positions, mid_labels):
+    box = mpatches.FancyBboxPatch((x - 1.2, y), 2.4, 1.8, boxstyle="round,pad=0.1",
+        facecolor=COLORS['warning'], edgecolor='white', linewidth=2, alpha=0.85)
+    ax.add_patch(box)
+    ax.text(x, y + 0.9, label, ha='center', fontsize=9, fontweight='bold',
+            color='white', linespacing=1.3)
+
+# Bottom: Supporting details
+bot_positions = [(0.8, 2.0), (2.4, 2.0), (4.0, 2.0), (5.6, 2.0), (7.2, 2.0), (8.8, 2.0)]
+
+for x, y in bot_positions:
+    box = mpatches.FancyBboxPatch((x - 0.6, y), 1.2, 1.8, boxstyle="round,pad=0.05",
+        facecolor=COLORS['primary'], edgecolor='white', linewidth=1.5, alpha=0.75)
+    ax.add_patch(box)
+    ax.text(x, y + 0.9, '证据\nBeleg', ha='center', fontsize=7.5, color='white', linespacing=1.3)
+
+# Arrows
+for (x, y), _ in zip(mid_positions, mid_labels):
+    ax.annotate('', xy=(x, y + 1.8), xytext=(6.0, 7.4),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=1.5, alpha=0.5))
+
+# Label
+ax.text(10.5, 8.0, '① 先说结论\nZuerst die\nKernaussage', fontsize=9,
+        color=COLORS['danger'], fontweight='bold', linespacing=1.3)
+ax.text(10.5, 5.5, '② 支撑论据\nArgumente\ndanach', fontsize=9,
+        color=COLORS['warning'], fontweight='bold', linespacing=1.3)
+ax.text(10.5, 2.8, '③ 具体证据\nBelege\nzuletzt', fontsize=9,
+        color=COLORS['primary'], fontweight='bold', linespacing=1.3)
+
+# Key insight
+key_box = mpatches.FancyBboxPatch((1.0, 0.2), 10.0, 1.2, boxstyle="round,pad=0.1",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(key_box)
+ax.text(6.0, 0.8, '自上而下沟通：先结论，再论据，最后证据 | Top-down: Erst Ergebnis, dann Begründung',
+        ha='center', fontsize=9.5, fontweight='bold', color=COLORS['highlight'])
+
+plt.tight_layout()
+plt.show()
+```
+
+### 四耳模型 | Vier-Seiten-Modell (Schulz von Thun)
+
+```{python}
+#| label: fig-four-sides
+#| fig-cap: "四耳模型 | Vier-Seiten-Modell (Schulz von Thun)"
+
+fig, ax = plt.subplots(figsize=(13, 8))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('四耳模型 | Vier-Seiten-Modell', fontsize=15, fontweight='bold')
+
+# Central message
+msg_box = mpatches.FancyBboxPatch((4.5, 3.5), 4.0, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=3)
+ax.add_patch(msg_box)
+ax.text(6.5, 4.8, '消息 | Nachricht', ha='center', fontsize=12, fontweight='bold',
+        color=COLORS['highlight'])
+ax.text(6.5, 3.9, '"绿灯亮了"\n"Die Ampel zeigt grün"', ha='center', fontsize=9,
+        color='#555', linespacing=1.3, family='monospace')
+
+# Sender
+sender = mpatches.FancyBboxPatch((0.3, 3.5), 3.5, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=2)
+ax.add_patch(sender)
+ax.text(2.05, 4.5, '发送者 | Sender', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['primary'])
+
+# Receiver
+receiver = mpatches.FancyBboxPatch((9.2, 3.5), 3.5, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['success'], linewidth=2)
+ax.add_patch(receiver)
+ax.text(10.95, 4.5, '接收者 | Empfänger', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['success'])
+
+# Arrows
+ax.annotate('', xy=(4.4, 4.5), xytext=(3.9, 4.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+ax.annotate('', xy=(9.1, 4.5), xytext=(8.6, 4.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+
+# Four sides
+sides = [
+    {
+        'zh': '事实层', 'de': 'Sachebene', 'icon': '',
+        'example': '信号灯显示绿色\nDie Ampel zeigt grün',
+        'color': COLORS['primary'], 'x': 6.5, 'y': 7.5
+    },
+    {
+        'zh': '自我揭示', 'de': 'Selbstkundgabe', 'icon': '',
+        'example': '我很着急\nIch habe es eilig',
+        'color': COLORS['purple'], 'x': 1.5, 'y': 1.5
+    },
+    {
+        'zh': '关系层', 'de': 'Beziehungsseite', 'icon': '',
+        'example': '你不够专心\nDu bist unaufmerksam',
+        'color': COLORS['warning'], 'x': 6.5, 'y': 1.5
+    },
+    {
+        'zh': '诉求层', 'de': 'Appellseite', 'icon': '',
+        'example': '快开车！\nFahr los!',
+        'color': COLORS['danger'], 'x': 11.5, 'y': 1.5
+    },
+]
+
+for s in sides:
+    card = mpatches.FancyBboxPatch((s['x'] - 1.5, s['y'] - 0.8), 3.0, 1.8,
+        boxstyle="round,pad=0.1", facecolor='white', edgecolor=s['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(s['x'], s['y'] + 0.5, f'{s["icon"]} {s["zh"]} | {s["de"]}', ha='center',
+            fontsize=9, fontweight='bold', color=s['color'])
+    ax.text(s['x'], s['y'] - 0.3, s['example'], ha='center', fontsize=8,
+            color='#555', linespacing=1.3)
+
+# Connection lines
+ax.plot([6.5, 6.5], [5.6, 6.7], color=COLORS['primary'], lw=1.5, linestyle='--')
+ax.plot([6.5, 1.5], [3.4, 2.3], color=COLORS['purple'], lw=1.5, linestyle='--')
+ax.plot([6.5, 6.5], [3.4, 2.3], color=COLORS['warning'], lw=1.5, linestyle='--')
+ax.plot([6.5, 11.5], [3.4, 2.3], color=COLORS['danger'], lw=1.5, linestyle='--')
+
+plt.tight_layout()
+plt.show()
+```
+
+Schulz von Thun 的四耳模型指出，每条信息都有四个层面。人们是不同的，这影响我们的沟通方式——同一句 "绿灯亮了" 可以同时传达事实、自我状态、关系态度和行动诉求。理解这一点对于有效沟通至关重要。
+
+### 参与式沟通技巧 | Techniken zur Partizipation
+
+课堂上介绍了多种促进全员参与的沟通技巧。**提前通知 (Advance Notice)** 要求至少提前 24 小时分享议程和讨论主题，使参与者可以准备和深思。**静默会议 (Silent Meeting)** 以 5-10 分钟的静默阅读文档开始，之后才进入讨论。**1-2-4-All** 是一种渐进式讨论法：先个人思考 1 分钟，然后两人交流 2 分钟，再四人小组 4 分钟，最后全体讨论。**思考时间 (Think Time)** 指在提问后心里默数到 5 或 10 再接受回答。**两人等待规则 (Wait-for-Two-Rule)** 要求一个人必须等至少两位其他人发言后才能再次发言。**承诺检查 (Commitment Check)** 是在会议结束时明确询问每个人是否能接受结果。**异步沟通** 包括会议记录、书面头脑风暴和会议外的反馈渠道。
+
+```{python}
+#| label: fig-participation-techniques
+#| fig-cap: "参与式沟通技巧 | Techniken zur Partizipation"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('参与式沟通技巧 | Techniken zur Partizipation', fontsize=14, fontweight='bold')
+
+techniques = [
+    {'zh': '提前通知', 'de': 'Advance Notice', 'desc': '议程提前 24h 分享', 'icon': '', 'color': '#2196F3'},
+    {'zh': '静默会议', 'de': 'Silent Meeting', 'desc': '5-10min 静默阅读', 'icon': '', 'color': '#4CAF50'},
+    {'zh': '1-2-4-All', 'de': '1-2-4-All', 'desc': '独→双→四→全', 'icon': '', 'color': '#FF9800'},
+    {'zh': '思考时间', 'de': 'Think Time', 'desc': '数到 5-10 再答', 'icon': '', 'color': '#9C27B0'},
+    {'zh': '两人等待', 'de': 'Wait-for-Two', 'desc': '等 2 人发言后再说', 'icon': '', 'color': '#F44336'},
+    {'zh': '承诺检查', 'de': 'Commitment Check', 'desc': '会末逐人确认', 'icon': '', 'color': '#00BCD4'},
+    {'zh': '异步沟通', 'de': 'Asynchron', 'desc': '书面记录+反馈', 'icon': '', 'color': '#795548'},
+]
+
+for i, t in enumerate(techniques):
+    col = i % 4
+    row = i // 4
+    x = 1.5 + col * 3.2
+    y = 6.5 - row * 4.0
+
+    card = mpatches.FancyBboxPatch((x - 1.3, y - 1.2), 2.6, 3.0,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=t['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(x, y + 1.2, t['icon'], ha='center', fontsize=18)
+    ax.text(x, y + 0.3, t['zh'], ha='center', fontsize=10, fontweight='bold', color=t['color'])
+    ax.text(x, y - 0.2, t['de'], ha='center', fontsize=8, color=t['color'])
+    ax.text(x, y - 0.8, t['desc'], ha='center', fontsize=8, color='#555')
+
+plt.tight_layout()
+plt.show()
+```
+
+### 人格类型 | Persönlichkeitstypen
+
+#### Sommerville 的三种类型
+
+Sommerville 提到三种有不同动机和协作方式的人格类型：**任务导向型 (Aufgabenorientiert)** 关注智力挑战；**自我导向型 (Selbstorientiert)** 关注个人成功和认可；**互动导向型 (Interaktionsorientiert)** 关注社交关系。
+
+#### Big Five 人格特质
+
+Big Five (也称为 OCEAN 模型) 是更深入的人格分析框架，包括五个维度。需要注意的是，人格是不断变化的，取决于环境和情境，但 Big Five 有助于自我反思。
+
+```{python}
+#| label: fig-big-five
+#| fig-cap: "Big Five 人格特质 | Big Five Personality Traits (OCEAN)"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('Big Five 人格特质 | Big Five Personality Traits', fontsize=15, fontweight='bold')
+
+traits_b5 = [
+    {
+        'letter': 'O', 'zh': '开放性', 'de': 'Openness',
+        'desc': '好奇心、创造力\n愿意尝试新事物\nKreativität,\nNeugier',
+        'color': COLORS['openness'], 'x': 1.5
+    },
+    {
+        'letter': 'C', 'zh': '尽责性', 'de': 'Conscientiousness',
+        'desc': '自律、有条理\n可靠性\nSelbstdisziplin,\nZuverlässigkeit',
+        'color': COLORS['conscientiousness'], 'x': 4.5
+    },
+    {
+        'letter': 'E', 'zh': '外向性', 'de': 'Extraversion',
+        'desc': '社交活跃\n精力充沛\nGeselligkeit,\nEnergie',
+        'color': COLORS['extraversion'], 'x': 7.5
+    },
+    {
+        'letter': 'A', 'zh': '宜人性', 'de': 'Agreeableness',
+        'desc': '合作、信任\n同理心\nKooperation,\nEmpathie',
+        'color': COLORS['agreeableness'], 'x': 10.5
+    },
+    {
+        'letter': 'N', 'zh': '稳定需求', 'de': 'Need for Stability',
+        'desc': '情绪稳定性\n抗压能力\nEmotionale\nStabilität',
+        'color': COLORS['neuroticism'], 'x': 13.5
+    },
+]
+
+for t in traits_b5:
+    card = mpatches.FancyBboxPatch((t['x'] - 1.2, 0.5), 2.4, 7.0,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=t['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    circle = plt.Circle((t['x'], 6.5), 0.5, facecolor=t['color'], edgecolor='white', linewidth=2)
+    ax.add_patch(circle)
+    ax.text(t['x'], 6.5, t['letter'], ha='center', va='center', fontsize=16,
+            fontweight='bold', color='white')
+
+    ax.text(t['x'], 5.4, t['zh'], ha='center', fontsize=11, fontweight='bold', color=t['color'])
+    ax.text(t['x'], 4.8, t['de'], ha='center', fontsize=9, color=t['color'])
+
+    ax.text(t['x'], 3.0, t['desc'], ha='center', fontsize=8, color='#555', linespacing=1.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-tip}
+## Mini Big Five 测试 (Mini-IPIP Test)
+
+可以通过 [discovermyprofile.com/test/miniIPIP](https://discovermyprofile.com/test/miniIPIP) 完成 **Short Personality Test (Mini-IPIP)**。这是一个 20 题的 Big Five 人格量表，在学术研究中广泛使用，大约需要 5 分钟完成。该网站由剑桥大学心理测量中心 (University of Cambridge Psychometrics Centre) 运营，还提供其他多种测试，包括完整的 100 题人格测试、智商测试、领导力风格测试等。
+:::
+
+::: {.callout-warning}
+## 重要提醒 (Wichtig!)
+
+人格特质是**不断变化的** (Persönlichkeiten verändern sich ständig)，并且取决于环境和情境。Big Five 不应被用来给人贴标签，而是作为**自我反思**的工具。
+:::
+
+### People Management 小结 | Zusammenfassung
+
+```{python}
+#| label: fig-pm-summary
+#| fig-cap: "People Management 小结 | Zusammenfassung People Management"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('People Management 小结 | Zusammenfassung', fontsize=14, fontweight='bold')
+
+items = [
+    {'title': '动机模型\nMotivation', 'content': 'Maslow 层次\n+ SDT 三维度',
+     'icon': '', 'color': COLORS['warning'], 'x': 2.0},
+    {'title': '有效沟通\nKommunikation', 'content': 'Minto 金字塔\n四耳模型',
+     'icon': '', 'color': COLORS['primary'], 'x': 5.0},
+    {'title': '参与技巧\nPartizipation', 'content': 'Silent Meeting\n1-2-4-All 等',
+     'icon': '', 'color': COLORS['success'], 'x': 8.0},
+    {'title': '人格反思\nPersönlichkeit', 'content': 'Big Five (OCEAN)\n尊重差异',
+     'icon': '', 'color': COLORS['purple'], 'x': 11.0},
+]
+
+for item in items:
+    card = mpatches.FancyBboxPatch((item['x'] - 1.3, 0.5), 2.6, 5.5,
+        boxstyle="round,pad=0.18", facecolor='white', edgecolor=item['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(item['x'], 5.5, item['icon'], ha='center', fontsize=22)
+    ax.text(item['x'], 4.0, item['title'], ha='center', fontsize=10,
+            fontweight='bold', color=item['color'], linespacing=1.3)
+    ax.text(item['x'], 2.2, item['content'], ha='center', fontsize=9,
+            color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+# Teamwork | 团队合作
+
+## 团队凝聚力 | Zusammenhalt
+
+Sommerville 认为团队精神和凝聚力是成功的关键。常用方法包括强化共同目标和价值观、定期举办非正式聚会，以及组织工作外的共同活动。但 Google 的 Project Aristotle 研究更深入地揭示了成功团队的秘密。
+
+## Google's Project Aristotle (2012-2015)
+
+```{python}
+#| label: fig-project-aristotle
+#| fig-cap: "Google Project Aristotle：最重要的团队成功因素 | Ergebnisse"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('Google Project Aristotle (2012-2015)\n180+ 团队 | 250+ 变量',
+             fontsize=14, fontweight='bold')
+
+# Important factors
+ax.text(3.5, 9.2, '最重要的因素 | Wichtigste Faktoren', fontsize=12,
+        fontweight='bold', color=COLORS['safety_green'])
+
+factors = [
+    {'rank': '1', 'zh': '心理安全', 'de': 'Psychologische Sicherheit',
+     'icon': '', 'color': COLORS['safety_green'], 'size': 1.0},
+    {'rank': '2', 'zh': '可靠性', 'de': 'Zuverlässigkeit',
+     'icon': '', 'color': '#4CAF50', 'size': 0.85},
+    {'rank': '3', 'zh': '结构与清晰度', 'de': 'Struktur & Klarheit',
+     'icon': '', 'color': '#8BC34A', 'size': 0.7},
+    {'rank': '4', 'zh': '意义', 'de': 'Meaning',
+     'icon': '', 'color': '#CDDC39', 'size': 0.55},
+    {'rank': '5', 'zh': '影响力', 'de': 'Impact',
+     'icon': '', 'color': '#FFEB3B', 'size': 0.4},
+]
+
+for i, f in enumerate(factors):
+    y = 7.8 - i * 1.2
+    bar_w = 4.0 * f['size'] + 1.5
+    bar = mpatches.FancyBboxPatch((0.8, y - 0.35), bar_w, 0.7,
+        boxstyle="round,pad=0.05", facecolor=f['color'], edgecolor='white',
+        linewidth=1.5, alpha=0.8)
+    ax.add_patch(bar)
+    ax.text(0.5, y, f['rank'], ha='center', fontsize=12, fontweight='bold', color=f['color'])
+    ax.text(1.2, y, f'{f["icon"]} {f["zh"]} | {f["de"]}', ha='left', va='center',
+            fontsize=10, fontweight='bold', color='white')
+
+# No influence factors
+ax.text(9.5, 9.2, '无可测量影响 | Kein Einfluss', fontsize=12,
+        fontweight='bold', color=COLORS['danger'])
+
+no_influence = [
+    '个人人格 | Persönlichkeit',
+    '团队规模 | Teamgröße',
+    '团队位置 | Nähe (co-located vs. remote)',
+    '外向性 | Extroversion',
+    '个人表现 | Individuelle Performance',
+    '决策方式 | Art der Entscheidungsfindung'
+]
+
+for i, item in enumerate(no_influence):
+    y = 7.8 - i * 0.85
+    ax.text(8.2, y, '✗', ha='center', fontsize=12, color=COLORS['danger'])
+    ax.text(8.8, y, item, ha='left', va='center', fontsize=9, color='#666')
+
+# Caveat
+caveat_box = mpatches.FancyBboxPatch((0.5, 0.3), 13.0, 1.2, boxstyle="round,pad=0.1",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(caveat_box)
+ax.text(7.0, 0.9, '注意：未经同行评审，数据未公开 | Wichtig: nicht peer-reviewed, kein Dateneinblick',
+        ha='center', fontsize=9.5, fontweight='bold', color=COLORS['highlight'])
+
+plt.tight_layout()
+plt.show()
+```
+
+Google 在 2012-2015 年间分析了 180 多个真实团队和 250 多个变量，发现**心理安全 (Psychologische Sicherheit)** 是团队成功最重要的因素。紧随其后的是可靠性、结构与清晰度、意义感和影响力。令人惊讶的是，团队成员的人格特征、团队规模、是否同地办公、外向性和个人绩效等因素都没有可测量的影响。不过需要注意的是，这项研究未经同行评审，数据也未公开。
+
+## 心理安全 | Psychologische Sicherheit {#sec-psych-safety}
+
+::: {.callout-note}
+## 定义 (Definition) — Amy Edmondson, Harvard, 1999
+
+**心理安全** (Psychologische Sicherheit) 是所有团队成员共同持有的一种信念：团队是一个可以安全地承担人际风险的地方。
+
+*"A shared belief held by members of a team that the team is safe for interpersonal risk-taking."*
+:::
+
+具体来说，心理安全意味着：能够承认错误而不被惩罚 (Fehler zugeben können)；可以提问而不被视为无能 (Fragen stellen dürfen)；能够表达不同意见而不被排斥 (Verschiedene Meinungen äußern)；可以寻求帮助而不显得软弱 (Hilfe suchen können)。
+
+```{python}
+#| label: fig-psychological-safety
+#| fig-cap: "心理安全的四个维度 | Vier Dimensionen psychologischer Sicherheit"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('心理安全意味着什么？| Was bedeutet psychologische Sicherheit?',
+             fontsize=14, fontweight='bold')
+
+dimensions = [
+    {'zh': '承认错误\n不被惩罚', 'de': 'Fehler zugeben\nohne Bestrafung',
+     'icon': '', 'color': COLORS['safety_green'], 'x': 2.0},
+    {'zh': '提出问题\n不被轻视', 'de': 'Fragen stellen\nohne Inkompetenz',
+     'icon': '', 'color': COLORS['primary'], 'x': 5.3},
+    {'zh': '表达异议\n不被排斥', 'de': 'Meinungen äußern\nohne Ablehnung',
+     'icon': '', 'color': COLORS['purple'], 'x': 8.6},
+    {'zh': '寻求帮助\n不显软弱', 'de': 'Hilfe suchen\nohne Schwäche',
+     'icon': '', 'color': COLORS['warning'], 'x': 11.9},
+]
+
+for d in dimensions:
+    card = mpatches.FancyBboxPatch((d['x'] - 1.5, 0.5), 3.0, 5.8,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=d['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(d['x'], 5.8, d['icon'], ha='center', fontsize=24)
+    ax.text(d['x'], 4.2, d['zh'], ha='center', fontsize=11, fontweight='bold',
+            color=d['color'], linespacing=1.3)
+    ax.text(d['x'], 2.5, d['de'], ha='center', fontsize=9, color='#555', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+### Edmondson 的三步框架 | 3-Schritte-Framework
+
+```{python}
+#| label: fig-edmondson-framework
+#| fig-cap: "Amy Edmondson 的三步框架 | 3-Schritte-Framework"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('Amy Edmondson 的三步框架 | 3-Schritte-Framework', fontsize=15, fontweight='bold')
+
+steps = [
+    {
+        'num': '1', 'zh': '作为学习问题', 'de': 'Als Lernproblem framen',
+        'bad': 'X "我们必须做到完美"\n"Wir müssen das\nperfekt machen"',
+        'good': 'OK "有些领域还需要\n澄清"\n"Es gibt Bereiche, die\nnoch Klärung brauchen"\n\nOK "我们在探索新领域"\n"Wir entdecken\nneues Terrain"',
+        'color': COLORS['primary'], 'x': 2.5
+    },
+    {
+        'num': '2', 'zh': '承认自身不足', 'de': 'Eigene Fehlbarkeit\nanerkennen',
+        'bad': 'X "我知道怎么做"\n"Ich weiß, wie es geht"',
+        'good': 'OK "我可能遗漏了什么\n——我需要你们的反馈"\n"Ich könnte etwas\nübersehen"\n\nOK "我也没有全部答案"\n"Ich habe auch nicht\nalle Antworten"',
+        'color': COLORS['safety_green'], 'x': 7.0
+    },
+    {
+        'num': '3', 'zh': '示范好奇心', 'de': 'Neugier vorleben',
+        'bad': 'X 提封闭式问题\nGeschlossene Fragen',
+        'good': 'OK "我遗漏了什么?"\n"Was übersehe ich?"\n\nOK "你们怎么看?"\n"Was sind eure\nGedanken dazu?"\n\nOK 积极倾听\nAktiv zuhören',
+        'color': COLORS['purple'], 'x': 11.5
+    },
+]
+
+for s in steps:
+    card = mpatches.FancyBboxPatch((s['x'] - 2.0, 0.3), 4.0, 8.2,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=s['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    num_circle = plt.Circle((s['x'], 8.0), 0.4, facecolor=s['color'], edgecolor='white', linewidth=2)
+    ax.add_patch(num_circle)
+    ax.text(s['x'], 8.0, s['num'], ha='center', va='center', fontsize=14,
+            fontweight='bold', color='white')
+
+    ax.text(s['x'], 7.1, s['zh'], ha='center', fontsize=10, fontweight='bold', color=s['color'])
+    ax.text(s['x'], 6.4, s['de'], ha='center', fontsize=8.5, color=s['color'], linespacing=1.3)
+
+    # Bad example
+    bad_box = mpatches.FancyBboxPatch((s['x'] - 1.7, 4.5), 3.4, 1.5,
+        boxstyle="round,pad=0.05", facecolor=COLORS['red_light'], edgecolor=COLORS['danger'],
+        linewidth=1, linestyle='--')
+    ax.add_patch(bad_box)
+    ax.text(s['x'], 5.2, s['bad'], ha='center', fontsize=7.5, color=COLORS['danger'], linespacing=1.3)
+
+    # Good example
+    good_box = mpatches.FancyBboxPatch((s['x'] - 1.7, 0.6), 3.4, 3.6,
+        boxstyle="round,pad=0.05", facecolor=COLORS['green_light'], edgecolor=COLORS['safety_green'],
+        linewidth=1, linestyle='--')
+    ax.add_patch(good_box)
+    ax.text(s['x'], 2.8, s['good'], ha='center', fontsize=7, color=COLORS['safety_green'], linespacing=1.2)
+
+plt.tight_layout()
+plt.show()
+```
+
+Amy Edmondson 提出了建立心理安全的三步框架。第一步，**将工作框定为学习问题** (Als Lernproblem framen)：不要说"我们必须做到完美"，而是"有些领域还需要澄清"或"我们在探索新领域"。第二步，**承认自身的不完美** (Eigene Fehlbarkeit anerkennen)：不要说"我知道怎么做"，而是"我可能遗漏了什么——我需要你们的反馈"。第三步，**示范好奇心** (Neugier vorleben)：避免封闭式问题，而是问"我遗漏了什么？"、"你们怎么看？"，并积极倾听。
+
+### 开放式 vs. 封闭式问题 | Offene vs. Geschlossene Fragen
+
+```{python}
+#| label: fig-open-closed-questions
+#| fig-cap: "开放式 vs. 封闭式问题 | Offene vs. Geschlossene Fragen"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+
+# Closed questions
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('封闭式问题 | Geschlossene Fragen', fontsize=13, fontweight='bold',
+             color=COLORS['danger'])
+
+closed_box = mpatches.FancyBboxPatch((0.5, 0.3), 9.0, 8.2, boxstyle="round,pad=0.2",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(closed_box)
+
+ax.text(5.0, 8.0, '回答：是/否 或简短事实', fontsize=10, ha='center', color=COLORS['danger'])
+
+closed_examples = [
+    '"你理解了吗?"',
+    '"Bug 修好了吗?"',
+    '"要用方案 A 还是 B?"',
+    '"用 SQL 还是 NoSQL?"',
+]
+for i, ex in enumerate(closed_examples):
+    y = 6.5 - i * 1.2
+    ax.text(1.0, y, '•', fontsize=12, color=COLORS['danger'])
+    ax.text(1.5, y, ex, fontsize=9, color='#444')
+
+effects_closed = [
+    ('', '减少输入 | Reduziert Inputs'),
+    ('', '隐藏不确定性 | Versteckt Unsicherheiten'),
+    ('', '促进决策 | Fördert Entscheidungsfindung'),
+]
+ax.text(5.0, 2.0, '效果 | Effekt:', fontsize=10, ha='center', fontweight='bold', color=COLORS['danger'])
+for i, (icon, text) in enumerate(effects_closed):
+    ax.text(2.0, 1.2 - i * 0.5, f'{icon} {text}', fontsize=8.5, color='#555')
+
+# Open questions
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('开放式问题 | Offene Fragen', fontsize=13, fontweight='bold',
+             color=COLORS['safety_green'])
+
+open_box = mpatches.FancyBboxPatch((0.5, 0.3), 9.0, 8.2, boxstyle="round,pad=0.2",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['safety_green'], linewidth=2)
+ax.add_patch(open_box)
+
+ax.text(5.0, 8.0, '促进解释和对话', fontsize=10, ha='center', color=COLORS['safety_green'])
+
+open_examples = [
+    '"还有哪些未解决的问题?"',
+    '"你会怎么处理这个问题?"',
+    '"你看到了哪些挑战?"',
+    '"还缺少什么?"',
+]
+for i, ex in enumerate(open_examples):
+    y = 6.5 - i * 1.2
+    ax.text(1.0, y, '•', fontsize=12, color=COLORS['safety_green'])
+    ax.text(1.5, y, ex, fontsize=9, color='#444')
+
+effects_open = [
+    ('', '邀请思考 | Lädt zum Denken ein'),
+    ('', '显示真正的兴趣 | Zeigt echtes Interesse'),
+    ('', '促进讨论 | Fördert Diskussion'),
+]
+ax.text(5.0, 2.0, '效果 | Effekt:', fontsize=10, ha='center', fontweight='bold',
+        color=COLORS['safety_green'])
+for i, (icon, text) in enumerate(effects_open):
+    ax.text(2.0, 1.2 - i * 0.5, f'{icon} {text}', fontsize=8.5, color='#555')
+
+plt.tight_layout()
+plt.show()
+```
+
+封闭式问题（答案为是/否或简短事实）虽然有助于快速决策，但会减少输入并隐藏不确定性。而开放式问题（促进解释和对话）能邀请人们思考、显示真正的兴趣并促进讨论。在建立心理安全的环境中，领导者应优先使用开放式问题。
+
+### 行为准则 | Code of Conduct
+
+::: {.callout-tip}
+## 心理安全行为准则 (Code of Conduct)
+
+1. 我们尊重他人和不同的意见，并通过沟通和行动积极展现这一点。
+2. 性格安静的人也有宝贵的意见。在小组练习中，我们主动为他人的发言留出空间。
+3. 不知道是正常的。提出问题比给出完美答案更重要。
+4. 每个人都可以说"不"——如果感到不适，可以调整练习方式。
+:::
+
+## Teamwork 小结 | Zusammenfassung Teamwork
+
+```{python}
+#| label: fig-teamwork-summary
+#| fig-cap: "Teamwork 核心要点 | Zusammenfassung Teamwork"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('Teamwork 三大核心要点 | Drei wichtigste Erkenntnisse', fontsize=14, fontweight='bold')
+
+takeaways = [
+    {
+        'num': '1', 'zh': '心理安全是\n团队成功的\n最重要因素',
+        'de': 'Psychologische Sicherheit\nist der wichtigste\nFaktor',
+        'icon': '', 'color': COLORS['safety_green'], 'x': 2.5
+    },
+    {
+        'num': '2', 'zh': '领导行为\n影响安全感',
+        'de': 'Führungsverhalten\nbeeinflusst Sicherheit:\nOffene Fragen,\nFehlbarkeit zeigen',
+        'icon': '', 'color': COLORS['primary'], 'x': 7.0
+    },
+    {
+        'num': '3', 'zh': '通过建设性冲突\n避免群体思维',
+        'de': 'Groupthink vermeiden\ndurch konstruktiven\nKonflikt',
+        'icon': '', 'color': COLORS['purple'], 'x': 11.5
+    },
+]
+
+for t in takeaways:
+    card = mpatches.FancyBboxPatch((t['x'] - 2.0, 0.5), 4.0, 5.8,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=t['color'], linewidth=3)
+    ax.add_patch(card)
+
+    num_circle = plt.Circle((t['x'], 5.8), 0.4, facecolor=t['color'], edgecolor='white', linewidth=2)
+    ax.add_patch(num_circle)
+    ax.text(t['x'], 5.8, t['num'], ha='center', va='center', fontsize=14,
+            fontweight='bold', color='white')
+
+    ax.text(t['x'], 4.8, t['icon'], ha='center', fontsize=22)
+    ax.text(t['x'], 3.4, t['zh'], ha='center', fontsize=10, fontweight='bold',
+            color=t['color'], linespacing=1.3)
+    ax.text(t['x'], 1.6, t['de'], ha='center', fontsize=8.5, color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+# 全章总结 | Gesamtzusammenfassung
+
+```{python}
+#| label: fig-full-summary
+#| fig-cap: "全章知识地图 | Gesamte Wissenslandkarte"
+
+fig, ax = plt.subplots(figsize=(15, 10))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('第九章 People Management 与 Teamarbeit — 知识地图\nKapitel 9: Wissenslandkarte',
+             fontsize=15, fontweight='bold')
+
+# Central theme
+center = mpatches.FancyBboxPatch((5.5, 4.5), 4.0, 2.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['dark'], edgecolor='white', linewidth=3)
+ax.add_patch(center)
+ax.text(7.5, 5.8, 'People Management', ha='center', fontsize=12,
+        fontweight='bold', color='white')
+ax.text(7.5, 4.9, '& Teamarbeit', ha='center', fontsize=11, color='white')
+
+# Surrounding topics
+topics = [
+    {'title': '动机\nMotivation', 'items': 'Maslow\nSDT (K/A/V)\nUberX GitLab✔',
+     'color': COLORS['warning'], 'x': 2.0, 'y': 8.5},
+    {'title': '领导力\nFührung', 'items': '平等 + 尊重\n融合 + 诚实\n(Sommerville)',
+     'color': COLORS['purple'], 'x': 7.5, 'y': 9.5},
+    {'title': '沟通\nKommunikation', 'items': 'Minto 金字塔\n四耳模型\n参与技巧',
+     'color': COLORS['primary'], 'x': 13.0, 'y': 8.5},
+    {'title': '人格\nPersönlichkeit', 'items': 'Sommerville 3类\nBig Five (OCEAN)\nMini-IPIP',
+     'color': '#9C27B0', 'x': 13.0, 'y': 3.0},
+    {'title': '心理安全\nPsych. Sicherheit', 'items': 'Edmondson 3步\n开放式问题\nCode of Conduct',
+     'color': COLORS['safety_green'], 'x': 2.0, 'y': 3.0},
+    {'title': 'Project\nAristotle', 'items': '心理安全 #1\n可靠性 #2\n结构/意义/影响',
+     'color': COLORS['teal'], 'x': 7.5, 'y': 1.0},
+]
+
+for t in topics:
+    card = mpatches.FancyBboxPatch((t['x'] - 1.8, t['y'] - 1.2), 3.6, 2.6,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=t['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(t['x'], t['y'] + 0.8, t['title'], ha='center', fontsize=9,
+            fontweight='bold', color=t['color'], linespacing=1.3)
+    ax.text(t['x'], t['y'] - 0.5, t['items'], ha='center', fontsize=7.5,
+            color='#555', linespacing=1.3)
+
+    # Draw line to center
+    dx = 7.5 - t['x']
+    dy = 5.5 - t['y']
+    dist = (dx**2 + dy**2)**0.5
+    if dist > 0:
+        ux, uy = dx/dist, dy/dist
+        ax.plot([t['x'] + ux*2.0, 7.5 - ux*2.2],
+                [t['y'] + uy*1.5, 5.5 - uy*1.2],
+                color=t['color'], lw=1.5, linestyle='--', alpha=0.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-tip}
+## 下周预告 | Ausblick nächste Woche
+
+**主题**：需求分析 (Anforderungsanalyse / Requirements Engineering)
+
+**核心概念**：功能性与非功能性需求 (Funktionale und nichtfunktionale Anforderungen)、需求工程流程 (Prozesse des Requirements-Engineering)、需求获取与分析 (Anforderungserhebung und -analyse)。
+
+**阅读作业**（12 月 17 日前）：Software Engineering, Kapitel 4–4.3（含，21 页）
+:::

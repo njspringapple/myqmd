@@ -1,0 +1,1187 @@
+---
+title: "Letzte Veranstaltung -- 总复习与考试要点"
+subtitle: "最后一课：课程总结与重点答疑 | Zusammenfassung und Klausurvorbereitung"
+author: "Softwaretechnik WS 25/26"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    font_list = candidates.get(system, candidates['Linux'])
+    valid_fonts = [f for f in font_list if f in available_fonts]
+    if valid_fonts:
+        plt.rcParams['font.sans-serif'] = valid_fonts + ['DejaVu Sans']
+        plt.rcParams['font.monospace'] = valid_fonts + ['Consolas', 'Courier New', 'DejaVu Sans Mono']
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+COLORS = {
+    'primary': '#2E86AB',
+    'secondary': '#A23B72',
+    'success': '#2E8B57',
+    'warning': '#E8871E',
+    'danger': '#C1292E',
+    'info': '#5B8C5A',
+    'light': '#F5F5F5',
+    'dark': '#2C3E50',
+    'neutral': '#7F8C8D',
+    'highlight': '#F39C12',
+    'purple': '#8E44AD',
+    'teal': '#1ABC9C',
+    'pink': '#E91E63',
+    'indigo': '#3F51B5',
+    'deep_orange': '#FF5722',
+    'blue_light': '#D6EAF8',
+    'green_light': '#D5F5E3',
+    'red_light': '#FDEDEC',
+    'yellow_light': '#FEF9E7',
+    'purple_light': '#F3E5F5',
+    'orange_light': '#FDEBD0',
+    'teal_light': '#D1F2EB',
+    'pink_light': '#FCE4EC',
+    'indigo_light': '#E8EAF6',
+    # Specific
+    'exam_red': '#C62828',
+    'exam_green': '#2E7D32',
+    'exam_blue': '#1565C0',
+    'exam_orange': '#E65100',
+    'exam_purple': '#6A1B9A',
+    'arch_layer': '#0D47A1',
+    'arch_onion': '#BF360C',
+    'clean_code': '#00695C',
+    'di_color': '#4527A0',
+    'demeter': '#AD1457',
+    'uml_color': '#1B5E20',
+    'ai_color': '#00838F',
+    'abstraction': '#5D4037',
+}
+```
+
+# 考试须知 | Klausur-Hinweise
+
+::: {.callout-warning}
+## 考试重要提示 (Wichtige Klausur-Hinweise)
+
+以下信息直接来自最后一次课程的官方答疑，明确界定了考试范围：
+
+**需要掌握的内容**：需要能够自己编写代码（Java）；阅读材料的核心概念需要理解（不需要逐字背诵）；软件演化 (Softwareevolution) 部分不仅有选择题，也有开放性问题。
+
+**不需要掌握的内容**：不需要阅读 Python 代码；Scrum 幻灯片第 42 页之后的内容不考；测试工具 (Tooling) 的具体用法不考（仅作了解）。
+:::
+
+```{python}
+#| label: fig-exam-scope
+#| fig-cap: "考试范围概览 | Klausur-Umfang"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('考试范围与重点 | Klausur-Umfang und Schwerpunkte', fontsize=14, fontweight='bold')
+
+# Exam relevant (left)
+relevant_box = mpatches.FancyBboxPatch((0.3, 0.3), 6.4, 9.2, boxstyle="round,pad=0.2",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['exam_green'], linewidth=2.5)
+ax.add_patch(relevant_box)
+ax.text(3.5, 9.0, '[klausurrelevant]', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['exam_green'])
+ax.text(3.5, 8.3, '考试范围内', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['exam_green'])
+
+relevant_items = [
+    '需求工程 (Requirements Engineering)',
+    '用户故事、场景 (User Stories, Szenarien)',
+    '功能/非功能需求 (Funktionale/Nicht-funktionale Anf.)',
+    '架构视图与模式 (Architektursichten & -muster)',
+    '设计模式 (Entwurfsmuster)',
+    'Clean Code 原则',
+    'TDD 与测试用例设计',
+    '软件演化 (Softwareevolution) -- 含开放题',
+    'Scrum 基础 (Folien 1-41)',
+    '自己编写 Java 代码',
+    'UML 类图 (Klassendiagramme)',
+    'Dependency Injection / Law of Demeter',
+]
+for i, item in enumerate(relevant_items):
+    y = 7.5 - i * 0.55
+    ax.text(1.0, y, '[+]', fontsize=9, fontweight='bold', color=COLORS['exam_green'])
+    ax.text(1.5, y, item, fontsize=8.5, color='#333')
+
+# Not relevant (right)
+not_rel_box = mpatches.FancyBboxPatch((7.3, 3.3), 6.4, 6.2, boxstyle="round,pad=0.2",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['exam_red'], linewidth=2.5)
+ax.add_patch(not_rel_box)
+ax.text(10.5, 9.0, '[nicht klausurrelevant]', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['exam_red'])
+ax.text(10.5, 8.3, '不在考试范围内', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['exam_red'])
+
+not_items = [
+    'Python 代码阅读',
+    'Scrum Folien ab S. 42',
+    '测试工具具体用法 (Tooling)',
+    '阅读材料逐字背诵',
+    'AI 编程实践 (仅了解概念)',
+    '进阶话题 (DevOps, CI/CD, OWASP 等)',
+]
+for i, item in enumerate(not_items):
+    y = 7.5 - i * 0.55
+    ax.text(7.8, y, '[X]', fontsize=9, fontweight='bold', color=COLORS['exam_red'])
+    ax.text(8.3, y, item, fontsize=8.5, color='#333')
+
+# Example questions box
+example_box = mpatches.FancyBboxPatch((7.3, 0.3), 6.4, 2.5, boxstyle="round,pad=0.15",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=2)
+ax.add_patch(example_box)
+ax.text(10.5, 2.3, '开放题示例 | Beispielfragen', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['highlight'])
+ax.text(7.7, 1.6, '(1) 标准变更流程中，软件开发前发生什么？', fontsize=7.5, color='#444')
+ax.text(7.7, 1.0, '(2) 紧急修复时，上级要求先修改文档规格说明\n    再修复，如何评价这一要求？', fontsize=7.5,
+        color='#444', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+# 软件工程总览 | Zusammenfassung Softwaretechnik
+
+## 核心目标与挑战 | Ziele und Herausforderungen
+
+```{python}
+#| label: fig-se-goals-challenges
+#| fig-cap: "软件工程的目标与挑战 | Ziele und Herausforderungen der Softwaretechnik"
+
+fig, ax = plt.subplots(figsize=(14, 10))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('软件工程：目标与挑战 | Softwaretechnik: Ziele und Herausforderungen',
+             fontsize=14, fontweight='bold')
+
+# Goal section (top)
+goal_bg = mpatches.FancyBboxPatch((0.5, 7.5), 13.0, 3.2, boxstyle="round,pad=0.2",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['exam_green'], linewidth=2.5)
+ax.add_patch(goal_bg)
+ax.text(7.0, 10.2, '目标 | Ziel der Softwaretechnik', ha='center', fontsize=13,
+        fontweight='bold', color=COLORS['exam_green'])
+ax.text(7.0, 9.5, '构建有价值的系统 | Wertvolle Systeme bauen', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['dark'])
+
+goals = [
+    {'text': '达到要求的质量\nin geforderter Qualitaet', 'x': 3.0, 'color': '#1565C0'},
+    {'text': '在时间计划内\ninnerhalb des Zeitplans', 'x': 7.0, 'color': '#2E7D32'},
+    {'text': '在预算范围内\ninnerhalb des Budgets', 'x': 11.0, 'color': '#BF360C'},
+]
+for g in goals:
+    gbox = mpatches.FancyBboxPatch((g['x'] - 1.5, 7.8), 3.0, 1.3, boxstyle="round,pad=0.1",
+        facecolor='white', edgecolor=g['color'], linewidth=2)
+    ax.add_patch(gbox)
+    ax.text(g['x'], 8.45, g['text'], ha='center', fontsize=9, fontweight='bold',
+            color=g['color'], linespacing=1.3)
+
+# Motto
+ax.text(7.0, 7.1, '工匠自豪而非完美主义 | Handwerksstolz statt Perfektionismus',
+        ha='center', fontsize=10, fontweight='bold', color=COLORS['highlight'],
+        style='italic')
+
+# Challenges section (bottom)
+chal_bg = mpatches.FancyBboxPatch((0.5, 0.3), 13.0, 6.3, boxstyle="round,pad=0.2",
+    facecolor=COLORS['orange_light'], edgecolor=COLORS['exam_orange'], linewidth=2.5)
+ax.add_patch(chal_bg)
+ax.text(7.0, 6.1, '挑战 | Herausforderungen', ha='center', fontsize=13,
+        fontweight='bold', color=COLORS['exam_orange'])
+
+challenges = [
+    {'zh': '团队与客户合作', 'de': 'Kooperation mit Team und Kund:innen',
+     'x': 3.5, 'y': 5.0, 'color': '#C62828'},
+    {'zh': '硬件与软件的异构性', 'de': 'Heterogenitaet in Hardware und Software',
+     'x': 10.5, 'y': 5.0, 'color': '#AD1457'},
+    {'zh': '快速变化与短技术生命周期', 'de': 'Schneller Wandel, kurze technologische Lebenszyklen',
+     'x': 3.5, 'y': 3.2, 'color': '#6A1B9A'},
+    {'zh': '高复杂度与不安全系统', 'de': 'Hohe Komplexitaet und unsichere Systeme',
+     'x': 10.5, 'y': 3.2, 'color': '#0D47A1'},
+    {'zh': '异构环境下的可扩展性', 'de': 'Skalierung in heterogenen Umgebungen',
+     'x': 7.0, 'y': 1.2, 'color': '#00695C'},
+]
+for c in challenges:
+    cbox = mpatches.FancyBboxPatch((c['x'] - 2.8, c['y'] - 0.6), 5.6, 1.4,
+        boxstyle="round,pad=0.08", facecolor='white', edgecolor=c['color'], linewidth=1.5)
+    ax.add_patch(cbox)
+    ax.text(c['x'], c['y'] + 0.2, c['zh'], ha='center', fontsize=9,
+            fontweight='bold', color=c['color'])
+    ax.text(c['x'], c['y'] - 0.3, c['de'], ha='center', fontsize=7.5, color='#555')
+
+plt.tight_layout()
+plt.show()
+```
+
+软件工程 (Softwaretechnik) 的核心目标是**构建有价值的系统** (Wertvolle Systeme bauen)，并且需要同时满足三个约束条件：达到要求的质量 (in geforderter Qualitaet)、在时间计划内 (innerhalb des Zeitplans)、在预算范围内 (innerhalb des Budgets)。课件强调的态度是**工匠自豪而非完美主义** (Handwerksstolz statt Perfektionismus)——追求高质量的同时保持务实。
+
+软件开发面临五大挑战。团队与客户的合作 (Kooperation) 要求良好的沟通和协调。硬件与软件的异构性 (Heterogenitaet) 意味着系统需要在不同的平台上运行。快速变化和短技术生命周期 (Schneller Wandel) 要求开发流程能够适应变化。高复杂度和安全风险 (Hohe Komplexitaet) 需要可靠的工程方法来应对。异构环境下的可扩展性 (Skalierung) 则要求系统架构具有足够的灵活性。
+
+## 四项基本原则 | Vier Grundsaetze
+
+```{python}
+#| label: fig-four-principles
+#| fig-cap: "软件工程四项基本原则 | Vier Grundsaetze der Softwaretechnik"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('软件工程四项基本原则 | Vier Grundsaetze', fontsize=14, fontweight='bold')
+
+principles = [
+    {
+        'num': '1',
+        'zh': '受控且可理解的过程',
+        'de': 'Kontrollierter und\nverstaendlicher Prozess',
+        'detail': '过程要与开发的软件相匹配\nProzess passt zur Software',
+        'color': '#1565C0', 'x': 2.0
+    },
+    {
+        'num': '2',
+        'zh': '确保可靠性与性能',
+        'de': 'Verlaesslichkeit und\nPerformanz sicherstellen',
+        'detail': '通过适当方法确保\nDurch geeignete Methoden',
+        'color': '#2E7D32', 'x': 5.5
+    },
+    {
+        'num': '3',
+        'zh': '理解和管理需求',
+        'de': 'Anforderungen\nverstehen und verwalten',
+        'detail': '同时管理客户对预算\n和时间的期望',
+        'color': '#BF360C', 'x': 9.0
+    },
+    {
+        'num': '4',
+        'zh': '复用软件，高效开发',
+        'de': 'Software\nwiederverwenden',
+        'detail': '关注有效和高效的\n开发方式',
+        'color': '#6A1B9A', 'x': 12.5
+    },
+]
+
+for p in principles:
+    card = mpatches.FancyBboxPatch((p['x'] - 1.5, 0.5), 3.0, 8.0,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=p['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    circle = plt.Circle((p['x'], 7.8), 0.45, facecolor=p['color'], edgecolor='white', linewidth=2)
+    ax.add_patch(circle)
+    ax.text(p['x'], 7.8, p['num'], ha='center', va='center', fontsize=16,
+            fontweight='bold', color='white')
+
+    ax.text(p['x'], 6.5, p['zh'], ha='center', fontsize=9.5, fontweight='bold',
+            color=p['color'], linespacing=1.3)
+    ax.text(p['x'], 5.0, p['de'], ha='center', fontsize=8.5, color=p['color'],
+            linespacing=1.3)
+    ax.text(p['x'], 3.0, p['detail'], ha='center', fontsize=8, color='#555',
+            linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+课件总结了软件工程的四项基本原则 (Grundsaetze)。第一项原则强调在一个**受控且可理解的过程** (kontrollierter und verstaendlicher Prozess) 中开发软件，该过程需要与所开发的软件类型相匹配。第二项原则要求通过适当的方法确保软件系统的**可靠性和性能** (Verlaesslichkeit und Performanz)。第三项原则是**理解和管理需求** (Anforderungen verstehen und verwalten)，同时管理客户在预算和时间方面的期望。第四项原则提倡**复用软件** (Software wiederverwenden)，追求有效和高效的开发。
+
+## 开发的两面 | Zwei Seiten der Entwicklung
+
+```{python}
+#| label: fig-two-sides
+#| fig-cap: "软件开发的两面 | Zwei Seiten der Softwareentwicklung"
+
+fig, ax = plt.subplots(figsize=(13, 8))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('软件开发的两面 | Zwei Seiten der Entwicklung', fontsize=14, fontweight='bold')
+
+# Central interface
+interface_box = mpatches.FancyBboxPatch((5.0, 3.5), 3.0, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['dark'], edgecolor='white', linewidth=3)
+ax.add_patch(interface_box)
+ax.text(6.5, 4.8, 'interface {', ha='center', fontsize=10, fontweight='bold',
+        color='white', family='monospace')
+ax.text(6.5, 4.1, '  Teamwork', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['highlight'], family='monospace')
+ax.text(6.5, 3.7, '}', ha='center', fontsize=10, fontweight='bold',
+        color='white', family='monospace')
+
+# Management side (left)
+mgmt_box = mpatches.FancyBboxPatch((0.3, 0.5), 4.2, 8.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['exam_blue'], linewidth=2.5)
+ax.add_patch(mgmt_box)
+ax.text(2.4, 8.0, '(1) 管理 | Management', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['exam_blue'])
+
+mgmt_items = [
+    '管理和优先排序需求\nAnforderungen verwalten\nund priorisieren',
+    '协调团队工作\nArbeit im Team\nkoordinieren',
+    '清晰沟通与激励\nKlar kommunizieren\nund motivieren',
+    '掌控复杂性\nKomplexitaet\nbeherrschen',
+]
+for i, item in enumerate(mgmt_items):
+    y = 6.8 - i * 1.6
+    ibox = mpatches.FancyBboxPatch((0.6, y - 0.5), 3.6, 1.3, boxstyle="round,pad=0.06",
+        facecolor='white', edgecolor=COLORS['exam_blue'], linewidth=1)
+    ax.add_patch(ibox)
+    ax.text(2.4, y, item, ha='center', fontsize=7.5, color='#444', linespacing=1.2)
+
+# Programming side (right)
+prog_box = mpatches.FancyBboxPatch((8.5, 0.5), 4.2, 8.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['purple_light'], edgecolor=COLORS['exam_purple'], linewidth=2.5)
+ax.add_patch(prog_box)
+ax.text(10.6, 8.0, '(2) 编程 | Programmierung', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['exam_purple'])
+
+prog_items = [
+    '理解需求\nAnforderungen\nverstehen',
+    '设计合适架构\nPassende Architekturen\nentwerfen',
+    '编写干净的可维护代码\nSauberen, wartbaren\nCode schreiben',
+]
+for i, item in enumerate(prog_items):
+    y = 6.8 - i * 1.8
+    ibox = mpatches.FancyBboxPatch((8.8, y - 0.6), 3.6, 1.5, boxstyle="round,pad=0.06",
+        facecolor='white', edgecolor=COLORS['exam_purple'], linewidth=1)
+    ax.add_patch(ibox)
+    ax.text(10.6, y, item, ha='center', fontsize=7.5, color='#444', linespacing=1.2)
+
+# Arrows to center
+ax.annotate('', xy=(4.9, 4.5), xytext=(4.6, 4.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['exam_blue'], lw=2))
+ax.annotate('', xy=(8.1, 4.5), xytext=(8.4, 4.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['exam_purple'], lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+课件将软件开发描述为两个密不可分的方面，通过"Teamwork"这个接口连接。**管理** (Management) 方面负责管理和优先排序需求、协调团队工作、清晰沟通与激励、以及掌控技术和组织上的复杂性。**编程** (Programmierung) 方面负责理解需求、设计合适的架构（结构和算法）、以及编写干净的可维护代码。这两个方面不是分离的——好的软件工程师需要同时具备这两方面的能力。
+
+# 编程作为抽象过程 | Programmierung als Abstraktionsprozess
+
+```{python}
+#| label: fig-abstraction-levels
+#| fig-cap: "抽象层次 | Abstraktionsebenen"
+
+fig, ax = plt.subplots(figsize=(14, 11))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 12)
+ax.axis('off')
+ax.set_title('编程作为抽象过程 | Programmierung als Abstraktionsprozess',
+             fontsize=14, fontweight='bold')
+
+levels = [
+    {
+        'zh': '需求', 'de': 'Anforderungen',
+        'techniques': 'User Stories, Szenarien,\nformale Sprachen',
+        'color': '#C62828', 'y': 10.5
+    },
+    {
+        'zh': '架构', 'de': 'Architektur',
+        'techniques': '4+1 视图模型, 架构模式, UML',
+        'color': '#AD1457', 'y': 8.8
+    },
+    {
+        'zh': '模块设计', 'de': 'Modul-Entwurf',
+        'techniques': 'UML, Interfaces,\n数据结构, 设计模式',
+        'color': '#6A1B9A', 'y': 7.1
+    },
+    {
+        'zh': '测试', 'de': 'Tests',
+        'techniques': '验收测试, 集成测试,\n单元测试',
+        'color': '#4527A0', 'y': 5.4
+    },
+    {
+        'zh': '实现', 'de': 'Implementierung',
+        'techniques': '高级编程语言的具体代码\n/ Pseudo-Code',
+        'color': '#283593', 'y': 3.7
+    },
+    {
+        'zh': '机器码', 'de': 'Maschinencode',
+        'techniques': 'Assembly',
+        'color': '#1A237E', 'y': 2.0
+    },
+]
+
+# Draw levels
+for lv in levels:
+    box = mpatches.FancyBboxPatch((1.0, lv['y'] - 0.6), 5.0, 1.3, boxstyle="round,pad=0.1",
+        facecolor='white', edgecolor=lv['color'], linewidth=2)
+    ax.add_patch(box)
+    ax.text(2.0, lv['y'] + 0.15, lv['zh'] + ' | ' + lv['de'], fontsize=9,
+            fontweight='bold', color=lv['color'])
+    ax.text(2.0, lv['y'] - 0.35, lv['techniques'], fontsize=7.5, color='#555', linespacing=1.2)
+
+# Down arrows between levels
+for i in range(len(levels) - 1):
+    ax.annotate('', xy=(3.5, levels[i+1]['y'] + 0.8),
+        xytext=(3.5, levels[i]['y'] - 0.7),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=1.5))
+
+# Abstraction arrow
+ax.annotate('', xy=(0.5, 2.0), xytext=(0.5, 10.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['abstraction'], lw=2.5))
+ax.text(0.3, 6.5, '抽象层次\nAbstraktionsebene', ha='center', fontsize=8.5,
+        fontweight='bold', color=COLORS['abstraction'], rotation=90, linespacing=1.3)
+
+# Key principle box (right side)
+principle_box = mpatches.FancyBboxPatch((7.0, 8.0), 6.5, 3.5, boxstyle="round,pad=0.15",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=2)
+ax.add_patch(principle_box)
+ax.text(10.25, 11.0, '核心原则 | Kernprinzip', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['highlight'])
+ax.text(10.25, 10.0, '每一层...\nJede Ebene...', ha='center', fontsize=9.5,
+        fontweight='bold', color=COLORS['dark'])
+ax.text(10.25, 9.0, '(1) 细化上一层\n    ...verfeinert die vorherige Ebene\n'
+        '(2) 在特定细节层次上表达行为\n    ...drueckt Verhalten auf bestimmtem\n'
+        '    Detailgrad aus',
+        ha='center', fontsize=8.5, color='#444', linespacing=1.4)
+
+# AI communication box (right side, bottom)
+ai_box = mpatches.FancyBboxPatch((7.0, 2.5), 6.5, 5.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['teal_light'], edgecolor=COLORS['ai_color'], linewidth=2)
+ax.add_patch(ai_box)
+ax.text(10.25, 7.0, '抽象层次用于 AI 沟通', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['ai_color'])
+ax.text(10.25, 6.3, 'Abstraktionsniveaus als\nKommunikationsmittel mit Code-Assistenten',
+        ha='center', fontsize=8.5, color=COLORS['ai_color'], linespacing=1.3)
+
+ax.text(10.25, 5.0, '更具体的指令 --> 更好的结果\nKonkretere Anweisungen\n--> bessere Ergebnisse',
+        ha='center', fontsize=8.5, fontweight='bold', color='#333', linespacing=1.3)
+ax.text(10.25, 3.5, '小步骤的细化 --> 更多控制\nKleine Verfeinerungsschritte\n--> mehr Kontrolle',
+        ha='center', fontsize=8.5, fontweight='bold', color='#333', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+课件将编程描述为一个**抽象过程** (Abstraktionsprozess)。从最高层的需求 (Anforderungen) 开始，经过架构 (Architektur)、模块设计 (Modul-Entwurf)、测试 (Tests)、实现 (Implementierung)，最终到机器码 (Maschinencode)。每一层都细化上一层的描述，并在特定的细节层次上表达软件的行为。
+
+这个分层模型也适用于与 AI 代码助手的沟通。给 AI 更具体的指令（例如提供 UML 图或伪代码而非模糊的自然语言描述）会得到更好的结果。使用小步骤的逐层细化（而非一次性生成整个系统）能获得更多的控制权。
+
+::: {.callout-tip}
+## 机器辅助的发展 (Maschinelle Unterstuetzung)
+
+从编译器（不再手写机器码）到代码格式化工具、静态分析工具，再到今天的 AI 代码助手——自动化水平在不断提升。但课件也指出了当前 AI 的局限：大型项目面临上下文、成本和可靠性的限制；冷门语言/框架/领域支持不佳；尚无充分证据表明 AI 能完全替代所有应用领域的开发。
+:::
+
+# Clean Code 深入 | Clean Code Vertiefung
+
+## Um-Zu-Absaetze：从上到下的可读性
+
+```{python}
+#| label: fig-um-zu
+#| fig-cap: "Um-Zu-Absaetze 原则 | Um-Zu-Absaetze Prinzip"
+
+fig, ax = plt.subplots(figsize=(14, 11))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 12)
+ax.axis('off')
+ax.set_title('Um-Zu-Absaetze：从上到下的可读性 | Lesbarkeit von oben nach unten',
+             fontsize=13, fontweight='bold')
+
+# Principle box
+princ = mpatches.FancyBboxPatch((0.5, 10.0), 13.0, 1.8, boxstyle="round,pad=0.15",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['clean_code'], linewidth=2.5)
+ax.add_patch(princ)
+ax.text(7.0, 11.2, '核心原则 | Kernprinzip', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['clean_code'])
+ax.text(7.0, 10.4, '每个方法只在一个抽象层次上操作，调用的方法位于下一个更低的抽象层次\n'
+        'Jede Methode operiert auf einem Abstraktionsniveau; aufgerufene Methoden auf dem naechstniedrigeren',
+        ha='center', fontsize=9, color='#333', linespacing=1.4)
+
+# Bad example (left)
+bad_box = mpatches.FancyBboxPatch((0.3, 0.3), 6.4, 9.2, boxstyle="round,pad=0.15",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['exam_red'], linewidth=2.5)
+ax.add_patch(bad_box)
+ax.text(3.5, 9.0, '[X] 反面示例 | Negativ-Beispiel', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['exam_red'])
+
+bad_code = ('registerStudentBad(name, matNr) {\n'
+            '  // 1. 直接检查 null 和空字符串\n'
+            '  if (name == null || name.trim()...)\n'
+            '    throw new IllegalArgument...\n'
+            '  // 2. 直接构建正则表达式\n'
+            '  Pattern p = Pattern.compile(...);\n'
+            '  if (!p.matcher(matNr)...)\n'
+            '    throw new IllegalArgument...\n'
+            '  // 3. 检查重复\n'
+            '  if (dbContains(name)) throw...\n'
+            '  // 4. 持久化\n'
+            '  persistStudent(name, matNr);\n'
+            '  // 5. 发送邮件 <-- 不同层次!\n'
+            '  sendWelcomeEmail(name);\n'
+            '}')
+ax.text(0.8, 7.8, bad_code, fontsize=7, color='#444', family='monospace',
+        linespacing=1.35, verticalalignment='top')
+
+ax.text(3.5, 0.7, '问题：混合了多个抽象层次!', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['exam_red'])
+
+# Good example (right)
+good_box = mpatches.FancyBboxPatch((7.3, 0.3), 6.4, 9.2, boxstyle="round,pad=0.15",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['exam_green'], linewidth=2.5)
+ax.add_patch(good_box)
+ax.text(10.5, 9.0, '[OK] 正面示例 | Positiv-Beispiel', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['exam_green'])
+
+good_code = ('// 第一层: 总览\n'
+             'validateAndRegister(name, matNr) {\n'
+             '  validateStudentData(name, matNr);\n'
+             '  checkForDuplicates(name);\n'
+             '  persistStudent(name, matNr);\n'
+             '  sendWelcomeEmail(name);\n'
+             '}\n\n'
+             '// 第二层: 数据验证\n'
+             'validateStudentData(name, matNr) {\n'
+             '  validateName(name);\n'
+             '  validateMatriculationNumber(matNr);\n'
+             '}\n\n'
+             '// 第三层: 具体验证逻辑\n'
+             'validateName(name) {\n'
+             '  if (name == null || ...) throw...\n'
+             '}')
+ax.text(7.8, 7.8, good_code, fontsize=7, color='#444', family='monospace',
+        linespacing=1.35, verticalalignment='top')
+
+ax.text(10.5, 0.7, '每层只描述"做什么"，下层描述"怎么做"',
+        ha='center', fontsize=9, fontweight='bold', color=COLORS['exam_green'])
+
+plt.tight_layout()
+plt.show()
+```
+
+**Um-Zu-Absaetze** 原则是 Clean Code 中关于方法组织的核心规则。其核心思想是：每个方法应当只在一个抽象层次上操作，它所调用的方法位于下一个更低的抽象层次。好的代码可以被从上到下读取，就像阅读一系列"为了做 X，我们做 Y 和 Z"的段落 (Um-Zu-Absaetze)。
+
+**反面示例**中，`registerStudentBad` 方法在同一个方法体内混合了低级别操作（如直接构建正则表达式、检查 null）和高级别操作（如发送欢迎邮件），违反了单一抽象层次原则。其"Um-Zu"描述读起来支离破碎：包含了过多的实现细节。
+
+**正面示例**中，顶层方法 `validateAndRegisterStudent` 只描述了四步高层流程：验证数据、检查重复、持久化、发送邮件。每一步的具体实现被委托给下一层方法。`validateStudentData` 进一步分解为验证姓名和验证学号。各层的"Um-Zu"描述清晰、相互独立，每层只回答"做什么"，下一层回答"怎么做"。
+
+## Law of Demeter：不要与陌生人交谈
+
+```{python}
+#| label: fig-law-of-demeter
+#| fig-cap: "Law of Demeter | 得墨忒耳定律"
+
+fig, ax = plt.subplots(figsize=(14, 10))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('Law of Demeter：不要与陌生人交谈 | "Don\'t talk to strangers"',
+             fontsize=13, fontweight='bold')
+
+# Rule box
+rule_box = mpatches.FancyBboxPatch((0.5, 8.8), 13.0, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['purple_light'], edgecolor=COLORS['demeter'], linewidth=2.5)
+ax.add_patch(rule_box)
+ax.text(7.0, 10.2, '规则：一个对象只能调用以下方法 | Erlaubte Methodenaufrufe',
+        ha='center', fontsize=11, fontweight='bold', color=COLORS['demeter'])
+
+rules = [
+    'this.method() -- 自身方法',
+    'param.method() -- 参数对象的方法',
+    'new Object().method() -- 自己创建的对象的方法',
+    'this.field.method() -- 直接字段/组件的方法',
+]
+for i, r in enumerate(rules):
+    ax.text(2.0 + (i % 2) * 6.0, 9.5 - (i // 2) * 0.5, r, fontsize=8.5,
+            color='#333', family='monospace')
+
+# Violation (left)
+viol_box = mpatches.FancyBboxPatch((0.3, 0.3), 6.4, 8.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['exam_red'], linewidth=2.5)
+ax.add_patch(viol_box)
+ax.text(3.5, 7.8, '[X] 违反 | Verletzung', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['exam_red'])
+
+ax.text(3.5, 7.0, '方法链 -- 火车残骸反模式', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['exam_red'])
+
+viol_code = ('course\n'
+             '  .getDepartment()    // 获取系\n'
+             '  .getSecretary()     // 获取秘书\n'
+             '  .getContact()       // 获取联系方式\n'
+             '  .getEmail();        // 获取邮箱')
+ax.text(1.0, 5.5, viol_code, fontsize=8.5, color='#444', family='monospace',
+        linespacing=1.5, verticalalignment='top')
+
+# Chain visualization
+chain_items = ['Course', 'Dept', 'Secretary', 'Contact', 'Email']
+chain_colors = ['#6A1B9A', '#AD1457', '#C62828', '#BF360C', '#E65100']
+for i, (item, cc) in enumerate(zip(chain_items, chain_colors)):
+    x = 0.8 + i * 1.3
+    cbox = mpatches.FancyBboxPatch((x - 0.5, 2.5), 1.2, 0.8, boxstyle="round,pad=0.04",
+        facecolor='white', edgecolor=cc, linewidth=1.5)
+    ax.add_patch(cbox)
+    ax.text(x + 0.1, 2.9, item, ha='center', fontsize=7, fontweight='bold', color=cc)
+    if i < len(chain_items) - 1:
+        ax.annotate('', xy=(x + 0.8, 2.9), xytext=(x + 0.7, 2.9),
+            arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=1.2))
+
+ax.text(3.5, 1.8, '问题: EnrollmentService 了解\nCourse 的整个内部结构!', ha='center',
+        fontsize=8.5, fontweight='bold', color=COLORS['exam_red'], linespacing=1.3)
+ax.text(3.5, 0.7, '目标: 低耦合 | Ziel: Lose Kopplung',
+        ha='center', fontsize=9, fontweight='bold', color=COLORS['dark'])
+
+# Solutions (right)
+sol_box = mpatches.FancyBboxPatch((7.3, 0.3), 6.4, 8.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['exam_green'], linewidth=2.5)
+ax.add_patch(sol_box)
+ax.text(10.5, 7.8, '[OK] 解决方案 | Loesungen', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['exam_green'])
+
+# Solution A
+sol_a = mpatches.FancyBboxPatch((7.6, 4.5), 5.8, 3.0, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor='#1565C0', linewidth=1.5)
+ax.add_patch(sol_a)
+ax.text(10.5, 7.0, '方案 A: 直接传递引用 | Direkte Referenz', ha='center',
+        fontsize=9, fontweight='bold', color='#1565C0')
+ax.text(8.0, 6.0, 'enrollStudent(\n  student, course,\n  secretaryContact) {\n'
+        '  email = secretaryContact\n    .getEmail();\n}',
+        fontsize=7.5, color='#444', family='monospace', linespacing=1.3)
+ax.text(10.5, 4.7, '(+)简单 (-)更多参数', ha='center', fontsize=7.5, color='#666')
+
+# Solution B
+sol_b = mpatches.FancyBboxPatch((7.6, 0.6), 5.8, 3.5, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor='#2E7D32', linewidth=1.5)
+ax.add_patch(sol_b)
+ax.text(10.5, 3.6, '方案 B: Tell, Don\'t Ask', ha='center',
+        fontsize=9, fontweight='bold', color='#2E7D32')
+ax.text(8.0, 2.6, '// 让对象自己负责\ncourse\n  .sendEnrollNotification(\n    student);\n'
+        '// Course -> Department\n//   -> Secretary -> send',
+        fontsize=7.5, color='#444', family='monospace', linespacing=1.3)
+ax.text(10.5, 0.8, '(+)最低耦合 (-)更多小方法', ha='center', fontsize=7.5, color='#666')
+
+plt.tight_layout()
+plt.show()
+```
+
+**Law of Demeter** (得墨忒耳定律)，又称"不要与陌生人交谈" (Don't talk to strangers)，是关于对象间通信的重要原则。一个对象只应当调用以下四类方法：自身的方法 (`this.method()`)、作为参数传入的对象的方法 (`param.method()`)、自己创建的对象的方法 (`new Object().method()`)、以及自己直接持有的字段的方法 (`this.field.method()`)。
+
+**违反示例**是经典的"火车残骸"反模式 (Train Wreck Anti-Pattern)：`course.getDepartment().getSecretary().getContact().getEmail()`。这条方法链意味着 `EnrollmentService` 了解了 `Course` 的整个内部结构（系、秘书、联系方式），导致了极高的耦合度——如果内部结构中的任何一环发生变化，调用者都必须修改。
+
+课件给出了两种解决方案。**方案 A** (直接传递引用)：将 `secretaryContact` 作为参数直接传入方法，这样调用者只需要访问一层。优点是简单、依赖清晰，缺点是增加了参数数量。**方案 B** (Tell, Don't Ask)：让每个对象自己负责转发消息——`course.sendEnrollmentNotification(student)`，`Course` 内部再调用 `department.notifyOfEnrollment(student)` 等。优点是达到了最低耦合，缺点是需要在每个中间对象上添加转发方法。
+
+## Dependency Injection：解耦的核心手段
+
+```{python}
+#| label: fig-dependency-injection
+#| fig-cap: "Dependency Injection | 依赖注入"
+
+fig, ax = plt.subplots(figsize=(14, 11))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 12)
+ax.axis('off')
+ax.set_title('Dependency Injection：解耦的核心手段 | Kernmittel zur Entkopplung',
+             fontsize=13, fontweight='bold')
+
+# Cohesion and Coupling definitions
+def_box = mpatches.FancyBboxPatch((0.5, 10.0), 13.0, 1.8, boxstyle="round,pad=0.15",
+    facecolor=COLORS['indigo_light'], edgecolor=COLORS['di_color'], linewidth=2.5)
+ax.add_patch(def_box)
+
+ax.text(3.5, 11.2, '内聚 | Kohaesion', ha='center', fontsize=11,
+        fontweight='bold', color='#1565C0')
+ax.text(3.5, 10.5, '类内部元素的关联度 --> 尽可能高\nZusammengehoerigkeit --> moeglichst hoch',
+        ha='center', fontsize=8.5, color='#333', linespacing=1.3)
+
+ax.text(10.5, 11.2, '耦合 | Kopplung', ha='center', fontsize=11,
+        fontweight='bold', color='#C62828')
+ax.text(10.5, 10.5, '类之间的依赖度 --> 尽可能低\nAbhaengigkeit --> moeglichst gering',
+        ha='center', fontsize=8.5, color='#333', linespacing=1.3)
+
+# Without DI (left)
+no_di = mpatches.FancyBboxPatch((0.3, 0.3), 6.4, 9.2, boxstyle="round,pad=0.15",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['exam_red'], linewidth=2.5)
+ax.add_patch(no_di)
+ax.text(3.5, 9.0, '[X] 无 DI: 硬编码依赖 | Ohne DI', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['exam_red'])
+
+no_di_code = ('class StudentService {\n'
+              '  // 具体实现类!\n'
+              '  private TrieStudentDatabase db;\n\n'
+              '  StudentService() {\n'
+              '    // 硬编码创建\n'
+              '    this.db =\n'
+              '      new TrieStudentDatabase();\n'
+              '  }\n\n'
+              '  void registerStudent(...) {\n'
+              '    db.addStudent(student);\n'
+              '  }\n'
+              '}')
+ax.text(0.8, 7.8, no_di_code, fontsize=7.5, color='#444', family='monospace',
+        linespacing=1.3, verticalalignment='top')
+
+problems = [
+    '(1) 不可测试: 需要真实数据库',
+    '(2) 难以更改: 换 DB 实现要改代码',
+    '(3) 不该由 Service 决定用哪个 DB',
+    '(4) 可以访问 TrieStudentDB 特有方法',
+]
+for i, p in enumerate(problems):
+    ax.text(0.8, 2.5 - i * 0.5, p, fontsize=7.5, fontweight='bold',
+            color=COLORS['exam_red'])
+
+# With DI (right)
+with_di = mpatches.FancyBboxPatch((7.3, 0.3), 6.4, 9.2, boxstyle="round,pad=0.15",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['exam_green'], linewidth=2.5)
+ax.add_patch(with_di)
+ax.text(10.5, 9.0, '[OK] 有 DI: 接口依赖 | Mit DI', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['exam_green'])
+
+with_di_code = ('class StudentService {\n'
+                '  // Interface!\n'
+                '  private StudentDatabase db;\n\n'
+                '  // 注入依赖\n'
+                '  StudentService(\n'
+                '    StudentDatabase db) {\n'
+                '    this.db = db;\n'
+                '  }\n\n'
+                '  void registerStudent(...) {\n'
+                '    db.addStudent(student);\n'
+                '  }\n'
+                '}')
+ax.text(7.8, 7.8, with_di_code, fontsize=7.5, color='#444', family='monospace',
+        linespacing=1.3, verticalalignment='top')
+
+benefits = [
+    '(1) 可测试: 传入 Mock 即可',
+    '(2) 松耦合: 只依赖 Interface',
+    '(3) 职责正确: 由外部决定实现',
+    '(4) 只能调用 Interface 定义的方法',
+]
+for i, b in enumerate(benefits):
+    ax.text(7.8, 2.5 - i * 0.5, b, fontsize=7.5, fontweight='bold',
+            color=COLORS['exam_green'])
+
+plt.tight_layout()
+plt.show()
+```
+
+**Dependency Injection** (依赖注入, DI) 是实现低耦合的核心手段。课件首先回顾了两个基本概念：**内聚** (Kohaesion) 是类内部元素的关联度，应尽可能高；**耦合** (Kopplung) 是不同具体类之间的依赖度，应尽可能低。
+
+**未使用 DI** 的代码中，`StudentService` 在构造函数内直接创建了具体的 `TrieStudentDatabase` 实例。这导致了四个问题：无法在没有真实数据库的情况下测试；更换数据库实现需要修改 `StudentService` 的代码；不应该由 `StudentService` 来决定使用哪种数据库实现；`StudentService` 可以访问 `TrieStudentDatabase` 的所有特有方法（超出了它实际需要的接口）。
+
+**使用 DI** 的代码中，`StudentService` 只依赖 `StudentDatabase` 接口 (Interface)，具体实现通过构造函数参数注入。这带来了四个优势：可以通过传入 Mock 对象来测试；松耦合，只依赖接口；职责正确——由外部的创建者来决定使用哪种实现；只能调用接口定义的方法，避免了对具体实现的不必要依赖。
+
+::: {.callout-important}
+## DI 的决策原则 (Entscheidungsregel fuer DI)
+
+是否使用 Dependency Injection 取决于一个核心问题：**这个类是否应该决定它使用哪个依赖的具体实现？** (Sollte die Klasse entscheiden, welche Implementierung sie verwendet?) 如果是，则直接创建是合理的。如果不是，则应该使用 Dependency Injection。
+:::
+
+# 架构对比 | Architekturvergleich
+
+## 分层架构 vs. 洋葱架构
+
+```{python}
+#| label: fig-layered-vs-onion
+#| fig-cap: "分层架构 vs 洋葱架构 | Schichtenarchitektur vs Onion Architecture"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 10))
+
+# Layered Architecture (left)
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('分层架构 | Schichtenarchitektur', fontsize=12, fontweight='bold',
+             color=COLORS['arch_layer'])
+
+layers_data = [
+    {'name': 'UI / Praesentation', 'zh': '表现层', 'y': 9.0, 'color': '#1565C0'},
+    {'name': 'Geschaeftslogik', 'zh': '业务逻辑层', 'y': 6.5, 'color': '#1976D2'},
+    {'name': 'Datenzugriff', 'zh': '数据访问层', 'y': 4.0, 'color': '#1E88E5'},
+    {'name': 'Infrastruktur / DB', 'zh': '基础设施层', 'y': 1.5, 'color': '#2196F3'},
+]
+
+for ld in layers_data:
+    box = mpatches.FancyBboxPatch((0.5, ld['y'] - 0.8), 9.0, 1.8,
+        boxstyle="round,pad=0.1", facecolor='white', edgecolor=ld['color'], linewidth=2.5)
+    ax.add_patch(box)
+    ax.text(5.0, ld['y'] + 0.3, ld['zh'] + ' | ' + ld['name'], ha='center',
+            fontsize=9, fontweight='bold', color=ld['color'])
+
+for i in range(len(layers_data) - 1):
+    ax.annotate('', xy=(5.0, layers_data[i+1]['y'] + 1.1),
+        xytext=(5.0, layers_data[i]['y'] - 0.9),
+        arrowprops=dict(arrowstyle='->', color=COLORS['dark'], lw=2))
+
+ax.text(5.0, 0.3, '上层只使用直接下层\nObere Schicht nutzt nur\ndirekt darunterliegende',
+        ha='center', fontsize=8.5, fontweight='bold', color=COLORS['arch_layer'], linespacing=1.3)
+
+# Onion Architecture (right)
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('洋葱架构 | Onion Architecture', fontsize=12, fontweight='bold',
+             color=COLORS['arch_onion'])
+
+rings = [
+    {'name': 'Infrastruktur\nUI, DB, External', 'zh': '基础设施(最外层)',
+     'r': 4.0, 'color': '#FF5722', 'fc': '#FBE9E7'},
+    {'name': 'Application\nServices', 'zh': '应用服务',
+     'r': 2.8, 'color': '#E64A19', 'fc': '#FFCCBC'},
+    {'name': 'Domain\nServices', 'zh': '领域服务',
+     'r': 1.8, 'color': '#BF360C', 'fc': '#FF8A65'},
+    {'name': 'Domain\nModel', 'zh': '领域模型(核心)',
+     'r': 1.0, 'color': '#870000', 'fc': '#FFAB91'},
+]
+
+cx, cy = 5.0, 5.5
+for ring in rings:
+    circle = plt.Circle((cx, cy), ring['r'], facecolor=ring['fc'],
+                          edgecolor=ring['color'], linewidth=2.5)
+    ax.add_patch(circle)
+
+for ring in rings:
+    if ring['r'] > 2.0:
+        ax.text(cx, cy + ring['r'] - 0.4, ring['zh'], ha='center',
+                fontsize=7.5, fontweight='bold', color=ring['color'])
+    else:
+        ax.text(cx, cy + ring['r'] - 0.3, ring['zh'], ha='center',
+                fontsize=7, fontweight='bold', color='white')
+
+# Arrows pointing inward
+for angle in [45, 135, 225, 315]:
+    rad = np.radians(angle)
+    x_start = cx + 4.2 * np.cos(rad)
+    y_start = cy + 4.2 * np.sin(rad)
+    x_end = cx + 3.0 * np.cos(rad)
+    y_end = cy + 3.0 * np.sin(rad)
+    ax.annotate('', xy=(x_end, y_end), xytext=(x_start, y_start),
+        arrowprops=dict(arrowstyle='->', color=COLORS['dark'], lw=1.5))
+
+ax.text(5.0, 0.5, '依赖指向内部，基础设施在外层\nAbhaengigkeiten zeigen nach innen,\nInfrastruktur ganz aussen',
+        ha='center', fontsize=8.5, fontweight='bold', color=COLORS['arch_onion'], linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: fig-arch-comparison-table
+#| fig-cap: "两种架构的对比 | Vergleich der Architekturen"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('分层架构 vs 洋葱架构：关键区别 | Wesentliche Unterschiede',
+             fontsize=13, fontweight='bold')
+
+# Table header
+header_items = [
+    ('比较维度\nVergleichsdimension', 1.5),
+    ('分层架构\nSchichtenarchitektur', 5.5),
+    ('洋葱架构\nOnion Architecture', 10.5),
+]
+for text, x in header_items:
+    hbox = mpatches.FancyBboxPatch((x - 2.0, 6.5), 4.0, 1.3, boxstyle="round,pad=0.08",
+        facecolor=COLORS['dark'], edgecolor='white', linewidth=1.5)
+    ax.add_patch(hbox)
+    ax.text(x, 7.1, text, ha='center', fontsize=9, fontweight='bold',
+            color='white', linespacing=1.3)
+
+# Table rows
+rows = [
+    {
+        'dim': '依赖方向\nAbhaengigkeiten',
+        'layer': '上层只使用直接下层\nObere -> direkt untere Schicht',
+        'onion': '上层可使用所有内层\nObere nutzt untere Schichten',
+        'y': 5.2
+    },
+    {
+        'dim': '基础设施位置\nInfrastruktur',
+        'layer': '最底层 (数据库等)\nUnterste Schicht',
+        'onion': '最外层 (DB, UI, External)\nOberste Schicht',
+        'y': 3.5
+    },
+    {
+        'dim': '领域逻辑位置\nDomaenen-Logik',
+        'layer': '中间层\nMittlere Schicht(en)',
+        'onion': '最内层 (核心)\nUnterste Schicht',
+        'y': 1.8
+    },
+    {
+        'dim': '耦合方式\nKopplung',
+        'layer': '常通过具体类耦合\nOft ueber konkrete Klassen',
+        'onion': '只通过 Interface + DI\nNur Interfaces -> DI',
+        'y': 0.2
+    },
+]
+
+for row in rows:
+    for text, x, color in [
+        (row['dim'], 1.5, COLORS['dark']),
+        (row['layer'], 5.5, COLORS['arch_layer']),
+        (row['onion'], 10.5, COLORS['arch_onion']),
+    ]:
+        rbox = mpatches.FancyBboxPatch((x - 2.0, row['y'] - 0.5), 4.0, 1.2,
+            boxstyle="round,pad=0.05", facecolor='white', edgecolor=color, linewidth=1)
+        ax.add_patch(rbox)
+        ax.text(x, row['y'], text, ha='center', fontsize=7.5, color=color,
+                linespacing=1.2)
+
+plt.tight_layout()
+plt.show()
+```
+
+课件对比了两种核心架构风格。在**分层架构** (Schichtenarchitektur) 中，系统被组织为水平层，每一层只使用直接位于其下方的层。基础设施（如数据库）位于最底层，业务逻辑位于中间层。层与层之间通常通过具体类进行耦合。
+
+在**洋葱架构** (Onion Architecture) 中，系统被组织为同心圆。领域模型 (Domain Model) 位于最核心的位置，领域服务和应用服务包裹在外层，而基础设施（数据库、UI、外部服务）位于最外层。所有依赖都指向内部——外层依赖内层，但内层不知道外层的存在。层与层之间的通信只通过接口 (Interface) 进行，外层的具体实现通过 Dependency Injection 注入。
+
+两者的根本区别在于基础设施的位置和耦合方式。洋葱架构将基础设施推到最外层，使得领域逻辑完全独立于具体的数据库或 UI 技术，从而实现更彻底的解耦和更高的可测试性。
+
+# UML 类图 | UML Klassendiagramme
+
+```{python}
+#| label: fig-uml-overview
+#| fig-cap: "UML 类图的两种应用 | Zwei Anwendungen von Klassendiagrammen"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('UML 类图 | Klassendiagramme', fontsize=14, fontweight='bold')
+
+# Two applications
+ax.text(7.0, 9.5, '类图有两种应用 | Zwei Anwendungen', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['dark'])
+
+# Application 1: Domain Modeling
+app1 = mpatches.FancyBboxPatch((0.5, 0.5), 6.0, 8.5, boxstyle="round,pad=0.2",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['exam_blue'], linewidth=2.5)
+ax.add_patch(app1)
+ax.text(3.5, 8.3, '(1) 建模业务概念', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['exam_blue'])
+ax.text(3.5, 7.6, 'Modellierung eines\nfachlichen Sachverhalts', ha='center',
+        fontsize=9, color=COLORS['exam_blue'], linespacing=1.3)
+
+# Example: Film collection
+example_items = [
+    ('Filmsammlung', '电影收藏', 6.2, '#0D47A1'),
+    ('Medium', '媒体 (基类)', 4.5, '#1565C0'),
+    ('Film', '电影 (子类)', 2.8, '#1976D2'),
+    ('VHSSpieler', 'VHS播放器', 1.2, '#1E88E5'),
+]
+
+for name, zh, y, color in example_items:
+    ebox = mpatches.FancyBboxPatch((1.0, y - 0.4), 5.0, 1.0, boxstyle="round,pad=0.06",
+        facecolor='white', edgecolor=color, linewidth=1.5)
+    ax.add_patch(ebox)
+    ax.text(3.5, y + 0.1, name + ' | ' + zh, ha='center', fontsize=8.5,
+            fontweight='bold', color=color)
+
+# Relationships
+ax.annotate('', xy=(3.5, 5.6), xytext=(3.5, 6.1),
+    arrowprops=dict(arrowstyle='->', color=COLORS['dark'], lw=1.5))
+ax.text(4.5, 5.8, '1..*', fontsize=8, color=COLORS['dark'])
+
+ax.annotate('', xy=(3.5, 3.9), xytext=(3.5, 4.4),
+    arrowprops=dict(arrowstyle='-|>', color=COLORS['dark'], lw=1.5))
+ax.text(4.2, 4.1, 'extends', fontsize=7.5, color=COLORS['dark'], style='italic')
+
+ax.plot([3.5, 3.5], [2.0, 2.7], color=COLORS['dark'], lw=1.5, linestyle='--')
+ax.text(4.2, 2.3, 'uses', fontsize=7.5, color=COLORS['dark'], style='italic')
+
+# Application 2: Software Design
+app2 = mpatches.FancyBboxPatch((7.5, 0.5), 6.0, 8.5, boxstyle="round,pad=0.2",
+    facecolor=COLORS['purple_light'], edgecolor=COLORS['exam_purple'], linewidth=2.5)
+ax.add_patch(app2)
+ax.text(10.5, 8.3, '(2) 设计/文档化软件系统', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['exam_purple'])
+ax.text(10.5, 7.6, 'Dokumentation/Entwurf\neines Softwaresystems', ha='center',
+        fontsize=9, color=COLORS['exam_purple'], linespacing=1.3)
+
+# Key UML elements
+uml_elements = [
+    '类 (Klasse): 属性 + 方法',
+    '接口 (Interface): <<interface>>',
+    '继承 (Vererbung): ------|>',
+    '组合 (Komposition): ------<*>',
+    '聚合 (Aggregation): ------<>',
+    '关联 (Assoziation): ------',
+    '依赖 (Abhaengigkeit): - - - >',
+    '多重性 (Multiplizitaet): 1, 0..*, 1..*',
+]
+
+for i, elem in enumerate(uml_elements):
+    y = 6.5 - i * 0.7
+    ax.text(8.0, y, elem, fontsize=8, color='#444', family='monospace')
+
+plt.tight_layout()
+plt.show()
+```
+
+课件强调 UML 类图 (Klassendiagramme) 有两种应用。第一种是**建模业务概念** (Modellierung eines fachlichen Sachverhalts)——用类图来描述现实世界中的概念和关系，例如课件中的电影收藏示例：一个 `Filmsammlung` (电影收藏) 由多个 `Medium` (媒体) 组成，每个媒体有标题和出版年份；`Film` (电影) 是 `Medium` 的子类，额外有时长属性；`VHSSpieler` (VHS播放器) 提供播放电影的功能。
+
+第二种是**设计和文档化软件系统** (Dokumentation/Entwurf eines Softwaresystems)——用类图来设计代码结构，包括类、接口、继承关系、组合、聚合、关联和依赖关系，以及多重性标注。
+
+::: {.callout-important}
+## 考试中的类图题 (Klassendiagramme in der Klausur)
+
+考试中可能需要根据文字描述绘制类图，也可能需要阅读类图并回答问题。关键要掌握：区分继承 (Vererbung) 与实现 (Implementierung)；区分组合 (Komposition, 强从属) 与聚合 (Aggregation, 弱从属)；正确标注多重性 (Multiplizitaet)。
+:::
+
+# 进阶话题概览 | Weiterfuehrende Themen
+
+```{python}
+#| label: fig-advanced-topics
+#| fig-cap: "进阶话题（仅了解）| Weiterfuehrende Themen (nur zur Info)"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('进阶话题 (非考试重点，仅了解) | Weiterfuehrende Themen (nicht klausurrelevant)',
+             fontsize=12, fontweight='bold', color=COLORS['neutral'])
+
+topics = [
+    {
+        'zh': 'DevOps 与 CI/CD',
+        'de': 'DevOps und CI/CD',
+        'desc': '持续集成/持续部署\nGitLab CI/CD',
+        'color': '#1565C0', 'x': 2.5
+    },
+    {
+        'zh': '软件安全',
+        'de': 'Sicherheit',
+        'desc': 'OWASP Top 10\n威胁建模, SBOM, CVE',
+        'color': '#C62828', 'x': 7.0
+    },
+    {
+        'zh': '软件质量',
+        'de': 'Weiterfuehrende Qualitaet',
+        'desc': '度量指标 (LoC, 圈复杂度)\nArchUnit, Checkstyle\nPMD, SonarQube\n形式化验证',
+        'color': '#2E7D32', 'x': 11.5
+    },
+]
+
+for t in topics:
+    card = mpatches.FancyBboxPatch((t['x'] - 2.0, 0.5), 4.0, 7.0, boxstyle="round,pad=0.15",
+        facecolor='white', edgecolor=t['color'], linewidth=2, linestyle='--')
+    ax.add_patch(card)
+
+    header = mpatches.FancyBboxPatch((t['x'] - 1.8, 6.2), 3.6, 1.0, boxstyle="round,pad=0.08",
+        facecolor=t['color'], edgecolor='white', linewidth=1)
+    ax.add_patch(header)
+    ax.text(t['x'], 6.9, t['zh'], ha='center', fontsize=10, fontweight='bold', color='white')
+    ax.text(t['x'], 6.4, t['de'], ha='center', fontsize=8.5, color='white')
+
+    ax.text(t['x'], 4.0, t['desc'], ha='center', fontsize=9, color='#444', linespacing=1.4)
+
+ax.text(7.0, 0.2, '-- 虚线表示非考试重点，但在实际开发中非常重要 --',
+        ha='center', fontsize=9, color=COLORS['neutral'], style='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+课件最后提及了三个没有在课程中深入讲解但在实际开发中非常重要的主题。**DevOps 与 CI/CD** (持续集成/持续部署) 涉及开发和运维的融合，以及自动化的构建、测试和部署流水线。**软件安全** 包括 OWASP Top 10 常见漏洞、威胁建模、软件物料清单 (SBOM) 和 CVE 漏洞数据库。**进阶软件质量** 涵盖代码度量指标（代码行数、注释比例、圈复杂度）、架构测试工具 (ArchUnit)、代码检查工具 (Checkstyle, PMD, SonarQube) 以及形式化验证。这些主题不是考试重点，但了解它们的存在对于成为全面的软件工程师是有益的。
+
+# 全课程知识地图 | Gesamte Wissenslandkarte
+
+```{python}
+#| label: fig-course-knowledge-map
+#| fig-cap: "全课程知识地图 | Wissenslandkarte des gesamten Kurses"
+
+fig, ax = plt.subplots(figsize=(15, 12))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 13)
+ax.axis('off')
+ax.set_title('Softwaretechnik WS 25/26 -- 全课程知识地图', fontsize=15, fontweight='bold')
+
+# Central theme
+center = mpatches.FancyBboxPatch((5.5, 5.5), 4.0, 2.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['dark'], edgecolor='white', linewidth=3)
+ax.add_patch(center)
+ax.text(7.5, 6.8, '软件工程', ha='center', fontsize=14, fontweight='bold', color='white')
+ax.text(7.5, 5.9, 'Softwaretechnik', ha='center', fontsize=11, color='#BDC3C7')
+
+# Knowledge topics around center
+topics = [
+    {'title': '需求工程\nRequirements\nEngineering', 'items': 'User Stories\nSzenarien\n功能/非功能需求',
+     'color': '#C62828', 'x': 2.0, 'y': 11.5},
+    {'title': '架构\nArchitektur', 'items': '4+1 视图\n架构模式\n分层/洋葱架构',
+     'color': '#AD1457', 'x': 7.5, 'y': 11.5},
+    {'title': '设计模式\nEntwurfsmuster', 'items': 'Strategy, Observer\nFactory, Singleton\nAdapter, Decorator',
+     'color': '#6A1B9A', 'x': 13.0, 'y': 11.5},
+    {'title': 'Clean Code', 'items': 'Um-Zu-Absaetze\nLaw of Demeter\nDI, SOLID',
+     'color': COLORS['clean_code'], 'x': 1.5, 'y': 6.5},
+    {'title': '测试\nTesten', 'items': 'TDD, 测试金字塔\n测试用例设计\n缺陷成本',
+     'color': '#1565C0', 'x': 13.5, 'y': 6.5},
+    {'title': '过程模型\nProzessmodelle', 'items': 'Scrum, Wasserfall\nAgile Methoden',
+     'color': '#E65100', 'x': 2.0, 'y': 1.5},
+    {'title': '软件演化\nSoftwareevolution', 'items': '演化过程\n遗留系统\n软件维护',
+     'color': '#00695C', 'x': 7.5, 'y': 1.5},
+    {'title': 'UML\n类图', 'items': '类, 接口\n继承, 组合, 聚合\n多重性',
+     'color': '#5D4037', 'x': 13.0, 'y': 1.5},
+]
+
+for t in topics:
+    card = mpatches.FancyBboxPatch((t['x'] - 1.5, t['y'] - 1.2), 3.0, 2.5,
+        boxstyle="round,pad=0.12", facecolor='white', edgecolor=t['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(t['x'], t['y'] + 0.7, t['title'], ha='center', fontsize=8,
+            fontweight='bold', color=t['color'], linespacing=1.2)
+    ax.text(t['x'], t['y'] - 0.5, t['items'], ha='center', fontsize=6.5,
+            color='#555', linespacing=1.2)
+
+    dx = 7.5 - t['x']
+    dy = 6.5 - t['y']
+    dist = (dx**2 + dy**2)**0.5
+    if dist > 0:
+        ux, uy = dx/dist, dy/dist
+        ax.plot([t['x'] + ux*1.6, 7.5 - ux*2.2],
+                [t['y'] + uy*1.3 - 0.2, 6.5 - uy*1.2],
+                color=t['color'], lw=1.2, linestyle='--', alpha=0.35)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-tip}
+## 考试准备建议 (Tipps zur Klausurvorbereitung)
+
+**(1)** 确保能够自己编写 Java 代码，特别是接口定义、继承、设计模式的实现。
+
+**(2)** 理解而非死记硬背：每个概念都要能用自己的话解释。例如"什么是 Dependency Injection"不是背定义，而是理解它解决了什么问题。
+
+**(3)** 软件演化部分准备开放性问题：理解标准变更流程 (Aenderungsprozess)、紧急修复 (Notfallreparatur) 与规范修改的关系等。
+
+**(4)** 能绘制和阅读 UML 类图：掌握类、接口、继承、组合、聚合、关联的正确表示。
+
+**(5)** Clean Code 原则要能结合代码示例分析：Um-Zu-Absaetze、Law of Demeter、DI 都可能出现代码分析题。
+:::

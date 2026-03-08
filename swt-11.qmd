@@ -1,0 +1,982 @@
+---
+title: "Testen von Software"
+subtitle: "软件测试 | Softwaretesten"
+author: "Softwaretechnik WS 25/26"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    font_list = candidates.get(system, candidates['Linux'])
+    valid_fonts = [f for f in font_list if f in available_fonts]
+    if valid_fonts:
+        plt.rcParams['font.sans-serif'] = valid_fonts + ['DejaVu Sans']
+        plt.rcParams['font.monospace'] = valid_fonts + ['Consolas', 'Courier New', 'DejaVu Sans Mono']
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+COLORS = {
+    'primary': '#2E86AB',
+    'secondary': '#A23B72',
+    'success': '#2E8B57',
+    'warning': '#E8871E',
+    'danger': '#C1292E',
+    'info': '#5B8C5A',
+    'light': '#F5F5F5',
+    'dark': '#2C3E50',
+    'neutral': '#7F8C8D',
+    'highlight': '#F39C12',
+    'purple': '#8E44AD',
+    'teal': '#1ABC9C',
+    'pink': '#E91E63',
+    'indigo': '#3F51B5',
+    'deep_orange': '#FF5722',
+    'blue_light': '#D6EAF8',
+    'green_light': '#D5F5E3',
+    'red_light': '#FDEDEC',
+    'yellow_light': '#FEF9E7',
+    'purple_light': '#F3E5F5',
+    'orange_light': '#FDEBD0',
+    'teal_light': '#D1F2EB',
+    'pink_light': '#FCE4EC',
+    'indigo_light': '#E8EAF6',
+    # Testing specific
+    'unit': '#1565C0',
+    'integration': '#6A1B9A',
+    'system': '#BF360C',
+    'release': '#00695C',
+    'tdd_red': '#C62828',
+    'tdd_green': '#2E7D32',
+    'tdd_refactor': '#1565C0',
+    'cost_req': '#4527A0',
+    'cost_design': '#6A1B9A',
+    'cost_code': '#AD1457',
+    'cost_test': '#C62828',
+    'cost_deploy': '#BF360C',
+    'mock_color': '#00838F',
+    'assert_color': '#2E7D32',
+    'framework_color': '#E65100',
+    'pyramid_base': '#1565C0',
+    'pyramid_mid': '#6A1B9A',
+    'pyramid_top': '#BF360C',
+}
+```
+
+# 回顾与本章目标 | Recap und Ziel
+
+::: {.callout-note}
+## 前几章要点 (Zusammenfassung bisheriger Kapitel)
+
+本章处于软件开发生命周期 (Softwareentwicklungslebenszyklus) 的**实现与模块测试** (Implementierung und Modultests) 以及**集成与系统测试** (Integration und Systemtests) 阶段。之前的章节涵盖了需求定义 (Anforderungsdefinition)、系统与软件设计 (System- und Softwareentwurf)——包括架构视图、非功能需求影响、架构模式和设计模式。现在我们进入验证和确认的核心环节：测试。
+:::
+
+::: {.callout-important}
+## 本章目标 (Ziel dieser Vorlesung)
+
+在本章结束时，你将理解测试的层次 (Teststufen) 和测试金字塔 (Test-Pyramide)，掌握缺陷成本曲线 (Cost of Defects) 的含义，了解测试驱动开发 (TDD) 的流程，具备设计全面测试用例的能力，并熟悉 Java 和 Python 生态中的主要测试工具。
+:::
+
+```{python}
+#| label: fig-chapter-overview
+#| fig-cap: "本章概览 | Kapiteluebersicht"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('Testen von Software -- 概览 | Ueberblick', fontsize=15, fontweight='bold')
+
+sections = [
+    {'title': '测试层次\nTeststufen &\nTest-Pyramide', 'sub': '模块/集成\n系统/验收', 'marker': 'T',
+     'color': COLORS['unit'], 'x': 2.0},
+    {'title': '缺陷成本\nCost of\nDefects', 'sub': '越早发现\n成本越低', 'marker': 'C',
+     'color': COLORS['cost_deploy'], 'x': 5.0},
+    {'title': 'TDD\nTest-Driven\nDevelopment', 'sub': 'Red-Green\nRefactor 循环', 'marker': 'D',
+     'color': COLORS['tdd_green'], 'x': 8.0},
+    {'title': '测试用例设计\nTestfall-\nEntwurf', 'sub': '等价类/边界\n无效输入', 'marker': 'F',
+     'color': COLORS['secondary'], 'x': 11.0},
+    {'title': '测试工具\nTest-\nTooling', 'sub': 'JUnit/pytest\nMockito/Mock', 'marker': 'W',
+     'color': COLORS['framework_color'], 'x': 13.0},
+]
+
+for s in sections:
+    card = mpatches.FancyBboxPatch((s['x'] - 1.3, 0.5), 2.6, 4.8,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=s['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    marker_circle = plt.Circle((s['x'], 4.7), 0.35, facecolor=s['color'], edgecolor='white', linewidth=2)
+    ax.add_patch(marker_circle)
+    ax.text(s['x'], 4.7, s['marker'], ha='center', va='center', fontsize=12,
+            fontweight='bold', color='white')
+
+    ax.text(s['x'], 3.3, s['title'], ha='center', fontsize=8, fontweight='bold',
+            color=s['color'], linespacing=1.3)
+    ax.text(s['x'], 1.5, s['sub'], ha='center', fontsize=7.5, color='#555', linespacing=1.3)
+
+for i in range(len(sections) - 1):
+    ax.annotate('', xy=(sections[i+1]['x'] - 1.4, 2.8),
+        xytext=(sections[i]['x'] + 1.4, 2.8),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+# 测试概述 | Testen im Ueberblick
+
+## 测试的层次 | Teststufen
+
+```{python}
+#| label: fig-test-levels
+#| fig-cap: "四个测试层次 | Vier Teststufen"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('测试层次 | Teststufen', fontsize=15, fontweight='bold')
+
+levels = [
+    {
+        'zh': '模块测试 | Modultests',
+        'desc': '测试单个模块或函数\nTesten einzelner Module/Funktionen',
+        'scope': '一个函数/类',
+        'color': COLORS['unit'], 'x': 2.0, 'y': 7.5
+    },
+    {
+        'zh': '集成测试 | Integrationstests',
+        'desc': '测试多个模块的协作\nTesten des Zusammenspiels\nmehrerer Module',
+        'scope': '多个模块组合',
+        'color': COLORS['integration'], 'x': 5.5, 'y': 5.5
+    },
+    {
+        'zh': '系统测试 | Systemtests',
+        'desc': '测试整个系统\nTesten des Gesamtsystems',
+        'scope': '完整系统',
+        'color': COLORS['system'], 'x': 9.0, 'y': 3.5
+    },
+    {
+        'zh': '验收测试 | Freigabetests',
+        'desc': '验证需求是否满足\nPruefen, ob Anforderungen\nerfuellt sind',
+        'scope': '用户/客户视角',
+        'color': COLORS['release'], 'x': 12.5, 'y': 1.5
+    },
+]
+
+for lv in levels:
+    card = mpatches.FancyBboxPatch((lv['x'] - 1.8, lv['y'] - 1.2), 3.6, 2.6,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=lv['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    ax.text(lv['x'], lv['y'] + 0.8, lv['zh'], ha='center', fontsize=9,
+            fontweight='bold', color=lv['color'])
+    ax.text(lv['x'], lv['y'] - 0.2, lv['desc'], ha='center', fontsize=7.5,
+            color='#555', linespacing=1.3)
+
+for i in range(len(levels) - 1):
+    ax.annotate('', xy=(levels[i+1]['x'] - 1.9, levels[i+1]['y'] + 0.5),
+        xytext=(levels[i]['x'] + 1.9, levels[i]['y'] - 0.5),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+
+# Goals box
+goal_box = mpatches.FancyBboxPatch((0.3, 0.3), 5.0, 1.5, boxstyle="round,pad=0.12",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=2)
+ax.add_patch(goal_box)
+ax.text(2.8, 1.3, '测试目标 | Ziele des Testens', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['highlight'])
+ax.text(2.8, 0.6, '(1) 快速发现错误 | Fehler schnell finden\n(2) 证明功能正确 | Korrekte Funktionalitaet zeigen',
+        ha='center', fontsize=8.5, color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+软件测试 (Testen von Software) 按照测试范围由小到大分为四个层次。**模块测试** (Modultests) 也称为单元测试 (Unit Tests)，测试单个模块或函数的正确性。**集成测试** (Integrationstests / Komponententests) 测试多个模块之间的协作是否正确。**系统测试** (Systemtests) 对整个系统进行端到端的验证。**验收测试** (Freigabetests) 从用户或客户的视角验证系统是否满足了预期的需求。
+
+测试的核心目标有两个：快速发现错误 (Fehler schnell finden) 以降低修复成本，以及证明系统的功能是正确的 (Korrekte Funktionalitaet zeigen)。
+
+## 测试金字塔 | Test-Pyramide
+
+```{python}
+#| label: fig-test-pyramid
+#| fig-cap: "测试金字塔 | Test-Pyramide"
+
+fig, ax = plt.subplots(figsize=(13, 9))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('测试金字塔 | Test-Pyramide', fontsize=15, fontweight='bold')
+
+# Pyramid shape
+pyramid_x = [6.5, 1.5, 11.5, 6.5]
+pyramid_y = [9.0, 1.5, 1.5, 9.0]
+ax.fill(pyramid_x, pyramid_y, facecolor=COLORS['light'], edgecolor=COLORS['dark'], linewidth=2)
+
+# Horizontal dividers
+ax.plot([3.0, 10.0], [5.0, 5.0], color=COLORS['dark'], lw=1.5)
+ax.plot([4.25, 8.75], [7.0, 7.0], color=COLORS['dark'], lw=1.5)
+
+# Layer labels
+ax.text(6.5, 8.0, '系统测试\nSystem Tests', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['pyramid_top'])
+ax.text(6.5, 5.8, '集成测试\nIntegration Tests', ha='center', fontsize=13,
+        fontweight='bold', color=COLORS['pyramid_mid'])
+ax.text(6.5, 3.0, '单元测试\nUnit Tests', ha='center', fontsize=14,
+        fontweight='bold', color=COLORS['pyramid_base'])
+
+# Left axis: Integration level
+ax.annotate('', xy=(0.8, 8.5), xytext=(0.8, 2.0),
+    arrowprops=dict(arrowstyle='->', color=COLORS['dark'], lw=2.5))
+ax.text(0.5, 5.5, '更强的集成\nstaerkere\nIntegration', ha='center', fontsize=8.5,
+        fontweight='bold', color=COLORS['dark'], rotation=90, linespacing=1.3)
+
+# Left axis: Isolation level
+ax.annotate('', xy=(0.8, 2.0), xytext=(0.8, 8.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['primary'], lw=2.5))
+ax.text(0.1, 5.5, '更强的隔离\nstaerkere\nIsolierung', ha='center', fontsize=8.5,
+        fontweight='bold', color=COLORS['primary'], rotation=90, linespacing=1.3)
+
+# Right axis: Complexity
+ax.annotate('', xy=(12.2, 8.5), xytext=(12.2, 2.0),
+    arrowprops=dict(arrowstyle='->', color=COLORS['danger'], lw=2.5))
+ax.text(12.8, 5.5, '更复杂\n更难执行\nkomplizierter\nzu bauen', ha='center', fontsize=8.5,
+        fontweight='bold', color=COLORS['danger'], rotation=270, linespacing=1.3)
+
+# Right axis: Speed
+ax.annotate('', xy=(12.2, 2.0), xytext=(12.2, 8.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['success'], lw=2.5))
+ax.text(12.0, 5.5, '更快构建\n更快执行\nschneller\nauszufuehren', ha='center', fontsize=8.5,
+        fontweight='bold', color=COLORS['success'], rotation=270, linespacing=1.3)
+
+# Bottom annotation
+note = mpatches.FancyBboxPatch((2.5, 0.2), 8.0, 1.0, boxstyle="round,pad=0.1",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=1.5)
+ax.add_patch(note)
+ax.text(6.5, 0.7, '原则：底层测试数量最多，向上逐渐减少 | Prinzip: Mehr Tests an der Basis',
+        ha='center', fontsize=9, fontweight='bold', color=COLORS['primary'])
+
+plt.tight_layout()
+plt.show()
+```
+
+测试金字塔 (Test-Pyramide) 是理解不同测试层次之间关系的核心模型。金字塔底部是**单元测试** (Unit Tests)，数量最多、构建和执行速度最快、隔离性最强，每个测试只关注一个独立的模块或函数。中间层是**集成测试** (Integration Tests)，测试多个模块的协作，集成程度更高但构建成本也更大。顶部是**系统测试** (System Tests)，覆盖整个系统，集成度最高，但构建和执行最为复杂。
+
+健康的测试策略应当遵循金字塔形状：大量的单元测试构成坚实的基础，适量的集成测试确保模块间的正确协作，少量但关键的系统测试验证端到端的功能。如果金字塔倒置——即系统测试多于单元测试——通常意味着反馈周期过长、维护成本过高。
+
+## 缺陷成本 | Cost of Defects
+
+```{python}
+#| label: fig-cost-of-defects
+#| fig-cap: "缺陷成本曲线 | Cost of Defects"
+
+fig, ax = plt.subplots(figsize=(13, 8))
+
+phases = ['需求\nRequirements', '设计/架构\nDesign/\nArchitecture', '编码\nCoding',
+          '测试\nTesting', '部署/维护\nDeployment/\nMaintenance']
+costs = [1, 3, 7, 15, 65]
+cost_labels = ['1X', '3X', '7X', '15X', '30X...100X']
+colors_bar = [COLORS['cost_req'], COLORS['cost_design'], COLORS['cost_code'],
+              COLORS['cost_test'], COLORS['cost_deploy']]
+
+bars = ax.bar(range(len(phases)), costs, color=colors_bar, edgecolor='white', linewidth=2, width=0.65)
+
+for i, (bar, label) in enumerate(zip(bars, cost_labels)):
+    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1.5,
+            label, ha='center', fontsize=12, fontweight='bold', color=colors_bar[i])
+
+ax.set_xticks(range(len(phases)))
+ax.set_xticklabels(phases, fontsize=9, linespacing=1.3)
+ax.set_ylabel('相对修复成本 | Relative Behebungskosten', fontsize=11)
+ax.set_title('缺陷成本曲线 | Cost of Defects', fontsize=14, fontweight='bold')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+ax.set_ylim(0, 80)
+
+# Arrow annotation
+ax.annotate('越早发现，成本越低!\nJe frueher gefunden, desto guenstiger!',
+            xy=(0, 5), xytext=(2.5, 55),
+            fontsize=11, fontweight='bold', color=COLORS['danger'],
+            arrowprops=dict(arrowstyle='->', color=COLORS['danger'], lw=2.5),
+            ha='center')
+
+# Development cycle arrow
+ax.annotate('', xy=(4.3, -12), xytext=(-0.3, -12),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2),
+    annotation_clip=False)
+ax.text(2.0, -14, '开发周期 | Development Cycle', fontsize=9,
+        color=COLORS['neutral'], ha='center', clip_on=False)
+
+plt.tight_layout()
+plt.show()
+```
+
+缺陷成本曲线 (Cost of Defects) 是软件工程中一个经典而重要的概念。它揭示了一个残酷的现实：缺陷被发现得越晚，修复成本就呈指数级增长。在**需求阶段** (Requirements) 发现并修复一个缺陷的成本设为基准 1X。如果同一缺陷延迟到**设计/架构阶段** (Design/Architecture) 才被发现，成本上升到 3X。到**编码阶段** (Coding) 是 7X，到**测试阶段** (Testing) 是 15X，而如果直到**部署/维护阶段** (Deployment/Maintenance) 才被发现，成本将飙升到 30X 甚至 100X。
+
+这条曲线有力地论证了为什么我们需要早期测试、持续测试，以及为什么测试驱动开发 (TDD) 是一种有效的开发方法——它从编码的最早期就开始验证正确性。
+
+# 测试驱动开发 | Test-Driven Development (TDD)
+
+```{python}
+#| label: fig-tdd-cycle
+#| fig-cap: "TDD 循环 | TDD-Zyklus"
+
+fig, ax = plt.subplots(figsize=(12, 10))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('测试驱动开发 | Test-Driven Development (TDD)', fontsize=14, fontweight='bold')
+
+# Central cycle representation
+cx, cy = 6.0, 5.5
+
+# Step 1: Identify new functionality
+step1_box = mpatches.FancyBboxPatch((3.5, 9.0), 5.0, 1.2, boxstyle="round,pad=0.12",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['tdd_refactor'], linewidth=2.5)
+ax.add_patch(step1_box)
+ax.text(6.0, 9.6, '(1) 识别新功能 | Neue Funktionalitaet identifizieren',
+        ha='center', fontsize=9, fontweight='bold', color=COLORS['tdd_refactor'])
+
+# Step 2: Write test (RED)
+step2_box = mpatches.FancyBboxPatch((0.5, 6.0), 4.0, 1.8, boxstyle="round,pad=0.15",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['tdd_red'], linewidth=3)
+ax.add_patch(step2_box)
+ax.text(2.5, 7.2, '(2) 编写测试', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['tdd_red'])
+ax.text(2.5, 6.5, 'Test schreiben\n[RED]', ha='center', fontsize=9,
+        color=COLORS['tdd_red'], linespacing=1.3)
+
+# Step 3: Run test
+step3_box = mpatches.FancyBboxPatch((4.0, 3.5), 4.0, 1.8, boxstyle="round,pad=0.15",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=2.5)
+ax.add_patch(step3_box)
+ax.text(6.0, 4.8, '(3) 执行测试', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['highlight'])
+ax.text(6.0, 4.0, 'Test ausfuehren', ha='center', fontsize=9,
+        color=COLORS['highlight'])
+
+# Step 4: Implement + Refactor (GREEN)
+step4_box = mpatches.FancyBboxPatch((7.5, 6.0), 4.0, 1.8, boxstyle="round,pad=0.15",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['tdd_green'], linewidth=3)
+ax.add_patch(step4_box)
+ax.text(9.5, 7.2, '(4) 实现功能 + 重构', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['tdd_green'])
+ax.text(9.5, 6.5, 'Implementieren &\nRefactoring [GREEN]', ha='center', fontsize=9,
+        color=COLORS['tdd_green'], linespacing=1.3)
+
+# Arrows
+# Step 1 -> Step 2
+ax.annotate('', xy=(2.5, 7.9), xytext=(4.5, 9.0),
+    arrowprops=dict(arrowstyle='->', color=COLORS['dark'], lw=2))
+
+# Step 2 -> Step 3
+ax.annotate('', xy=(5.0, 5.3), xytext=(3.5, 6.0),
+    arrowprops=dict(arrowstyle='->', color=COLORS['dark'], lw=2))
+
+# Step 3 -> Step 4 (failed)
+ax.annotate('', xy=(8.5, 6.0), xytext=(7.5, 5.3),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tdd_red'], lw=2.5))
+ax.text(8.5, 5.5, '失败\nfehlgeschlagen', ha='center', fontsize=8,
+        fontweight='bold', color=COLORS['tdd_red'])
+
+# Step 4 -> Step 3 (re-run)
+ax.annotate('', xy=(7.0, 3.8), xytext=(8.5, 6.0),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tdd_green'], lw=2,
+                    connectionstyle='arc3,rad=0.3'))
+
+# Step 3 -> Step 1 (passed)
+ax.annotate('', xy=(5.5, 9.0), xytext=(5.5, 5.4),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tdd_green'], lw=2.5))
+ax.text(4.5, 8.2, '通过\nbestanden', ha='center', fontsize=8,
+        fontweight='bold', color=COLORS['tdd_green'])
+
+# Summary box
+summary = mpatches.FancyBboxPatch((1.0, 0.5), 10.0, 2.2, boxstyle="round,pad=0.15",
+    facecolor='white', edgecolor=COLORS['dark'], linewidth=2)
+ax.add_patch(summary)
+ax.text(6.0, 2.2, 'TDD 核心流程 | TDD-Kernprozess', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['dark'])
+ax.text(6.0, 1.2, '识别新功能 --> 编写(必然失败的)测试 --> 执行测试 --> 失败则实现功能 --> 重新执行测试 --> 通过则回到第一步',
+        ha='center', fontsize=8.5, color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+测试驱动开发 (Test-Driven Development, TDD) 又称为"测试优先开发" (Testgetriebene Entwicklung)，其核心理念是**先写测试，再写实现**。TDD 的循环流程如下：首先**识别一个新功能** (neue Funktionalitaet identifizieren)；然后**编写一个测试** (Test schreiben)，此时测试必然失败因为功能尚未实现——这就是 "Red" 阶段；接着**执行测试** (Test ausfuehren) 确认其确实失败；然后**实现功能并进行重构** (Funktionalitaet implementieren und Refactoring durchfuehren)——这就是 "Green" 阶段；再次执行测试，如果测试通过就回到第一步识别下一个功能，如果测试失败则继续修改实现。
+
+TDD 的优势在于：它迫使开发者在编码前思考清楚接口和预期行为；每个功能都有对应的测试保驾护航；重构时有充分的信心不会破坏已有功能。
+
+# 测试用例设计 | Testfall-Entwurf
+
+## 示例：三角形分类 | Beispiel: Dreiecksklassifikation
+
+```{python}
+#| label: fig-triangle-exercise
+#| fig-cap: "三角形分类测试用例设计 | Testfall-Entwurf fuer Dreiecksklassifikation"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('测试用例设计：三角形分类 | Testfall-Entwurf: Dreiecksklassifikation',
+             fontsize=13, fontweight='bold')
+
+# Method signature box
+sig_box = mpatches.FancyBboxPatch((1.0, 8.5), 12.0, 1.2, boxstyle="round,pad=0.1",
+    facecolor=COLORS['dark'], edgecolor='white', linewidth=2)
+ax.add_patch(sig_box)
+ax.text(7.0, 9.1, 'TriangleType classifyTriangle(int a, int b, int c)',
+        ha='center', fontsize=11, fontweight='bold', color='white', family='monospace')
+
+# Classification types
+types_data = [
+    {'zh': '等边三角形', 'de': 'Gleichseitig', 'desc': '三边相等\nAlle 3 Seiten gleich',
+     'color': '#1565C0', 'x': 2.5, 'y': 7.0},
+    {'zh': '等腰三角形', 'de': 'Gleichschenklig', 'desc': '恰好两边相等\nGenau 2 Seiten gleich',
+     'color': '#6A1B9A', 'x': 7.0, 'y': 7.0},
+    {'zh': '不等边三角形', 'de': 'Ungleichseitig', 'desc': '三边各不相等\nKeine 2 Seiten gleich',
+     'color': '#BF360C', 'x': 11.5, 'y': 7.0},
+]
+
+for t in types_data:
+    box = mpatches.FancyBboxPatch((t['x'] - 1.8, t['y'] - 0.8), 3.6, 1.8,
+        boxstyle="round,pad=0.1", facecolor='white', edgecolor=t['color'], linewidth=2)
+    ax.add_patch(box)
+    ax.text(t['x'], t['y'] + 0.4, t['zh'] + ' | ' + t['de'], ha='center', fontsize=9,
+            fontweight='bold', color=t['color'])
+    ax.text(t['x'], t['y'] - 0.3, t['desc'], ha='center', fontsize=8, color='#555', linespacing=1.3)
+
+# Test cases
+test_categories = [
+    {'cat_zh': '有效输入 (Gueltige Eingaben)', 'color': COLORS['success'],
+     'cases': [
+         '01: (3,3,3) --> GLEICHSEITIG',
+         '02: (3,3,5) --> GLEICHSCHENKLIG (a=b)',
+         '03: (3,5,3) --> GLEICHSCHENKLIG (a=c)',
+         '04: (5,3,3) --> GLEICHSCHENKLIG (b=c)',
+         '05: (3,4,5) --> UNGLEICHSEITIG',
+     ], 'x': 3.5, 'y': 4.5},
+    {'cat_zh': '无效输入 (Ungueltige Eingaben)', 'color': COLORS['danger'],
+     'cases': [
+         '06-08: Seite=0: (0,3,4) (3,0,4) (3,4,0)',
+         '09: Alle=0: (0,0,0)',
+         '10-12: Seite<0: (-1,3,4) (3,-1,4) (3,4,-1)',
+         '13-15: 等腰但无效: (1,1,3) (1,3,1) (3,1,1)',
+         '16: 等边但无效: (-1,-1,-1)',
+         '17-19: 三角不等式违反: (1,2,4) (1,4,2) (4,1,2)',
+     ], 'x': 10.5, 'y': 4.5},
+]
+
+for tc in test_categories:
+    # Category header
+    header = mpatches.FancyBboxPatch((tc['x'] - 3.0, tc['y'] + 0.2), 6.0, 0.8,
+        boxstyle="round,pad=0.08", facecolor=tc['color'], edgecolor='white', linewidth=1.5)
+    ax.add_patch(header)
+    ax.text(tc['x'], tc['y'] + 0.6, tc['cat_zh'], ha='center', fontsize=9,
+            fontweight='bold', color='white')
+
+    # Cases
+    for i, case in enumerate(tc['cases']):
+        y_pos = tc['y'] - 0.4 - i * 0.65
+        case_box = mpatches.FancyBboxPatch((tc['x'] - 3.0, y_pos - 0.25), 6.0, 0.55,
+            boxstyle="round,pad=0.03", facecolor='white', edgecolor=tc['color'], linewidth=0.8)
+        ax.add_patch(case_box)
+        ax.text(tc['x'] - 2.8, y_pos, case, fontsize=7.5, color='#444',
+                family='monospace', va='center')
+
+plt.tight_layout()
+plt.show()
+```
+
+课件以一个经典的三角形分类函数 (`classifyTriangle(int a, int b, int c)`) 为例，展示了如何设计全面的测试用例。该函数根据三条边长将三角形分类为等边 (Gleichseitig)、等腰 (Gleichschenklig) 或不等边 (Ungleichseitig)。
+
+全面的测试用例设计需要覆盖以下几个维度。对于**有效输入**：等边三角形 (3,3,3)；等腰三角形的三种排列方式 (3,3,5)、(3,5,3)、(5,3,3)；不等边三角形 (3,4,5)。对于**无效输入**：边长为零的情况需要对每个参数位置分别测试——(0,3,4)、(3,0,4)、(3,4,0)——以及全部为零 (0,0,0)；负数边长同样需要逐位测试——(-1,3,4)、(3,-1,4)、(3,4,-1)；外观上是等腰但违反三角不等式的情况——(1,1,3)、(1,3,1)、(3,1,1)；外观上是等边但边长为负的情况——(-1,-1,-1)；以及纯粹违反三角不等式的情况——(1,2,4)、(1,4,2)、(4,1,2)。
+
+::: {.callout-tip}
+## 测试用例设计的关键原则
+
+测试用例设计的核心思想是**系统性覆盖**：不仅要测试正常情况 (Happy Path)，更要测试边界情况 (Grenzfaelle)、无效输入 (Ungueltige Eingaben)、以及参数排列组合的对称性。每个参数位置都可能隐藏不同的代码路径 (Codepfad)，因此需要分别测试。
+:::
+
+## 测试用例设计策略 | Strategien fuer Testfall-Entwurf
+
+```{python}
+#| label: fig-test-strategies
+#| fig-cap: "测试用例设计策略 | Strategien fuer Testfall-Entwurf"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('测试用例设计策略 | Strategien fuer Testfall-Entwurf',
+             fontsize=14, fontweight='bold')
+
+strategies = [
+    {
+        'zh': '等价类划分', 'de': 'Aequivalenzklassen',
+        'desc': '将输入空间划分为\n等价类,每类选一个\n代表性值进行测试',
+        'example': '正数/零/负数\n等边/等腰/不等边',
+        'color': '#1565C0', 'x': 2.0
+    },
+    {
+        'zh': '边界值分析', 'de': 'Grenzwertanalyse',
+        'desc': '测试等价类边界上的值\n以及边界两侧的值',
+        'example': '0, 1, -1\nMAX_INT, MIN_INT',
+        'color': '#6A1B9A', 'x': 5.5
+    },
+    {
+        'zh': '无效输入测试', 'de': 'Ungueltige Eingaben',
+        'desc': '测试系统如何处理\n不合法的输入数据',
+        'example': '负数边长\n违反三角不等式\nnull / 空值',
+        'color': '#C62828', 'x': 9.0
+    },
+    {
+        'zh': '排列组合', 'de': 'Permutationen',
+        'desc': '对称参数需要测试\n所有排列组合',
+        'example': '(3,3,5) (3,5,3)\n(5,3,3)',
+        'color': '#00695C', 'x': 12.5
+    },
+]
+
+for s in strategies:
+    card = mpatches.FancyBboxPatch((s['x'] - 1.5, 0.5), 3.0, 7.0,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=s['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    header = mpatches.FancyBboxPatch((s['x'] - 1.3, 6.2), 2.6, 1.1,
+        boxstyle="round,pad=0.08", facecolor=s['color'], edgecolor='white', linewidth=1)
+    ax.add_patch(header)
+    ax.text(s['x'], 7.0, s['zh'], ha='center', fontsize=9, fontweight='bold', color='white')
+    ax.text(s['x'], 6.4, s['de'], ha='center', fontsize=7.5, color='white')
+
+    ax.text(s['x'], 4.8, s['desc'], ha='center', fontsize=8, color='#444', linespacing=1.4)
+
+    ex_box = mpatches.FancyBboxPatch((s['x'] - 1.2, 1.0), 2.4, 2.2,
+        boxstyle="round,pad=0.05", facecolor=s['color'] + '10', edgecolor=s['color'], linewidth=0.8)
+    ax.add_patch(ex_box)
+    ax.text(s['x'], 2.8, '示例:', ha='center', fontsize=7.5, fontweight='bold', color=s['color'])
+    ax.text(s['x'], 1.8, s['example'], ha='center', fontsize=7.5, color='#555',
+            linespacing=1.3, family='monospace')
+
+plt.tight_layout()
+plt.show()
+```
+
+从三角形分类的练习中可以归纳出四种核心的测试用例设计策略。**等价类划分** (Aequivalenzklassen) 将输入空间划分为若干等价类，从每个类中选择一个代表性的值进行测试。**边界值分析** (Grenzwertanalyse) 关注等价类边界上及其两侧的值，因为错误往往发生在边界。**无效输入测试** (Ungueltige Eingaben) 验证系统能否正确处理不合法的输入数据。**排列组合** (Permutationen) 要求对于对称参数的所有排列进行测试，以确保实现不依赖于参数的特定顺序。
+
+# 单元测试实践 | Unit Testing in der Praxis
+
+## 单元测试的结构 | Struktur von Unit Tests
+
+```{python}
+#| label: fig-unit-test-structure
+#| fig-cap: "单元测试的 AAA 结构 | AAA-Struktur von Unit Tests"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('单元测试的 AAA 结构 | Arrange-Act-Assert', fontsize=14, fontweight='bold')
+
+# Three phases
+phases = [
+    {
+        'letter': 'A', 'zh': '准备', 'de': 'Arrange',
+        'desc': '设置测试所需的对象、\n数据和前置条件\nObjekte, Daten und\nVorbedingungen einrichten',
+        'code': '// Arrange\nint a = 3, b = 3, c = 3;',
+        'color': '#1565C0', 'y': 7.5
+    },
+    {
+        'letter': 'A', 'zh': '执行', 'de': 'Act',
+        'desc': '调用被测试的方法\nDie zu testende Methode\naufrufen',
+        'code': '// Act\nTriangleType result =\n  classifyTriangle(a, b, c);',
+        'color': '#E65100', 'y': 4.8
+    },
+    {
+        'letter': 'A', 'zh': '断言', 'de': 'Assert',
+        'desc': '验证结果是否符合预期\nPruefen, ob das Ergebnis\nder Erwartung entspricht',
+        'code': '// Assert\nassertEquals(\n  GLEICHSEITIG, result);',
+        'color': '#2E7D32', 'y': 2.0
+    },
+]
+
+for p in phases:
+    # Left: description
+    desc_box = mpatches.FancyBboxPatch((0.5, p['y'] - 1.0), 5.0, 2.2,
+        boxstyle="round,pad=0.12", facecolor='white', edgecolor=p['color'], linewidth=2.5)
+    ax.add_patch(desc_box)
+
+    circle = plt.Circle((1.2, p['y'] + 0.5), 0.4, facecolor=p['color'],
+                          edgecolor='white', linewidth=2)
+    ax.add_patch(circle)
+    ax.text(1.2, p['y'] + 0.5, p['letter'], ha='center', va='center',
+            fontsize=14, fontweight='bold', color='white')
+
+    ax.text(2.0, p['y'] + 0.5, p['zh'] + ' | ' + p['de'], fontsize=10,
+            fontweight='bold', color=p['color'])
+    ax.text(1.0, p['y'] - 0.4, p['desc'], fontsize=8, color='#555', linespacing=1.3)
+
+    # Right: code
+    code_box = mpatches.FancyBboxPatch((6.0, p['y'] - 1.0), 5.5, 2.2,
+        boxstyle="round,pad=0.1", facecolor=COLORS['dark'] + '10', edgecolor=p['color'], linewidth=1.5)
+    ax.add_patch(code_box)
+    ax.text(6.3, p['y'] + 0.1, p['code'], fontsize=9, color=COLORS['dark'],
+            family='monospace', linespacing=1.5)
+
+# Arrows between phases
+for i in range(len(phases) - 1):
+    ax.annotate('', xy=(3.0, phases[i+1]['y'] + 1.3),
+        xytext=(3.0, phases[i]['y'] - 1.1),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+单元测试通常遵循 AAA 结构，即 Arrange-Act-Assert 三步法。**Arrange (准备)** 阶段设置测试所需的对象、数据和前置条件。**Act (执行)** 阶段调用被测试的方法。**Assert (断言)** 阶段验证执行结果是否符合预期。每个测试方法应当只测试一个行为 (one behavior per test)，保持测试简洁明确。
+
+此外还有 Setup 和 Teardown 方法：**Setup** 方法在每个测试之前自动执行，用于创建通用的测试前置条件；**Teardown** 方法在每个测试之后自动执行，用于清理资源。在 JUnit 中使用 `@BeforeEach` / `@AfterEach` 注解，在 pytest 中使用 fixture 机制。
+
+## Mock 对象 | Mock-Objekte
+
+```{python}
+#| label: fig-mocks
+#| fig-cap: "Mock 对象的作用 | Rolle von Mock-Objekten"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('Mock 对象 | Mock-Objekte', fontsize=14, fontweight='bold')
+
+# Without mock (left)
+left_title = mpatches.FancyBboxPatch((0.3, 7.5), 6.4, 1.0, boxstyle="round,pad=0.08",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(left_title)
+ax.text(3.5, 8.0, '[X] 不使用 Mock：测试依赖真实组件', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['danger'])
+
+# Test -> ClassUnderTest -> RealDependency
+for item, label, x, y, color in [
+    ('Test', '测试', 1.5, 5.5, COLORS['primary']),
+    ('ClassUnderTest', '被测类', 3.5, 5.5, COLORS['dark']),
+    ('Database', '真实数据库', 5.5, 5.5, COLORS['danger']),
+]:
+    box = mpatches.FancyBboxPatch((x - 1.0, y - 0.6), 2.0, 1.4,
+        boxstyle="round,pad=0.08", facecolor='white', edgecolor=color, linewidth=1.5)
+    ax.add_patch(box)
+    ax.text(x, y + 0.2, item, ha='center', fontsize=8, fontweight='bold',
+            color=color, family='monospace')
+    ax.text(x, y - 0.3, label, ha='center', fontsize=7.5, color='#666')
+
+ax.annotate('', xy=(2.4, 5.5), xytext=(2.1, 5.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['dark'], lw=1.5))
+ax.annotate('', xy=(4.4, 5.5), xytext=(4.1, 5.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['danger'], lw=1.5))
+
+ax.text(3.5, 4.2, '问题：慢、不稳定、难以控制\nProblem: Langsam, instabil, schwer kontrollierbar',
+        ha='center', fontsize=8, color=COLORS['danger'])
+
+# With mock (right)
+right_title = mpatches.FancyBboxPatch((7.3, 7.5), 6.4, 1.0, boxstyle="round,pad=0.08",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['success'], linewidth=2)
+ax.add_patch(right_title)
+ax.text(10.5, 8.0, '[OK] 使用 Mock：用模拟对象替代真实依赖', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['success'])
+
+for item, label, x, y, color in [
+    ('Test', '测试', 8.5, 5.5, COLORS['primary']),
+    ('ClassUnderTest', '被测类', 10.5, 5.5, COLORS['dark']),
+    ('MockDB', 'Mock 对象', 12.5, 5.5, COLORS['success']),
+]:
+    ls = '--' if item == 'MockDB' else '-'
+    box = mpatches.FancyBboxPatch((x - 1.0, y - 0.6), 2.0, 1.4,
+        boxstyle="round,pad=0.08", facecolor='white', edgecolor=color, linewidth=1.5, linestyle=ls)
+    ax.add_patch(box)
+    ax.text(x, y + 0.2, item, ha='center', fontsize=8, fontweight='bold',
+            color=color, family='monospace')
+    ax.text(x, y - 0.3, label, ha='center', fontsize=7.5, color='#666')
+
+ax.annotate('', xy=(9.4, 5.5), xytext=(9.1, 5.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['dark'], lw=1.5))
+ax.annotate('', xy=(11.4, 5.5), xytext=(11.1, 5.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['success'], lw=1.5))
+
+ax.text(10.5, 4.2, '优势：快速、可控、确定性结果\nVorteil: Schnell, kontrollierbar, deterministisch',
+        ha='center', fontsize=8, color=COLORS['success'])
+
+# Code examples at bottom
+java_box = mpatches.FancyBboxPatch((0.5, 0.5), 6.0, 3.0, boxstyle="round,pad=0.12",
+    facecolor=COLORS['dark'] + '08', edgecolor=COLORS['unit'], linewidth=2)
+ax.add_patch(java_box)
+ax.text(3.5, 3.1, 'Java (Mockito)', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['unit'])
+ax.text(1.0, 2.0, 'Foo mock = mock(Foo.class);\nwhen(mock.someMethod())\n  .thenReturn(someValue);',
+        fontsize=8.5, color=COLORS['dark'], family='monospace', linespacing=1.5)
+
+python_box = mpatches.FancyBboxPatch((7.5, 0.5), 6.0, 3.0, boxstyle="round,pad=0.12",
+    facecolor=COLORS['dark'] + '08', edgecolor=COLORS['framework_color'], linewidth=2)
+ax.add_patch(python_box)
+ax.text(10.5, 3.1, 'Python (unittest.mock)', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['framework_color'])
+ax.text(8.0, 2.0, 'from unittest.mock import MagicMock\nthing = ProductionClass()\nthing.method = MagicMock(\n  return_value=3)',
+        fontsize=8.5, color=COLORS['dark'], family='monospace', linespacing=1.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+Mock 对象 (Mock-Objekte) 是单元测试中用于替代真实依赖的模拟对象。当被测试的类依赖外部组件——如数据库、网络服务或文件系统——时，直接使用真实组件会导致测试缓慢、不稳定且难以控制。通过使用 Mock 对象，我们可以精确控制依赖的行为，使测试快速、确定性地执行。
+
+在 **Java** 中，Mockito 是最常用的 Mock 框架。通过 `mock(Foo.class)` 创建一个模拟对象，然后通过 `when(...).thenReturn(...)` 指定当特定方法被调用时应返回的值。在 **Python** 中，标准库的 `unittest.mock` 模块提供了 `MagicMock` 类，可以通过设置 `return_value` 来控制 Mock 的返回行为。
+
+# 测试工具 | Tooling fuer Tests
+
+```{python}
+#| label: fig-test-tooling
+#| fig-cap: "Java 和 Python 测试工具生态 | Test-Tooling fuer Java und Python"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 9))
+
+# Java tooling
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('Java 测试工具 | Java Test-Tooling', fontsize=12, fontweight='bold',
+             color=COLORS['unit'])
+
+java_bg = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 9.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['unit'], linewidth=2)
+ax.add_patch(java_bg)
+
+java_tools = [
+    {
+        'name': 'JUnit 5', 'cat_zh': '测试框架', 'cat_de': 'Test-Framework',
+        'desc': '标准单元测试框架\n@Test, @BeforeEach, @AfterEach',
+        'color': '#0D47A1', 'y': 8.5
+    },
+    {
+        'name': 'Mockito', 'cat_zh': 'Mock 框架', 'cat_de': 'Mock-Framework',
+        'desc': '创建 Mock 对象\nmock(), when().thenReturn()',
+        'color': '#1565C0', 'y': 6.5
+    },
+    {
+        'name': 'Truth', 'cat_zh': '流畅断言', 'cat_de': 'Fluent Assertions',
+        'desc': '可读性强的断言 API\nassertThat(x).contains("...")',
+        'color': '#1976D2', 'y': 4.5
+    },
+    {
+        'name': 'AssertJ / Hamcrest', 'cat_zh': '替代断言库', 'cat_de': 'Alternativen zu Truth',
+        'desc': '其他流畅断言库\n功能类似',
+        'color': '#1E88E5', 'y': 2.7
+    },
+    {
+        'name': 'jqwik', 'cat_zh': '基于属性的测试', 'cat_de': 'Property-Based Testing',
+        'desc': '自动生成测试数据\n验证通用属性',
+        'color': '#2196F3', 'y': 1.0
+    },
+]
+
+for t in java_tools:
+    tool_box = mpatches.FancyBboxPatch((0.8, t['y'] - 0.5), 8.4, 1.4,
+        boxstyle="round,pad=0.08", facecolor='white', edgecolor=t['color'], linewidth=1.5)
+    ax.add_patch(tool_box)
+    ax.text(1.2, t['y'] + 0.3, t['name'], fontsize=10, fontweight='bold',
+            color=t['color'], family='monospace')
+    ax.text(4.5, t['y'] + 0.3, t['cat_zh'] + ' | ' + t['cat_de'], fontsize=8,
+            color=t['color'])
+    ax.text(1.2, t['y'] - 0.2, t['desc'], fontsize=7.5, color='#555', linespacing=1.3)
+
+# Python tooling
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('Python 测试工具 | Python Test-Tooling', fontsize=12, fontweight='bold',
+             color=COLORS['framework_color'])
+
+python_bg = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 9.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['orange_light'], edgecolor=COLORS['framework_color'], linewidth=2)
+ax.add_patch(python_bg)
+
+python_tools = [
+    {
+        'name': 'pytest', 'cat_zh': '测试框架', 'cat_de': 'Test-Framework',
+        'desc': '功能强大的测试框架\n丰富的插件生态系统\nFixtures 机制',
+        'color': '#BF360C', 'y': 8.0
+    },
+    {
+        'name': 'unittest.mock', 'cat_zh': 'Mock 框架', 'cat_de': 'Mock-Framework',
+        'desc': '标准库中的 Mock 模块\nMagicMock, patch()',
+        'color': '#E65100', 'y': 5.5
+    },
+    {
+        'name': 'Hypothesis', 'cat_zh': '基于属性的测试', 'cat_de': 'Property-Based Testing',
+        'desc': '自动生成测试输入\n探索边界情况',
+        'color': '#F57C00', 'y': 3.0
+    },
+]
+
+for t in python_tools:
+    tool_box = mpatches.FancyBboxPatch((0.8, t['y'] - 0.8), 8.4, 2.0,
+        boxstyle="round,pad=0.08", facecolor='white', edgecolor=t['color'], linewidth=1.5)
+    ax.add_patch(tool_box)
+    ax.text(1.2, t['y'] + 0.5, t['name'], fontsize=10, fontweight='bold',
+            color=t['color'], family='monospace')
+    ax.text(4.5, t['y'] + 0.5, t['cat_zh'] + ' | ' + t['cat_de'], fontsize=8,
+            color=t['color'])
+    ax.text(1.2, t['y'] - 0.3, t['desc'], fontsize=7.5, color='#555', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+在 **Java** 生态系统中，**JUnit 5** 是标准的单元测试框架，提供 `@Test`、`@BeforeEach`、`@AfterEach` 等注解来组织测试。**Mockito** 是最流行的 Mock 框架，通过 `mock()` 和 `when().thenReturn()` 来创建和配置 Mock 对象。**Truth** (来自 Google) 提供了可读性极强的流畅断言 (Fluent Assertions) API，如 `assertThat(notificationText).contains("testuser@google.com")`，其替代方案有 **AssertJ** 和 **Hamcrest**。**jqwik** 则支持基于属性的测试 (Property-Based Testing)，自动生成大量测试数据来验证通用属性。
+
+在 **Python** 生态系统中，**pytest** 是最受欢迎的测试框架，拥有丰富的插件和强大的 fixture 机制。**unittest.mock** 是标准库中的 Mock 模块，提供 `MagicMock` 和 `patch()` 来模拟依赖。**Hypothesis** 是 Python 中基于属性的测试库，能够自动生成测试输入并智能地探索边界情况。
+
+## 断言的比较 | Vergleich der Assertions
+
+```{python}
+#| label: fig-assertions-comparison
+#| fig-cap: "传统断言 vs 流畅断言 | Traditionelle vs Fluent Assertions"
+
+fig, ax = plt.subplots(figsize=(13, 6))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('传统断言 vs 流畅断言 | Traditionelle vs Fluent Assertions',
+             fontsize=13, fontweight='bold')
+
+# Traditional
+trad_box = mpatches.FancyBboxPatch((0.5, 0.5), 5.5, 6.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(trad_box)
+ax.text(3.25, 6.0, '传统断言 | JUnit assertEquals', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['danger'])
+
+trad_code = ('assertEquals(expected, actual);\n\n'
+             '// 可读性较差\n'
+             '// 错误信息不够描述性\n'
+             '// 参数顺序易混淆')
+ax.text(1.0, 4.0, trad_code, fontsize=9, color='#444', family='monospace', linespacing=1.8)
+
+# Fluent
+fluent_box = mpatches.FancyBboxPatch((7.0, 0.5), 5.5, 6.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['success'], linewidth=2)
+ax.add_patch(fluent_box)
+ax.text(9.75, 6.0, '流畅断言 | Truth / AssertJ', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['success'])
+
+fluent_code = ('assertThat(actual)\n'
+               '  .contains("expected");\n\n'
+               '// 读起来像自然语言\n'
+               '// 更好的错误信息\n'
+               '// 链式调用, 类型安全')
+ax.text(7.5, 4.0, fluent_code, fontsize=9, color='#444', family='monospace', linespacing=1.8)
+
+# Arrow
+ax.annotate('', xy=(6.9, 3.5), xytext=(6.1, 3.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['highlight'], lw=3))
+ax.text(6.5, 2.5, '推荐\nempfohlen', ha='center', fontsize=9, fontweight='bold',
+        color=COLORS['highlight'])
+
+plt.tight_layout()
+plt.show()
+```
+
+课件推荐使用**流畅断言** (Fluent Assertions) 而非传统的 `assertEquals`。流畅断言（如 Truth 的 `assertThat(notificationText).contains("testuser@google.com")`）读起来更像自然语言，提供更具描述性的错误信息，并且通过链式调用 (Method Chaining) 实现类型安全。传统的 `assertEquals(expected, actual)` 虽然简单，但参数顺序容易混淆，且错误信息往往不够清晰。
+
+# 全章总结 | Gesamtzusammenfassung
+
+```{python}
+#| label: fig-full-summary
+#| fig-cap: "全章知识地图 | Gesamte Wissenslandkarte"
+
+fig, ax = plt.subplots(figsize=(15, 10))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('Testen von Software -- 知识地图 | Wissenslandkarte',
+             fontsize=15, fontweight='bold')
+
+# Central theme
+center = mpatches.FancyBboxPatch((5.5, 4.5), 4.0, 2.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['dark'], edgecolor='white', linewidth=3)
+ax.add_patch(center)
+ax.text(7.5, 5.8, '软件测试', ha='center', fontsize=13, fontweight='bold', color='white')
+ax.text(7.5, 5.0, 'Testen von Software', ha='center', fontsize=11, color='#BDC3C7')
+
+topics = [
+    {'title': '测试层次\nTeststufen', 'items': '模块/集成/系统/验收\nTest-Pyramide\n隔离 vs 集成',
+     'color': COLORS['unit'], 'x': 2.0, 'y': 9.5},
+    {'title': '缺陷成本\nCost of Defects', 'items': '1X-->3X-->7X-->15X-->100X\n越早发现越好',
+     'color': COLORS['cost_deploy'], 'x': 7.5, 'y': 9.5},
+    {'title': 'TDD\nTest-Driven Dev', 'items': 'Red-Green-Refactor\n先写测试再实现',
+     'color': COLORS['tdd_green'], 'x': 13.0, 'y': 9.5},
+    {'title': '测试用例设计\nTestfall-Entwurf', 'items': '等价类/边界值\n无效输入/排列组合\n三角形分类示例',
+     'color': COLORS['secondary'], 'x': 2.0, 'y': 4.5},
+    {'title': 'Mock 对象\nMock-Objekte', 'items': '替代真实依赖\n控制测试环境\nMockito / unittest.mock',
+     'color': COLORS['mock_color'], 'x': 13.0, 'y': 4.5},
+    {'title': '测试工具\nTest-Tooling', 'items': 'Java: JUnit/Mockito/Truth\nPython: pytest/mock\nPBT: jqwik/Hypothesis',
+     'color': COLORS['framework_color'], 'x': 7.5, 'y': 0.8},
+]
+
+for t in topics:
+    card = mpatches.FancyBboxPatch((t['x'] - 1.8, t['y'] - 1.4), 3.6, 2.8,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=t['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(t['x'], t['y'] + 0.7, t['title'], ha='center', fontsize=8.5,
+            fontweight='bold', color=t['color'], linespacing=1.3)
+    ax.text(t['x'], t['y'] - 0.6, t['items'], ha='center', fontsize=7,
+            color='#555', linespacing=1.3)
+
+    dx = 7.5 - t['x']
+    dy = 5.5 - t['y']
+    dist = (dx**2 + dy**2)**0.5
+    if dist > 0:
+        ux, uy = dx/dist, dy/dist
+        ax.plot([t['x'] + ux*2.0, 7.5 - ux*2.2],
+                [t['y'] + uy*1.5, 5.5 - uy*1.2],
+                color=t['color'], lw=1.5, linestyle='--', alpha=0.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-tip}
+## 下周预告 | Ausblick naechste Woche
+
+**主题**：答疑 (Fragestunde) 和 AI 辅助软件开发 (Softwareentwicklung mit KI)。请通过 Moodle 表单提前提交问题。请携带安装了 IDE 的笔记本电脑。
+
+**阅读准备**：Software Engineering, 第 9.1-9.3.2 章 (共 22 页)，涵盖：演化过程 (Evolutionsprozesse)、遗留系统 (Altsysteme)、软件维护 (Softwarewartung) 直至软件再工程 (Software-Reengineering)。
+:::

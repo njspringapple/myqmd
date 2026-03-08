@@ -1,0 +1,1762 @@
+---
+title: "Entwurf der Architektur"
+subtitle: "架构设计 | Architekturentwurf"
+author: "Softwaretechnik WS 25/26"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    font_list = candidates.get(system, candidates['Linux'])
+    valid_fonts = [f for f in font_list if f in available_fonts]
+    if valid_fonts:
+        plt.rcParams['font.sans-serif'] = valid_fonts + ['DejaVu Sans']
+        plt.rcParams['font.monospace'] = valid_fonts + ['Consolas', 'Courier New', 'DejaVu Sans Mono']
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+COLORS = {
+    'primary': '#2E86AB',
+    'secondary': '#A23B72',
+    'success': '#2E8B57',
+    'warning': '#E8871E',
+    'danger': '#C1292E',
+    'info': '#5B8C5A',
+    'light': '#F5F5F5',
+    'dark': '#2C3E50',
+    'neutral': '#7F8C8D',
+    'highlight': '#F39C12',
+    'purple': '#8E44AD',
+    'teal': '#1ABC9C',
+    'pink': '#E91E63',
+    'indigo': '#3F51B5',
+    'deep_orange': '#FF5722',
+    'blue_light': '#D6EAF8',
+    'green_light': '#D5F5E3',
+    'red_light': '#FDEDEC',
+    'yellow_light': '#FEF9E7',
+    'purple_light': '#F3E5F5',
+    'orange_light': '#FDEBD0',
+    'teal_light': '#D1F2EB',
+    'pink_light': '#FCE4EC',
+    'indigo_light': '#E8EAF6',
+    # Architecture specific
+    'sys_arch': '#0D47A1',
+    'sw_arch': '#4A148C',
+    'logical': '#1565C0',
+    'process': '#6A1B9A',
+    'dev': '#00695C',
+    'physical': '#BF360C',
+    'mvc_m': '#1565C0',
+    'mvc_v': '#2E7D32',
+    'mvc_c': '#E65100',
+    'layer1': '#1A237E',
+    'layer2': '#283593',
+    'layer3': '#3949AB',
+    'layer4': '#5C6BC0',
+    'onion_core': '#4A148C',
+    'onion_app': '#7B1FA2',
+    'onion_infra': '#AB47BC',
+    'micro_color': '#00838F',
+    'ddd_color': '#AD1457',
+    'decouple_color': '#37474F',
+    'adr_color': '#E65100',
+}
+```
+
+# 回顾与本章目标 | Recap und Ziel
+
+::: {.callout-note}
+## 前几章要点 (Zusammenfassung bisheriger Kapitel)
+
+**Requirements Engineering**：需求分为功能性需求 (Funktionale Anforderungen) 和非功能性需求 (Nichtfunktionale Anforderungen)；需求可能存在歧义，应使用标准格式、量化指标来消除；需求获取技术包括访谈、民族志、研讨会、问卷、Personas、Design Thinking 等；需求以自然语言、结构化自然语言、图形表示法或数学规格说明进行规格化。**UML**：作为可视化需求和流程的工具，包括用例图、活动图、序列图、类图、状态图等。
+:::
+
+::: {.callout-important}
+## 本章目标 (Ziel dieser Vorlesung)
+
+在本章结束时，你将理解系统架构 (Systemarchitektur) 和软件架构 (Softwarearchitektur) 的区别，掌握四种架构视图 (Architektur-Sichten)，了解架构决策记录 (ADR) 的意义与用法，熟悉主要的架构设计策略 (Divide and Conquer、DDD、解耦) 以及七种核心架构模式 (Architekturmuster)。
+:::
+
+```{python}
+#| label: fig-chapter-overview
+#| fig-cap: "本章概览 | Kapiteluebersicht"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('Entwurf der Architektur -- 概览 | Ueberblick', fontsize=15, fontweight='bold')
+
+sections = [
+    {'title': '架构概念\nArchitektur-\nBegriffe', 'sub': '系统架构\n软件架构\n架构视图', 'marker': 'A',
+     'color': COLORS['sys_arch'], 'x': 2.0},
+    {'title': '设计策略\nEntwurfs-\nstrategien', 'sub': 'D&C / DDD\n解耦 / Top-Down\nBottom-Up', 'marker': 'S',
+     'color': COLORS['ddd_color'], 'x': 5.5},
+    {'title': '架构模式\nArchitektur-\nmuster', 'sub': 'MVC / 分层\nOnion / 微服务\nClient-Server', 'marker': 'M',
+     'color': COLORS['micro_color'], 'x': 9.0},
+    {'title': 'ADR\nArchitectural\nDecision Records', 'sub': '决策文档化\n上下文/备选方案\n利弊权衡', 'marker': 'D',
+     'color': COLORS['adr_color'], 'x': 12.5},
+]
+
+for s in sections:
+    card = mpatches.FancyBboxPatch((s['x'] - 1.5, 0.5), 3.0, 4.8,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=s['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    marker_circle = plt.Circle((s['x'], 4.7), 0.35, facecolor=s['color'], edgecolor='white', linewidth=2)
+    ax.add_patch(marker_circle)
+    ax.text(s['x'], 4.7, s['marker'], ha='center', va='center', fontsize=12,
+            fontweight='bold', color='white')
+
+    ax.text(s['x'], 3.5, s['title'], ha='center', fontsize=9, fontweight='bold',
+            color=s['color'], linespacing=1.3)
+    ax.text(s['x'], 1.5, s['sub'], ha='center', fontsize=8, color='#555', linespacing=1.3)
+
+for i in range(len(sections) - 1):
+    ax.annotate('', xy=(sections[i+1]['x'] - 1.6, 2.8),
+        xytext=(sections[i]['x'] + 1.6, 2.8),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+# 系统架构与软件架构 | System- und Softwarearchitektur
+
+## 系统架构 | Systemarchitektur
+
+```{python}
+#| label: fig-system-arch
+#| fig-cap: "系统架构的组成要素 | Bestandteile der Systemarchitektur"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('系统架构 | Systemarchitektur', fontsize=15, fontweight='bold')
+
+# Central box
+center = mpatches.FancyBboxPatch((4.5, 3.0), 5.0, 2.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['sys_arch'], edgecolor='white', linewidth=3)
+ax.add_patch(center)
+ax.text(7.0, 4.3, '系统架构', ha='center', fontsize=14, fontweight='bold', color='white')
+ax.text(7.0, 3.5, 'Systemarchitektur', ha='center', fontsize=11, color='#BBDEFB')
+
+# Surrounding elements
+elements = [
+    {'zh': '粗粒度结构\nGrobstruktur', 'color': '#1565C0', 'x': 2.0, 'y': 7.0},
+    {'zh': '主要组件 (子系统)\nHauptkomponenten\n(Subsysteme)', 'color': '#0277BD', 'x': 7.0, 'y': 7.0},
+    {'zh': '组件间关系\nBeziehungen zwischen\nKomponenten', 'color': '#00838F', 'x': 12.0, 'y': 7.0},
+    {'zh': '组件到硬件的分配\nVerteilung auf\nHardware', 'color': '#00695C', 'x': 2.0, 'y': 1.0},
+    {'zh': '技术栈\nTechnologiestack', 'color': '#2E7D32', 'x': 7.0, 'y': 1.0},
+    {'zh': '通信协议\nKommunikations-\nprotokolle', 'color': '#558B2F', 'x': 12.0, 'y': 1.0},
+]
+
+for e in elements:
+    card = mpatches.FancyBboxPatch((e['x'] - 1.7, e['y'] - 0.8), 3.4, 1.8,
+        boxstyle="round,pad=0.12", facecolor='white', edgecolor=e['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(e['x'], e['y'], e['zh'], ha='center', fontsize=8, fontweight='bold',
+            color=e['color'], linespacing=1.3)
+    # Connect to center
+    cx, cy = 7.0, 4.0
+    dx = cx - e['x']
+    dy = cy - e['y']
+    dist = (dx**2 + dy**2)**0.5
+    ux, uy = dx/dist, dy/dist
+    ax.plot([e['x'] + ux*1.8, cx - ux*2.6],
+            [e['y'] + uy*1.0, cy - uy*1.2],
+            color=e['color'], lw=1.5, linestyle='--', alpha=0.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+系统架构 (Systemarchitektur) 描述了一个软件系统的粗粒度结构 (Grobstruktur)。它关注的核心要素包括：主要组件即子系统 (Hauptkomponenten / Subsysteme)、这些组件之间的关系 (Beziehungen)、组件在硬件上的分配方式 (Verteilung auf Hardware)、所选技术栈 (Technologiestack) ——例如 Web 应用、移动应用还是桌面应用——以及系统间的通信协议 (Kommunikationsprotokolle)。
+
+## 软件架构 | Softwarearchitektur
+
+```{python}
+#| label: fig-sw-arch
+#| fig-cap: "软件架构的组成要素 | Bestandteile der Softwarearchitektur"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('软件架构 | Softwarearchitektur', fontsize=15, fontweight='bold')
+
+# Central
+center = mpatches.FancyBboxPatch((4.5, 2.5), 5.0, 2.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['sw_arch'], edgecolor='white', linewidth=3)
+ax.add_patch(center)
+ax.text(7.0, 3.8, '软件架构', ha='center', fontsize=14, fontweight='bold', color='white')
+ax.text(7.0, 3.0, 'Softwarearchitektur', ha='center', fontsize=11, color='#E1BEE7')
+
+sw_elements = [
+    {'zh': '组件\nKomponenten\n(Module, Subsysteme)', 'color': '#6A1B9A', 'x': 1.8, 'y': 5.8},
+    {'zh': '组件间关系\nBeziehungen zwischen\nKomponenten', 'color': '#7B1FA2', 'x': 7.0, 'y': 6.0},
+    {'zh': '架构模式\nArchitekturmuster\n(z.B. MVC, Microservices)', 'color': '#9C27B0', 'x': 12.2, 'y': 5.8},
+    {'zh': '架构决策\nArchitekturentscheidungen\n(基于功能/非功能需求)', 'color': '#AB47BC', 'x': 7.0, 'y': 0.5},
+]
+
+for e in sw_elements:
+    card = mpatches.FancyBboxPatch((e['x'] - 1.7, e['y'] - 0.6), 3.4, 1.6,
+        boxstyle="round,pad=0.1", facecolor='white', edgecolor=e['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(e['x'], e['y'], e['zh'], ha='center', fontsize=7.5, fontweight='bold',
+            color=e['color'], linespacing=1.3)
+    cx, cy = 7.0, 3.5
+    dx = cx - e['x']
+    dy = cy - e['y']
+    dist = (dx**2 + dy**2)**0.5
+    if dist > 0:
+        ux, uy = dx/dist, dy/dist
+        ax.plot([e['x'] + ux*1.8, cx - ux*2.6],
+                [e['y'] + uy*0.9, cy - uy*1.1],
+                color=e['color'], lw=1.5, linestyle='--', alpha=0.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+软件架构 (Softwarearchitektur) 关注的是一个自包含的软件子系统的内部结构。它包含组件 (Komponenten)——模块和子系统——之间的关系、所采用的架构模式 (Architekturmuster)——如分层架构、Client-Server 或微服务——以及基于功能性和非功能性需求做出的架构决策 (Architekturentscheidungen)。
+
+## 系统架构与软件架构的对比 | Vergleich
+
+```{python}
+#| label: fig-arch-comparison
+#| fig-cap: "系统架构 vs 软件架构 | Systemarchitektur vs Softwarearchitektur"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('系统架构 vs 软件架构 | Systemarchitektur vs Softwarearchitektur',
+             fontsize=14, fontweight='bold')
+
+# System arch (outer)
+outer = mpatches.FancyBboxPatch((0.5, 0.5), 13.0, 5.5, boxstyle="round,pad=0.3",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['sys_arch'], linewidth=3)
+ax.add_patch(outer)
+ax.text(7.0, 5.5, '系统架构 | Systemarchitektur', ha='center', fontsize=13,
+        fontweight='bold', color=COLORS['sys_arch'])
+ax.text(7.0, 4.8, '粗粒度：硬件分配、技术栈、通信协议、子系统间关系',
+        ha='center', fontsize=9, color=COLORS['sys_arch'])
+
+# Software arch (inner boxes)
+for i, (name, desc) in enumerate([
+    ('子系统 A\nSubsystem A', '软件架构\nSoftwarearchitektur'),
+    ('子系统 B\nSubsystem B', '软件架构\nSoftwarearchitektur'),
+    ('子系统 C\nSubsystem C', '软件架构\nSoftwarearchitektur'),
+]):
+    x = 2.5 + i * 3.5
+    inner = mpatches.FancyBboxPatch((x - 1.3, 1.0), 2.6, 3.2, boxstyle="round,pad=0.15",
+        facecolor='white', edgecolor=COLORS['sw_arch'], linewidth=2)
+    ax.add_patch(inner)
+    ax.text(x, 3.5, name, ha='center', fontsize=9, fontweight='bold',
+            color=COLORS['sw_arch'], linespacing=1.3)
+    ax.text(x, 1.8, desc, ha='center', fontsize=8, color='#888', linespacing=1.3)
+
+# Arrows between subsystems
+for i in range(2):
+    x1 = 2.5 + i * 3.5 + 1.4
+    x2 = 2.5 + (i+1) * 3.5 - 1.4
+    ax.annotate('', xy=(x2, 2.5), xytext=(x1, 2.5),
+        arrowprops=dict(arrowstyle='<->', color=COLORS['neutral'], lw=1.5))
+
+plt.tight_layout()
+plt.show()
+```
+
+系统架构是"大图" (Big Picture)，关注子系统之间的关系、硬件分配、技术栈和通信协议。软件架构则聚焦于每个子系统内部的模块结构、组件关系和设计模式。两者是包含关系：系统架构包含多个子系统，每个子系统有自己的软件架构。
+
+# 架构视图 | Architektur-Sichten
+
+```{python}
+#| label: fig-arch-views
+#| fig-cap: "四种架构视图 | Vier Architektur-Sichten"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('架构视图 | Architektur-Sichten', fontsize=15, fontweight='bold')
+
+views = [
+    {
+        'zh': '逻辑视图', 'de': 'Logische Sicht',
+        'desc': '系统中的主要抽象\n以对象/实体形式表示\nHauptabstraktionen\nals Objekte/Entitaeten',
+        'tool': 'UML 类图 / 对象图',
+        'marker': 'L', 'color': COLORS['logical'], 'x': 2.0, 'y': 6.5
+    },
+    {
+        'zh': '过程视图', 'de': 'Prozess-Sicht',
+        'desc': '运行时的系统进程\n交互与通信\nProzesse zur Laufzeit',
+        'tool': '活动图 / 序列图 / 文本描述',
+        'marker': 'P', 'color': COLORS['process'], 'x': 7.0, 'y': 6.5
+    },
+    {
+        'zh': '开发视图', 'de': 'Entwicklungs-Sicht',
+        'desc': '开发者视角的组件划分\n包、接口、类\nPakete, Interfaces, Klassen',
+        'tool': '包图 / 目录结构',
+        'marker': 'E', 'color': COLORS['dev'], 'x': 2.0, 'y': 2.0
+    },
+    {
+        'zh': '物理视图', 'de': 'Physische Sicht',
+        'desc': '软件组件到硬件的映射\n服务器、客户端、网络\nServer, Clients, Netzwerke',
+        'tool': '部署图 / 文本描述',
+        'marker': 'H', 'color': COLORS['physical'], 'x': 7.0, 'y': 2.0
+    },
+]
+
+for v in views:
+    card = mpatches.FancyBboxPatch((v['x'] - 1.8, v['y'] - 1.5), 5.6, 3.2,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=v['color'], linewidth=2.5)
+    ax.add_patch(card)
+
+    marker_circle = plt.Circle((v['x'] - 1.2, v['y'] + 1.2), 0.35,
+                                facecolor=v['color'], edgecolor='white', linewidth=2)
+    ax.add_patch(marker_circle)
+    ax.text(v['x'] - 1.2, v['y'] + 1.2, v['marker'], ha='center', va='center',
+            fontsize=12, fontweight='bold', color='white')
+
+    ax.text(v['x'] + 0.5, v['y'] + 1.2, v['zh'] + ' | ' + v['de'], fontsize=10,
+            fontweight='bold', color=v['color'])
+    ax.text(v['x'] - 1.4, v['y'] - 0.1, v['desc'], fontsize=8, color='#555', linespacing=1.4)
+    ax.text(v['x'] - 1.4, v['y'] - 1.1, '工具: ' + v['tool'], fontsize=7.5,
+            color=v['color'], fontstyle='italic')
+
+# Pointer to center
+cx, cy = 12.5, 4.3
+center_box = mpatches.FancyBboxPatch((cx - 1.3, cy - 1.0), 2.6, 2.0,
+    boxstyle="round,pad=0.15", facecolor=COLORS['dark'], edgecolor='white', linewidth=2)
+ax.add_patch(center_box)
+ax.text(cx, cy + 0.3, '完整', ha='center', fontsize=11, fontweight='bold', color='white')
+ax.text(cx, cy - 0.3, '架构描述', ha='center', fontsize=10, color='#BDC3C7')
+
+for v in views:
+    dx = cx - (v['x'] + 1.0)
+    dy = cy - v['y']
+    dist = (dx**2 + dy**2)**0.5
+    ux, uy = dx/dist, dy/dist
+    ax.annotate('', xy=(cx - ux*1.5, cy - uy*1.1),
+        xytext=(v['x'] + 1.0 + ux*2.0, v['y'] + uy*0.5),
+        arrowprops=dict(arrowstyle='->', color=v['color'], lw=1.5, alpha=0.5))
+
+plt.tight_layout()
+plt.show()
+```
+
+## 逻辑视图 | Logische Sicht
+
+逻辑视图 (Logische Sicht) 展示系统中的主要抽象概念，以对象或实体 (Objekte/Entitaeten) 的形式表示。这一视图帮助理解系统的核心领域模型——系统"知道"什么、管理什么。典型工具是 UML 类图和对象图。
+
+## 过程视图 | Prozess-Sicht
+
+过程视图 (Prozess-Sicht) 描述系统运行时的进程交互。它展示不同组件在运行时如何通信和协作。可以使用活动图、序列图或文本描述来呈现。例如，在一个食堂应用 (Mensa-App) 的案例中：
+
+::: {.callout-note}
+## 过程描述示例 (Beispiel textuelle Beschreibung)
+
+**Sensor-Collector**: 每 30 秒轮询所有座位传感器，并将占用/空闲更新发送给 Occupancy Recorder。
+
+**Occupancy-Recorder**: 从不同的 Sensor-Collector 实例接收占用信息，将其转换为 Occupancy 对象，并存储到数据库中。
+:::
+
+## 开发视图 | Entwicklungs-Sicht
+
+开发视图 (Entwicklungs-Sicht) 从开发者的视角展示组件的划分方式——包 (Pakete)、接口 (Interfaces)、类 (Klassen) 的组织结构。一个典型的例子是项目的包结构：
+
+```
+org.sosy_lab.mensaapp
+|-- backend
+|   |-- mensa
+|   |-- occupancy
+|   |-- reservation
+|   |-- user
+|   |-- sensor
+|-- client
+|   |-- ui
+|   |-- models
+|-- restapi
+```
+
+这种视图帮助团队理解代码的组织方式，也为新成员提供了导航整个代码库的路线图。
+
+## 物理视图 | Physische Sicht
+
+物理视图 (Physische Sicht) 描述软件组件到硬件的映射——服务器、客户端、网络拓扑等。
+
+::: {.callout-note}
+## 物理视图示例 (Beispiel)
+
+**占用传感器**: ESP32 模块配雷达传感器。**后端**: Google Cloud Run, 800 MHz CPU, 256 MB RAM。**数据库**: Supabase Postgres。**Web 应用**: 预期在当前 iOS 和 Android 设备上运行，笔记本电脑上使用最新版 Chrome。**通信**: IEEE 802.11g。
+:::
+
+# 架构决策记录 | Architectural Decision Records (ADR)
+
+```{python}
+#| label: fig-adr-concept
+#| fig-cap: "ADR 核心概念 | ADR Kernkonzepte"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('架构决策记录 (ADR) | Architectural Decision Records', fontsize=14, fontweight='bold')
+
+# Definitions
+defs = [
+    {
+        'term_zh': '架构决策 (AD)', 'term_de': 'Architectural Decision',
+        'desc': '一个有理由的设计选择,\n针对具有架构重要性的\n功能或非功能需求',
+        'color': '#BF360C', 'x': 2.5, 'y': 7.0
+    },
+    {
+        'term_zh': '架构重要需求 (ASR)', 'term_de': 'Architecturally\nSignificant Requirement',
+        'desc': '对架构和系统质量\n有可测量影响的需求',
+        'color': '#E65100', 'x': 7.0, 'y': 7.0
+    },
+    {
+        'term_zh': '架构决策记录 (ADR)', 'term_de': 'Architectural\nDecision Record',
+        'desc': '记录一个 AD 及其\n理由、权衡与后果\n的短文档',
+        'color': '#F57C00', 'x': 11.5, 'y': 7.0
+    },
+]
+
+for d in defs:
+    card = mpatches.FancyBboxPatch((d['x'] - 2.0, d['y'] - 1.5), 4.0, 3.2,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=d['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(d['x'], d['y'] + 1.1, d['term_zh'], ha='center', fontsize=10,
+            fontweight='bold', color=d['color'])
+    ax.text(d['x'], d['y'] + 0.4, d['term_de'], ha='center', fontsize=8,
+            color=d['color'], linespacing=1.2)
+    ax.text(d['x'], d['y'] - 0.7, d['desc'], ha='center', fontsize=8,
+            color='#555', linespacing=1.3)
+
+# Arrows between definitions
+ax.annotate('', xy=(5.0, 7.0), xytext=(4.5, 7.0),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=1.5))
+ax.annotate('', xy=(9.5, 7.0), xytext=(9.0, 7.0),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=1.5))
+
+# Decision Log
+log_box = mpatches.FancyBboxPatch((3.0, 1.0), 8.0, 3.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['orange_light'], edgecolor=COLORS['adr_color'], linewidth=2)
+ax.add_patch(log_box)
+ax.text(7.0, 3.5, '决策日志 | Decision Log', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['adr_color'])
+ax.text(7.0, 2.5, '一个项目中创建和维护的所有 ADR 构成其决策日志。\n'
+        'ADR 的使用属于架构知识管理 (AKM) 的范畴,\n'
+        '但也可以扩展到设计决策和其他任何决策。',
+        ha='center', fontsize=8.5, color='#555', linespacing=1.5)
+
+ax.annotate('', xy=(7.0, 4.1), xytext=(7.0, 5.4),
+    arrowprops=dict(arrowstyle='->', color=COLORS['adr_color'], lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+## ADR 的定义与目的 | Definition und Zweck
+
+根据 [adr.github.io](https://adr.github.io/) 的定义：**架构决策 (Architectural Decision, AD)** 是一个有理由的设计选择，它针对的是具有架构重要性的功能或非功能需求。**架构重要需求 (Architecturally Significant Requirement, ASR)** 是对系统架构和质量有可测量影响的需求。**架构决策记录 (Architectural Decision Record, ADR)** 则是捕获单个 AD 及其理由的短文档。简单来说，ADR 帮助团队理解为什么选择了某个架构方案，以及这个选择带来了哪些权衡和后果。一个项目中所有的 ADR 汇集在一起构成其**决策日志 (Decision Log)**。
+
+ADR GitHub 组织 (adr.github.io) 的目标包括：激发对架构决策捕获的需求认识并建立共同术语；加强 ADR 工具支持以配合敏捷实践和迭代式开发流程；提供架构知识管理 (AKM) 领域的公共知识指引。
+
+## ADR 的内容结构 | Inhalt eines ADR
+
+```{python}
+#| label: fig-adr-template
+#| fig-cap: "ADR 内容模板 | ADR Inhaltsvorlage"
+
+fig, ax = plt.subplots(figsize=(12, 9))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('ADR 内容结构 | Inhalt eines ADR', fontsize=14, fontweight='bold')
+
+# Template card
+template_box = mpatches.FancyBboxPatch((0.5, 0.5), 11.0, 9.0,
+    boxstyle="round,pad=0.25", facecolor='white', edgecolor=COLORS['adr_color'], linewidth=3)
+ax.add_patch(template_box)
+
+fields = [
+    ('标题 | Title:', 'ADR-001: 选择 PostgreSQL 作为主数据库', 8.8),
+    ('状态 | Status:', '已接受 (Accepted) / 已弃用 (Deprecated) / 已取代 (Superseded)', 8.0),
+    ('上下文 | Context:', '描述导致此决策的背景和约束条件\n(z.B. 需要支持复杂查询和地理空间数据)', 7.0),
+    ('决策 | Decision:', '我们选择 PostgreSQL + PostGIS 扩展\n作为主数据库解决方案', 5.8),
+    ('备选方案 | Alternatives:', 'MySQL: 不支持原生地理空间扩展\nMongoDB: 对复杂 JOIN 查询性能不佳', 4.5),
+    ('理由 | Rationale:', '支持复杂查询 + 成熟的地理空间扩展\n开源 + 活跃社区 + 团队经验丰富', 3.2),
+    ('后果 | Consequences:', '[+] 强大的查询能力和扩展生态\n[-] 需要 DBA 经验进行性能调优', 2.0),
+]
+
+for label, value, y in fields:
+    label_box = mpatches.FancyBboxPatch((1.0, y - 0.35), 3.2, 0.7,
+        boxstyle="round,pad=0.03", facecolor=COLORS['adr_color'] + '15',
+        edgecolor=COLORS['adr_color'], linewidth=0.5)
+    ax.add_patch(label_box)
+    ax.text(1.2, y, label, fontsize=8.5, fontweight='bold', color=COLORS['adr_color'])
+    ax.text(4.5, y, value, fontsize=8, color='#444', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+一个典型的 ADR 包含以下内容：标题 (Title) 简要概括决策；状态 (Status) 标明当前状态——已接受、已弃用或已被取代；上下文 (Context) 描述促使此决策产生的背景和约束；决策 (Decision) 明确说明所做的选择；备选方案 (Alternatives) 列出被考虑但未被采纳的方案；理由 (Rationale) 解释为什么这个选择优于其他方案；后果 (Consequences) 阐述此决策的正面和负面影响。
+
+::: {.callout-tip}
+## 背景资料 | Hintergrundmaterial
+
+ADR 的概念由 Michael Nygard 在 2011 年的博客文章 "Documenting Architecture Decisions" 中推广。adr.github.io 基于 Zdun 等人在 "Sustainable Architectural Decisions" 中提出的指南和原则，包括 Y-statement 格式。Azure Well-Architected Framework (2024) 和 AWS Prescriptive Guidance 均推荐使用 ADR 来简化技术决策流程。课程中提到的 GitLab 项目 ([gitlab.com/gitlab-org/gitlab/-/boards](https://gitlab.com/gitlab-org/gitlab/-/boards)) 也是 ADR 实践的一个例子。
+:::
+
+# 非功能需求对架构的影响 | Einfluss nichtfunktionaler Anforderungen
+
+```{python}
+#| label: fig-nfr-influence
+#| fig-cap: "非功能需求对架构决策的影响 | Einfluss nichtfunktionaler Anforderungen"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('非功能需求 --> 架构决策 | NFR --> Architekturentscheidungen',
+             fontsize=14, fontweight='bold')
+
+nfrs = [
+    {
+        'zh': '性能\nLeistungsfaehigkeit',
+        'decision_zh': '时间关键流程不通过网络分发,\n而是在少数紧耦合模块中本地执行。\n可能通过负载均衡实现可扩展性。',
+        'decision_de': 'Zeitkritische Ablaeufe lokal ausfuehren,\nnicht ueber Netzwerk verteilen.\nSkalierbarkeit durch Lastverteilung.',
+        'color': '#1565C0', 'y': 7.0
+    },
+    {
+        'zh': '信息安全\nInformationssicherheit',
+        'decision_zh': '分层架构,\n将需保护的内容保存在\n隔离的层中。',
+        'decision_de': 'Schichtenarchitektur,\nschuetzenswerte Inhalte\nin abgeschotteter Schicht.',
+        'color': '#C62828', 'y': 4.5
+    },
+    {
+        'zh': '可维护性\nWartbarkeit',
+        'decision_zh': '强解耦、小组件。\n避免共享数据结构。',
+        'decision_de': 'Stark entkoppelte, kleine Komponenten.\nGemeinsame Datenstrukturen vermeiden.',
+        'color': '#2E7D32', 'y': 2.0
+    },
+]
+
+for n in nfrs:
+    # NFR box
+    nfr_box = mpatches.FancyBboxPatch((0.5, n['y'] - 0.8), 3.5, 1.8,
+        boxstyle="round,pad=0.12", facecolor=n['color'], edgecolor='white', linewidth=2)
+    ax.add_patch(nfr_box)
+    ax.text(2.25, n['y'], n['zh'], ha='center', fontsize=9, fontweight='bold',
+            color='white', linespacing=1.3)
+
+    # Arrow
+    ax.annotate('', xy=(4.5, n['y']), xytext=(4.1, n['y']),
+        arrowprops=dict(arrowstyle='->', color=n['color'], lw=2.5))
+
+    # Decision box
+    dec_box = mpatches.FancyBboxPatch((4.5, n['y'] - 1.0), 9.0, 2.2,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=n['color'], linewidth=2)
+    ax.add_patch(dec_box)
+    ax.text(5.0, n['y'] + 0.5, n['decision_zh'], fontsize=8.5, color='#333', linespacing=1.4)
+    ax.text(9.5, n['y'] - 0.5, n['decision_de'], fontsize=7, color='#888',
+            linespacing=1.3, fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+非功能需求对架构有着决定性的影响。当**性能 (Leistungsfaehigkeit)** 是关键需求时，时间关键的流程应避免通过网络分发，而应在少数紧耦合模块中本地执行，同时可能需要通过负载均衡来实现可扩展性。当**信息安全 (Informationssicherheit)** 是优先事项时，采用分层架构将敏感内容保存在受保护的隔离层中是典型选择。当**可维护性 (Wartbarkeit)** 是核心关注点时，应采用强解耦的小组件设计，避免共享数据结构。
+
+# 架构设计策略 | Strategien fuer den Architektur-Entwurf
+
+```{python}
+#| label: fig-design-strategies
+#| fig-cap: "架构设计策略概览 | Entwurfsstrategien Ueberblick"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('架构设计策略 | Entwurfsstrategien', fontsize=14, fontweight='bold')
+
+strategies = [
+    {'zh': '分而治之\nDivide & Conquer', 'color': '#1565C0', 'x': 1.8},
+    {'zh': '领域驱动设计\nDomain-driven\nDesign (DDD)', 'color': '#AD1457', 'x': 4.6},
+    {'zh': '解耦\nEntkopplung', 'color': '#37474F', 'x': 7.4},
+    {'zh': '自顶向下\nTop-Down', 'color': '#00695C', 'x': 10.2},
+    {'zh': '自底向上\nBottom-Up', 'color': '#E65100', 'x': 13.0},
+]
+
+for s in strategies:
+    card = mpatches.FancyBboxPatch((s['x'] - 1.3, 1.0), 2.6, 4.5,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=s['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(s['x'], 4.0, s['zh'], ha='center', fontsize=9, fontweight='bold',
+            color=s['color'], linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 分而治之 | Divide and Conquer
+
+```{python}
+#| label: fig-divide-conquer
+#| fig-cap: "分而治之策略 | Divide and Conquer"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('分而治之 | Divide & Conquer', fontsize=14, fontweight='bold')
+
+# System at top
+sys_box = mpatches.FancyBboxPatch((4.5, 6.0), 5.0, 1.5, boxstyle="round,pad=0.15",
+    facecolor='#1565C0', edgecolor='white', linewidth=2)
+ax.add_patch(sys_box)
+ax.text(7.0, 6.8, '整体系统 | Gesamtsystem', ha='center', fontsize=11,
+        fontweight='bold', color='white')
+
+# Subsystems
+sub_colors = ['#1976D2', '#1E88E5', '#2196F3', '#42A5F5']
+sub_names = ['子系统 A\nSubsystem A', '子系统 B\nSubsystem B',
+             '子系统 C\nSubsystem C', '子系统 D\nSubsystem D']
+
+for i, (name, color) in enumerate(zip(sub_names, sub_colors)):
+    x = 2.0 + i * 3.0
+    sub_box = mpatches.FancyBboxPatch((x - 1.2, 3.0), 2.4, 2.0,
+        boxstyle="round,pad=0.12", facecolor='white', edgecolor=color, linewidth=2)
+    ax.add_patch(sub_box)
+    ax.text(x, 4.0, name, ha='center', fontsize=8.5, fontweight='bold',
+            color=color, linespacing=1.3)
+    # Arrow from system
+    ax.annotate('', xy=(x, 5.1), xytext=(7.0, 5.9),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=1.5))
+
+# Interface arrows between subsystems
+for i in range(3):
+    x1 = 2.0 + i * 3.0 + 1.3
+    x2 = 2.0 + (i+1) * 3.0 - 1.3
+    ax.annotate('', xy=(x2, 4.0), xytext=(x1, 4.0),
+        arrowprops=dict(arrowstyle='<->', color=COLORS['highlight'], lw=2, linestyle='--'))
+
+# Steps
+steps = [
+    '(1) 将系统分解为可管理的子系统\n    Zerlege in ueberschaubare Subsysteme',
+    '(2) 定义子系统间的清晰接口\n    Definiere klare Schnittstellen',
+    '(3) 独立设计每个子系统\n    Entwerfe jedes Subsystem separat',
+]
+for i, step in enumerate(steps):
+    ax.text(1.0, 2.0 - i * 0.8, step, fontsize=8.5, color='#444', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+分而治之 (Divide and Conquer) 是经典的系统分解策略。其核心步骤是：首先将系统分解为可管理的子系统 (Subsysteme)；然后定义子系统之间的清晰接口 (Schnittstellen)；最后独立设计每个子系统——每个子系统只需要尽可能好地满足接口约定即可。
+
+## 领域驱动设计 | Domain-driven Design (DDD)
+
+```{python}
+#| label: fig-ddd
+#| fig-cap: "DDD 核心原则 | Domain-driven Design Kernprinzipien"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('领域驱动设计 | Domain-driven Design (DDD)', fontsize=14, fontweight='bold')
+
+principles = [
+    {
+        'zh': '统一语言', 'de': 'Ubiquitous Language',
+        'desc': '软件精确映射领域专家的语言。\n项目各层使用相同的术语。',
+        'color': '#880E4F', 'x': 3.5, 'y': 7.0
+    },
+    {
+        'zh': '领域聚焦', 'de': 'Domaenenfokus',
+        'desc': '项目焦点在业务领域\n及其逻辑上。',
+        'color': '#AD1457', 'x': 10.5, 'y': 7.0
+    },
+    {
+        'zh': '界限上下文', 'de': 'Bounded Contexts',
+        'desc': '不同业务领域严格分离。\n上下文间仅通过定义良好\n的接口交流。',
+        'color': '#C2185B', 'x': 3.5, 'y': 3.5
+    },
+    {
+        'zh': '独立领域模型', 'de': 'Separate Modelle',
+        'desc': '共享概念在每个上下文中\n独立建模。',
+        'color': '#D81B60', 'x': 10.5, 'y': 3.5
+    },
+]
+
+for p in principles:
+    card = mpatches.FancyBboxPatch((p['x'] - 2.5, p['y'] - 1.5), 5.0, 3.2,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=p['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(p['x'], p['y'] + 1.0, p['zh'] + ' | ' + p['de'], ha='center',
+            fontsize=10, fontweight='bold', color=p['color'])
+    ax.text(p['x'], p['y'] - 0.4, p['desc'], ha='center', fontsize=8.5,
+            color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+### DDD 代码示例 | Code-Beispiel
+
+DDD 的统一语言 (Ubiquitous Language) 原则要求代码反映业务概念。对比以下两段代码：
+
+改进前 (不使用领域语言)：
+```java
+void processMoneyMovement(Account a, Account b, double amount)
+```
+
+改进后 (使用领域语言)：
+```java
+void transferMoney(CheckingAccount from, SavingsAccount to, Money amount)
+```
+
+改进后的代码清楚地传达了业务意图：从支票账户 (CheckingAccount) 向储蓄账户 (SavingsAccount) 转账一笔特定金额 (Money)。
+
+### Bounded Contexts 示例 | Beispiel
+
+```{python}
+#| label: fig-bounded-contexts
+#| fig-cap: "Bounded Contexts: 同一概念在不同领域的含义 | Gleiches Konzept, verschiedene Bedeutungen"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('"Account" 在三个不同 Bounded Context 中的含义',
+             fontsize=13, fontweight='bold')
+
+contexts = [
+    {
+        'name_zh': '支付领域', 'name_de': 'Zahlungsverkehr',
+        'fields': 'Iban iban\nBic bic\ntransfer(Money, Account)',
+        'color': '#1565C0', 'x': 2.5
+    },
+    {
+        'name_zh': '销售领域', 'name_de': 'Verkauf',
+        'fields': 'Customer customer\nList<Product> cart\nList<Order> orderHistory',
+        'color': '#AD1457', 'x': 7.0
+    },
+    {
+        'name_zh': '客户服务', 'name_de': 'Kundenbetreuung',
+        'fields': 'Customer owner\nList<Transfer> interactions\nPreferredChannel channel',
+        'color': '#00695C', 'x': 11.5
+    },
+]
+
+for c in contexts:
+    # Outer context box
+    ctx_box = mpatches.FancyBboxPatch((c['x'] - 2.0, 0.5), 4.0, 8.0,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=c['color'],
+        linewidth=2.5, linestyle='--')
+    ax.add_patch(ctx_box)
+    ax.text(c['x'], 8.0, c['name_zh'], ha='center', fontsize=11, fontweight='bold',
+            color=c['color'])
+    ax.text(c['x'], 7.4, c['name_de'], ha='center', fontsize=9, color=c['color'])
+
+    # Account class box
+    class_box = mpatches.FancyBboxPatch((c['x'] - 1.7, 2.5), 3.4, 4.0,
+        boxstyle="round,pad=0.1", facecolor=c['color'] + '10', edgecolor=c['color'], linewidth=1.5)
+    ax.add_patch(class_box)
+    ax.text(c['x'], 6.0, 'class Account', ha='center', fontsize=10,
+            fontweight='bold', color=c['color'], family='monospace')
+
+    # Divider line
+    ax.plot([c['x'] - 1.5, c['x'] + 1.5], [5.5, 5.5], color=c['color'], lw=1)
+
+    ax.text(c['x'], 4.5, c['fields'], ha='center', fontsize=8, color='#444',
+            linespacing=1.6, family='monospace')
+
+# Interface arrows
+for i in range(2):
+    x1 = contexts[i]['x'] + 2.1
+    x2 = contexts[i+1]['x'] - 2.1
+    ax.annotate('', xy=(x2, 4.5), xytext=(x1, 4.5),
+        arrowprops=dict(arrowstyle='<->', color=COLORS['highlight'], lw=2, linestyle='--'))
+    ax.text((x1 + x2) / 2, 4.0, '接口\nInterface', ha='center', fontsize=7,
+            color=COLORS['highlight'], fontweight='bold')
+
+# Bottom note
+note = mpatches.FancyBboxPatch((1.5, 0.2), 11.0, 1.5, boxstyle="round,pad=0.1",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(note)
+ax.text(7.0, 1.2, '!! 共享概念 (如 Customer, Product) 在每个上下文中独立建模', ha='center',
+        fontsize=9.5, fontweight='bold', color=COLORS['highlight'])
+ax.text(7.0, 0.6, 'Geteilte Konzepte werden in jedem Kontext separat modelliert',
+        ha='center', fontsize=8.5, color='#777')
+
+plt.tight_layout()
+plt.show()
+```
+
+"Account" 这个概念在不同的 Bounded Context 中有完全不同的含义。在**支付领域** (Zahlungsverkehr) 中，Account 包含 IBAN、BIC 和转账方法。在**销售领域** (Verkauf) 中，Account 包含客户信息、购物车和订单历史。在**客户服务** (Kundenbetreuung) 中，Account 包含客户所有者、交互记录和首选沟通渠道。DDD 的核心观点是：这些上下文之间的边界必须清晰，交流只能通过定义良好的接口进行。
+
+## 解耦 | Entkopplung
+
+```{python}
+#| label: fig-decoupling-overview
+#| fig-cap: "解耦的核心概念 | Kernkonzepte der Entkopplung"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('解耦 | Entkopplung', fontsize=14, fontweight='bold')
+
+# Cohesion vs Coupling
+coh_box = mpatches.FancyBboxPatch((0.5, 4.5), 6.0, 3.0,
+    boxstyle="round,pad=0.15", facecolor=COLORS['green_light'], edgecolor=COLORS['success'], linewidth=2.5)
+ax.add_patch(coh_box)
+ax.text(3.5, 6.8, '内聚性 | Kohaesion', ha='center', fontsize=12, fontweight='bold',
+        color=COLORS['success'])
+ax.text(3.5, 6.0, '模块内部元素的关联程度', ha='center', fontsize=10, color='#555')
+ax.text(3.5, 5.2, '高内聚 = 好', ha='center', fontsize=11, fontweight='bold',
+        color=COLORS['success'])
+
+coup_box = mpatches.FancyBboxPatch((7.5, 4.5), 6.0, 3.0,
+    boxstyle="round,pad=0.15", facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2.5)
+ax.add_patch(coup_box)
+ax.text(10.5, 6.8, '耦合性 | Kopplung', ha='center', fontsize=12, fontweight='bold',
+        color=COLORS['danger'])
+ax.text(10.5, 6.0, '模块之间的依赖程度', ha='center', fontsize=10, color='#555')
+ax.text(10.5, 5.2, '高耦合 = 坏', ha='center', fontsize=11, fontweight='bold',
+        color=COLORS['danger'])
+
+# Principles
+principles = [
+    {'zh': '接口作为依赖\n用抽象接口替代\n具体实现', 'de': 'Interfaces als\nAbhaengigkeiten',
+     'color': '#1565C0', 'x': 2.0},
+    {'zh': '每个系统独立类型\n保持对自身数据类型\n的控制', 'de': 'Eigene Datentypen\npro System',
+     'color': '#6A1B9A', 'x': 5.5},
+    {'zh': '仅在业务相关时\n复用代码', 'de': 'Code-Wiederverwendung\nnur bei fachlichem\nZusammenhang',
+     'color': '#BF360C', 'x': 9.0},
+    {'zh': '避免循环依赖\nA-->B, B-->A', 'de': 'Keine zyklischen\nAbhaengigkeiten',
+     'color': '#37474F', 'x': 12.5},
+]
+
+for p in principles:
+    card = mpatches.FancyBboxPatch((p['x'] - 1.5, 0.3), 3.0, 3.5,
+        boxstyle="round,pad=0.12", facecolor='white', edgecolor=p['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(p['x'], 2.8, p['zh'], ha='center', fontsize=7.5, fontweight='bold',
+            color=p['color'], linespacing=1.3)
+    ax.text(p['x'], 0.8, p['de'], ha='center', fontsize=7, color='#888', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+解耦 (Entkopplung) 的目标是实现**高内聚 (hohe Kohaesion)** 和**低耦合 (niedrige Kopplung)**。内聚性衡量模块内部元素的关联程度——高内聚意味着模块内的所有元素在逻辑上紧密相关。耦合性衡量模块之间的依赖程度——高耦合意味着一个模块的修改会波及其他模块。
+
+### 通过接口解耦 | Entkopplung durch Interfaces
+
+```{python}
+#| label: fig-interface-decoupling
+#| fig-cap: "通过接口实现解耦 | Entkopplung durch Interfaces"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 8))
+
+# Left: Without interface (bad)
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('[X] 无接口：直接依赖具体实现\nOhne Interface', fontsize=10, fontweight='bold',
+             color=COLORS['danger'])
+
+bad_box = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 8.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(bad_box)
+
+# StripePayment
+stripe_box = mpatches.FancyBboxPatch((2.5, 6.5), 5.0, 1.5, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor='#E53935', linewidth=2)
+ax.add_patch(stripe_box)
+ax.text(5.0, 7.5, 'StripePayment', ha='center', fontsize=10, fontweight='bold',
+        color='#E53935', family='monospace')
+ax.text(5.0, 6.9, 'charge() + getBitcoinFee()', ha='center', fontsize=8,
+        color='#666', family='monospace')
+
+# PaymentProcessor
+proc_box = mpatches.FancyBboxPatch((2.5, 4.0), 5.0, 1.5, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor='#C62828', linewidth=2)
+ax.add_patch(proc_box)
+ax.text(5.0, 5.0, 'PaymentProcessor', ha='center', fontsize=10, fontweight='bold',
+        color='#C62828', family='monospace')
+ax.text(5.0, 4.3, 'StripePayment provider', ha='center', fontsize=8,
+        color='#666', family='monospace')
+
+# OrderService
+order_box = mpatches.FancyBboxPatch((2.5, 1.5), 5.0, 1.5, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor='#B71C1C', linewidth=2)
+ax.add_patch(order_box)
+ax.text(5.0, 2.5, 'OrderService', ha='center', fontsize=10, fontweight='bold',
+        color='#B71C1C', family='monospace')
+
+# Arrows (direct dependency)
+ax.annotate('', xy=(5.0, 6.4), xytext=(5.0, 5.6),
+    arrowprops=dict(arrowstyle='->', color='#E53935', lw=2))
+ax.annotate('', xy=(5.0, 3.9), xytext=(5.0, 3.1),
+    arrowprops=dict(arrowstyle='->', color='#C62828', lw=2))
+
+ax.text(5.0, 0.8, '更换 Stripe --> GiroPay\n需修改多个类!', ha='center',
+        fontsize=9, fontweight='bold', color=COLORS['danger'])
+
+# Right: With interface (good)
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('[OK] 通过接口解耦\nMit Interface', fontsize=10, fontweight='bold',
+             color=COLORS['success'])
+
+good_box = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 8.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['success'], linewidth=2)
+ax.add_patch(good_box)
+
+# PaymentProvider Interface
+iface_box = mpatches.FancyBboxPatch((2.5, 6.5), 5.0, 1.5, boxstyle="round,pad=0.1",
+    facecolor='#E8F5E9', edgecolor=COLORS['success'], linewidth=2, linestyle='--')
+ax.add_patch(iface_box)
+ax.text(5.0, 7.5, '<<interface>>', ha='center', fontsize=8, color=COLORS['success'],
+        fontstyle='italic')
+ax.text(5.0, 6.9, 'PaymentProvider', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['success'], family='monospace')
+
+# StripePayment implements
+stripe_box2 = mpatches.FancyBboxPatch((0.5, 4.5), 4.0, 1.2, boxstyle="round,pad=0.08",
+    facecolor='white', edgecolor='#43A047', linewidth=1.5)
+ax.add_patch(stripe_box2)
+ax.text(2.5, 5.1, 'StripePayment', ha='center', fontsize=8.5, fontweight='bold',
+        color='#43A047', family='monospace')
+
+# GiroPayPayment implements
+giro_box = mpatches.FancyBboxPatch((5.5, 4.5), 4.0, 1.2, boxstyle="round,pad=0.08",
+    facecolor='white', edgecolor='#66BB6A', linewidth=1.5)
+ax.add_patch(giro_box)
+ax.text(7.5, 5.1, 'GiroPayPayment', ha='center', fontsize=8.5, fontweight='bold',
+        color='#66BB6A', family='monospace')
+
+# PaymentProcessor
+proc_box2 = mpatches.FancyBboxPatch((2.5, 2.5), 5.0, 1.2, boxstyle="round,pad=0.08",
+    facecolor='white', edgecolor='#2E7D32', linewidth=1.5)
+ax.add_patch(proc_box2)
+ax.text(5.0, 3.1, 'PaymentProcessor', ha='center', fontsize=9, fontweight='bold',
+        color='#2E7D32', family='monospace')
+
+# Implement arrows (dashed)
+ax.annotate('', xy=(3.5, 6.4), xytext=(2.5, 5.8),
+    arrowprops=dict(arrowstyle='->', color='#43A047', lw=1.5, linestyle='--'))
+ax.annotate('', xy=(6.5, 6.4), xytext=(7.5, 5.8),
+    arrowprops=dict(arrowstyle='->', color='#66BB6A', lw=1.5, linestyle='--'))
+
+# Dependency on interface
+ax.annotate('', xy=(5.0, 6.4), xytext=(5.0, 3.8),
+    arrowprops=dict(arrowstyle='->', color='#2E7D32', lw=2))
+
+ax.text(5.0, 1.5, '接口确保只使用约定的方法\n更换实现无需修改使用方',
+        ha='center', fontsize=9, fontweight='bold', color=COLORS['success'])
+
+plt.tight_layout()
+plt.show()
+```
+
+课件中详细展示了一个支付处理的例子。在**无接口**的情况下，`OrderService` 和 `PaymentProcessor` 直接依赖 `StripePayment` 的具体实现。这意味着如果要从 Stripe 切换到 GiroPay，需要修改多个类。更危险的是，开发者可能会无意中使用 Stripe 特有的方法（如 `getBitcoinFee()`），导致更深的耦合。
+
+通过引入 `PaymentProvider` **接口**，所有使用方只依赖抽象接口而非具体实现。接口确保只有约定的方法（如 `charge()`）可以被使用，避免了对特定实现细节的无意依赖。更换支付提供商时，只需提供一个新的接口实现，使用方无需任何修改。
+
+### 每个系统独立的类型 | Eigene Typen pro System
+
+```{python}
+#| label: fig-own-types
+#| fig-cap: "通过独立类型解耦 | Entkopplung durch eigene Typen"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+
+# Left: Direct use of external types (bad)
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('[X] 直接使用外部类型\nDirekte Nutzung externer Typen', fontsize=10,
+             fontweight='bold', color=COLORS['danger'])
+
+bad_bg = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 7.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(bad_bg)
+
+# External API type
+ext_box = mpatches.FancyBboxPatch((1.0, 5.5), 8.0, 1.5, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor='#E53935', linewidth=2)
+ax.add_patch(ext_box)
+ax.text(5.0, 6.5, 'some.api.PaymentRequest', ha='center', fontsize=9,
+        fontweight='bold', color='#E53935', family='monospace')
+ax.text(5.0, 5.9, 'double amount --> long amountInCent', ha='center',
+        fontsize=8, color='#888', family='monospace')
+
+# Internal code using external type directly
+int_box = mpatches.FancyBboxPatch((1.0, 2.5), 8.0, 2.2, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor='#C62828', linewidth=2)
+ax.add_patch(int_box)
+ax.text(5.0, 4.2, 'our.payment.CheckoutResource', ha='center', fontsize=9,
+        fontweight='bold', color='#C62828', family='monospace')
+ax.text(5.0, 3.3, 'validatePayment(PaymentRequest)\nprocessOrder(PaymentRequest)\nsendConfirmation(PaymentRequest)',
+        ha='center', fontsize=7.5, color='#666', family='monospace', linespacing=1.4)
+
+ax.annotate('', xy=(5.0, 5.4), xytext=(5.0, 4.8),
+    arrowprops=dict(arrowstyle='->', color='#E53935', lw=2))
+
+ax.text(5.0, 1.5, '外部 API 变更\n--> 内部多处需要修改!', ha='center',
+        fontsize=9, fontweight='bold', color=COLORS['danger'])
+
+# Right: Own internal type (good)
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('[OK] 使用独立内部类型\nEigene interne Repraesentation', fontsize=10,
+             fontweight='bold', color=COLORS['success'])
+
+good_bg = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 7.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['success'], linewidth=2)
+ax.add_patch(good_bg)
+
+# External
+ext_box2 = mpatches.FancyBboxPatch((1.0, 5.8), 3.5, 1.2, boxstyle="round,pad=0.08",
+    facecolor='white', edgecolor='#E53935', linewidth=1.5)
+ax.add_patch(ext_box2)
+ax.text(2.75, 6.4, 'PaymentRequest', ha='center', fontsize=8,
+        fontweight='bold', color='#E53935', family='monospace')
+
+# Mapping
+map_box = mpatches.FancyBboxPatch((3.8, 4.5), 2.4, 1.0, boxstyle="round,pad=0.08",
+    facecolor=COLORS['highlight'] + '30', edgecolor=COLORS['highlight'], linewidth=2)
+ax.add_patch(map_box)
+ax.text(5.0, 5.0, 'Mapping', ha='center', fontsize=9, fontweight='bold',
+        color=COLORS['highlight'])
+
+# Internal
+int_box2 = mpatches.FancyBboxPatch((5.5, 5.8), 3.5, 1.2, boxstyle="round,pad=0.08",
+    facecolor='white', edgecolor=COLORS['success'], linewidth=1.5)
+ax.add_patch(int_box2)
+ax.text(7.25, 6.4, 'Payment (内部)', ha='center', fontsize=8,
+        fontweight='bold', color=COLORS['success'], family='monospace')
+
+# Internal system
+sys_box = mpatches.FancyBboxPatch((1.5, 2.5), 7.0, 1.5, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor=COLORS['success'], linewidth=2)
+ax.add_patch(sys_box)
+ax.text(5.0, 3.5, '内部系统：只使用 Payment 类型', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['success'])
+ax.text(5.0, 2.8, 'validate / process / send -- 均使用内部类型',
+        ha='center', fontsize=8, color='#555')
+
+# Arrows
+ax.annotate('', xy=(4.0, 5.0), xytext=(2.75, 5.7),
+    arrowprops=dict(arrowstyle='->', color='#E53935', lw=1.5))
+ax.annotate('', xy=(7.25, 5.7), xytext=(5.8, 5.0),
+    arrowprops=dict(arrowstyle='->', color=COLORS['success'], lw=1.5))
+ax.annotate('', xy=(5.0, 4.0), xytext=(5.0, 4.4),
+    arrowprops=dict(arrowstyle='<-', color=COLORS['success'], lw=1.5))
+
+ax.text(5.0, 1.5, '外部 API 变更\n--> 只需修改 Mapping!', ha='center',
+        fontsize=9, fontweight='bold', color=COLORS['success'])
+
+plt.tight_layout()
+plt.show()
+```
+
+当直接使用外部系统的类型（如 `some.api.PaymentRequest`）时，外部 API 的任何变更（例如 `double amount` 改为 `long amountInCent`）都会导致内部代码的多处修改。解决方案是创建独立的内部类型 (`Payment`)，并在系统边界处设置一个映射层 (Mapping)。这样，外部 API 的变更只影响映射逻辑，内部系统的其余部分完全不受影响。
+
+### 按业务逻辑分离 | Trennung nach Fachlichkeit
+
+```{python}
+#| label: fig-business-separation
+#| fig-cap: "按业务逻辑分离而非共享工具类 | Trennung nach Fachlichkeit"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 8))
+
+# Left: Shared utility (bad)
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('[X] 共享工具类\nGemeinsame Util-Klasse', fontsize=10,
+             fontweight='bold', color=COLORS['danger'])
+
+bad_bg = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 8.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(bad_bg)
+
+# Shared util
+util_box = mpatches.FancyBboxPatch((2.0, 5.5), 6.0, 2.0, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor='#E53935', linewidth=2)
+ax.add_patch(util_box)
+ax.text(5.0, 7.0, 'Users.sortByName()', ha='center', fontsize=10,
+        fontweight='bold', color='#E53935', family='monospace')
+ax.text(5.0, 6.0, '"Returns a sorted list"\n(规格不够精确!)', ha='center',
+        fontsize=8, color='#888', linespacing=1.3)
+
+# CustomerService
+cs_box = mpatches.FancyBboxPatch((0.5, 2.5), 4.0, 2.0, boxstyle="round,pad=0.08",
+    facecolor='white', edgecolor='#43A047', linewidth=1.5)
+ax.add_patch(cs_box)
+ax.text(2.5, 3.8, 'CustomerService', ha='center', fontsize=9, fontweight='bold',
+        color='#43A047', family='monospace')
+ax.text(2.5, 2.9, '需要按名字排序', ha='center', fontsize=8, color='#555')
+
+# InvoiceGenerator
+inv_box = mpatches.FancyBboxPatch((5.5, 2.5), 4.0, 2.0, boxstyle="round,pad=0.08",
+    facecolor='white', edgecolor='#E53935', linewidth=1.5)
+ax.add_patch(inv_box)
+ax.text(7.5, 3.8, 'InvoiceGenerator', ha='center', fontsize=9, fontweight='bold',
+        color='#E53935', family='monospace')
+ax.text(7.5, 2.9, '需要按姓氏排序', ha='center', fontsize=8, color='#555')
+
+ax.annotate('', xy=(3.0, 5.4), xytext=(2.5, 4.6),
+    arrowprops=dict(arrowstyle='->', color='#43A047', lw=1.5))
+ax.annotate('', xy=(7.0, 5.4), xytext=(7.5, 4.6),
+    arrowprops=dict(arrowstyle='->', color='#E53935', lw=1.5))
+
+ax.text(5.0, 1.5, 'CustomerService 要求按名字排序\n--> InvoiceGenerator 出错!',
+        ha='center', fontsize=9, fontweight='bold', color=COLORS['danger'], linespacing=1.3)
+
+# Right: Separated by business domain (good)
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('[OK] 按业务领域分离工具\nGetrennt nach Fachlichkeit', fontsize=10,
+             fontweight='bold', color=COLORS['success'])
+
+good_bg = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 8.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['success'], linewidth=2)
+ax.add_patch(good_bg)
+
+# CustomerService with own sort
+cs_box2 = mpatches.FancyBboxPatch((0.5, 5.0), 4.2, 3.0, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor='#2E7D32', linewidth=2)
+ax.add_patch(cs_box2)
+ax.text(2.6, 7.5, 'customerservice.utils', ha='center', fontsize=8,
+        fontweight='bold', color='#2E7D32', family='monospace')
+ax.text(2.6, 6.7, 'Customers\n.sortForDisplay()', ha='center', fontsize=8,
+        color='#2E7D32', family='monospace', linespacing=1.3)
+ax.text(2.6, 5.5, '按名字排序 (明确规格)', ha='center', fontsize=8, color='#555')
+
+# InvoiceGenerator with own sort
+inv_box2 = mpatches.FancyBboxPatch((5.3, 5.0), 4.2, 3.0, boxstyle="round,pad=0.1",
+    facecolor='white', edgecolor='#1565C0', linewidth=2)
+ax.add_patch(inv_box2)
+ax.text(7.4, 7.5, 'accounting.utils', ha='center', fontsize=8,
+        fontweight='bold', color='#1565C0', family='monospace')
+ax.text(7.4, 6.7, 'InvoiceUsers\n.sortForInvoice()', ha='center', fontsize=8,
+        color='#1565C0', family='monospace', linespacing=1.3)
+ax.text(7.4, 5.5, '按姓氏排序 (明确规格)', ha='center', fontsize=8, color='#555')
+
+# No connection between them
+ax.text(5.0, 4.0, '无共享依赖', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['success'])
+ax.text(5.0, 3.3, '各自修改不影响对方', ha='center', fontsize=9, color='#555')
+
+# Solutions
+solution_box = mpatches.FancyBboxPatch((0.8, 0.8), 8.4, 2.0, boxstyle="round,pad=0.1",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(solution_box)
+ax.text(5.0, 2.3, '三个解决方案 | Drei Loesungen:', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['highlight'])
+ax.text(5.0, 1.3, '(1) 按业务逻辑分离  (2) 精确指定行为  (3) 警惕隐含假设',
+        ha='center', fontsize=8.5, color='#555')
+
+plt.tight_layout()
+plt.show()
+```
+
+课件展示了一个典型的反面案例：`Users.sortByName()` 这个共享工具方法被两个不同的业务领域使用——客户服务 (CustomerService) 和发票生成 (InvoiceGenerator)。当客户服务团队要求将排序改为按名字 (Vorname) 排序时，发票生成器突然产生了错误的排序顺序，导致发票编号错误分配，甚至可能在税务审计中产生问题。
+
+课件提出三种解决方案：按业务逻辑分离排序逻辑，让每个领域拥有自己的工具方法；精确指定行为 (Verhalten genau spezifizieren)，不依赖模糊的文档如 "Returns a sorted list"；以及始终警惕隐含假设 (Vorsicht vor impliziten Annahmen)。
+
+## 自顶向下与自底向上 | Top-Down und Bottom-Up
+
+```{python}
+#| label: fig-topdown-bottomup
+#| fig-cap: "Top-Down vs Bottom-Up 设计策略 | Top-Down vs Bottom-Up Entwurf"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+
+# Top-Down
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('自顶向下 | Top-Down', fontsize=12, fontweight='bold', color='#00695C')
+
+td_bg = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 7.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['teal_light'], edgecolor='#00695C', linewidth=2)
+ax.add_patch(td_bg)
+
+# Levels
+levels_td = [
+    {'text': '系统应该做什么?\nWas soll das System tun?', 'y': 6.5, 'w': 8.0},
+    {'text': '子系统 A    子系统 B    子系统 C', 'y': 4.5, 'w': 7.0},
+    {'text': '模块 1  模块 2  模块 3  模块 4  模块 5', 'y': 2.5, 'w': 6.0},
+    {'text': '具体类和方法', 'y': 1.0, 'w': 5.0},
+]
+
+for lv in levels_td:
+    box = mpatches.FancyBboxPatch((5.0 - lv['w']/2, lv['y'] - 0.5), lv['w'], 1.0,
+        boxstyle="round,pad=0.08", facecolor='white', edgecolor='#00695C', linewidth=1.5)
+    ax.add_patch(box)
+    ax.text(5.0, lv['y'], lv['text'], ha='center', fontsize=8, color='#333')
+
+# Arrows pointing down
+for i in range(len(levels_td) - 1):
+    ax.annotate('', xy=(5.0, levels_td[i+1]['y'] + 0.6),
+        xytext=(5.0, levels_td[i]['y'] - 0.6),
+        arrowprops=dict(arrowstyle='->', color='#00695C', lw=2))
+
+# Bottom-Up
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('自底向上 | Bottom-Up', fontsize=12, fontweight='bold', color='#E65100')
+
+bu_bg = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 7.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['orange_light'], edgecolor='#E65100', linewidth=2)
+ax.add_patch(bu_bg)
+
+levels_bu = [
+    {'text': '整体系统 | Gesamtsystem', 'y': 6.5, 'w': 5.0},
+    {'text': '组合为更大的组件', 'y': 4.5, 'w': 6.0},
+    {'text': '基本构件组合', 'y': 2.5, 'w': 7.0},
+    {'text': '基本构件：具体类型和流程\nWelche Typen und Prozesse?', 'y': 1.0, 'w': 8.0},
+]
+
+for lv in levels_bu:
+    box = mpatches.FancyBboxPatch((5.0 - lv['w']/2, lv['y'] - 0.5), lv['w'], 1.0,
+        boxstyle="round,pad=0.08", facecolor='white', edgecolor='#E65100', linewidth=1.5)
+    ax.add_patch(box)
+    ax.text(5.0, lv['y'], lv['text'], ha='center', fontsize=8, color='#333')
+
+# Arrows pointing up
+for i in range(len(levels_bu) - 1, 0, -1):
+    ax.annotate('', xy=(5.0, levels_bu[i-1]['y'] - 0.6),
+        xytext=(5.0, levels_bu[i]['y'] + 0.6),
+        arrowprops=dict(arrowstyle='->', color='#E65100', lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+**自顶向下 (Top-Down)** 是经典的 Divide and Conquer 方法：从最高抽象层开始——"系统应该做什么？"——然后逐步分解为越来越小、越来越详细的组件。**自底向上 (Bottom-Up)** 则从基础构件出发——具体的类型和流程——然后逐步组合为更大的组件，最终形成完整的系统。实际项目中通常两种方法混合使用。
+
+# 架构模式 | Architekturmuster
+
+```{python}
+#| label: fig-patterns-overview
+#| fig-cap: "七种核心架构模式 | Sieben Architekturmuster"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('架构模式 | Architekturmuster', fontsize=14, fontweight='bold')
+
+patterns = [
+    {'zh': 'MVC', 'de': 'Model-View-\nController', 'color': '#1565C0', 'x': 1.0, 'y': 5.0},
+    {'zh': '分层', 'de': 'Schichten-\narchitektur', 'color': '#6A1B9A', 'x': 3.5, 'y': 5.0},
+    {'zh': '仓库', 'de': 'Repository-\nArchitektur', 'color': '#00695C', 'x': 6.0, 'y': 5.0},
+    {'zh': 'C/S', 'de': 'Client-Server-\nArchitektur', 'color': '#BF360C', 'x': 8.5, 'y': 5.0},
+    {'zh': '管道过滤器', 'de': 'Pipes and\nFilters', 'color': '#37474F', 'x': 11.0, 'y': 5.0},
+    {'zh': '洋葱', 'de': 'Onion-\nArchitektur', 'color': '#4A148C', 'x': 4.5, 'y': 1.5},
+    {'zh': '微服务', 'de': 'Microservice-\nArchitektur', 'color': '#00838F', 'x': 9.5, 'y': 1.5},
+]
+
+for p in patterns:
+    card = mpatches.FancyBboxPatch((p['x'] - 1.1, p['y'] - 0.8), 2.2, 2.0,
+        boxstyle="round,pad=0.1", facecolor='white', edgecolor=p['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(p['x'], p['y'] + 0.5, p['zh'], ha='center', fontsize=10,
+            fontweight='bold', color=p['color'])
+    ax.text(p['x'], p['y'] - 0.3, p['de'], ha='center', fontsize=7.5,
+            color='#666', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+## Model-View-Controller (MVC)
+
+```{python}
+#| label: fig-mvc
+#| fig-cap: "MVC 架构模式 | Model-View-Controller"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('Model-View-Controller (MVC)', fontsize=14, fontweight='bold')
+
+# Model
+model_box = mpatches.FancyBboxPatch((1.0, 1.5), 3.5, 3.0, boxstyle="round,pad=0.15",
+    facecolor='white', edgecolor=COLORS['mvc_m'], linewidth=3)
+ax.add_patch(model_box)
+ax.text(2.75, 3.8, 'Model', ha='center', fontsize=14, fontweight='bold',
+        color=COLORS['mvc_m'])
+ax.text(2.75, 2.8, '数据与业务逻辑\nDaten und\nGeschaeftslogik',
+        ha='center', fontsize=8.5, color='#555', linespacing=1.3)
+
+# View
+view_box = mpatches.FancyBboxPatch((7.5, 5.5), 3.5, 3.0, boxstyle="round,pad=0.15",
+    facecolor='white', edgecolor=COLORS['mvc_v'], linewidth=3)
+ax.add_patch(view_box)
+ax.text(9.25, 7.8, 'View', ha='center', fontsize=14, fontweight='bold',
+        color=COLORS['mvc_v'])
+ax.text(9.25, 6.8, '用户界面/展示\nBenutzeroberflaeche\n/ Darstellung',
+        ha='center', fontsize=8.5, color='#555', linespacing=1.3)
+
+# Controller
+ctrl_box = mpatches.FancyBboxPatch((1.0, 5.5), 3.5, 3.0, boxstyle="round,pad=0.15",
+    facecolor='white', edgecolor=COLORS['mvc_c'], linewidth=3)
+ax.add_patch(ctrl_box)
+ax.text(2.75, 7.8, 'Controller', ha='center', fontsize=14, fontweight='bold',
+        color=COLORS['mvc_c'])
+ax.text(2.75, 6.8, '处理用户输入\n协调 Model 和 View\nSteuerungslogik',
+        ha='center', fontsize=8.5, color='#555', linespacing=1.3)
+
+# Arrows
+# Controller -> Model
+ax.annotate('', xy=(2.75, 4.6), xytext=(2.75, 5.4),
+    arrowprops=dict(arrowstyle='->', color=COLORS['mvc_c'], lw=2.5))
+ax.text(1.2, 5.0, '更新\nupdates', fontsize=8, color=COLORS['mvc_c'])
+
+# Controller -> View
+ax.annotate('', xy=(7.4, 7.0), xytext=(4.6, 7.0),
+    arrowprops=dict(arrowstyle='->', color=COLORS['mvc_c'], lw=2.5))
+ax.text(5.5, 7.5, '选择视图\nselects View', fontsize=8, color=COLORS['mvc_c'], ha='center')
+
+# Model -> View (notifies)
+ax.annotate('', xy=(7.4, 5.8), xytext=(4.6, 3.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['mvc_m'], lw=2, linestyle='--'))
+ax.text(6.2, 4.0, '通知变更\nnotifies', fontsize=8, color=COLORS['mvc_m'])
+
+# User
+user_box = mpatches.FancyBboxPatch((7.5, 1.5), 3.5, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['light'], edgecolor=COLORS['neutral'], linewidth=2)
+ax.add_patch(user_box)
+ax.text(9.25, 2.5, '用户 | User', ha='center', fontsize=11, fontweight='bold',
+        color=COLORS['neutral'])
+
+# User <-> View
+ax.annotate('', xy=(9.25, 5.4), xytext=(9.25, 3.6),
+    arrowprops=dict(arrowstyle='<->', color=COLORS['neutral'], lw=1.5))
+
+# User -> Controller
+ax.annotate('', xy=(2.75, 8.6), xytext=(9.25, 3.6),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=1.5,
+                    connectionstyle='arc3,rad=-0.5'))
+ax.text(7.0, 8.5, '用户操作\nUser Action', fontsize=7.5, color=COLORS['neutral'])
+
+plt.tight_layout()
+plt.show()
+```
+
+MVC 将应用程序分为三个相互关联的组件。**Model** 负责数据和业务逻辑；**View** 负责用户界面的展示；**Controller** 处理用户输入，协调 Model 和 View 之间的交互。这种分离使得每个组件可以独立开发和测试。
+
+## 分层架构 | Schichtenarchitektur
+
+```{python}
+#| label: fig-layered
+#| fig-cap: "分层架构 | Schichtenarchitektur"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('分层架构 | Schichtenarchitektur', fontsize=14, fontweight='bold')
+
+layers = [
+    {'zh': '表示层 | Presentation Layer', 'de': 'UI / API', 'color': '#5C6BC0', 'y': 7.0},
+    {'zh': '应用层 | Application Layer', 'de': '用例 / 业务流程协调', 'color': '#3949AB', 'y': 5.0},
+    {'zh': '领域层 | Domain Layer', 'de': '核心业务逻辑 / 实体', 'color': '#283593', 'y': 3.0},
+    {'zh': '基础设施层 | Infrastructure Layer', 'de': '数据库 / 外部服务', 'color': '#1A237E', 'y': 1.0},
+]
+
+for lv in layers:
+    layer_box = mpatches.FancyBboxPatch((1.5, lv['y'] - 0.7), 9.0, 1.5,
+        boxstyle="round,pad=0.1", facecolor=lv['color'], edgecolor='white',
+        linewidth=2, alpha=0.85)
+    ax.add_patch(layer_box)
+    ax.text(6.0, lv['y'] + 0.1, lv['zh'], ha='center', fontsize=11,
+            fontweight='bold', color='white')
+    ax.text(6.0, lv['y'] - 0.4, lv['de'], ha='center', fontsize=9, color='#D0D0FF')
+
+# Arrows between layers
+for i in range(len(layers) - 1):
+    ax.annotate('', xy=(6.0, layers[i+1]['y'] + 0.9),
+        xytext=(6.0, layers[i]['y'] - 0.8),
+        arrowprops=dict(arrowstyle='->', color='white', lw=2))
+
+# Rule
+rule_box = mpatches.FancyBboxPatch((1.0, 8.0), 10.0, 0.7, boxstyle="round,pad=0.05",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(rule_box)
+ax.text(6.0, 8.35, '规则：每层只能调用其下一层 | Regel: Jede Schicht nutzt nur die darunterliegende',
+        ha='center', fontsize=9, fontweight='bold', color=COLORS['highlight'])
+
+plt.tight_layout()
+plt.show()
+```
+
+分层架构 (Schichtenarchitektur) 将系统组织为水平层次，每层只能使用其直接下方的层。典型的四层划分为：表示层 (Presentation) 处理 UI 和 API；应用层 (Application) 协调业务流程和用例；领域层 (Domain) 包含核心业务逻辑和实体；基础设施层 (Infrastructure) 负责数据库访问和外部服务集成。
+
+## 洋葱架构 | Onion Architecture
+
+```{python}
+#| label: fig-onion
+#| fig-cap: "洋葱架构 | Onion Architecture"
+
+fig, ax = plt.subplots(figsize=(12, 10))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('洋葱架构 | Onion Architecture', fontsize=14, fontweight='bold')
+
+# Concentric circles representing layers
+center_x, center_y = 6.0, 6.0
+
+circles = [
+    {'r': 4.5, 'label_zh': '表示层/API 和 基础设施层', 'label_de': 'Presentation/API + Infrastructure',
+     'color': COLORS['onion_infra'], 'alpha': 0.15},
+    {'r': 3.0, 'label_zh': '应用层', 'label_de': 'Application',
+     'color': COLORS['onion_app'], 'alpha': 0.2},
+    {'r': 1.5, 'label_zh': '领域层', 'label_de': 'Domain',
+     'color': COLORS['onion_core'], 'alpha': 0.3},
+]
+
+for c in circles:
+    circle = plt.Circle((center_x, center_y), c['r'], facecolor=c['color'],
+                          edgecolor=c['color'], linewidth=2.5, alpha=c['alpha'])
+    ax.add_patch(circle)
+
+# Labels
+ax.text(center_x, center_y + 0.3, '领域层', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['onion_core'])
+ax.text(center_x, center_y - 0.3, 'Domain', ha='center', fontsize=10,
+        color=COLORS['onion_core'])
+
+ax.text(center_x, center_y + 2.3, '应用层', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['onion_app'])
+ax.text(center_x, center_y + 1.7, 'Application', ha='center', fontsize=9,
+        color=COLORS['onion_app'])
+
+ax.text(center_x, center_y + 4.0, '表示层/API + 基础设施层', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['onion_infra'])
+ax.text(center_x, center_y + 3.4, 'Presentation/API + Infrastructure', ha='center',
+        fontsize=8, color=COLORS['onion_infra'])
+
+# Descriptions on right side
+descs = [
+    {'text': 'Domain:\n具体应用逻辑。\n不知道 UI、数据库、网络等。\nKonkrete Anwendungslogik.\nWeiss nichts von UI, DB, etc.',
+     'y': 3.0, 'color': COLORS['onion_core']},
+    {'text': 'Application:\n实现的用例,\n使用 Domain 来实现。\n不知道 UI、数据库、网络等。\nImplementierte Anwendungsfaelle.',
+     'y': 6.5, 'color': COLORS['onion_app']},
+    {'text': 'Presentation + Infrastructure:\n调用 Application 逻辑。\n实现 UI、数据库访问、网络等。\nRufen Application Logik auf.',
+     'y': 10.0, 'color': COLORS['onion_infra']},
+]
+
+for d in descs:
+    ax.text(0.3, d['y'], d['text'], fontsize=7.5, color=d['color'],
+            linespacing=1.4, va='center')
+
+# Key rule
+rule_box = mpatches.FancyBboxPatch((1.5, 0.3), 9.0, 1.2, boxstyle="round,pad=0.1",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(rule_box)
+ax.text(6.0, 1.1, '核心规则：外层使用内层。内层只知道接口,不知道外层的具体实现。',
+        ha='center', fontsize=9, fontweight='bold', color=COLORS['highlight'])
+ax.text(6.0, 0.5, 'Innerer Layer weiss nichts von konkretem aeusserem Layer; nur Interfaces.',
+        ha='center', fontsize=8, color='#777')
+
+plt.tight_layout()
+plt.show()
+```
+
+洋葱架构 (Onion Architecture) 的核心规则是：外层使用内层，但内层对外层的具体实现一无所知——内层只知道接口 (Interfaces)。**Domain 层**包含具体的应用逻辑，完全不知道 UI、数据库或网络的存在。**Application 层**实现具体的用例，通过调用 Domain 来完成业务逻辑，同样不知道 UI 和数据库。**Presentation/API 层和 Infrastructure 层**位于最外层，负责调用 Application 逻辑并实现 UI、数据库访问和网络通信。
+
+## Client-Server 架构 | Client-Server-Architektur
+
+```{python}
+#| label: fig-client-server
+#| fig-cap: "Client-Server 架构 | Client-Server-Architektur"
+
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('Client-Server 架构 | Client-Server-Architektur', fontsize=14, fontweight='bold')
+
+# Server
+server_box = mpatches.FancyBboxPatch((7.0, 2.0), 4.5, 3.0, boxstyle="round,pad=0.2",
+    facecolor='#0D47A1', edgecolor='white', linewidth=3)
+ax.add_patch(server_box)
+ax.text(9.25, 4.0, 'Server', ha='center', fontsize=14, fontweight='bold', color='white')
+ax.text(9.25, 3.0, '数据存储 + 业务逻辑\nDatenhaltung +\nGeschaeftslogik', ha='center',
+        fontsize=9, color='#BBDEFB', linespacing=1.3)
+
+# Clients
+client_data = [
+    {'label': 'Web Client', 'x': 2.5, 'y': 5.5},
+    {'label': 'Mobile Client', 'x': 2.5, 'y': 3.5},
+    {'label': 'Desktop Client', 'x': 2.5, 'y': 1.5},
+]
+
+for c in client_data:
+    client_box = mpatches.FancyBboxPatch((c['x'] - 1.5, c['y'] - 0.5), 3.0, 1.2,
+        boxstyle="round,pad=0.1", facecolor='white', edgecolor=COLORS['primary'], linewidth=2)
+    ax.add_patch(client_box)
+    ax.text(c['x'], c['y'], c['label'], ha='center', fontsize=10,
+            fontweight='bold', color=COLORS['primary'])
+    # Arrow to server
+    ax.annotate('', xy=(6.9, 3.5), xytext=(4.1, c['y']),
+        arrowprops=dict(arrowstyle='<->', color=COLORS['neutral'], lw=1.5))
+
+# Network label
+ax.text(5.5, 4.5, '网络\nNetzwerk', ha='center', fontsize=9, fontweight='bold',
+        color=COLORS['neutral'])
+
+plt.tight_layout()
+plt.show()
+```
+
+Client-Server 架构是最基本的分布式架构模式。客户端 (Client) 负责用户界面和用户交互，服务器 (Server) 负责数据存储和核心业务逻辑。两者通过网络通信进行交互。
+
+## 微服务架构 | Microservice-Architektur
+
+```{python}
+#| label: fig-microservices
+#| fig-cap: "微服务架构 | Microservice-Architektur"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('微服务架构 | Microservice-Architektur', fontsize=14, fontweight='bold')
+
+# API Gateway
+gw_box = mpatches.FancyBboxPatch((5.0, 7.5), 4.0, 1.5, boxstyle="round,pad=0.15",
+    facecolor=COLORS['dark'], edgecolor='white', linewidth=2.5)
+ax.add_patch(gw_box)
+ax.text(7.0, 8.5, 'API Gateway', ha='center', fontsize=11, fontweight='bold', color='white')
+ax.text(7.0, 7.9, '路由 / 负载均衡', ha='center', fontsize=9, color='#BDC3C7')
+
+# Services
+services = [
+    {'name': '用户服务\nUser Service', 'color': '#00838F', 'x': 1.5, 'y': 4.5},
+    {'name': '订单服务\nOrder Service', 'color': '#00695C', 'x': 5.0, 'y': 4.5},
+    {'name': '支付服务\nPayment Service', 'color': '#2E7D32', 'x': 8.5, 'y': 4.5},
+    {'name': '通知服务\nNotification\nService', 'color': '#558B2F', 'x': 12.0, 'y': 4.5},
+]
+
+for s in services:
+    svc_box = mpatches.FancyBboxPatch((s['x'] - 1.3, s['y'] - 1.2), 2.6, 2.6,
+        boxstyle="round,pad=0.12", facecolor='white', edgecolor=s['color'], linewidth=2.5)
+    ax.add_patch(svc_box)
+    ax.text(s['x'], s['y'], s['name'], ha='center', fontsize=8.5, fontweight='bold',
+            color=s['color'], linespacing=1.3)
+
+    # DB icon below
+    db_box = mpatches.FancyBboxPatch((s['x'] - 0.6, s['y'] - 2.5), 1.2, 0.8,
+        boxstyle="round,pad=0.05", facecolor=s['color'] + '20', edgecolor=s['color'], linewidth=1)
+    ax.add_patch(db_box)
+    ax.text(s['x'], s['y'] - 2.1, 'DB', ha='center', fontsize=8, color=s['color'],
+            fontweight='bold')
+    ax.annotate('', xy=(s['x'], s['y'] - 1.7), xytext=(s['x'], s['y'] - 1.3),
+        arrowprops=dict(arrowstyle='->', color=s['color'], lw=1))
+
+    # Arrow from gateway
+    ax.annotate('', xy=(s['x'], s['y'] + 1.5), xytext=(7.0, 7.4),
+        arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=1.5))
+
+# Communication between services
+ax.annotate('', xy=(3.7, 4.5), xytext=(3.0, 4.5),
+    arrowprops=dict(arrowstyle='<->', color=COLORS['highlight'], lw=1.5, linestyle='--'))
+ax.annotate('', xy=(7.1, 4.5), xytext=(6.5, 4.5),
+    arrowprops=dict(arrowstyle='<->', color=COLORS['highlight'], lw=1.5, linestyle='--'))
+ax.annotate('', xy=(10.6, 4.5), xytext=(10.0, 4.5),
+    arrowprops=dict(arrowstyle='<->', color=COLORS['highlight'], lw=1.5, linestyle='--'))
+
+ax.text(7.0, 6.5, 'REST / gRPC / Event Queues', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['highlight'])
+
+plt.tight_layout()
+plt.show()
+```
+
+### 微服务优缺点 | Vor- und Nachteile
+
+```{python}
+#| label: fig-microservices-proscons
+#| fig-cap: "微服务架构的优缺点 | Vor- und Nachteile der Microservice-Architektur"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 8))
+
+# Advantages
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('[+] 优势 | Vorteile', fontsize=12, fontweight='bold', color=COLORS['success'])
+
+adv_bg = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 8.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['success'], linewidth=2)
+ax.add_patch(adv_bg)
+
+advantages = [
+    '服务可独立扩展\nServices unabhaengig skalierbar',
+    '服务可独立部署\n(升级、多版本并行)\nUnabhaengig deploybar',
+    '每个服务可自由选择技术\nTechnologische Freiheit pro Service',
+    '故障隔离\nFehlerisolierung',
+    '清晰接口 + 更小的代码库\nKlare Schnittstellen, kleinere Code-Bases',
+]
+
+for i, adv in enumerate(advantages):
+    y = 7.5 - i * 1.4
+    ax.text(1.0, y, '[+]', fontsize=10, fontweight='bold', color=COLORS['success'])
+    ax.text(1.8, y, adv, fontsize=8, color='#444', linespacing=1.3)
+
+# Disadvantages
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('[-] 劣势 | Nachteile', fontsize=12, fontweight='bold', color=COLORS['danger'])
+
+dis_bg = mpatches.FancyBboxPatch((0.3, 0.3), 9.4, 8.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(dis_bg)
+
+disadvantages = [
+    '额外的复杂度\nZusaetzliche Komplexitaet',
+    '数据一致性更难保证\n(优先使用无状态服务)\nDaten-Konsistenz schwieriger',
+    '运维开销：部署/日志/监控\nOperativer Overhead je Service',
+    '调试和性能分析更复杂\n(跨多个服务)\nDebugging ueber mehrere Services',
+    '集成测试更复杂\n(需要 Mock 服务)\nMock-Services notwendig',
+]
+
+for i, dis in enumerate(disadvantages):
+    y = 7.5 - i * 1.4
+    ax.text(1.0, y, '[-]', fontsize=10, fontweight='bold', color=COLORS['danger'])
+    ax.text(1.8, y, dis, fontsize=8, color='#444', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+微服务架构 (Microservice-Architektur) 是 Client-Server 架构的特殊形式，将应用拆分为一组小型、自治的服务，通过定义良好的网络接口 (REST、gRPC、Event Queues) 进行通信。其主要**优势**包括：服务可独立扩展和部署、每个服务可自由选择技术栈、故障隔离、以及更清晰的接口和更小的代码库。**劣势**则包括：额外的分布式系统复杂度、数据一致性保证更难、每个服务都需要独立的部署/日志/监控运维、跨服务的调试和性能分析更复杂、以及集成测试需要 Mock 服务。
+
+# 全章总结 | Gesamtzusammenfassung
+
+```{python}
+#| label: fig-full-summary
+#| fig-cap: "全章知识地图 | Gesamte Wissenslandkarte"
+
+fig, ax = plt.subplots(figsize=(15, 10))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('Entwurf der Architektur -- 知识地图 | Wissenslandkarte',
+             fontsize=15, fontweight='bold')
+
+# Central theme
+center = mpatches.FancyBboxPatch((5.5, 4.5), 4.0, 2.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['dark'], edgecolor='white', linewidth=3)
+ax.add_patch(center)
+ax.text(7.5, 5.8, '架构设计', ha='center', fontsize=13, fontweight='bold', color='white')
+ax.text(7.5, 5.0, 'Architekturentwurf', ha='center', fontsize=11, color='#BDC3C7')
+
+topics = [
+    {'title': '架构概念\nSystem-/SW-Arch', 'items': '系统架构 vs 软件架构\n四种视图\n(逻辑/过程/开发/物理)',
+     'color': COLORS['sys_arch'], 'x': 2.0, 'y': 9.0},
+    {'title': 'ADR\nDecision Records', 'items': '上下文/决策/备选\n理由/后果\nadr.github.io',
+     'color': COLORS['adr_color'], 'x': 7.5, 'y': 9.5},
+    {'title': 'NFR 影响\nNFR Einfluss', 'items': '性能/安全/可维护性\n--> 架构决策',
+     'color': COLORS['danger'], 'x': 13.0, 'y': 9.0},
+    {'title': '设计策略\nStrategien', 'items': 'D&C / DDD\n解耦 (接口/独立类型)\nTop-Down / Bottom-Up',
+     'color': COLORS['ddd_color'], 'x': 13.0, 'y': 4.0},
+    {'title': '架构模式\nMuster', 'items': 'MVC / 分层 / 洋葱\nClient-Server\n微服务',
+     'color': COLORS['micro_color'], 'x': 2.0, 'y': 4.0},
+    {'title': '解耦原则\nEntkopplung', 'items': '高内聚 / 低耦合\n接口 / 独立类型\n业务分离',
+     'color': COLORS['decouple_color'], 'x': 7.5, 'y': 1.0},
+]
+
+for t in topics:
+    card = mpatches.FancyBboxPatch((t['x'] - 1.8, t['y'] - 1.4), 3.6, 2.8,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=t['color'], linewidth=2)
+    ax.add_patch(card)
+    ax.text(t['x'], t['y'] + 0.7, t['title'], ha='center', fontsize=8.5,
+            fontweight='bold', color=t['color'], linespacing=1.3)
+    ax.text(t['x'], t['y'] - 0.6, t['items'], ha='center', fontsize=7,
+            color='#555', linespacing=1.3)
+
+    dx = 7.5 - t['x']
+    dy = 5.5 - t['y']
+    dist = (dx**2 + dy**2)**0.5
+    if dist > 0:
+        ux, uy = dx/dist, dy/dist
+        ax.plot([t['x'] + ux*2.0, 7.5 - ux*2.2],
+                [t['y'] + uy*1.5, 5.5 - uy*1.2],
+                color=t['color'], lw=1.5, linestyle='--', alpha=0.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-tip}
+## 下周预告 | Ausblick naechste Woche
+
+**主题**：设计模式 (Entwurfsmuster / Design Patterns) -- 针对常见问题的可复用解决方案。
+
+**阅读准备**：Design Patterns, 第 1-1.1 章和 1.3-1.5 章 (共 13 页)。通过 refactoring.guru 网站详细学习以下三个设计模式：Singleton、Facade、Iterator。
+:::

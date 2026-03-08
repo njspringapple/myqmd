@@ -1,0 +1,2581 @@
+---
+title: "Entwurfsmuster II -- 设计模式精讲（续）"
+subtitle: "通俗故事 + 反面代码 + 重构代码 + UML | Softwaretechnik WS 25/26"
+author: "Klausurvorbereitung"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "模式导航 | Muster-Navigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available = set(f.name for f in fm.fontManager.ttflist)
+    for f in candidates.get(system, candidates['Linux']):
+        if f in available:
+            plt.rcParams['font.sans-serif'] = [f, 'DejaVu Sans']
+            break
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+# ── 通用 UML 绘图工具 ──
+
+def draw_uml_class(ax, x, y, w, name, attrs=None, methods=None,
+                   color='#333333', is_interface=False, is_abstract=False):
+    attrs = attrs or []
+    methods = methods or []
+    lh = 0.32
+    pad = 0.12
+
+    stereo_h = 0.3 if is_interface else 0
+    name_h = 0.45 + stereo_h
+    attr_h = max(0.35, len(attrs) * lh + pad) if attrs else 0.35
+    meth_h = max(0.35, len(methods) * lh + pad) if methods else 0.35
+    total = name_h + attr_h + meth_h
+
+    rect = mpatches.FancyBboxPatch(
+        (x, y - total), w, total, boxstyle="round,pad=0.04",
+        facecolor='white', edgecolor=color, linewidth=1.8)
+    ax.add_patch(rect)
+
+    top = y
+    if is_interface:
+        ax.text(x + w/2, top - 0.2, '<<interface>>', ha='center',
+                fontsize=7, color=color, style='italic')
+    name_style = 'italic' if is_abstract else 'normal'
+    ax.text(x + w/2, top - stereo_h - 0.3, name, ha='center',
+            fontsize=8.5, fontweight='bold', color=color, style=name_style)
+
+    attr_top = top - name_h
+    ax.plot([x + 0.05, x + w - 0.05], [attr_top, attr_top],
+            color=color, lw=0.8)
+    for i, a in enumerate(attrs):
+        ax.text(x + 0.12, attr_top - 0.1 - i * lh - 0.15, a,
+                fontsize=7, color='#444', family='monospace')
+
+    meth_top = attr_top - attr_h
+    ax.plot([x + 0.05, x + w - 0.05], [meth_top, meth_top],
+            color=color, lw=0.8)
+    for i, m in enumerate(methods):
+        ax.text(x + 0.12, meth_top - 0.1 - i * lh - 0.15, m,
+                fontsize=7, color='#444', family='monospace')
+
+    cx = x + w / 2
+    bottom = y - total
+    return (cx, y, bottom)
+
+
+def draw_arrow(ax, start, end, style='->', color='#333', lw=1.5,
+               linestyle='-', head='normal'):
+    if head == 'open':
+        ax.annotate('', xy=end, xytext=start,
+            arrowprops=dict(arrowstyle='-|>', color=color, lw=lw,
+                            linestyle=linestyle, shrinkA=2, shrinkB=2))
+    else:
+        ax.annotate('', xy=end, xytext=start,
+            arrowprops=dict(arrowstyle='->', color=color, lw=lw,
+                            linestyle=linestyle, shrinkA=2, shrinkB=2))
+
+
+def draw_implements(ax, child_top, parent_bottom, color='#333'):
+    ax.annotate('', xy=(parent_bottom[0], parent_bottom[1]),
+        xytext=(child_top[0], child_top[1]),
+        arrowprops=dict(arrowstyle='-|>', color=color, lw=1.5,
+                        linestyle='--', shrinkA=2, shrinkB=2))
+
+
+def draw_extends(ax, child_top, parent_bottom, color='#333'):
+    ax.annotate('', xy=(parent_bottom[0], parent_bottom[1]),
+        xytext=(child_top[0], child_top[1]),
+        arrowprops=dict(arrowstyle='-|>', color=color, lw=1.5,
+                        linestyle='-', shrinkA=2, shrinkB=2))
+
+
+def draw_uses(ax, from_pt, to_pt, color='#333', label=''):
+    ax.annotate('', xy=to_pt, xytext=from_pt,
+        arrowprops=dict(arrowstyle='->', color=color, lw=1.2,
+                        linestyle='--', shrinkA=3, shrinkB=3))
+    if label:
+        mx = (from_pt[0] + to_pt[0]) / 2
+        my = (from_pt[1] + to_pt[1]) / 2
+        ax.text(mx, my + 0.15, label, fontsize=6.5, ha='center',
+                color=color, style='italic')
+
+
+def draw_association(ax, from_pt, to_pt, color='#333', label='',
+                     from_mult='', to_mult=''):
+    ax.annotate('', xy=to_pt, xytext=from_pt,
+        arrowprops=dict(arrowstyle='->', color=color, lw=1.5,
+                        linestyle='-', shrinkA=3, shrinkB=3))
+    if from_mult:
+        ax.text(from_pt[0] + 0.15, from_pt[1] + 0.15, from_mult,
+                fontsize=6.5, color=color)
+    if to_mult:
+        ax.text(to_pt[0] - 0.3, to_pt[1] + 0.15, to_mult,
+                fontsize=6.5, color=color)
+```
+
+# 十一大设计模式总览 | Ueberblick
+
+本文是设计模式精讲系列的第二部分，在掌握了 Strategy、Observer、Factory Method、Singleton、Adapter、Decorator 六大核心模式之后，我们继续讲解另外十一个重要的设计模式。每个模式仍然包含：一个通俗的小故事解释动机，一段"差的代码"展示痛点，一段用模式重构后的代码，对差代码问题的分析，以及该模式的 UML 类图。
+
+```{python}
+#| label: fig-pattern-overview-2
+#| fig-cap: "十一大设计模式总览 | Ueberblick: Elf Entwurfsmuster"
+
+fig, ax = plt.subplots(figsize=(15, 10))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('十一大设计模式总览 | Elf Entwurfsmuster im Ueberblick',
+             fontsize=14, fontweight='bold')
+
+patterns = [
+    # 创建型
+    {'name': 'Builder', 'zh': '建造者模式', 'cat': '创建型',
+     'color': '#6A1B9A', 'x': 2.5, 'y': 9.0},
+    {'name': 'Prototype', 'zh': '原型模式', 'cat': '创建型',
+     'color': '#4A148C', 'x': 6.5, 'y': 9.0},
+    # 结构型
+    {'name': 'Facade', 'zh': '外观模式', 'cat': '结构型',
+     'color': '#00695C', 'x': 10.5, 'y': 9.0},
+    {'name': 'Proxy', 'zh': '代理模式', 'cat': '结构型',
+     'color': '#004D40', 'x': 2.5, 'y': 5.8},
+    {'name': 'Composite', 'zh': '组合模式', 'cat': '结构型',
+     'color': '#1B5E20', 'x': 6.5, 'y': 5.8},
+    # 行为型
+    {'name': 'Chain of\nResponsibility', 'zh': '责任链模式', 'cat': '行为型',
+     'color': '#C62828', 'x': 10.5, 'y': 5.8},
+    {'name': 'Iterator', 'zh': '迭代器模式', 'cat': '行为型',
+     'color': '#B71C1C', 'x': 2.0, 'y': 2.5},
+    {'name': 'State', 'zh': '状态模式', 'cat': '行为型',
+     'color': '#D32F2F', 'x': 5.0, 'y': 2.5},
+    {'name': 'Visitor', 'zh': '访问者模式', 'cat': '行为型',
+     'color': '#E53935', 'x': 8.0, 'y': 2.5},
+    {'name': 'Mediator', 'zh': '中介者模式', 'cat': '行为型',
+     'color': '#AD1457', 'x': 11.0, 'y': 2.5},
+    {'name': 'Interpreter', 'zh': '解释器模式', 'cat': '行为型',
+     'color': '#880E4F', 'x': 14.0, 'y': 2.5},
+]
+
+for p in patterns:
+    card = mpatches.FancyBboxPatch((p['x'] - 1.3, p['y'] - 1.2), 2.8, 2.4,
+        boxstyle="round,pad=0.12", facecolor='white',
+        edgecolor=p['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(p['x'] + 0.1, p['y'] + 0.7, p['name'], ha='center',
+            fontsize=9, fontweight='bold', color=p['color'], linespacing=1.1)
+    ax.text(p['x'] + 0.1, p['y'] - 0.2, p['zh'], ha='center',
+            fontsize=8.5, color=p['color'])
+    ax.text(p['x'] + 0.1, p['y'] - 0.7, p['cat'], ha='center',
+            fontsize=7, color='#777')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Builder 建造者模式 | Erbauermuster
+
+## 小故事：定制电脑的组装过程
+
+你去电脑城配一台电脑。你对店员说："我要一台 i7 处理器、32GB 内存、1TB SSD、RTX 4090 显卡的电脑。"如果店员的代码是一个巨大的构造函数 `new Computer("i7", 32, "1TB", "RTX4090", true, false, true, "水冷", "白色", ...)`——十几个参数排成一排，你根本搞不清第三个 `true` 代表什么，也搞不清哪些参数是可选的。更糟的是，如果某些组件有依赖关系（比如选了水冷必须配特定机箱），构造函数里完全无法体现。
+
+更好的做法是：给你一个"装机清单"(Builder)，你一步步地说"CPU 选 i7"、"内存选 32GB"、"显卡选 RTX 4090"……最后说"组装！"——Builder 负责按照正确的顺序把零件组装成一台完整的电脑。
+
+**Builder 模式**的核心思想：**将一个复杂对象的构建过程与它的表示分离，使得同样的构建过程可以创建不同的表示。** 特别适合参数很多、部分可选、或构建步骤有顺序要求的场景。
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 构造函数参数爆炸 -- Telescoping Constructor Anti-Pattern
+public class Computer {
+    private String cpu;
+    private int ram;
+    private String storage;
+    private String gpu;
+    private boolean hasWifi;
+    private boolean hasBluetooth;
+    private String cooling;
+    private String color;
+
+    // 参数越来越多，调用者根本看不懂每个参数是什么
+    public Computer(String cpu, int ram, String storage, String gpu,
+                    boolean hasWifi, boolean hasBluetooth,
+                    String cooling, String color) {
+        this.cpu = cpu;
+        this.ram = ram;
+        this.storage = storage;
+        this.gpu = gpu;
+        this.hasWifi = hasWifi;
+        this.hasBluetooth = hasBluetooth;
+        this.cooling = cooling;
+        this.color = color;
+    }
+}
+
+// 使用 -- 这些 true/false 代表什么？？？
+// Computer pc = new Computer("i7", 32, "1TB", "RTX4090",
+//                            true, false, "水冷", "白色");
+// Computer pc2 = new Computer("i5", 16, "512GB", null,
+//                             true, true, "风冷", null);  // null 散落各处!
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+```{python}
+#| label: fig-builder-problems
+#| fig-cap: "Builder 模式解决的问题 | Probleme ohne Builder Pattern"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6.5)
+ax.axis('off')
+ax.set_title('没有 Builder 模式时的问题', fontsize=13, fontweight='bold',
+             color='#6A1B9A')
+
+probs = [
+    ('(1) 构造函数参数爆炸', '8+ 个参数排成一排，\n调用者无法从位置\n判断每个参数的含义。\nbool 参数尤其难读。', 2.5),
+    ('(2) 可选参数处理混乱', '不需要 GPU 的电脑仍然\n必须传 null。\n多个重载构造函数\n导致维护噩梦。', 7.0),
+    ('(3) 无法控制构建顺序', '某些组件有依赖关系\n（如水冷必须配特定机箱），\n构造函数无法强制\n正确的装配顺序。', 11.5),
+]
+
+for title, desc, x in probs:
+    card = mpatches.FancyBboxPatch((x - 2.0, 0.5), 4.2, 5.5,
+        boxstyle="round,pad=0.12", facecolor='#F3E5F5',
+        edgecolor='#6A1B9A', linewidth=2)
+    ax.add_patch(card)
+    ax.text(x + 0.1, 5.5, title, ha='center', fontsize=9.5,
+            fontweight='bold', color='#6A1B9A')
+    ax.text(x + 0.1, 3.2, desc, ha='center', fontsize=8.5,
+            color='#444', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+这段代码有三个核心问题。第一，**构造函数参数爆炸** (Telescoping Constructor)：8 个以上参数排成一排，调用者无法凭位置理解每个参数的含义，布尔参数尤其难以阅读。第二，**可选参数处理混乱**：不需要 GPU 的电脑仍然必须传 `null`，如果用多个重载构造函数来解决，会导致维护噩梦。第三，**无法控制构建顺序**：某些组件之间有依赖关系，构造函数无法表达和强制执行。
+
+## 用 Builder 重构 | Refactoring mit Builder
+
+```java
+// 1. 产品类: 字段设为 final 或 package-private，不暴露 setter
+public class Computer {
+    private final String cpu;
+    private final int ram;
+    private final String storage;
+    private final String gpu;
+    private final boolean hasWifi;
+    private final boolean hasBluetooth;
+    private final String cooling;
+    private final String color;
+
+    // 私有构造函数，只有 Builder 能调用
+    private Computer(Builder builder) {
+        this.cpu = builder.cpu;
+        this.ram = builder.ram;
+        this.storage = builder.storage;
+        this.gpu = builder.gpu;
+        this.hasWifi = builder.hasWifi;
+        this.hasBluetooth = builder.hasBluetooth;
+        this.cooling = builder.cooling;
+        this.color = builder.color;
+    }
+
+    @Override
+    public String toString() {
+        return "Computer[cpu=" + cpu + ", ram=" + ram + "GB, gpu=" + gpu + "]";
+    }
+
+    // 2. 静态内部 Builder 类
+    public static class Builder {
+        // 必填参数
+        private final String cpu;
+        private final int ram;
+
+        // 可选参数 -- 提供默认值
+        private String storage = "256GB";
+        private String gpu = "集成显卡";
+        private boolean hasWifi = true;
+        private boolean hasBluetooth = false;
+        private String cooling = "风冷";
+        private String color = "黑色";
+
+        // Builder 构造函数只需必填参数
+        public Builder(String cpu, int ram) {
+            this.cpu = cpu;
+            this.ram = ram;
+        }
+
+        // 每个 setter 返回 this，支持链式调用
+        public Builder storage(String storage) {
+            this.storage = storage;
+            return this;
+        }
+
+        public Builder gpu(String gpu) {
+            this.gpu = gpu;
+            return this;
+        }
+
+        public Builder hasWifi(boolean hasWifi) {
+            this.hasWifi = hasWifi;
+            return this;
+        }
+
+        public Builder hasBluetooth(boolean hasBluetooth) {
+            this.hasBluetooth = hasBluetooth;
+            return this;
+        }
+
+        public Builder cooling(String cooling) {
+            this.cooling = cooling;
+            return this;
+        }
+
+        public Builder color(String color) {
+            this.color = color;
+            return this;
+        }
+
+        // 最终构建方法
+        public Computer build() {
+            // 可以在这里做校验，比如水冷 + 特定机箱
+            return new Computer(this);
+        }
+    }
+}
+
+// 使用 -- 清晰的链式调用，每个参数都有名字!
+// Computer gaming = new Computer.Builder("i7", 32)
+//     .storage("1TB")
+//     .gpu("RTX 4090")
+//     .cooling("水冷")
+//     .color("白色")
+//     .build();
+//
+// Computer office = new Computer.Builder("i5", 16)
+//     .hasBluetooth(true)
+//     .build();   // 其他参数使用默认值，不需要传 null!
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-builder-uml
+#| fig-cap: "Builder 模式 UML | Klassendiagramm Builder Pattern"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 8.5)
+ax.axis('off')
+ax.set_title('Builder Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C = '#6A1B9A'
+
+# Computer (Product)
+cp = draw_uml_class(ax, 0.3, 8.0, 5.0,
+    'Computer',
+    attrs=['- cpu: String  {final}',
+           '- ram: int  {final}',
+           '- storage: String  {final}',
+           '- gpu: String  {final}'],
+    methods=['- Computer(builder: Builder)',
+             '+ toString(): String'],
+    color=C)
+
+# Builder (static inner class)
+bd = draw_uml_class(ax, 6.5, 8.0, 5.0,
+    'Computer.Builder',
+    attrs=['- cpu: String  {final}',
+           '- ram: int  {final}',
+           '- storage: String = "256GB"',
+           '- gpu: String = "集成显卡"'],
+    methods=['+ Builder(cpu, ram)',
+             '+ storage(s): Builder',
+             '+ gpu(g): Builder',
+             '+ cooling(c): Builder',
+             '+ build(): Computer'],
+    color=C)
+
+# Builder creates Computer
+draw_uses(ax, (bd[0] - 1.5, 5.0), (cp[0] + 1.5, 5.0),
+          color=C, label='<<creates>>')
+
+# Annotation
+note = mpatches.FancyBboxPatch((1.0, 0.5), 5.5, 2.2, boxstyle="round,pad=0.1",
+    facecolor='#FEF9E7', edgecolor='#F39C12', linewidth=1.5, linestyle='--')
+ax.add_patch(note)
+ax.text(3.75, 2.3, 'Builder 的关键特征:', fontsize=9,
+        fontweight='bold', color='#E65100')
+ax.text(3.75, 1.7, '(1) setter 返回 this --> 链式调用', fontsize=8, color='#444')
+ax.text(3.75, 1.2, '(2) build() 返回产品 --> 最终组装', fontsize=8, color='#444')
+ax.text(3.75, 0.7, '(3) 可选参数有默认值 --> 无需 null', fontsize=8, color='#444')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Prototype 原型模式 | Prototypmuster
+
+## 小故事：游戏里的怪物复制
+
+你在开发一个游戏。游戏里有一种"哥布林"怪物，它有 50 点生命值、10 点攻击力、穿着皮甲、手持短刀。每当玩家进入一个新房间，需要刷出 20 只一模一样的哥布林。如果每次都 `new Goblin()` 然后逐个设置属性——`setHp(50); setAttack(10); setArmor("皮甲"); setWeapon("短刀");`——这不仅繁琐，而且如果哥布林的初始化逻辑需要从数据库或配置文件读取，每次 new 都要重复那些昂贵的操作。
+
+更聪明的做法：先创建一只"模板哥布林" (Prototype)，把它的所有属性设置好。之后每次需要新哥布林时，直接**克隆** (clone) 这个模板就行——一行代码搞定，而且不需要重新执行昂贵的初始化。
+
+**Prototype 模式**的核心思想：**通过克隆一个已有的实例来创建新对象，而不是通过 new 从头构建。** 尤其适合创建成本高或者需要大量相似对象的场景。
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 每次都从头创建和初始化
+public class GameRoom {
+
+    public void spawnGoblins(int count) {
+        for (int i = 0; i < count; i++) {
+            Goblin g = new Goblin();         // 每次 new
+            g.setHp(50);                      // 重复设置
+            g.setAttack(10);                  // 重复设置
+            g.setArmor("皮甲");               // 重复设置
+            g.setWeapon("短刀");              // 重复设置
+            g.loadTextureFromDisk();          // 每次都读磁盘! 昂贵!
+            g.calculateInitialStats();        // 每次都重新计算!
+            addToRoom(g);
+        }
+    }
+
+    // 如果要刷"精英哥布林"？复制上面一大段，改几个属性值...
+    public void spawnEliteGoblins(int count) {
+        for (int i = 0; i < count; i++) {
+            Goblin g = new Goblin();
+            g.setHp(200);
+            g.setAttack(50);
+            g.setArmor("铁甲");
+            g.setWeapon("大剑");
+            g.loadTextureFromDisk();          // 又读一次磁盘!
+            g.calculateInitialStats();
+            addToRoom(g);
+        }
+    }
+
+    private void addToRoom(Goblin g) { /* ... */ }
+}
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+这段代码的问题首先在于**重复的初始化逻辑**：每次创建新对象都要重复执行相同的属性设置和昂贵的初始化操作（如磁盘读取）。其次，**创建逻辑散落各处**：想修改哥布林的默认属性，需要在所有 spawn 方法中逐一修改。第三，**违反 DRY 原则**：普通哥布林和精英哥布林的创建代码高度相似，重复代码过多。第四，如果对象的创建需要经过复杂的计算或外部资源加载，每次从头创建都**浪费大量性能**。
+
+## 用 Prototype 重构 | Refactoring mit Prototype
+
+```java
+// 1. Prototype 接口
+public interface GameUnitPrototype {
+    GameUnitPrototype clone();
+}
+
+// 2. 具体原型
+public class Goblin implements GameUnitPrototype {
+    private int hp;
+    private int attack;
+    private String armor;
+    private String weapon;
+    private byte[] texture;  // 从磁盘加载的纹理，很大
+
+    public Goblin(int hp, int attack, String armor, String weapon) {
+        this.hp = hp;
+        this.attack = attack;
+        this.armor = armor;
+        this.weapon = weapon;
+        this.texture = loadTextureFromDisk();  // 只在创建原型时执行一次!
+    }
+
+    // 私有拷贝构造函数
+    private Goblin(Goblin source) {
+        this.hp = source.hp;
+        this.attack = source.attack;
+        this.armor = source.armor;
+        this.weapon = source.weapon;
+        this.texture = source.texture;  // 共享纹理，不重新加载!
+    }
+
+    @Override
+    public GameUnitPrototype clone() {
+        return new Goblin(this);  // 通过拷贝构造函数克隆
+    }
+
+    private byte[] loadTextureFromDisk() {
+        System.out.println("从磁盘加载纹理...(昂贵操作)");
+        return new byte[1024];
+    }
+
+    // getter/setter ...
+    public void setHp(int hp) { this.hp = hp; }
+}
+
+// 3. 原型注册表 (可选，方便管理多种原型)
+public class PrototypeRegistry {
+    private Map<String, GameUnitPrototype> prototypes = new HashMap<>();
+
+    public void register(String key, GameUnitPrototype prototype) {
+        prototypes.put(key, prototype);
+    }
+
+    public GameUnitPrototype getClone(String key) {
+        return prototypes.get(key).clone();
+    }
+}
+
+// 4. 使用
+// PrototypeRegistry registry = new PrototypeRegistry();
+// registry.register("goblin", new Goblin(50, 10, "皮甲", "短刀"));
+// registry.register("elite_goblin", new Goblin(200, 50, "铁甲", "大剑"));
+//
+// // 刷 20 只普通哥布林 -- 不再重复加载纹理!
+// for (int i = 0; i < 20; i++) {
+//     Goblin g = (Goblin) registry.getClone("goblin");
+//     addToRoom(g);
+// }
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-prototype-uml
+#| fig-cap: "Prototype 模式 UML | Klassendiagramm Prototype Pattern"
+
+fig, ax = plt.subplots(figsize=(13, 9))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 9.5)
+ax.axis('off')
+ax.set_title('Prototype Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C = '#4A148C'
+
+# GameUnitPrototype (interface)
+pr = draw_uml_class(ax, 4.0, 9.0, 4.5,
+    'GameUnitPrototype',
+    attrs=[],
+    methods=['+ clone(): GameUnitPrototype'],
+    color=C, is_interface=True)
+
+# Goblin (concrete prototype)
+gb = draw_uml_class(ax, 1.5, 5.5, 4.5,
+    'Goblin',
+    attrs=['- hp: int',
+           '- attack: int',
+           '- armor: String',
+           '- texture: byte[]'],
+    methods=['+ clone(): GameUnitPrototype'],
+    color=C)
+
+# PrototypeRegistry
+rg = draw_uml_class(ax, 7.5, 5.5, 5.0,
+    'PrototypeRegistry',
+    attrs=['- prototypes: Map<String, Prototype>'],
+    methods=['+ register(key, proto): void',
+             '+ getClone(key): GameUnitPrototype'],
+    color='#333')
+
+# Goblin implements GameUnitPrototype
+draw_implements(ax, (gb[0], gb[1]), (pr[0] - 0.5, pr[2]), color=C)
+
+# PrototypeRegistry -> GameUnitPrototype
+draw_association(ax, (rg[0] - 1.0, rg[1]), (pr[0] + 1.5, pr[2]),
+                 color='#333')
+ax.text(8.0, 7.6, 'prototypes', fontsize=7, color='#333', style='italic')
+ax.text(8.5, 7.3, '0..*', fontsize=7, color='#333')
+
+# Self-clone arrow on Goblin
+ax.annotate('', xy=(1.3, 4.0), xytext=(1.3, 5.0),
+    arrowprops=dict(arrowstyle='->', color=C, lw=1.5,
+                    connectionstyle='arc3,rad=-0.5'))
+ax.text(0.2, 4.5, 'clone()', fontsize=7, color=C, style='italic')
+
+# Annotation
+note = mpatches.FancyBboxPatch((0.5, 0.5), 6.0, 2.0, boxstyle="round,pad=0.1",
+    facecolor='#FEF9E7', edgecolor='#F39C12', linewidth=1.5, linestyle='--')
+ax.add_patch(note)
+ax.text(3.5, 2.1, 'Prototype 关键点:', fontsize=9,
+        fontweight='bold', color='#E65100')
+ax.text(3.5, 1.5, '(1) clone() 通过拷贝已有对象创建新对象', fontsize=8, color='#444')
+ax.text(3.5, 1.0, '(2) 避免重复执行昂贵的初始化操作', fontsize=8, color='#444')
+ax.text(3.5, 0.5, '(3) 注意深拷贝 vs 浅拷贝问题!', fontsize=8, color='#C62828')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Facade 外观模式 | Fassadenmuster
+
+## 小故事：看电影只需按一个按钮
+
+你家里有一套复杂的家庭影院系统：投影仪、功放、蓝光播放器、环绕音响、灯光控制器、窗帘电机。想看电影时你要按正确的顺序操作：先拉窗帘、再关灯、开投影仪、开功放、设置功放为环绕声模式、开蓝光播放器、选影片……一共十几步。你的家人根本记不住，每次都叫你来操作。
+
+于是你买了一个万能遥控器，上面只有一个按钮"看电影"。按下后，遥控器自动帮你执行所有步骤。这个万能遥控器就是 **Facade**。
+
+**Facade 模式**的核心思想：**为一组复杂的子系统提供一个统一的、简化的高层接口，让客户端不需要了解子系统内部的复杂交互。** 它不隐藏子系统——需要细粒度控制的人仍然可以直接调用子系统——但为常见操作提供了便利入口。
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 客户端直接操作所有子系统 -- 复杂且容易出错
+public class MovieNight {
+
+    public void watchMovie(String movie) {
+        // 客户端必须了解所有子系统和正确的操作顺序
+        CurtainController curtain = new CurtainController();
+        curtain.close();
+
+        LightController light = new LightController();
+        light.dim(10);
+
+        Projector projector = new Projector();
+        projector.on();
+        projector.setWideScreenMode();
+
+        Amplifier amp = new Amplifier();
+        amp.on();
+        amp.setVolume(8);
+        amp.setSurroundMode();
+
+        BluRayPlayer player = new BluRayPlayer();
+        player.on();
+        player.play(movie);
+
+        // 看完电影? 又要按逆序关闭所有设备...
+        // 如果子系统 API 变了? 所有使用此流程的地方都要改!
+        // 如果新加了一个"空调控制"? 所有调用者都要加一行!
+    }
+}
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+这段代码的问题在于客户端与每一个子系统都是**紧耦合**的：客户端必须知道所有子系统类、方法名、调用顺序。如果子系统的 API 发生变化（比如 Projector 的 `setWideScreenMode()` 改名了），所有使用这段流程的客户端代码都要修改。此外，这段复杂的操作序列很可能在多处被调用，导致**大量重复代码**，违反 DRY 原则。
+
+## 用 Facade 重构 | Refactoring mit Facade
+
+```java
+// 1. 子系统类保持不变 (已有的复杂系统)
+public class CurtainController {
+    public void close() { System.out.println("窗帘关闭"); }
+    public void open()  { System.out.println("窗帘打开"); }
+}
+
+public class LightController {
+    public void dim(int level) { System.out.println("灯光调暗至 " + level + "%"); }
+    public void on() { System.out.println("灯光打开"); }
+}
+
+public class Projector {
+    public void on()  { System.out.println("投影仪开启"); }
+    public void off() { System.out.println("投影仪关闭"); }
+    public void setWideScreenMode() { System.out.println("宽屏模式"); }
+}
+
+public class Amplifier {
+    public void on()  { System.out.println("功放开启"); }
+    public void off() { System.out.println("功放关闭"); }
+    public void setVolume(int v) { System.out.println("音量: " + v); }
+    public void setSurroundMode() { System.out.println("环绕声模式"); }
+}
+
+public class BluRayPlayer {
+    public void on()  { System.out.println("蓝光播放器开启"); }
+    public void off() { System.out.println("蓝光播放器关闭"); }
+    public void play(String movie) { System.out.println("播放: " + movie); }
+}
+
+// 2. Facade: 提供简化的高层接口
+public class HomeTheaterFacade {
+    private CurtainController curtain;
+    private LightController light;
+    private Projector projector;
+    private Amplifier amp;
+    private BluRayPlayer player;
+
+    public HomeTheaterFacade(CurtainController curtain, LightController light,
+                             Projector projector, Amplifier amp,
+                             BluRayPlayer player) {
+        this.curtain = curtain;
+        this.light = light;
+        this.projector = projector;
+        this.amp = amp;
+        this.player = player;
+    }
+
+    // 简化操作: 一个方法搞定一切
+    public void watchMovie(String movie) {
+        curtain.close();
+        light.dim(10);
+        projector.on();
+        projector.setWideScreenMode();
+        amp.on();
+        amp.setVolume(8);
+        amp.setSurroundMode();
+        player.on();
+        player.play(movie);
+    }
+
+    public void endMovie() {
+        player.off();
+        amp.off();
+        projector.off();
+        light.on();
+        curtain.open();
+    }
+}
+
+// 3. 使用 -- 客户端只需要知道 Facade!
+// HomeTheaterFacade theater = new HomeTheaterFacade(
+//     new CurtainController(), new LightController(),
+//     new Projector(), new Amplifier(), new BluRayPlayer());
+// theater.watchMovie("Inception");   // 一行搞定!
+// theater.endMovie();                // 一行关闭!
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-facade-uml
+#| fig-cap: "Facade 模式 UML | Klassendiagramm Facade Pattern"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9.5)
+ax.axis('off')
+ax.set_title('Facade Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C_facade = '#00695C'
+C_sub = '#555555'
+
+# HomeTheaterFacade
+fc = draw_uml_class(ax, 4.5, 9.0, 5.0,
+    'HomeTheaterFacade',
+    attrs=['- curtain: CurtainController',
+           '- light: LightController',
+           '- projector: Projector',
+           '- amp: Amplifier',
+           '- player: BluRayPlayer'],
+    methods=['+ watchMovie(movie): void',
+             '+ endMovie(): void'],
+    color=C_facade)
+
+# Client
+cl = draw_uml_class(ax, 0.2, 8.0, 2.8,
+    'Client',
+    attrs=[],
+    methods=['+ main(): void'],
+    color='#333')
+
+# Subsystem classes
+subs_data = [
+    ('CurtainController', ['+ close(): void', '+ open(): void'], 0.3),
+    ('LightController', ['+ dim(level): void', '+ on(): void'], 3.0),
+    ('Projector', ['+ on(): void', '+ off(): void'], 5.7),
+    ('Amplifier', ['+ on(): void', '+ setSurroundMode()'], 8.4),
+    ('BluRayPlayer', ['+ play(movie): void', '+ off(): void'], 11.1),
+]
+
+subs = []
+for name, methods, x in subs_data:
+    s = draw_uml_class(ax, x, 3.5, 2.5, name, attrs=[], methods=methods,
+                        color=C_sub)
+    subs.append(s)
+
+# Client -> Facade
+draw_association(ax, (cl[0] + 1.0, 7.0), (fc[0] - 1.5, 7.0),
+                 color='#333')
+
+# Facade -> each subsystem
+for s in subs:
+    draw_association(ax, (fc[0], fc[2]), (s[0], s[1]),
+                     color=C_facade)
+
+# Subsystem boundary
+sub_rect = mpatches.FancyBboxPatch((0.0, 0.8), 13.8, 3.5,
+    boxstyle="round,pad=0.1", facecolor='#F0F0F0',
+    edgecolor='#AAA', linewidth=1.5, linestyle='--')
+ax.add_patch(sub_rect)
+ax.text(7.0, 0.9, '子系统 | Subsystem', ha='center', fontsize=8,
+        color='#888', style='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Proxy 代理模式 | Stellvertretenmuster
+
+## 小故事：明星的经纪人
+
+你想找一位大明星拍广告。你不可能直接打电话给明星本人——你得联系他的**经纪人** (Proxy)。经纪人跟你谈价格、确认档期、签合同。只有在真正需要拍摄的时候，经纪人才会把明星请来。经纪人起到了几个作用：控制谁能接触明星 (访问控制)、在明星到场前先处理琐事 (延迟加载)、记录所有联系请求 (日志)。
+
+**Proxy 模式**的核心思想：**提供一个代理对象来控制对另一个对象的访问。** 代理和真实对象实现同一个接口，客户端不知道自己用的是代理还是真实对象。常见的 Proxy 类型包括：虚拟代理 (Virtueller Proxy，延迟加载)、保护代理 (Schutzproxy，访问控制)、远程代理 (Fernproxy，远程调用)。
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 客户端直接操作昂贵的真实对象
+public class HugeImage {
+    private byte[] imageData;
+
+    public HugeImage(String filename) {
+        // 构造时立即加载，即使图片可能永远不会被显示!
+        System.out.println("从磁盘加载大图片: " + filename + " (100MB)...");
+        this.imageData = loadFromDisk(filename);  // 非常慢!
+    }
+
+    public void display() {
+        System.out.println("显示图片");
+    }
+
+    private byte[] loadFromDisk(String filename) {
+        // 模拟耗时操作
+        return new byte[100_000_000];
+    }
+}
+
+// 使用 -- 页面上有 50 张大图片，全部立即加载!
+// List<HugeImage> gallery = new ArrayList<>();
+// for (String file : files) {
+//     gallery.add(new HugeImage(file));  // 50张图全部加载到内存!
+// }
+// // 用户可能只看前 3 张就离开了...
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+核心问题是**过早加载** (Eager Loading)：50 张图片在创建时就全部从磁盘读入内存，即使用户可能只看其中几张。这导致内存占用巨大、程序启动缓慢。此外，客户端代码没有任何手段控制何时加载、是否有权限访问，所有逻辑都裸露在外。
+
+## 用 Proxy 重构 | Refactoring mit Proxy
+
+```java
+// 1. 共同接口
+public interface Image {
+    void display();
+}
+
+// 2. 真实对象 (Real Subject)
+public class HugeImage implements Image {
+    private byte[] imageData;
+    private String filename;
+
+    public HugeImage(String filename) {
+        this.filename = filename;
+        loadFromDisk();  // 创建时才加载
+    }
+
+    @Override
+    public void display() {
+        System.out.println("显示图片: " + filename);
+    }
+
+    private void loadFromDisk() {
+        System.out.println("从磁盘加载: " + filename + " (100MB)...");
+        this.imageData = new byte[100_000_000];
+    }
+}
+
+// 3. 虚拟代理 (Virtual Proxy) -- 延迟加载
+public class ImageProxy implements Image {
+    private HugeImage realImage;  // 真实对象的引用 (初始为 null)
+    private String filename;
+
+    public ImageProxy(String filename) {
+        this.filename = filename;
+        // 不加载图片! 只记住文件名
+    }
+
+    @Override
+    public void display() {
+        // 只有在真正需要显示时才加载
+        if (realImage == null) {
+            realImage = new HugeImage(filename);  // 懒加载!
+        }
+        realImage.display();
+    }
+}
+
+// 4. 使用 -- 创建 50 个代理几乎不消耗资源
+// List<Image> gallery = new ArrayList<>();
+// for (String file : files) {
+//     gallery.add(new ImageProxy(file));  // 只保存文件名，不加载!
+// }
+// gallery.get(0).display();  // 只有第 0 张被加载并显示
+// gallery.get(1).display();  // 第 1 张此时才被加载
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-proxy-uml
+#| fig-cap: "Proxy 模式 UML | Klassendiagramm Proxy Pattern"
+
+fig, ax = plt.subplots(figsize=(13, 9))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 9.5)
+ax.axis('off')
+ax.set_title('Proxy Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C = '#004D40'
+
+# Image (interface)
+im = draw_uml_class(ax, 4.0, 9.0, 4.5,
+    'Image',
+    attrs=[],
+    methods=['+ display(): void'],
+    color=C, is_interface=True)
+
+# ImageProxy
+ip = draw_uml_class(ax, 1.0, 5.0, 4.5,
+    'ImageProxy',
+    attrs=['- realImage: HugeImage',
+           '- filename: String'],
+    methods=['+ display(): void'],
+    color=C)
+
+# HugeImage (Real Subject)
+hi = draw_uml_class(ax, 7.5, 5.0, 4.5,
+    'HugeImage',
+    attrs=['- imageData: byte[]',
+           '- filename: String'],
+    methods=['+ display(): void',
+             '- loadFromDisk(): void'],
+    color=C)
+
+# Client
+cl = draw_uml_class(ax, 0.2, 8.5, 2.5,
+    'Client',
+    attrs=[],
+    methods=[],
+    color='#333')
+
+# Client -> Image
+draw_association(ax, (cl[0] + 1.0, 8.0), (im[0] - 1.0, 8.0),
+                 color='#333')
+
+# ImageProxy implements Image
+draw_implements(ax, (ip[0], ip[1]), (im[0] - 0.5, im[2]), color=C)
+
+# HugeImage implements Image
+draw_implements(ax, (hi[0], hi[1]), (im[0] + 0.5, im[2]), color=C)
+
+# ImageProxy -> HugeImage (关联)
+draw_association(ax, (ip[0] + 2.0, 3.5), (hi[0] - 1.5, 3.5),
+                 color=C)
+ax.text(5.5, 3.8, 'realImage', fontsize=7, color=C, style='italic')
+
+# Annotation
+note = mpatches.FancyBboxPatch((0.5, 0.3), 6.0, 2.0, boxstyle="round,pad=0.1",
+    facecolor='#FEF9E7', edgecolor='#F39C12', linewidth=1.5, linestyle='--')
+ax.add_patch(note)
+ax.text(3.5, 1.9, 'Proxy 的三种常见类型:', fontsize=9,
+        fontweight='bold', color='#E65100')
+ax.text(3.5, 1.3, '(1) Virtual Proxy -- 延迟加载昂贵资源', fontsize=8, color='#444')
+ax.text(3.5, 0.8, '(2) Protection Proxy -- 访问权限控制', fontsize=8, color='#444')
+ax.text(3.5, 0.3, '(3) Remote Proxy -- 远程对象的本地代表', fontsize=8, color='#444')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Chain of Responsibility 责任链模式 | Zustaendigkeitskette
+
+## 小故事：公司的报销审批流程
+
+你在公司提交了一笔报销申请。金额 500 元以内，组长可以直接批准；500 到 5000 元，需要部门经理审批；5000 元以上，需要总经理批准。传统做法是：你写一个大 if-else——如果金额 < 500 找组长，如果 500-5000 找经理，否则找总经理。但是！如果公司增加了一个"副总"审批级别呢？如果审批权限变了呢？每次都要改这段 if-else。
+
+更好的做法是：把每个审批人看作链条上的一环。你只管把申请交给链条的第一环（组长），如果他能批就批了；如果他觉得金额超出自己权限，就自动传递给下一环（经理）——以此类推，直到有人能处理为止。
+
+**Chain of Responsibility 模式**的核心思想：**将多个处理者连成一条链，请求沿链传递，直到有一个处理者能够处理它。** 发送者无需知道哪个处理者最终会处理请求。
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 所有审批逻辑硬编码在一个方法中
+public class ExpenseApproval {
+
+    public void approve(double amount, String description) {
+        if (amount < 500) {
+            System.out.println("组长批准: " + description + " (" + amount + "元)");
+        } else if (amount < 5000) {
+            System.out.println("部门经理批准: " + description + " (" + amount + "元)");
+        } else if (amount < 50000) {
+            System.out.println("总经理批准: " + description + " (" + amount + "元)");
+        } else {
+            System.out.println("金额太大，需要董事会审批!");
+        }
+        // 新增 "副总" 级别? 修改这个方法，重新排列 if-else!
+        // 修改组长的审批上限? 修改这个方法!
+        // 审批不仅看金额，还要看类别? if-else 越来越复杂!
+    }
+}
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+这段代码有三个核心问题。第一，**违反 Open-Closed Principle**：增加新的审批级别必须修改现有代码。第二，**审批逻辑集中在一处**：所有审批人的职责和权限都混在同一个方法里，违反 SRP。第三，**请求发送者和所有处理者紧耦合**：发送者必须知道所有审批级别的规则，无法在运行时动态调整审批链。
+
+## 用 Chain of Responsibility 重构 | Refactoring mit Chain of Responsibility
+
+```java
+// 1. 抽象处理者
+public abstract class Approver {
+    protected Approver nextApprover;  // 链中的下一个
+
+    public void setNext(Approver next) {
+        this.nextApprover = next;
+    }
+
+    public abstract void approve(double amount, String description);
+
+    protected void passToNext(double amount, String description) {
+        if (nextApprover != null) {
+            nextApprover.approve(amount, description);
+        } else {
+            System.out.println("没有人能批准此申请: " + description);
+        }
+    }
+}
+
+// 2. 具体处理者: 组长
+public class TeamLeader extends Approver {
+    @Override
+    public void approve(double amount, String description) {
+        if (amount < 500) {
+            System.out.println("组长批准: " + description + " (" + amount + "元)");
+        } else {
+            passToNext(amount, description);  // 超出权限，传给下一个
+        }
+    }
+}
+
+// 3. 具体处理者: 部门经理
+public class DepartmentManager extends Approver {
+    @Override
+    public void approve(double amount, String description) {
+        if (amount < 5000) {
+            System.out.println("部门经理批准: " + description + " (" + amount + "元)");
+        } else {
+            passToNext(amount, description);
+        }
+    }
+}
+
+// 4. 具体处理者: 总经理
+public class GeneralManager extends Approver {
+    @Override
+    public void approve(double amount, String description) {
+        if (amount < 50000) {
+            System.out.println("总经理批准: " + description + " (" + amount + "元)");
+        } else {
+            passToNext(amount, description);
+        }
+    }
+}
+
+// 5. 组装链 + 使用
+// TeamLeader leader = new TeamLeader();
+// DepartmentManager manager = new DepartmentManager();
+// GeneralManager gm = new GeneralManager();
+// leader.setNext(manager);
+// manager.setNext(gm);
+//
+// leader.approve(200, "办公用品");   --> 组长批准
+// leader.approve(3000, "培训费用"); --> 部门经理批准
+// leader.approve(30000, "设备采购"); --> 总经理批准
+// 新增副总? 只需创建 ViceGM extends Approver，插入链中!
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-chain-uml
+#| fig-cap: "Chain of Responsibility 模式 UML | Klassendiagramm"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9.5)
+ax.axis('off')
+ax.set_title('Chain of Responsibility Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C = '#C62828'
+
+# Approver (abstract)
+ap = draw_uml_class(ax, 4.5, 9.0, 5.0,
+    'Approver',
+    attrs=['# nextApprover: Approver'],
+    methods=['+ setNext(next: Approver): void',
+             '+ approve(amount, desc): void  {abstract}',
+             '# passToNext(amount, desc): void'],
+    color=C, is_abstract=True)
+
+# Self-reference arrow (next)
+ax.annotate('', xy=(9.8, 8.5), xytext=(9.8, 7.0),
+    arrowprops=dict(arrowstyle='->', color=C, lw=1.5,
+                    connectionstyle='arc3,rad=-0.5'))
+ax.text(10.5, 7.7, 'nextApprover', fontsize=7, color=C, style='italic')
+
+# TeamLeader
+tl = draw_uml_class(ax, 0.5, 3.5, 3.5,
+    'TeamLeader',
+    attrs=[],
+    methods=['+ approve(amount, desc): void'],
+    color=C)
+
+# DepartmentManager
+dm = draw_uml_class(ax, 5.0, 3.5, 3.8,
+    'DepartmentManager',
+    attrs=[],
+    methods=['+ approve(amount, desc): void'],
+    color=C)
+
+# GeneralManager
+gm = draw_uml_class(ax, 9.5, 3.5, 3.8,
+    'GeneralManager',
+    attrs=[],
+    methods=['+ approve(amount, desc): void'],
+    color=C)
+
+# All extend Approver
+draw_extends(ax, (tl[0], tl[1]), (ap[0] - 1.0, ap[2]), color=C)
+draw_extends(ax, (dm[0], dm[1]), (ap[0], ap[2]), color=C)
+draw_extends(ax, (gm[0], gm[1]), (ap[0] + 1.0, ap[2]), color=C)
+
+# Chain arrows between concrete handlers
+ax.annotate('', xy=(dm[0] - 1.5, 2.5), xytext=(tl[0] + 1.5, 2.5),
+    arrowprops=dict(arrowstyle='->', color='#888', lw=1.5,
+                    linestyle='--'))
+ax.text(4.3, 2.8, 'next', fontsize=7, color='#888', style='italic')
+
+ax.annotate('', xy=(gm[0] - 1.5, 2.5), xytext=(dm[0] + 1.5, 2.5),
+    arrowprops=dict(arrowstyle='->', color='#888', lw=1.5,
+                    linestyle='--'))
+ax.text(9.0, 2.8, 'next', fontsize=7, color='#888', style='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Iterator 迭代器模式 | Iteratormuster
+
+## 小故事：图书馆的借阅系统
+
+图书馆有一面书架，书排成一排（数组）。另外还有一个"推荐阅读"列表，用链表存储。管理员想统一遍历这两种数据结构——比如打印所有书名。如果他直接用 `for (int i = 0; i < array.length; i++)` 遍历数组，用 `node = node.next` 遍历链表，那他的打印代码就必须知道底层数据结构的细节。换了一种数据结构？打印代码就得重写。
+
+如果每种数据结构都提供一个统一的"浏览器" (Iterator)——你只需要问"有下一本吗？"和"给我下一本"——那打印代码就完全不用关心底层是数组还是链表。
+
+**Iterator 模式**的核心思想：**提供一种方法来顺序访问聚合对象中的元素，而不暴露其内部表示。**
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 客户端必须知道底层数据结构
+public class Library {
+    private String[] shelfBooks = {"Java编程", "算法导论", "设计模式"};
+    private LinkedList<String> recommendedBooks = new LinkedList<>();
+
+    public Library() {
+        recommendedBooks.add("重构");
+        recommendedBooks.add("代码整洁之道");
+    }
+
+    // 直接暴露内部数据结构!
+    public String[] getShelfBooks() { return shelfBooks; }
+    public LinkedList<String> getRecommendedBooks() { return recommendedBooks; }
+}
+
+// 客户端: 必须用两种不同的方式遍历
+// Library lib = new Library();
+// for (int i = 0; i < lib.getShelfBooks().length; i++) {
+//     System.out.println(lib.getShelfBooks()[i]);     // 数组遍历
+// }
+// for (String book : lib.getRecommendedBooks()) {
+//     System.out.println(book);                        // 链表遍历
+// }
+// 如果 shelfBooks 改成 ArrayList? 所有遍历代码都要改!
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+这段代码**暴露了内部数据结构**：客户端直接拿到 `String[]` 和 `LinkedList`，与具体的数据结构紧耦合。如果将来 `shelfBooks` 从数组改成 `ArrayList`，所有遍历代码都要修改。此外，两种遍历方式不统一，无法写一个通用的"打印所有书籍"方法。
+
+## 用 Iterator 重构 | Refactoring mit Iterator
+
+```java
+// 1. Iterator 接口
+public interface BookIterator {
+    boolean hasNext();
+    String next();
+}
+
+// 2. 集合接口
+public interface BookCollection {
+    BookIterator createIterator();
+}
+
+// 3. 具体集合: 书架 (数组实现)
+public class ShelfCollection implements BookCollection {
+    private String[] books = {"Java编程", "算法导论", "设计模式"};
+
+    @Override
+    public BookIterator createIterator() {
+        return new ShelfIterator(books);
+    }
+
+    // 内部迭代器
+    private static class ShelfIterator implements BookIterator {
+        private String[] books;
+        private int index = 0;
+
+        ShelfIterator(String[] books) { this.books = books; }
+
+        @Override
+        public boolean hasNext() { return index < books.length; }
+
+        @Override
+        public String next() { return books[index++]; }
+    }
+}
+
+// 4. 具体集合: 推荐列表 (链表实现)
+public class RecommendedCollection implements BookCollection {
+    private LinkedList<String> books = new LinkedList<>();
+
+    public RecommendedCollection() {
+        books.add("重构");
+        books.add("代码整洁之道");
+    }
+
+    @Override
+    public BookIterator createIterator() {
+        return new RecommendedIterator(books);
+    }
+
+    private static class RecommendedIterator implements BookIterator {
+        private Iterator<String> javaIterator;
+
+        RecommendedIterator(LinkedList<String> books) {
+            this.javaIterator = books.iterator();
+        }
+
+        @Override
+        public boolean hasNext() { return javaIterator.hasNext(); }
+
+        @Override
+        public String next() { return javaIterator.next(); }
+    }
+}
+
+// 5. 使用 -- 统一遍历!
+// BookCollection shelf = new ShelfCollection();
+// BookCollection recommended = new RecommendedCollection();
+//
+// // 通用打印方法，不关心底层数据结构!
+// public void printAll(BookCollection collection) {
+//     BookIterator it = collection.createIterator();
+//     while (it.hasNext()) {
+//         System.out.println(it.next());
+//     }
+// }
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-iterator-uml
+#| fig-cap: "Iterator 模式 UML | Klassendiagramm Iterator Pattern"
+
+fig, ax = plt.subplots(figsize=(14, 10))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10.5)
+ax.axis('off')
+ax.set_title('Iterator Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C_iter = '#B71C1C'
+C_coll = '#1565C0'
+
+# BookIterator (interface)
+bi = draw_uml_class(ax, 8.0, 10.0, 4.5,
+    'BookIterator',
+    attrs=[],
+    methods=['+ hasNext(): boolean',
+             '+ next(): String'],
+    color=C_iter, is_interface=True)
+
+# BookCollection (interface)
+bc = draw_uml_class(ax, 0.5, 10.0, 5.0,
+    'BookCollection',
+    attrs=[],
+    methods=['+ createIterator(): BookIterator'],
+    color=C_coll, is_interface=True)
+
+# ShelfCollection
+sc = draw_uml_class(ax, 0.5, 5.5, 4.5,
+    'ShelfCollection',
+    attrs=['- books: String[]'],
+    methods=['+ createIterator(): BookIterator'],
+    color=C_coll)
+
+# RecommendedCollection
+rc = draw_uml_class(ax, 0.5, 2.5, 5.0,
+    'RecommendedCollection',
+    attrs=['- books: LinkedList<String>'],
+    methods=['+ createIterator(): BookIterator'],
+    color=C_coll)
+
+# ShelfIterator
+si = draw_uml_class(ax, 8.0, 5.5, 4.5,
+    'ShelfIterator',
+    attrs=['- books: String[]', '- index: int'],
+    methods=['+ hasNext(): boolean', '+ next(): String'],
+    color=C_iter)
+
+# RecommendedIterator
+ri = draw_uml_class(ax, 8.0, 2.5, 4.5,
+    'RecommendedIterator',
+    attrs=['- javaIterator: Iterator'],
+    methods=['+ hasNext(): boolean', '+ next(): String'],
+    color=C_iter)
+
+# Collections implement BookCollection
+draw_implements(ax, (sc[0], sc[1]), (bc[0] + 0.5, bc[2]), color=C_coll)
+draw_implements(ax, (rc[0], rc[1] + 0.5), (bc[0] + 0.5, bc[2] - 0.5), color=C_coll)
+
+# Iterators implement BookIterator
+draw_implements(ax, (si[0], si[1]), (bi[0], bi[2]), color=C_iter)
+draw_implements(ax, (ri[0], ri[1] + 0.5), (bi[0], bi[2] - 0.5), color=C_iter)
+
+# Collection -> Iterator (creates)
+draw_uses(ax, (bc[0] + 2.0, 9.0), (bi[0] - 1.0, 9.0),
+          color='#555', label='<<creates>>')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# State 状态模式 | Zustandsmuster
+
+## 小故事：自动售货机的状态转换
+
+想象一台自动售货机。它有几种状态：等待投币、已投币（等待选择商品）、正在出货、缺货。在"等待投币"状态下按选择按钮？什么都不会发生。在"已投币"状态下再投币？应该累加金额或退回。在"正在出货"状态下投币？应该提示等待。
+
+如果用 if-else 来处理："如果当前状态是等待投币且用户投了币，那么……如果当前状态是已投币且用户按了选择……"——随着状态和事件的增加，if-else 会爆炸式增长，而且状态转换逻辑分散在各个方法中，极易出错。
+
+**State 模式**的核心思想：**将每种状态封装成一个独立的类，把状态相关的行为委托给当前状态对象。** 状态转换就是切换当前状态对象，行为随之自动改变——就像售货机换了一个"大脑"。
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 状态逻辑散落在 if-else 中
+public class VendingMachine {
+    private String state = "WAITING_FOR_COIN";
+    private int balance = 0;
+
+    public void insertCoin(int amount) {
+        if (state.equals("WAITING_FOR_COIN")) {
+            balance += amount;
+            state = "COIN_INSERTED";
+            System.out.println("已投入: " + amount + "分");
+        } else if (state.equals("COIN_INSERTED")) {
+            balance += amount;
+            System.out.println("追加投入: " + amount + "分, 总计: " + balance);
+        } else if (state.equals("DISPENSING")) {
+            System.out.println("请等待出货完成!");
+        } else if (state.equals("SOLD_OUT")) {
+            System.out.println("已售罄，退回硬币!");
+        }
+    }
+
+    public void selectProduct() {
+        if (state.equals("WAITING_FOR_COIN")) {
+            System.out.println("请先投币!");
+        } else if (state.equals("COIN_INSERTED")) {
+            if (balance >= 100) {
+                state = "DISPENSING";
+                dispense();
+            } else {
+                System.out.println("金额不足!");
+            }
+        } else if (state.equals("DISPENSING")) {
+            System.out.println("正在出货，请等待!");
+        } else if (state.equals("SOLD_OUT")) {
+            System.out.println("已售罄!");
+        }
+    }
+
+    private void dispense() { /* ... */ }
+    // 每个方法都有一大堆 if-else，增加新状态就是噩梦!
+}
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+这段代码的每个方法里都有一组 if-else 来判断当前状态，**状态逻辑分散在多个方法中**。增加一种新状态（比如"维护中"），需要在 `insertCoin`、`selectProduct` 以及所有其他方法中都增加对应的分支。字符串比较 `state.equals("...")` 没有编译期检查，拼写错误只能运行时发现。状态越多、事件越多，if-else 矩阵式增长，极易遗漏或出错。
+
+## 用 State 重构 | Refactoring mit State
+
+```java
+// 1. 状态接口
+public interface VendingState {
+    void insertCoin(VendingMachine machine, int amount);
+    void selectProduct(VendingMachine machine);
+    void dispense(VendingMachine machine);
+}
+
+// 2. 上下文: 售货机
+public class VendingMachine {
+    private VendingState currentState;
+    private int balance = 0;
+
+    // 各种状态实例 (可复用)
+    private VendingState waitingState = new WaitingForCoinState();
+    private VendingState coinInsertedState = new CoinInsertedState();
+    private VendingState dispensingState = new DispensingState();
+    private VendingState soldOutState = new SoldOutState();
+
+    public VendingMachine() {
+        this.currentState = waitingState;
+    }
+
+    public void setState(VendingState state) { this.currentState = state; }
+    public int getBalance() { return balance; }
+    public void addBalance(int amount) { this.balance += amount; }
+    public void resetBalance() { this.balance = 0; }
+
+    // getter for states
+    public VendingState getWaitingState() { return waitingState; }
+    public VendingState getCoinInsertedState() { return coinInsertedState; }
+    public VendingState getDispensingState() { return dispensingState; }
+    public VendingState getSoldOutState() { return soldOutState; }
+
+    // 委托给当前状态!
+    public void insertCoin(int amount) { currentState.insertCoin(this, amount); }
+    public void selectProduct() { currentState.selectProduct(this); }
+    public void dispense() { currentState.dispense(this); }
+}
+
+// 3. 具体状态: 等待投币
+public class WaitingForCoinState implements VendingState {
+    @Override
+    public void insertCoin(VendingMachine m, int amount) {
+        m.addBalance(amount);
+        System.out.println("已投入: " + amount + "分");
+        m.setState(m.getCoinInsertedState());  // 状态转换!
+    }
+
+    @Override
+    public void selectProduct(VendingMachine m) {
+        System.out.println("请先投币!");
+    }
+
+    @Override
+    public void dispense(VendingMachine m) {
+        System.out.println("请先投币!");
+    }
+}
+
+// 4. 具体状态: 已投币
+public class CoinInsertedState implements VendingState {
+    @Override
+    public void insertCoin(VendingMachine m, int amount) {
+        m.addBalance(amount);
+        System.out.println("追加投入, 总计: " + m.getBalance() + "分");
+    }
+
+    @Override
+    public void selectProduct(VendingMachine m) {
+        if (m.getBalance() >= 100) {
+            m.setState(m.getDispensingState());
+            m.dispense();
+        } else {
+            System.out.println("金额不足!");
+        }
+    }
+
+    @Override
+    public void dispense(VendingMachine m) {
+        System.out.println("请先选择商品!");
+    }
+}
+
+// 5. 具体状态: 正在出货 / 售罄 (类似结构，省略详细实现)
+// public class DispensingState implements VendingState { ... }
+// public class SoldOutState implements VendingState { ... }
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-state-uml
+#| fig-cap: "State 模式 UML | Klassendiagramm State Pattern"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9.5)
+ax.axis('off')
+ax.set_title('State Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C = '#D32F2F'
+
+# VendingState (interface)
+vs = draw_uml_class(ax, 5.0, 9.0, 5.5,
+    'VendingState',
+    attrs=[],
+    methods=['+ insertCoin(machine, amount): void',
+             '+ selectProduct(machine): void',
+             '+ dispense(machine): void'],
+    color=C, is_interface=True)
+
+# VendingMachine (context)
+vm = draw_uml_class(ax, 0.0, 6.0, 4.5,
+    'VendingMachine',
+    attrs=['- currentState: VendingState',
+           '- balance: int'],
+    methods=['+ setState(s): void',
+             '+ insertCoin(amount): void',
+             '+ selectProduct(): void'],
+    color='#333')
+
+# WaitingForCoinState
+ws = draw_uml_class(ax, 1.0, 3.0, 3.8,
+    'WaitingForCoinState',
+    attrs=[],
+    methods=['+ insertCoin(m, amt): void',
+             '+ selectProduct(m): void'],
+    color=C)
+
+# CoinInsertedState
+cs = draw_uml_class(ax, 5.5, 3.0, 3.8,
+    'CoinInsertedState',
+    attrs=[],
+    methods=['+ insertCoin(m, amt): void',
+             '+ selectProduct(m): void'],
+    color=C)
+
+# DispensingState
+ds = draw_uml_class(ax, 10.0, 3.0, 3.5,
+    'DispensingState',
+    attrs=[],
+    methods=['+ dispense(m): void'],
+    color=C)
+
+# VendingMachine -> VendingState
+draw_association(ax, (vm[0] + 2.0, 6.0), (vs[0] - 1.0, vs[2] + 0.2),
+                 color='#333')
+ax.text(4.0, 6.3, 'currentState', fontsize=7, color='#333', style='italic')
+
+# Concrete states implement VendingState
+draw_implements(ax, (ws[0], ws[1]), (vs[0] - 1.0, vs[2]), color=C)
+draw_implements(ax, (cs[0], cs[1]), (vs[0], vs[2]), color=C)
+draw_implements(ax, (ds[0], ds[1]), (vs[0] + 1.0, vs[2]), color=C)
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Visitor 访问者模式 | Besuchermuster
+
+## 小故事：税务局的上门检查
+
+你是一个城市的税务检查员。城市里有各种建筑：住宅、商店、工厂。对每种建筑，你需要执行不同的检查逻辑——住宅查房产税、商店查营业税、工厂查环保税。如果把检查逻辑写在每种建筑类里面（`House.checkTax()`, `Shop.checkTax()`），那么每增加一种检查（比如消防检查），就要修改所有建筑类。
+
+更好的做法是：建筑不需要知道怎么被检查。它只需要说"欢迎检查员来访" (`accept(visitor)`)。检查员 (Visitor) 自己知道对不同类型的建筑该做什么。新增一种检查？写一个新的 Visitor 就行，建筑类不用改。
+
+**Visitor 模式**的核心思想：**将操作与对象结构分离，让你可以在不修改对象类的前提下，定义作用于这些对象的新操作。**
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 每种操作都写在建筑类里
+public class House {
+    private double area;
+    public House(double area) { this.area = area; }
+    public double getArea() { return area; }
+
+    public double calculatePropertyTax() {
+        return area * 1.5;
+    }
+
+    public void fireInspection() {
+        System.out.println("住宅消防检查: 检查烟雾报警器");
+    }
+
+    // 新增保险评估? 又要加方法!
+    // 新增环保检查? 又要加方法!
+}
+
+public class Shop {
+    private double revenue;
+    public Shop(double revenue) { this.revenue = revenue; }
+    public double getRevenue() { return revenue; }
+
+    public double calculateBusinessTax() {
+        return revenue * 0.15;
+    }
+
+    public void fireInspection() {
+        System.out.println("商店消防检查: 检查灭火器和逃生通道");
+    }
+
+    // 每种建筑都要重复添加所有操作类型的方法!
+}
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+核心问题是**操作与数据结构耦合**：每增加一种新操作（消防检查、保险评估、环保检查……），所有建筑类都必须添加新方法——违反 Open-Closed Principle。建筑类的职责越来越多，违反 SRP。如果建筑类来自第三方库无法修改，这种方式就完全不可行。
+
+## 用 Visitor 重构 | Refactoring mit Visitor
+
+```java
+// 1. 元素接口: 所有可访问对象的统一契约
+public interface Building {
+    void accept(BuildingVisitor visitor);
+}
+
+// 2. 具体元素
+public class House implements Building {
+    private double area;
+    public House(double area) { this.area = area; }
+    public double getArea() { return area; }
+
+    @Override
+    public void accept(BuildingVisitor visitor) {
+        visitor.visitHouse(this);  // 双重分派!
+    }
+}
+
+public class Shop implements Building {
+    private double revenue;
+    public Shop(double revenue) { this.revenue = revenue; }
+    public double getRevenue() { return revenue; }
+
+    @Override
+    public void accept(BuildingVisitor visitor) {
+        visitor.visitShop(this);
+    }
+}
+
+// 3. Visitor 接口
+public interface BuildingVisitor {
+    void visitHouse(House house);
+    void visitShop(Shop shop);
+}
+
+// 4. 具体 Visitor: 税务检查
+public class TaxVisitor implements BuildingVisitor {
+    @Override
+    public void visitHouse(House house) {
+        double tax = house.getArea() * 1.5;
+        System.out.println("住宅房产税: " + tax);
+    }
+
+    @Override
+    public void visitShop(Shop shop) {
+        double tax = shop.getRevenue() * 0.15;
+        System.out.println("商店营业税: " + tax);
+    }
+}
+
+// 5. 具体 Visitor: 消防检查 -- 新增操作不修改建筑类!
+public class FireInspectionVisitor implements BuildingVisitor {
+    @Override
+    public void visitHouse(House house) {
+        System.out.println("住宅消防检查: 检查烟雾报警器");
+    }
+
+    @Override
+    public void visitShop(Shop shop) {
+        System.out.println("商店消防检查: 检查灭火器和逃生通道");
+    }
+}
+
+// 6. 使用
+// List<Building> buildings = List.of(new House(120), new Shop(50000));
+// BuildingVisitor taxVisitor = new TaxVisitor();
+// BuildingVisitor fireVisitor = new FireInspectionVisitor();
+//
+// for (Building b : buildings) {
+//     b.accept(taxVisitor);   // 自动调用正确的 visit 方法
+// }
+// for (Building b : buildings) {
+//     b.accept(fireVisitor);  // 新增检查类型，建筑类零修改!
+// }
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-visitor-uml
+#| fig-cap: "Visitor 模式 UML | Klassendiagramm Visitor Pattern"
+
+fig, ax = plt.subplots(figsize=(14, 10))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10.5)
+ax.axis('off')
+ax.set_title('Visitor Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C_elem = '#1565C0'
+C_vis = '#E53935'
+
+# Building (interface)
+bd = draw_uml_class(ax, 0.5, 10.0, 4.5,
+    'Building',
+    attrs=[],
+    methods=['+ accept(v: BuildingVisitor): void'],
+    color=C_elem, is_interface=True)
+
+# BuildingVisitor (interface)
+bv = draw_uml_class(ax, 7.5, 10.0, 5.5,
+    'BuildingVisitor',
+    attrs=[],
+    methods=['+ visitHouse(h: House): void',
+             '+ visitShop(s: Shop): void'],
+    color=C_vis, is_interface=True)
+
+# House
+hs = draw_uml_class(ax, 0.0, 5.5, 4.0,
+    'House',
+    attrs=['- area: double'],
+    methods=['+ accept(v): void'],
+    color=C_elem)
+
+# Shop
+sp = draw_uml_class(ax, 0.0, 2.5, 4.0,
+    'Shop',
+    attrs=['- revenue: double'],
+    methods=['+ accept(v): void'],
+    color=C_elem)
+
+# TaxVisitor
+tv = draw_uml_class(ax, 7.0, 5.5, 3.5,
+    'TaxVisitor',
+    attrs=[],
+    methods=['+ visitHouse(h): void',
+             '+ visitShop(s): void'],
+    color=C_vis)
+
+# FireInspectionVisitor
+fv = draw_uml_class(ax, 10.8, 5.5, 3.0,
+    'FireInspection\nVisitor',
+    attrs=[],
+    methods=['+ visitHouse(h): void',
+             '+ visitShop(s): void'],
+    color=C_vis)
+
+# Elements implement Building
+draw_implements(ax, (hs[0], hs[1]), (bd[0], bd[2]), color=C_elem)
+draw_implements(ax, (sp[0], sp[1] + 0.5), (bd[0], bd[2] - 0.5), color=C_elem)
+
+# Visitors implement BuildingVisitor
+draw_implements(ax, (tv[0], tv[1]), (bv[0] - 0.3, bv[2]), color=C_vis)
+draw_implements(ax, (fv[0], fv[1]), (bv[0] + 0.5, bv[2]), color=C_vis)
+
+# Building -> BuildingVisitor (uses)
+draw_uses(ax, (bd[0] + 2.0, 9.0), (bv[0] - 1.0, 9.0),
+          color='#555', label='uses')
+
+# Annotation
+note = mpatches.FancyBboxPatch((4.5, 0.5), 6.0, 2.0, boxstyle="round,pad=0.1",
+    facecolor='#FEF9E7', edgecolor='#F39C12', linewidth=1.5, linestyle='--')
+ax.add_patch(note)
+ax.text(7.5, 2.1, 'Visitor 的关键 -- 双重分派 (Double Dispatch):', fontsize=8.5,
+        fontweight='bold', color='#E65100', ha='center')
+ax.text(7.5, 1.4, '(1) accept(visitor) 第一次分派: 根据元素类型', fontsize=8,
+        color='#444', ha='center')
+ax.text(7.5, 0.8, '(2) visitor.visitXxx(this) 第二次分派: 根据访问者类型', fontsize=8,
+        color='#444', ha='center')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Mediator 中介者模式 | Vermittlermuster
+
+## 小故事：机场的塔台
+
+想象一个繁忙的机场。如果每架飞机都要直接跟其他所有飞机通信来协调起降——"我要起飞了，你们让一下""我在降落，你等一等"——那 10 架飞机就要维护 45 条通信线路 (n*(n-1)/2)。混乱不堪，而且极其危险。
+
+实际上，机场有一个**塔台** (Control Tower)。所有飞机只跟塔台通信，由塔台统一协调。飞机 A 对塔台说"我准备好降落了"，塔台通知飞机 B "请在跑道上等待"。飞机之间互相不需要认识。
+
+**Mediator 模式**的核心思想：**用一个中介对象封装一组对象之间的交互，使得对象之间不需要直接引用彼此，从而减少对象之间的耦合。**
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 聊天室中每个用户直接持有其他用户的引用
+public class User {
+    private String name;
+    private List<User> contacts = new ArrayList<>();  // 直接认识其他人!
+
+    public User(String name) { this.name = name; }
+
+    public void addContact(User user) { contacts.add(user); }
+
+    public void sendMessage(String message) {
+        // 直接发给所有联系人 -- 每个 User 都要维护联系人列表!
+        for (User contact : contacts) {
+            contact.receive(message, this);
+        }
+    }
+
+    public void receive(String message, User from) {
+        System.out.println(name + " 收到来自 " + from.name + " 的消息: " + message);
+    }
+}
+
+// 使用: 每两个人都要互相 addContact
+// User alice = new User("Alice");
+// User bob = new User("Bob");
+// User charlie = new User("Charlie");
+// alice.addContact(bob);
+// alice.addContact(charlie);
+// bob.addContact(alice);
+// bob.addContact(charlie);  // n 个人需要 n*(n-1) 次 addContact!
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+这段代码中每个 User 都直接依赖其他 User 对象，形成了**网状耦合**。新增一个用户需要在所有现有用户中 addContact，关系管理是 O(n²) 复杂度。如果需要增加功能（消息过滤、消息记录、权限检查），逻辑会分散到每个 User 类中。
+
+## 用 Mediator 重构 | Refactoring mit Mediator
+
+```java
+// 1. Mediator 接口
+public interface ChatMediator {
+    void sendMessage(String message, User sender);
+    void addUser(User user);
+}
+
+// 2. 具体中介者: 聊天室
+public class ChatRoom implements ChatMediator {
+    private List<User> users = new ArrayList<>();
+
+    @Override
+    public void addUser(User user) {
+        users.add(user);
+    }
+
+    @Override
+    public void sendMessage(String message, User sender) {
+        // 中心化的消息分发逻辑
+        for (User user : users) {
+            if (user != sender) {
+                user.receive(message, sender);
+            }
+        }
+    }
+}
+
+// 3. 同事类: User -- 只认识 Mediator，不认识其他 User
+public class User {
+    private String name;
+    private ChatMediator mediator;
+
+    public User(String name, ChatMediator mediator) {
+        this.name = name;
+        this.mediator = mediator;
+    }
+
+    public String getName() { return name; }
+
+    public void sendMessage(String message) {
+        mediator.sendMessage(message, this);  // 通过中介者发送
+    }
+
+    public void receive(String message, User from) {
+        System.out.println(name + " 收到来自 " + from.getName() + ": " + message);
+    }
+}
+
+// 使用
+// ChatMediator room = new ChatRoom();
+// User alice = new User("Alice", room);
+// User bob = new User("Bob", room);
+// User charlie = new User("Charlie", room);
+// room.addUser(alice);
+// room.addUser(bob);
+// room.addUser(charlie);
+// alice.sendMessage("大家好!");   // Bob 和 Charlie 都收到
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-mediator-uml
+#| fig-cap: "Mediator 模式 UML | Klassendiagramm Mediator Pattern"
+
+fig, ax = plt.subplots(figsize=(13, 9))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 9.5)
+ax.axis('off')
+ax.set_title('Mediator Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C_med = '#AD1457'
+C_col = '#333'
+
+# ChatMediator (interface)
+cm = draw_uml_class(ax, 4.0, 9.0, 5.0,
+    'ChatMediator',
+    attrs=[],
+    methods=['+ sendMessage(msg, sender): void',
+             '+ addUser(user: User): void'],
+    color=C_med, is_interface=True)
+
+# ChatRoom (concrete mediator)
+cr = draw_uml_class(ax, 7.5, 5.5, 4.5,
+    'ChatRoom',
+    attrs=['- users: List<User>'],
+    methods=['+ sendMessage(msg, sender): void',
+             '+ addUser(user: User): void'],
+    color=C_med)
+
+# User (colleague)
+us = draw_uml_class(ax, 0.5, 5.5, 4.5,
+    'User',
+    attrs=['- name: String',
+           '- mediator: ChatMediator'],
+    methods=['+ sendMessage(msg): void',
+             '+ receive(msg, from): void'],
+    color=C_col)
+
+# ChatRoom implements ChatMediator
+draw_implements(ax, (cr[0], cr[1]), (cm[0] + 1.0, cm[2]), color=C_med)
+
+# User -> ChatMediator
+draw_association(ax, (us[0] + 1.5, us[1]), (cm[0] - 0.5, cm[2]),
+                 color=C_col)
+ax.text(3.5, 7.0, 'mediator', fontsize=7, color=C_col, style='italic')
+
+# ChatRoom -> User (0..*)
+draw_association(ax, (cr[0] - 1.5, 4.5), (us[0] + 1.5, 4.5),
+                 color=C_med)
+ax.text(5.5, 4.8, 'users 0..*', fontsize=7, color=C_med, style='italic')
+
+# Annotation
+note = mpatches.FancyBboxPatch((0.5, 0.3), 6.5, 2.0, boxstyle="round,pad=0.1",
+    facecolor='#FEF9E7', edgecolor='#F39C12', linewidth=1.5, linestyle='--')
+ax.add_patch(note)
+ax.text(3.75, 1.9, 'Mediator vs Observer:', fontsize=9,
+        fontweight='bold', color='#E65100')
+ax.text(3.75, 1.3, 'Observer: 一对多通知 (Subject --> Observers)', fontsize=8, color='#444')
+ax.text(3.75, 0.7, 'Mediator: 多对多协调 (Colleagues <-> Mediator)', fontsize=8, color='#444')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Composite 组合模式 | Kompositum
+
+## 小故事：公司的组织架构
+
+一家公司有总经理，总经理下面有几个部门经理，部门经理下面有员工。想计算整个公司的工资总额怎么办？总经理的工资 + 每个部门的工资总额。而"部门的工资总额"= 部门经理的工资 + 该部门所有员工的工资。这是一个**树形结构**：每个节点可以是一个"叶子"（员工），也可以是一个"容器"（部门，包含子节点）。
+
+如果客户端必须区分"这是一个员工还是一个部门"来决定如何计算工资，代码就会充满 `instanceof` 和类型判断。**Composite 模式**让客户端统一对待叶子节点和容器节点——不管是一个人还是一个部门，都调用 `getSalary()` 就行。
+
+**Composite 模式**的核心思想：**将对象组合成树形结构来表示"部分-整体"的层次结构，使得客户端对单个对象和组合对象的使用具有一致性。**
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 客户端必须区分叶子和容器
+public class Employee {
+    private String name;
+    private double salary;
+    public Employee(String name, double salary) {
+        this.name = name;
+        this.salary = salary;
+    }
+    public double getSalary() { return salary; }
+}
+
+public class Department {
+    private String name;
+    private List<Employee> employees = new ArrayList<>();
+    private List<Department> subDepartments = new ArrayList<>();
+
+    public void addEmployee(Employee e) { employees.add(e); }
+    public void addSubDepartment(Department d) { subDepartments.add(d); }
+
+    public double getTotalSalary() {
+        double total = 0;
+        for (Employee e : employees) {
+            total += e.getSalary();
+        }
+        for (Department d : subDepartments) {
+            total += d.getTotalSalary();
+        }
+        return total;
+    }
+}
+
+// 客户端: Employee 和 Department 是完全不同的类型!
+// 无法把它们放在同一个列表里统一处理。
+// Employee emp = new Employee("张三", 5000);
+// Department dept = new Department("技术部");
+// emp.getSalary();        // 一种调用方式
+// dept.getTotalSalary();  // 另一种调用方式 -- 方法名都不同!
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+这段代码中 `Employee` 和 `Department` 没有共同接口，客户端必须用不同的方式对待它们——`getSalary()` vs `getTotalSalary()`，甚至方法名都不一样。无法把员工和部门放在同一个列表中统一遍历和计算。如果树的层级结构更深（公司 → 事业部 → 部门 → 组 → 员工），代码会变得更加混乱。
+
+## 用 Composite 重构 | Refactoring mit Composite
+
+```java
+// 1. 组件接口: 叶子和容器的统一契约
+public interface OrganizationComponent {
+    String getName();
+    double getSalary();
+    void display(String indent);
+}
+
+// 2. 叶子: 员工
+public class Employee implements OrganizationComponent {
+    private String name;
+    private double salary;
+
+    public Employee(String name, double salary) {
+        this.name = name;
+        this.salary = salary;
+    }
+
+    @Override
+    public String getName() { return name; }
+
+    @Override
+    public double getSalary() { return salary; }
+
+    @Override
+    public void display(String indent) {
+        System.out.println(indent + "员工: " + name + " (" + salary + ")");
+    }
+}
+
+// 3. 容器: 部门 -- 也实现相同的接口!
+public class Department implements OrganizationComponent {
+    private String name;
+    private List<OrganizationComponent> children = new ArrayList<>();
+
+    public Department(String name) { this.name = name; }
+
+    public void add(OrganizationComponent component) {
+        children.add(component);
+    }
+
+    public void remove(OrganizationComponent component) {
+        children.remove(component);
+    }
+
+    @Override
+    public String getName() { return name; }
+
+    @Override
+    public double getSalary() {
+        double total = 0;
+        for (OrganizationComponent child : children) {
+            total += child.getSalary();  // 统一调用! 不管是员工还是子部门
+        }
+        return total;
+    }
+
+    @Override
+    public void display(String indent) {
+        System.out.println(indent + "部门: " + name + " (总计: " + getSalary() + ")");
+        for (OrganizationComponent child : children) {
+            child.display(indent + "  ");  // 递归显示
+        }
+    }
+}
+
+// 使用:
+// Department company = new Department("公司");
+// Department tech = new Department("技术部");
+// tech.add(new Employee("张三", 8000));
+// tech.add(new Employee("李四", 9000));
+// Department sales = new Department("销售部");
+// sales.add(new Employee("王五", 7000));
+// company.add(tech);
+// company.add(sales);
+// company.add(new Employee("总经理", 20000));
+// company.getSalary();  --> 44000  统一接口!
+// company.display("");  --> 递归打印整棵树
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-composite-uml
+#| fig-cap: "Composite 模式 UML | Klassendiagramm Composite Pattern"
+
+fig, ax = plt.subplots(figsize=(13, 9))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 9.5)
+ax.axis('off')
+ax.set_title('Composite Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C = '#1B5E20'
+
+# OrganizationComponent (interface)
+oc = draw_uml_class(ax, 3.5, 9.0, 5.5,
+    'OrganizationComponent',
+    attrs=[],
+    methods=['+ getName(): String',
+             '+ getSalary(): double',
+             '+ display(indent: String): void'],
+    color=C, is_interface=True)
+
+# Employee (leaf)
+em = draw_uml_class(ax, 0.5, 4.5, 4.0,
+    'Employee',
+    attrs=['- name: String',
+           '- salary: double'],
+    methods=['+ getSalary(): double',
+             '+ display(indent): void'],
+    color=C)
+
+# Department (composite)
+dp = draw_uml_class(ax, 7.0, 4.5, 5.5,
+    'Department',
+    attrs=['- children: List<Component>'],
+    methods=['+ add(c: Component): void',
+             '+ remove(c: Component): void',
+             '+ getSalary(): double',
+             '+ display(indent): void'],
+    color=C)
+
+# Employee implements Component
+draw_implements(ax, (em[0], em[1]), (oc[0] - 0.5, oc[2]), color=C)
+
+# Department implements Component
+draw_implements(ax, (dp[0], dp[1]), (oc[0] + 0.5, oc[2]), color=C)
+
+# Department -> Component (children)
+ax.annotate('', xy=(oc[0] + 2.5, oc[2] - 0.05),
+    xytext=(dp[0] + 2.5, dp[1] + 0.05),
+    arrowprops=dict(arrowstyle='->', color=C, lw=1.5,
+                    connectionstyle='arc3,rad=0.4'))
+ax.text(11.5, 7.0, 'children\n0..*', fontsize=7, color=C, style='italic',
+        linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Interpreter 解释器模式 | Interpretermuster
+
+## 小故事：计算器的表达式求值
+
+你在写一个简单的计算器。用户输入 `"3 + 5"` 或 `"3 + 5 - 2"` 这样的表达式，你需要解析并计算结果。如果用 if-else 来处理每种可能的表达式形式，你会发现组合是无限的。但如果你仔细观察，会发现所有表达式都由基本元素（数字）和运算符（+ - * /）按照固定的语法规则组合而成。
+
+Interpreter 模式的思路是：为语法中的每条规则定义一个类。数字是"终结符表达式"，加法是"非终结符表达式"（它由两个子表达式组合而成）。然后你可以把表达式构建成一棵**语法树**，调用根节点的 `interpret()` 就能递归求值。
+
+**Interpreter 模式**的核心思想：**为一种语言定义其文法的表示，并定义一个解释器来解释该语言中的句子。** 适合语法简单且效率不是首要关注的场景。
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 硬编码解析逻辑
+public class SimpleCalculator {
+
+    public int calculate(String expression) {
+        // 手动解析，无法优雅地扩展
+        String[] parts = expression.split(" ");
+        int result = Integer.parseInt(parts[0]);
+
+        for (int i = 1; i < parts.length; i += 2) {
+            String operator = parts[i];
+            int operand = Integer.parseInt(parts[i + 1]);
+
+            if (operator.equals("+")) {
+                result += operand;
+            } else if (operator.equals("-")) {
+                result -= operand;
+            }
+            // 加乘法? 加括号? 加变量? 这个 if-else 会爆炸!
+            // 而且不支持嵌套表达式，如 "(3 + 5) * 2"
+        }
+        return result;
+    }
+}
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+这段代码将解析和计算逻辑全部混在一起，无法处理嵌套表达式和运算符优先级。每增加一种运算符或语法规则，都要修改这个方法。表达式的结构没有被建模为对象，无法复用和组合。
+
+## 用 Interpreter 重构 | Refactoring mit Interpreter
+
+```java
+// 1. 抽象表达式
+public interface Expression {
+    int interpret();
+}
+
+// 2. 终结符表达式: 数字
+public class NumberExpression implements Expression {
+    private int number;
+
+    public NumberExpression(int number) {
+        this.number = number;
+    }
+
+    @Override
+    public int interpret() {
+        return number;
+    }
+}
+
+// 3. 非终结符表达式: 加法
+public class AddExpression implements Expression {
+    private Expression left;
+    private Expression right;
+
+    public AddExpression(Expression left, Expression right) {
+        this.left = left;
+        this.right = right;
+    }
+
+    @Override
+    public int interpret() {
+        return left.interpret() + right.interpret();
+    }
+}
+
+// 4. 非终结符表达式: 减法
+public class SubtractExpression implements Expression {
+    private Expression left;
+    private Expression right;
+
+    public SubtractExpression(Expression left, Expression right) {
+        this.left = left;
+        this.right = right;
+    }
+
+    @Override
+    public int interpret() {
+        return left.interpret() - right.interpret();
+    }
+}
+
+// 5. 非终结符表达式: 乘法 -- 新增运算符无需修改现有类!
+public class MultiplyExpression implements Expression {
+    private Expression left;
+    private Expression right;
+
+    public MultiplyExpression(Expression left, Expression right) {
+        this.left = left;
+        this.right = right;
+    }
+
+    @Override
+    public int interpret() {
+        return left.interpret() * right.interpret();
+    }
+}
+
+// 6. 使用: 构建语法树
+// 表达式: (3 + 5) * 2
+// Expression expr = new MultiplyExpression(
+//     new AddExpression(
+//         new NumberExpression(3),
+//         new NumberExpression(5)
+//     ),
+//     new NumberExpression(2)
+// );
+// System.out.println(expr.interpret());  --> 16
+//
+// 表达式: 10 - 3 + 2
+// Expression expr2 = new AddExpression(
+//     new SubtractExpression(
+//         new NumberExpression(10),
+//         new NumberExpression(3)
+//     ),
+//     new NumberExpression(2)
+// );
+// System.out.println(expr2.interpret());  --> 9
+```
+
+::: {.callout-warning}
+## Interpreter 模式的局限性
+
+Interpreter 模式适合**简单的、频率不高**的语法解析。对于复杂的语言（如 SQL、正则表达式），语法树会非常庞大，性能也成问题。实际工程中通常使用解析器生成器 (Parser Generator) 如 ANTLR 来代替手动实现。
+:::
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-interpreter-uml
+#| fig-cap: "Interpreter 模式 UML | Klassendiagramm Interpreter Pattern"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9.5)
+ax.axis('off')
+ax.set_title('Interpreter Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C = '#880E4F'
+
+# Expression (interface)
+ex = draw_uml_class(ax, 4.5, 9.0, 4.5,
+    'Expression',
+    attrs=[],
+    methods=['+ interpret(): int'],
+    color=C, is_interface=True)
+
+# NumberExpression (terminal)
+ne = draw_uml_class(ax, 0.5, 4.5, 3.5,
+    'NumberExpression',
+    attrs=['- number: int'],
+    methods=['+ interpret(): int'],
+    color=C)
+
+# AddExpression (non-terminal)
+ae = draw_uml_class(ax, 4.5, 4.5, 4.0,
+    'AddExpression',
+    attrs=['- left: Expression',
+           '- right: Expression'],
+    methods=['+ interpret(): int'],
+    color=C)
+
+# SubtractExpression
+se = draw_uml_class(ax, 9.0, 4.5, 4.5,
+    'SubtractExpression',
+    attrs=['- left: Expression',
+           '- right: Expression'],
+    methods=['+ interpret(): int'],
+    color=C)
+
+# All implement Expression
+draw_implements(ax, (ne[0], ne[1]), (ex[0] - 1.0, ex[2]), color=C)
+draw_implements(ax, (ae[0], ae[1]), (ex[0], ex[2]), color=C)
+draw_implements(ax, (se[0], se[1]), (ex[0] + 1.0, ex[2]), color=C)
+
+# Non-terminals -> Expression (left, right)
+ax.annotate('', xy=(ex[0] + 2.0, ex[2] - 0.1),
+    xytext=(ae[0] + 2.0, ae[1] + 0.1),
+    arrowprops=dict(arrowstyle='->', color=C, lw=1.3,
+                    connectionstyle='arc3,rad=0.35'))
+ax.text(9.5, 7.0, 'left, right', fontsize=7, color=C, style='italic')
+
+# Annotation
+note = mpatches.FancyBboxPatch((0.5, 0.3), 6.0, 2.2, boxstyle="round,pad=0.1",
+    facecolor='#FEF9E7', edgecolor='#F39C12', linewidth=1.5, linestyle='--')
+ax.add_patch(note)
+ax.text(3.5, 2.1, '终结符 vs 非终结符:', fontsize=9,
+        fontweight='bold', color='#E65100')
+ax.text(3.5, 1.5, 'Terminal: 叶子节点 (NumberExpression)', fontsize=8, color='#444')
+ax.text(3.5, 0.9, 'Non-Terminal: 包含子表达式的节点', fontsize=8, color='#444')
+ax.text(3.5, 0.4, '语法树通过递归 interpret() 求值', fontsize=8, color='#444')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# 十一大模式速查总结 | Zusammenfassung
+
+```{python}
+#| label: fig-final-summary-2
+#| fig-cap: "十一大设计模式速查表 | Spickzettel: Elf Entwurfsmuster"
+
+fig, ax = plt.subplots(figsize=(15, 18))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 23)
+ax.axis('off')
+ax.set_title('设计模式速查总结 (续) | Entwurfsmuster Zusammenfassung II',
+             fontsize=14, fontweight='bold')
+
+patterns_summary = [
+    {
+        'name': 'Builder\n建造者模式',
+        'problem': '构造函数参数爆炸\n可选参数 null 满天飞',
+        'solution': '链式 Builder 类\n一步步设置可选参数\n最后 build() 构建',
+        'key': 'setter 返回 this\n必填 vs 可选参数分离',
+        'color': '#6A1B9A', 'y': 21.5
+    },
+    {
+        'name': 'Prototype\n原型模式',
+        'problem': '重复创建昂贵对象\n初始化逻辑散落各处',
+        'solution': 'clone() 已有对象\n跳过昂贵初始化',
+        'key': '拷贝构造函数\n深拷贝 vs 浅拷贝',
+        'color': '#4A148C', 'y': 19.5
+    },
+    {
+        'name': 'Facade\n外观模式',
+        'problem': '客户端与多个子系统\n紧耦合，调用复杂',
+        'solution': 'Facade 类封装\n子系统的复杂交互\n提供简化接口',
+        'key': '不隐藏子系统\n只提供便利入口',
+        'color': '#00695C', 'y': 17.5
+    },
+    {
+        'name': 'Proxy\n代理模式',
+        'problem': '直接访问昂贵资源\n无访问控制',
+        'solution': 'Proxy 与真实对象\n实现同一接口\n控制访问时机和权限',
+        'key': '虚拟代理: 延迟加载\n保护代理: 权限控制',
+        'color': '#004D40', 'y': 15.5
+    },
+    {
+        'name': 'Composite\n组合模式',
+        'problem': '客户端必须区分\n叶子和容器节点',
+        'solution': '叶子和容器实现\n同一个接口\n容器递归调用子节点',
+        'key': '统一对待部分和整体\n树形结构递归处理',
+        'color': '#1B5E20', 'y': 13.5
+    },
+    {
+        'name': 'Chain of\nResponsibility',
+        'problem': '请求处理逻辑\n硬编码在 if-else 中',
+        'solution': '处理者连成链\n逐个尝试处理\n不能处理就传递',
+        'key': 'setNext() 组装链\n发送者不知道谁处理',
+        'color': '#C62828', 'y': 11.5
+    },
+    {
+        'name': 'Iterator\n迭代器模式',
+        'problem': '客户端依赖\n具体数据结构遍历',
+        'solution': '统一的 hasNext/next\n接口遍历任何集合',
+        'key': '隐藏内部表示\n一种集合一种迭代器',
+        'color': '#B71C1C', 'y': 9.5
+    },
+    {
+        'name': 'State\n状态模式',
+        'problem': '状态逻辑散落在\n多个方法的 if-else 中',
+        'solution': '每种状态一个类\n行为委托给当前状态\n切换状态 = 换对象',
+        'key': '消灭状态 if-else\n类似 Strategy 但自动切换',
+        'color': '#D32F2F', 'y': 7.5
+    },
+    {
+        'name': 'Visitor\n访问者模式',
+        'problem': '新增操作必须\n修改所有元素类',
+        'solution': 'accept(visitor)\n双重分派\n操作与数据结构分离',
+        'key': '新增操作: 加 Visitor\n新增元素类型: 不方便',
+        'color': '#E53935', 'y': 5.5
+    },
+    {
+        'name': 'Mediator\n中介者模式',
+        'problem': '对象间网状耦合\nN*(N-1) 条通信线路',
+        'solution': '引入中介者\n所有通信经过中介\n对象只认识中介',
+        'key': '星型结构替代网状\n类似塔台协调飞机',
+        'color': '#AD1457', 'y': 3.5
+    },
+    {
+        'name': 'Interpreter\n解释器模式',
+        'problem': '硬编码解析逻辑\n无法处理嵌套语法',
+        'solution': '为每条语法规则\n定义一个表达式类\n构建语法树递归求值',
+        'key': '终结符 + 非终结符\n适合简单语法',
+        'color': '#880E4F', 'y': 1.5
+    },
+]
+
+# Column headers
+headers = [
+    ('模式 | Muster', 1.5),
+    ('解决什么问题 | Problem', 5.0),
+    ('怎么解决 | Loesung', 9.0),
+    ('关键点 | Kernidee', 12.8),
+]
+for text, x in headers:
+    hbox = mpatches.FancyBboxPatch((x - 1.7, 22.3), 3.5, 0.6,
+        boxstyle="round,pad=0.06", facecolor='#2C3E50',
+        edgecolor='white', linewidth=1)
+    ax.add_patch(hbox)
+    ax.text(x, 22.6, text, ha='center', fontsize=9,
+            fontweight='bold', color='white')
+
+for p in patterns_summary:
+    y = p['y']
+
+    nbox = mpatches.FancyBboxPatch((0.0, y - 0.7), 3.0, 1.6,
+        boxstyle="round,pad=0.06", facecolor='white',
+        edgecolor=p['color'], linewidth=2)
+    ax.add_patch(nbox)
+    ax.text(1.5, y, p['name'], ha='center', fontsize=8.5,
+            fontweight='bold', color=p['color'], linespacing=1.2)
+
+    pbox = mpatches.FancyBboxPatch((3.3, y - 0.7), 3.5, 1.6,
+        boxstyle="round,pad=0.06", facecolor='#FDEDEC',
+        edgecolor='#C62828', linewidth=1)
+    ax.add_patch(pbox)
+    ax.text(5.05, y, p['problem'], ha='center', fontsize=7.5,
+            color='#444', linespacing=1.3)
+
+    sbox = mpatches.FancyBboxPatch((7.1, y - 0.7), 3.8, 1.6,
+        boxstyle="round,pad=0.06", facecolor='#D5F5E3',
+        edgecolor='#2E7D32', linewidth=1)
+    ax.add_patch(sbox)
+    ax.text(9.0, y, p['solution'], ha='center', fontsize=7.5,
+            color='#444', linespacing=1.3)
+
+    kbox = mpatches.FancyBboxPatch((11.2, y - 0.7), 3.5, 1.6,
+        boxstyle="round,pad=0.06", facecolor='#FEF9E7',
+        edgecolor='#F39C12', linewidth=1)
+    ax.add_patch(kbox)
+    ax.text(12.95, y, p['key'], ha='center', fontsize=7.5,
+            color='#444', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-tip}
+## 模式之间的对比 | Vergleich zwischen Mustern
+
+考试中常被问到模式之间的异同：
+
+**(1) Strategy vs State**：两者结构几乎相同（Context + 接口 + 多个实现类），区别在于 Strategy 是客户端主动选择和替换算法，而 State 是对象自身根据内部状态自动切换行为。
+
+**(2) Decorator vs Proxy**：两者都包装了另一个对象。Decorator 的目的是**增强功能**（可以嵌套多层），Proxy 的目的是**控制访问**（通常只有一层）。
+
+**(3) Mediator vs Observer**：Observer 是一对多的通知机制（Subject 通知 Observers），Mediator 是多对多的协调机制（Colleagues 通过 Mediator 互相通信）。
+
+**(4) Composite vs Decorator**：两者都用递归组合。Composite 是"部分-整体"结构，重点在于统一接口；Decorator 是"层层包装"，重点在于动态添加职责。
+
+**(5) Factory Method vs Builder**：Factory Method 解决的是"创建哪种产品"的问题，Builder 解决的是"如何一步步构建一个复杂产品"的问题。
+:::

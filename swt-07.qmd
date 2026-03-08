@@ -1,0 +1,1416 @@
+---
+title: "第八章：使用 Git 进行版本管理 — Versionsverwaltung mit Git"
+subtitle: "Git 对象模型、引用与分支、提交图与合并策略 | Git-Objektmodell, Referenzen & Branches, Commit-Graph & Merge-Strategien"
+author: "Softwaretechnik WS 25/26"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    font_list = candidates.get(system, candidates['Linux'])
+    valid_fonts = [f for f in font_list if f in available_fonts]
+    if valid_fonts:
+        plt.rcParams['font.sans-serif'] = valid_fonts + ['DejaVu Sans']
+        plt.rcParams['font.monospace'] = valid_fonts + ['Consolas', 'Courier New', 'DejaVu Sans Mono']
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+COLORS = {
+    'primary': '#2E86AB',
+    'secondary': '#A23B72',
+    'success': '#2E8B57',
+    'warning': '#E8871E',
+    'danger': '#C1292E',
+    'info': '#5B8C5A',
+    'light': '#F5F5F5',
+    'dark': '#2C3E50',
+    'clean': '#27AE60',
+    'dirty': '#E74C3C',
+    'neutral': '#7F8C8D',
+    'highlight': '#F39C12',
+    'purple': '#8E44AD',
+    'git_orange': '#F05033',
+    'git_gray': '#3B3B3B',
+    'blob_blue': '#3498DB',
+    'tree_green': '#27AE60',
+    'commit_yellow': '#F1C40F',
+    'ref_purple': '#9B59B6',
+    'branch_teal': '#1ABC9C',
+    'merge_red': '#E74C3C',
+    'rebase_blue': '#2980B9',
+    'blue_light': '#D6EAF8',
+    'green_light': '#D5F5E3',
+    'red_light': '#FDEDEC',
+    'yellow_light': '#FEF9E7',
+    'purple_light': '#F3E5F5',
+    'orange_light': '#FDEBD0',
+    'teal_light': '#D1F2EB',
+}
+```
+
+# 回顾 | Recap
+
+::: {.callout-note}
+## 前几章要点 (Zusammenfassung bisheriger Kapitel)
+
+**Kanban**：可视化工作流 (Visualisierung des Workflows)、限制在制品 (WIP-Limits)、显式流程规则 (Explizite Prozessregeln)。
+
+**阅读材料**：Git 基础与 GitLab 视频、Google Code Review 标准、Conventional Comments。
+:::
+
+```{python}
+#| label: fig-recap-overview
+#| fig-cap: "前几章回顾 | Recap bisheriger Kapitel"
+
+fig, ax = plt.subplots(figsize=(14, 4))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 5)
+ax.axis('off')
+ax.set_title('前几章要点回顾 | Recap bisheriger Kapitel', fontsize=14, fontweight='bold')
+
+topics = [
+    {'title': '瀑布 + 增量\nWasserfall +\nInkrementell', 'icon': '', 'color': '#2E86AB', 'x': 1.8},
+    {'title': 'Clean Code\nI + II', 'icon': '', 'color': '#27AE60', 'x': 4.6},
+    {'title': '敏捷方法\nAgile Methoden\n+ Scrum', 'icon': '', 'color': '#E8871E', 'x': 7.4},
+    {'title': 'Kanban\nVisualisierung\n+ WIP-Limits', 'icon': '', 'color': '#8E44AD', 'x': 10.2},
+    {'title': 'Git 内部\nGit Internals\n(本章)', 'icon': '', 'color': '#F05033', 'x': 13.0},
+]
+
+for t in topics:
+    card = mpatches.FancyBboxPatch(
+        (t['x'] - 1.3, 0.4), 2.6, 3.8,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=t['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    ax.text(t['x'], 3.6, t['icon'], ha='center', fontsize=18)
+    ax.text(t['x'], 2.2, t['title'], ha='center', va='center',
+            fontsize=9, fontweight='bold', color=t['color'], linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 本章目标 | Ziel dieser Vorlesung
+
+::: {.callout-important}
+## 理解 Git 的真正工作原理 (Verstehen, wie Git wirklich funktioniert)
+
+1. Git 内部存储模型 (Modell des internen Speichers)
+2. Git 分支概念 (Konzept von Git Branches)
+3. Merge 与 Rebase 的概念 (Konzept von Merges und Rebases)
+:::
+
+# Git 对象模型 | Git-Objektmodell
+
+参考资料：[Git Internals - Plumbing and Porcelain](https://git-scm.com/book/en/v2/Git-Internals-Plumbing-and-Porcelain)
+
+## Git 到底是什么？ | Was ist Git wirklich?
+
+::: {.callout-note}
+## 定义 (Definition)
+
+**Git** 是一个**内容寻址文件系统** (content-addressable filesystem)，上面搭建了一个版本控制界面 (VCS user interface)。
+:::
+
+Git 由 Linus Torvalds 为 Linux 内核开发而创建。Git 中所有数据通过 **SHA-1 哈希值**标识。它的设计理念是简单的构建块，组合起来却非常强大。
+
+Git 的命令分为两个层次。**瓷器命令 (Porcelain)**是面向用户的高级命令，如 `checkout`、`branch`、`remote` 等，书中前九章主要讨论的就是这些。**管道命令 (Plumbing)** 是底层命令，最初被设计为可以按 UNIX 风格链式调用或在脚本中使用的工具集，它们为我们揭示了 Git 的内部运作机制。
+
+```{python}
+#| label: fig-plumbing-porcelain
+#| fig-cap: "Plumbing vs. Porcelain：管道命令 vs. 瓷器命令"
+
+fig, ax = plt.subplots(figsize=(13, 7))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('Git 命令层次 | Plumbing vs. Porcelain', fontsize=15, fontweight='bold')
+
+# Porcelain (top layer)
+porcelain_box = mpatches.FancyBboxPatch((0.5, 4.5), 12.0, 3.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=3)
+ax.add_patch(porcelain_box)
+ax.text(6.5, 7.0, '瓷器命令 | Porcelain Commands', ha='center', fontsize=13,
+        fontweight='bold', color=COLORS['primary'])
+ax.text(6.5, 6.1, '面向用户的高级命令 | Benutzerfreundliche High-Level Befehle', ha='center',
+        fontsize=10, color='#555')
+cmds_porcelain = ['git add', 'git commit', 'git push', 'git pull', 'git branch', 'git merge', 'git switch']
+for i, cmd in enumerate(cmds_porcelain):
+    x = 1.5 + i * 1.6
+    cmd_box = mpatches.FancyBboxPatch((x - 0.6, 5.0), 1.2, 0.6, boxstyle="round,pad=0.05",
+        facecolor='white', edgecolor=COLORS['primary'], linewidth=1.2)
+    ax.add_patch(cmd_box)
+    ax.text(x, 5.3, cmd, ha='center', fontsize=7, family='monospace', color=COLORS['primary'])
+
+# Plumbing (bottom layer)
+plumbing_box = mpatches.FancyBboxPatch((0.5, 0.5), 12.0, 3.5, boxstyle="round,pad=0.2",
+    facecolor=COLORS['orange_light'], edgecolor=COLORS['git_orange'], linewidth=3)
+ax.add_patch(plumbing_box)
+ax.text(6.5, 3.5, '管道命令 | Plumbing Commands', ha='center', fontsize=13,
+        fontweight='bold', color=COLORS['git_orange'])
+ax.text(6.5, 2.7, '底层构建块，用于脚本和工具链 | Low-Level Bausteine für Skripte', ha='center',
+        fontsize=10, color='#555')
+cmds_plumbing = ['cat-file', 'hash-object', 'update-ref', 'write-tree', 'read-tree', 'rev-parse']
+for i, cmd in enumerate(cmds_plumbing):
+    x = 1.8 + i * 1.8
+    cmd_box = mpatches.FancyBboxPatch((x - 0.7, 1.2), 1.4, 0.6, boxstyle="round,pad=0.05",
+        facecolor='white', edgecolor=COLORS['git_orange'], linewidth=1.2)
+    ax.add_patch(cmd_box)
+    ax.text(x, 1.5, cmd, ha='center', fontsize=7, family='monospace', color=COLORS['git_orange'])
+
+# Arrow between layers
+ax.annotate('', xy=(6.5, 4.4), xytext=(6.5, 4.1),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2))
+ax.text(7.8, 4.2, '调用 | ruft auf', fontsize=9, color=COLORS['neutral'], fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+## `.git` 目录结构 | Die `.git`-Verzeichnisstruktur
+
+运行 `git init` 时，Git 会创建 `.git` 目录，几乎所有 Git 存储和操控的内容都在其中。如果你想备份或克隆仓库，只需复制这个目录就够了。一个新初始化的 `.git` 目录通常包含以下内容：
+
+```
+$ ls -F1
+config          # 项目特定配置
+description     # 仅供 GitWeb 使用
+HEAD            # 指向当前检出的分支
+hooks/          # 客户端或服务端钩子脚本
+info/           # 全局排除文件
+objects/        # 所有内容的数据库
+refs/           # 指向提交对象的指针（分支、标签等）
+```
+
+```{python}
+#| label: fig-git-directory
+#| fig-cap: ".git 目录结构：四个核心组件 | .git Verzeichnis: Vier Kernkomponenten"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('.git 目录核心结构 | .git Kernstruktur', fontsize=15, fontweight='bold')
+
+# Root .git box
+root_box = mpatches.FancyBboxPatch((0.3, 0.3), 13.4, 8.4, boxstyle="round,pad=0.2",
+    facecolor=COLORS['light'], edgecolor=COLORS['git_gray'], linewidth=3)
+ax.add_patch(root_box)
+ax.text(7.0, 8.2, '.git/', ha='center', fontsize=16, fontweight='bold',
+        color=COLORS['git_gray'], family='monospace')
+
+# Core components
+core = [
+    {
+        'name': 'HEAD', 'icon': '', 'x': 2.0, 'y': 6.0, 'w': 2.8, 'h': 2.0,
+        'color': COLORS['danger'],
+        'zh': '指向当前检出分支', 'de': 'Zeigt auf aktuell\nausgecheckten Branch',
+        'type': '文件 | Datei'
+    },
+    {
+        'name': 'index', 'icon': '', 'x': 5.5, 'y': 6.0, 'w': 2.8, 'h': 2.0,
+        'color': COLORS['highlight'],
+        'zh': '暂存区信息', 'de': 'Staging-Area\nInformation',
+        'type': '文件 | Datei'
+    },
+    {
+        'name': 'objects/', 'icon': '', 'x': 9.0, 'y': 6.0, 'w': 2.8, 'h': 2.0,
+        'color': COLORS['blob_blue'],
+        'zh': '所有内容的数据库', 'de': 'Alle Inhalte\n(Datenbank)',
+        'type': '目录 | Verzeichnis'
+    },
+    {
+        'name': 'refs/', 'icon': '', 'x': 12.5, 'y': 6.0, 'w': 1.0, 'h': 2.0,
+        'color': COLORS['ref_purple'],
+        'zh': '提交对象的指针', 'de': 'Pointer auf\nCommit-Objekte',
+        'type': '目录 | Verzeichnis'
+    },
+]
+
+for c in core:
+    card = mpatches.FancyBboxPatch((c['x'] - c['w']/2, c['y'] - c['h']/2), c['w'], c['h'],
+        boxstyle="round,pad=0.12", facecolor='white', edgecolor=c['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(c['x'], c['y'] + 0.65, c['icon'], ha='center', fontsize=16)
+    ax.text(c['x'], c['y'] + 0.15, c['name'], ha='center', fontsize=10,
+            fontweight='bold', color=c['color'], family='monospace')
+    ax.text(c['x'], c['y'] - 0.55, c['zh'], ha='center', fontsize=7.5, color='#555')
+
+# Non-core items
+other_box = mpatches.FancyBboxPatch((0.8, 0.8), 12.4, 3.5, boxstyle="round,pad=0.15",
+    facecolor='white', edgecolor=COLORS['neutral'], linewidth=1.5, linestyle='--')
+ax.add_patch(other_box)
+ax.text(7.0, 3.8, '其他内容 | Weitere Einträge', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['neutral'])
+
+others = [
+    ('config', '项目配置\nProjekt-Konfiguration', 2.5),
+    ('description', '仅 GitWeb 使用\nNur für GitWeb', 5.5),
+    ('hooks/', '钩子脚本\nHook-Skripte', 8.5),
+    ('info/', '全局排除文件\nGlobale Exclude-Datei', 11.5),
+]
+for name, desc, x in others:
+    ax.text(x, 2.8, name, ha='center', fontsize=9, family='monospace',
+            fontweight='bold', color=COLORS['neutral'])
+    ax.text(x, 1.8, desc, ha='center', fontsize=7.5, color='#999', linespacing=1.3)
+
+# Highlight box
+highlight = mpatches.FancyBboxPatch((0.8, 4.5), 12.4, 0.6, boxstyle="round,pad=0.05",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(highlight)
+ax.text(7.0, 4.8, '⬆ 四个核心部分 | Vier Kernteile: HEAD, index, objects/, refs/',
+        ha='center', fontsize=10, fontweight='bold', color=COLORS['highlight'])
+
+plt.tight_layout()
+plt.show()
+```
+
+其中四个核心部分是：**objects/** 目录存储数据库中的所有内容；**refs/** 目录存储指向提交对象的指针（分支、标签、远程引用等）；**HEAD** 文件指向当前检出的分支；**index** 文件存储暂存区信息。
+
+## 哈希函数 | Hash-Funktionen
+
+哈希函数 \(h: K \to S\) 从给定的 \(K\) 类型数据生成一个（极大概率）唯一的指纹，映射到集合 \(S\)。由于 \(|K| \gg |S|\)，碰撞在理论上是可能的，但在实践中极为罕见。
+
+哈希函数的三个重要性质：**确定性** (Deterministisch)——相同输入始终产生相同输出；**单向性** (Einweg)——无法从哈希值反推原始输入；**抗碰撞** (Kollisionsresistent)——实际上不可能找到两个不同的输入具有相同哈希值。
+
+```{python}
+#| label: fig-hash-function
+#| fig-cap: "哈希函数特性 | Hash-Funktionen: Eigenschaften"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('哈希函数特性 | Eigenschaften von Hash-Funktionen', fontsize=14, fontweight='bold')
+
+props = [
+    {
+        'zh': '确定性', 'de': 'Deterministisch',
+        'desc': '相同输入 → 相同输出\nGleicher Input →\nimmer gleicher Output',
+        'icon': '', 'color': COLORS['primary'], 'x': 2.5
+    },
+    {
+        'zh': '单向性', 'de': 'Einweg',
+        'desc': '无法从哈希反推输入\nAus Hash kann man\nInput nicht rekonstruieren',
+        'icon': '', 'color': COLORS['danger'], 'x': 7.0
+    },
+    {
+        'zh': '抗碰撞', 'de': 'Kollisionsresistent',
+        'desc': '几乎不可能找到\n两个相同哈希的不同输入\nPraktisch unmöglich',
+        'icon': '', 'color': COLORS['tree_green'], 'x': 11.5
+    },
+]
+
+for p in props:
+    card = mpatches.FancyBboxPatch((p['x'] - 2.0, 0.5), 4.0, 5.8,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=p['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(p['x'], 5.8, p['icon'], ha='center', fontsize=22)
+    ax.text(p['x'], 4.8, p['zh'], ha='center', fontsize=12, fontweight='bold', color=p['color'])
+    ax.text(p['x'], 4.2, p['de'], ha='center', fontsize=10, color=p['color'])
+    ax.text(p['x'], 2.5, p['desc'], ha='center', fontsize=9, color='#555', linespacing=1.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+## Git 如何计算哈希 | Wie Git Hashes berechnet
+
+Git 使用 **SHA-1** (Secure Hash Algorithm 1)，从给定的字节序列生成 160 位（40 个十六进制字符）的哈希值。虽然 SHA-1 在密码学上已不安全，但对于版本控制来说是足够的。
+
+Git 计算哈希的步骤是：先将 Header 与内容连接在一起（格式为 `<类型> <大小>\0<内容>`，其中 `\0` 是空字节分隔符），然后对整体计算 SHA-1 哈希。
+
+```bash
+# 手动计算
+❱ echo -n "blob 16\0what is up, doc?" | sha1sum --quiet
+bd9dbf5aae1a3862dd1526723246b20206e5fc37
+
+# 使用 Git 自带命令
+❱ echo -n "what is up, doc?" | git hash-object --stdin
+bd9dbf5aae1a3862dd1526723246b20206e5fc37
+```
+
+```{python}
+#| label: fig-hash-computation
+#| fig-cap: "Git 哈希计算过程 | Wie Git Hashes berechnet"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('Git 哈希计算流程 | Hash-Berechnung in Git', fontsize=14, fontweight='bold')
+
+# Step 1: Header
+h_box = mpatches.FancyBboxPatch((0.5, 3.0), 3.5, 2.2, boxstyle="round,pad=0.15",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=2)
+ax.add_patch(h_box)
+ax.text(2.25, 4.7, '① Header', ha='center', fontsize=11, fontweight='bold', color=COLORS['primary'])
+ax.text(2.25, 3.7, 'blob 16\\0', ha='center', fontsize=10, family='monospace', color='#444')
+
+# + sign
+ax.text(4.3, 4.0, '+', ha='center', fontsize=20, fontweight='bold', color=COLORS['neutral'])
+
+# Step 2: Content
+c_box = mpatches.FancyBboxPatch((4.8, 3.0), 3.5, 2.2, boxstyle="round,pad=0.15",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['tree_green'], linewidth=2)
+ax.add_patch(c_box)
+ax.text(6.55, 4.7, '② 内容 | Inhalt', ha='center', fontsize=11, fontweight='bold', color=COLORS['tree_green'])
+ax.text(6.55, 3.7, 'what is up, doc?', ha='center', fontsize=10, family='monospace', color='#444')
+
+# Arrow
+ax.annotate('', xy=(9.0, 4.1), xytext=(8.5, 4.1),
+    arrowprops=dict(arrowstyle='->', color=COLORS['git_orange'], lw=3))
+ax.text(8.75, 3.4, 'SHA-1', ha='center', fontsize=10, fontweight='bold', color=COLORS['git_orange'])
+
+# Step 3: Hash
+hash_box = mpatches.FancyBboxPatch((9.2, 3.0), 4.5, 2.2, boxstyle="round,pad=0.15",
+    facecolor=COLORS['orange_light'], edgecolor=COLORS['git_orange'], linewidth=2.5)
+ax.add_patch(hash_box)
+ax.text(11.45, 4.7, '③ 哈希 | Hash', ha='center', fontsize=11, fontweight='bold', color=COLORS['git_orange'])
+ax.text(11.45, 3.7, 'bd9dbf5aae1a...37', ha='center', fontsize=9.5, family='monospace', color='#444')
+
+# Format explanation
+fmt_box = mpatches.FancyBboxPatch((0.5, 0.5), 13.0, 2.0, boxstyle="round,pad=0.1",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(fmt_box)
+ax.text(7.0, 1.9, '格式 | Format:', ha='center', fontsize=10, fontweight='bold', color=COLORS['highlight'])
+ax.text(7.0, 1.1, '<typ> <größe-in-bytes>\\0<inhalt>    →    blob 16\\0what is up, doc?',
+        ha='center', fontsize=10, family='monospace', color='#444')
+
+plt.tight_layout()
+plt.show()
+```
+
+## 三种对象类型 | Die drei Objekttypen
+
+Git 的存储基于三种对象类型，它们共同保存在 `.git/objects/` 中作为 zlib 压缩文件。
+
+```{python}
+#| label: fig-three-object-types
+#| fig-cap: "Git 三种对象类型 | Die drei Objekttypen"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('Git 三种对象类型 | Die drei Objekttypen', fontsize=15, fontweight='bold')
+
+types = [
+    {
+        'name': 'Blob', 'icon': '', 'color': COLORS['blob_blue'],
+        'x': 2.5, 'zh_store': '存储：文件内容',
+        'de_store': 'Speichert: Dateiinhalt',
+        'zh_contain': '包含：字节（无文件名！）',
+        'de_contain': 'Enthält: Bytes\n(kein Dateiname!)',
+        'detail': '相同内容的文件\n自动去重\nAutomatische\nDeduplizierung'
+    },
+    {
+        'name': 'Tree', 'icon': '', 'color': COLORS['tree_green'],
+        'x': 7.0, 'zh_store': '存储：目录结构',
+        'de_store': 'Speichert: Verzeichnisstruktur',
+        'zh_contain': '包含：Blob/Tree 列表 + 名称',
+        'de_contain': 'Enthält: Liste von\nBlobs/Trees mit Namen',
+        'detail': '文件模式 + 类型\n+ SHA-1 + 文件名\nModus + Typ\n+ Hash + Name'
+    },
+    {
+        'name': 'Commit', 'icon': '', 'color': COLORS['commit_yellow'],
+        'x': 11.5, 'zh_store': '存储：快照元数据',
+        'de_store': 'Speichert: Snapshot-Metadaten',
+        'zh_contain': '包含：Tree, Parent(s), 作者, 消息',
+        'de_contain': 'Enthält: Tree, Parent(s),\nAutor:in, Nachricht',
+        'detail': '指向一个 Tree\n= 完整项目快照\nKompletter\nProjekt-Snapshot'
+    },
+]
+
+for t in types:
+    # Main card
+    card = mpatches.FancyBboxPatch((t['x'] - 2.0, 0.5), 4.0, 8.0,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=t['color'], linewidth=3)
+    ax.add_patch(card)
+
+    # Icon and name
+    ax.text(t['x'], 8.0, t['icon'], ha='center', fontsize=24)
+    ax.text(t['x'], 7.0, t['name'], ha='center', fontsize=16, fontweight='bold', color=t['color'])
+
+    # Store
+    store_box = mpatches.FancyBboxPatch((t['x'] - 1.7, 5.2), 3.4, 1.3,
+        boxstyle="round,pad=0.08", facecolor=t['color'] + '15', edgecolor=t['color'], linewidth=1)
+    ax.add_patch(store_box)
+    ax.text(t['x'], 6.1, t['zh_store'], ha='center', fontsize=9, fontweight='bold', color=t['color'])
+    ax.text(t['x'], 5.6, t['de_store'], ha='center', fontsize=7.5, color='#666')
+
+    # Contains
+    contain_box = mpatches.FancyBboxPatch((t['x'] - 1.7, 3.2), 3.4, 1.6,
+        boxstyle="round,pad=0.08", facecolor=t['color'] + '10', edgecolor=t['color'], linewidth=1, linestyle='--')
+    ax.add_patch(contain_box)
+    ax.text(t['x'], 4.4, t['zh_contain'], ha='center', fontsize=9, color='#444')
+    ax.text(t['x'], 3.7, t['de_contain'], ha='center', fontsize=7.5, color='#777', linespacing=1.3)
+
+    # Detail
+    ax.text(t['x'], 2.0, t['detail'], ha='center', fontsize=8, color='#555',
+            linespacing=1.4, fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-warning}
+## 重要 (Wichtig)
+
+一个 **Blob 不知道自己的文件名**。文件名存储在 Tree 中。这意味着内容相同的文件会被自动去重 (Deduplizierung)。
+:::
+
+## 对象层次结构 | Die Objekthierarchie
+
+```{python}
+#| label: fig-object-hierarchy
+#| fig-cap: "Git 对象层次结构示例 | Die Objekthierarchie (Beispiel)"
+
+fig, ax = plt.subplots(figsize=(15, 10))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('Git 对象层次结构 | Die Objekthierarchie', fontsize=15, fontweight='bold')
+
+# Commit object
+commit_box = mpatches.FancyBboxPatch((5.5, 8.5), 4.0, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['commit_yellow'], linewidth=3)
+ax.add_patch(commit_box)
+ax.text(7.5, 10.0, 'Commit  45b7aed...', ha='center', fontsize=11, fontweight='bold',
+        color='#8B7000', family='monospace')
+ax.text(7.5, 9.1, 'tree: 301666...\nparent: 909612...\nauthor: Thomas L.\nmessage: "Update 07..."',
+        ha='center', fontsize=7.5, color='#555', linespacing=1.3, family='monospace')
+
+# Arrow commit → tree
+ax.annotate('', xy=(7.5, 6.8), xytext=(7.5, 8.4),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=2.5))
+ax.text(8.2, 7.6, 'tree', fontsize=9, color=COLORS['tree_green'], fontweight='bold')
+
+# Root tree
+root_tree = mpatches.FancyBboxPatch((5.0, 4.8), 5.0, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['tree_green'], linewidth=2.5)
+ax.add_patch(root_tree)
+ax.text(7.5, 6.3, 'Tree  301666...  (根目录 | Root)', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['tree_green'], family='monospace')
+ax.text(7.5, 5.3, '040000 tree 0ded95... .github\n100644 blob 367a3e... .gitignore\n040000 tree 52ccc5... 01-intro\n...',
+        ha='center', fontsize=7.5, color='#555', linespacing=1.4, family='monospace')
+
+# Sub-tree
+sub_tree = mpatches.FancyBboxPatch((0.5, 1.5), 4.5, 2.5, boxstyle="round,pad=0.15",
+    facecolor=COLORS['green_light'], edgecolor=COLORS['tree_green'], linewidth=2)
+ax.add_patch(sub_tree)
+ax.text(2.75, 3.5, 'Tree  52ccc5...', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['tree_green'], family='monospace')
+ax.text(2.75, 2.5, '(01-intro/)\n100644 blob abc123... main.qmd\n100644 blob def456... README.md',
+        ha='center', fontsize=7, color='#555', linespacing=1.4, family='monospace')
+
+# Arrow root tree → sub tree
+ax.annotate('', xy=(4.0, 3.8), xytext=(5.5, 4.8),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=2))
+
+# Blob 1
+blob1 = mpatches.FancyBboxPatch((6.0, 1.5), 3.5, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['blob_blue'], linewidth=2)
+ax.add_patch(blob1)
+ax.text(7.75, 3.0, 'Blob  367a3e...', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['blob_blue'], family='monospace')
+ax.text(7.75, 2.1, '.gitignore 内容\n(纯字节 | Nur Bytes)', ha='center', fontsize=8,
+        color='#555', linespacing=1.3)
+
+# Arrow root tree → blob
+ax.annotate('', xy=(7.75, 3.55), xytext=(7.5, 4.8),
+    arrowprops=dict(arrowstyle='->', color=COLORS['blob_blue'], lw=2))
+
+# Blob 2
+blob2 = mpatches.FancyBboxPatch((10.5, 1.5), 3.5, 2.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['blue_light'], edgecolor=COLORS['blob_blue'], linewidth=2)
+ax.add_patch(blob2)
+ax.text(12.25, 3.0, 'Blob  abc123...', ha='center', fontsize=9,
+        fontweight='bold', color=COLORS['blob_blue'], family='monospace')
+ax.text(12.25, 2.1, 'main.qmd 内容\n(纯字节 | Nur Bytes)', ha='center', fontsize=8,
+        color='#555', linespacing=1.3)
+
+# Arrow sub tree → blob2
+ax.annotate('', xy=(10.5, 2.5), xytext=(5.0, 2.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['blob_blue'], lw=2))
+
+# Arrow commit → parent
+ax.annotate('', xy=(12.5, 9.5), xytext=(9.6, 9.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['neutral'], lw=2, linestyle='--'))
+ax.text(11.5, 10.0, 'parent → 909612...', fontsize=8, color=COLORS['neutral'],
+        family='monospace', fontstyle='italic')
+
+# Key takeaway
+key_box = mpatches.FancyBboxPatch((0.5, 0.2), 14.0, 1.0, boxstyle="round,pad=0.1",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['commit_yellow'], linewidth=2)
+ax.add_patch(key_box)
+ax.text(7.5, 0.7, '每个 Commit 哈希 = 一个完整的项目快照 (Snapshot) | Jeder Commit-Hash beinhaltet einen gesamten Projekt-Baum',
+        ha='center', fontsize=10, fontweight='bold', color='#8B7000')
+
+plt.tight_layout()
+plt.show()
+```
+
+要查看一个 Git 对象的内容，可以使用管道命令 `git cat-file -p <hash>`。Commit 对象包含五个部分：**tree**（项目当前状态）、**parent**（前一个 Commit）、**author**（做出更改的人）、**committer**（创建提交的人）和 **message**（提交消息）。Tree 对象列出每个条目的文件模式（100644 = 普通文件, 040000 = 目录）、对象类型 (blob/tree)、SHA-1 哈希和文件名。每个子目录递归为更深的 Tree 和 Blob。
+
+## 快照而非差异 | Snapshots, keine Diffs
+
+```{python}
+#| label: fig-snapshots-vs-diffs
+#| fig-cap: "Git 快照 vs. SVN/CVS 差异 | Git Snapshots vs. SVN/CVS Deltas"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+# Git: Snapshots
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('Git (快照 | Snapshots)', fontsize=13, fontweight='bold', color=COLORS['tree_green'])
+
+files = ['file A', 'file B', 'file C']
+versions = ['V1', 'V2', 'V3', 'V4']
+
+for i, v in enumerate(versions):
+    x = 1.5 + i * 2.2
+    ax.text(x, 7.2, v, ha='center', fontsize=10, fontweight='bold', color=COLORS['git_gray'])
+    for j, f in enumerate(files):
+        y = 5.5 - j * 1.8
+        changed = (i == 1 and j == 0) or (i == 2 and j == 1) or (i == 3 and j == 2)
+        color = COLORS['tree_green'] if changed else COLORS['neutral']
+        alpha = 1.0 if changed else 0.3
+        box = mpatches.FancyBboxPatch((x - 0.8, y - 0.5), 1.6, 1.0,
+            boxstyle="round,pad=0.05", facecolor=color, edgecolor=color, linewidth=1.5, alpha=alpha)
+        ax.add_patch(box)
+        ax.text(x, y, f, ha='center', fontsize=8, color='white', fontweight='bold')
+
+ax.text(5.0, 0.5, '每次提交 = 完整项目\n快速访问任意版本', ha='center', fontsize=9,
+        color=COLORS['tree_green'], linespacing=1.5)
+
+# SVN: Deltas
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('SVN/CVS (差异 | Deltas)', fontsize=13, fontweight='bold', color=COLORS['danger'])
+
+for i, v in enumerate(versions):
+    x = 1.5 + i * 2.2
+    ax.text(x, 7.2, v, ha='center', fontsize=10, fontweight='bold', color=COLORS['git_gray'])
+    for j, f in enumerate(files):
+        y = 5.5 - j * 1.8
+        if i == 0:
+            box = mpatches.FancyBboxPatch((x - 0.8, y - 0.5), 1.6, 1.0,
+                boxstyle="round,pad=0.05", facecolor=COLORS['danger'], edgecolor=COLORS['danger'],
+                linewidth=1.5, alpha=0.7)
+            ax.add_patch(box)
+            ax.text(x, y, f, ha='center', fontsize=8, color='white', fontweight='bold')
+        else:
+            changed = (i == 1 and j == 0) or (i == 2 and j == 1) or (i == 3 and j == 2)
+            if changed:
+                box = mpatches.FancyBboxPatch((x - 0.8, y - 0.5), 1.6, 1.0,
+                    boxstyle="round,pad=0.05", facecolor=COLORS['highlight'], edgecolor=COLORS['highlight'],
+                    linewidth=1.5, alpha=0.7)
+                ax.add_patch(box)
+                ax.text(x, y, 'Δ', ha='center', fontsize=14, color='white', fontweight='bold')
+
+ax.text(5.0, 0.5, '查看 6 个月前的版本\n需要逐步回算 (Zurückrechnen)', ha='center', fontsize=9,
+        color=COLORS['danger'], linespacing=1.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+Git 与 SVN/CVS 的根本区别在于：Git 中每次提交都保存完整的项目状态（快照），而 SVN/CVS 只保存版本之间的差异（Delta）。这让 Git 能快速访问任意历史版本，而无需逐步回算。
+
+## 为什么不浪费空间？| Warum ist das nicht verschwenderisch?
+
+**通过哈希实现自动去重**：因为对象按其内容的哈希值存储，所以如果两个不同 Commit 中同一个文件没有改变，它们指向的是同一个 Blob 对象。两个不同 Commit 的 Tree 中，未变化的子目录也指向相同的 Tree 对象。这意味着 Git 只存储每个独特文件内容的一份副本。
+
+## `git diff` 的工作原理 | Funktionsweise von `git diff`
+
+**Diff 是按需计算的，不是预先存储的**。当你运行 `git diff` 时，Git 会比较两个 Commit 的 Tree 对象，找出差异并动态生成差异输出。diff 输出中的 `-22,10` 表示旧版本从第 22 行起 10 行，`+22,7` 表示新版本从第 22 行起 7 行。
+
+# 引用与分支 | Referenzen und Branches
+
+## 初始提交 | Initialer Commit
+
+初始提交（Root Commit）没有 parent 行，这标志着提交历史的起点：
+
+```bash
+❱ git cat-file -p 6831ce9
+tree 72df72e8cc2464eb0a4d01c01e1c7c2ecb76a53f
+author Thomas Lemberger <...> 1756212339 +0200
+committer Thomas Lemberger <...> 1756293361 +0200
+
+Initial commit: Slides Master
+```
+
+而后续的 Commit 都包含一个 `parent` 行，指向前一个 Commit。
+
+## 完整性链 | Die Integritätskette
+
+```{python}
+#| label: fig-integrity-chain
+#| fig-cap: "Git 完整性链 | Die Integritätskette"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('Git 完整性链 | Die Integritätskette', fontsize=15, fontweight='bold')
+
+commits = [
+    {'hash': '3452205...', 'x': 2.0, 'label': 'Commit A'},
+    {'hash': '909612b...', 'x': 6.0, 'label': 'Commit B'},
+    {'hash': '45b7aed...', 'x': 10.0, 'label': 'Commit C'},
+]
+
+for i, c in enumerate(commits):
+    box = mpatches.FancyBboxPatch((c['x'] - 1.5, 4.0), 3.0, 3.0,
+        boxstyle="round,pad=0.15", facecolor=COLORS['yellow_light'],
+        edgecolor=COLORS['commit_yellow'], linewidth=2.5)
+    ax.add_patch(box)
+    ax.text(c['x'], 6.5, c['label'], ha='center', fontsize=11, fontweight='bold', color='#8B7000')
+    ax.text(c['x'], 5.7, c['hash'], ha='center', fontsize=9, family='monospace', color='#555')
+
+    if i > 0:
+        ax.text(c['x'], 4.7, f'parent: {commits[i-1]["hash"]}', ha='center',
+                fontsize=7.5, family='monospace', color=COLORS['danger'])
+
+    # Parent arrow
+    if i > 0:
+        ax.annotate('', xy=(commits[i-1]['x'] + 1.6, 5.5), xytext=(c['x'] - 1.6, 5.5),
+            arrowprops=dict(arrowstyle='->', color=COLORS['danger'], lw=2.5))
+
+# Chain explanation
+chain_box = mpatches.FancyBboxPatch((0.5, 0.5), 13.0, 3.0, boxstyle="round,pad=0.15",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(chain_box)
+ax.text(7.0, 3.0, '完整性链 | Integritätskette', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['danger'])
+ax.text(7.0, 2.0, 'Commit C 的哈希取决于 Commit B 的内容（通过 parent 引用）\n'
+        'Commit B 的哈希又取决于 Commit A 的内容\n'
+        '→ 修改任何 Commit 会改变其哈希，从而改变所有后续 Commit 的哈希\n'
+        '→ Git 历史无法被秘密篡改！',
+        ha='center', fontsize=9, color='#555', linespacing=1.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-important}
+## 完整性链 (Integritätskette)
+
+对一个 Commit 的任何修改都会改变它的哈希，进而改变所有后续 Commit 的哈希。
+
+**→ Git 历史无法被秘密篡改。**
+:::
+
+## 分支与标签 | Branches und Tags
+
+分支和标签本质上就是 `.git/refs/` 中的**文本文件**，内容仅为 41 字节（SHA-1 哈希 + 换行符）。创建一个分支 = 写入一个 41 字节的文件。
+
+```bash
+❱ cat .git/refs/heads/main
+ca82a6dff817ec66f44342007202690a93763949
+
+❱ cat .git/refs/tags/v1.0
+b5678ef90ab12cd34ef56789012345678901234
+```
+
+```{python}
+#| label: fig-branches-tags
+#| fig-cap: "Branches 和 Tags 本质 | Branches und Tags: Nur Textdateien"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('Branches & Tags = 文本文件 | Nur Textdateien (41 Bytes)', fontsize=14, fontweight='bold')
+
+# .git/refs/ structure
+ref_box = mpatches.FancyBboxPatch((0.5, 0.5), 5.5, 6.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['light'], edgecolor=COLORS['git_gray'], linewidth=2)
+ax.add_patch(ref_box)
+ax.text(3.25, 6.0, '.git/refs/', ha='center', fontsize=12, fontweight='bold',
+        color=COLORS['git_gray'], family='monospace')
+
+# heads/
+heads_box = mpatches.FancyBboxPatch((1.0, 3.5), 4.5, 2.0, boxstyle="round,pad=0.1",
+    facecolor=COLORS['teal_light'], edgecolor=COLORS['branch_teal'], linewidth=2)
+ax.add_patch(heads_box)
+ax.text(3.25, 5.0, 'heads/', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['branch_teal'], family='monospace')
+ax.text(3.25, 4.1, 'main → ca82a6d...\nfeature → fd61b57...', ha='center',
+        fontsize=8.5, family='monospace', color='#555', linespacing=1.5)
+
+# tags/
+tags_box = mpatches.FancyBboxPatch((1.0, 1.0), 4.5, 2.0, boxstyle="round,pad=0.1",
+    facecolor=COLORS['purple_light'], edgecolor=COLORS['ref_purple'], linewidth=2)
+ax.add_patch(tags_box)
+ax.text(3.25, 2.5, 'tags/', ha='center', fontsize=10, fontweight='bold',
+        color=COLORS['ref_purple'], family='monospace')
+ax.text(3.25, 1.6, 'v1.0 → b5678ef...\nv2.0 → 1a2b3c4...', ha='center',
+        fontsize=8.5, family='monospace', color='#555', linespacing=1.5)
+
+# Arrows to commits
+commit_colors = [COLORS['commit_yellow'], COLORS['commit_yellow']]
+commit_labels = ['Commit ca82a6d', 'Commit fd61b57']
+for i, (label, y_start) in enumerate(zip(commit_labels, [4.5, 4.0])):
+    commit_box = mpatches.FancyBboxPatch((7.5, 3.5 + i * 2.0), 5.5, 1.5,
+        boxstyle="round,pad=0.1", facecolor=COLORS['yellow_light'],
+        edgecolor=COLORS['commit_yellow'], linewidth=2)
+    ax.add_patch(commit_box)
+    ax.text(10.25, 4.4 + i * 2.0, f'{label}', ha='center', fontsize=10,
+            fontweight='bold', color='#8B7000', family='monospace')
+    ax.text(10.25, 3.9 + i * 2.0, 'tree: ...\nparent: ...\n...', ha='center',
+            fontsize=7.5, family='monospace', color='#777', linespacing=1.2)
+
+# Arrows
+ax.annotate('', xy=(7.4, 5.2), xytext=(5.6, 4.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['branch_teal'], lw=2.5))
+ax.annotate('', xy=(7.4, 3.8), xytext=(5.6, 4.2),
+    arrowprops=dict(arrowstyle='->', color=COLORS['branch_teal'], lw=2.5))
+
+# Key insight
+key_box = mpatches.FancyBboxPatch((7.0, 0.5), 6.5, 2.5, boxstyle="round,pad=0.15",
+    facecolor=COLORS['teal_light'], edgecolor=COLORS['branch_teal'], linewidth=2)
+ax.add_patch(key_box)
+ax.text(10.25, 2.5, '创建分支 = 写入 41 字节文件', ha='center', fontsize=11,
+        fontweight='bold', color=COLORS['branch_teal'])
+ax.text(10.25, 1.5, 'Branch anlegen =\nEine 41-Byte-Datei schreiben!\n→ Branching 几乎零成本！',
+        ha='center', fontsize=9, color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+## HEAD | HEAD
+
+**HEAD** 是一个特殊引用，指向当前检出的分支或 Commit。正常情况下，HEAD 是一个符号引用 (symbolische Referenz)，指向某个分支，而该分支又指向一个 Commit。
+
+```bash
+❱ cat .git/HEAD
+ref: refs/heads/main            # ← 符号引用
+
+❱ cat .git/refs/heads/main
+45b7aed17a2ef2608108fa505a5cafcd2ad4e043
+```
+
+```{python}
+#| label: fig-head-reference
+#| fig-cap: "HEAD 引用链 | HEAD-Referenzkette"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('HEAD → Branch → Commit | HEAD 引用链', fontsize=14, fontweight='bold')
+
+# HEAD
+head_box = mpatches.FancyBboxPatch((0.5, 2.0), 3.0, 2.5, boxstyle="round,pad=0.15",
+    facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=3)
+ax.add_patch(head_box)
+ax.text(2.0, 3.9, 'HEAD', ha='center', fontsize=14, fontweight='bold', color=COLORS['danger'])
+ax.text(2.0, 2.8, 'ref: refs/heads/main', ha='center', fontsize=8, family='monospace', color='#555')
+
+# Arrow HEAD → Branch
+ax.annotate('', xy=(4.0, 3.3), xytext=(3.6, 3.3),
+    arrowprops=dict(arrowstyle='->', color=COLORS['branch_teal'], lw=3))
+
+# Branch main
+branch_box = mpatches.FancyBboxPatch((4.2, 2.0), 3.5, 2.5, boxstyle="round,pad=0.15",
+    facecolor=COLORS['teal_light'], edgecolor=COLORS['branch_teal'], linewidth=2.5)
+ax.add_patch(branch_box)
+ax.text(5.95, 3.9, 'main', ha='center', fontsize=14, fontweight='bold', color=COLORS['branch_teal'])
+ax.text(5.95, 2.8, '45b7aed17a2ef...', ha='center', fontsize=8, family='monospace', color='#555')
+
+# Arrow Branch → Commit
+ax.annotate('', xy=(8.2, 3.3), xytext=(7.8, 3.3),
+    arrowprops=dict(arrowstyle='->', color=COLORS['commit_yellow'], lw=3))
+
+# Commit
+commit_box = mpatches.FancyBboxPatch((8.4, 1.5), 5.0, 3.5, boxstyle="round,pad=0.15",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['commit_yellow'], linewidth=2.5)
+ax.add_patch(commit_box)
+ax.text(10.9, 4.4, 'Commit  45b7aed...', ha='center', fontsize=11,
+        fontweight='bold', color='#8B7000', family='monospace')
+ax.text(10.9, 3.2, 'tree: 301666fc...\nparent: 909612bd...\nauthor: Thomas L.\n"Update 07 and add slides"',
+        ha='center', fontsize=8, family='monospace', color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 新 Commit 时发生了什么？| Was passiert bei einem neuen Commit?
+
+当你创建一个新 Commit 时，Git 执行三个步骤：首先创建新的 Commit 对象（以当前 Commit 为 parent）；然后更新 `.git/refs/heads/main` 为新 Commit 的哈希；HEAD 继续指向 main。
+
+```
+之前 | Vorher:   HEAD → main → C
+之后 | Nachher:  HEAD → main → D → C
+```
+
+```{python}
+#| label: fig-new-commit
+#| fig-cap: "创建新 Commit 的过程 | Was passiert bei einem neuen Commit?"
+
+fig, axes = plt.subplots(2, 1, figsize=(14, 7), gridspec_kw={'height_ratios': [1, 1]})
+
+for idx, (ax, title) in enumerate(zip(axes, ['之前 | Vorher', '之后 | Nachher'])):
+    ax.set_xlim(0, 14)
+    ax.set_ylim(0, 4)
+    ax.axis('off')
+    ax.set_title(title, fontsize=12, fontweight='bold',
+                 color=COLORS['tree_green'] if idx == 1 else COLORS['neutral'])
+
+    # HEAD
+    head_box = mpatches.FancyBboxPatch((0.5, 1.0), 2.0, 2.0, boxstyle="round,pad=0.1",
+        facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+    ax.add_patch(head_box)
+    ax.text(1.5, 2.3, '', ha='center', fontsize=14)
+    ax.text(1.5, 1.5, 'HEAD', ha='center', fontsize=10, fontweight='bold', color=COLORS['danger'])
+
+    # Arrow HEAD → main
+    ax.annotate('', xy=(3.0, 2.0), xytext=(2.6, 2.0),
+        arrowprops=dict(arrowstyle='->', color=COLORS['branch_teal'], lw=2))
+
+    # main
+    if idx == 0:
+        main_x = 4.5
+    else:
+        main_x = 6.5
+
+    main_box = mpatches.FancyBboxPatch((main_x - 0.8, 1.0), 2.5, 2.0, boxstyle="round,pad=0.1",
+        facecolor=COLORS['teal_light'], edgecolor=COLORS['branch_teal'], linewidth=2)
+    ax.add_patch(main_box)
+    ax.text(main_x + 0.45, 2.3, 'main', ha='center', fontsize=10, fontweight='bold',
+            color=COLORS['branch_teal'])
+
+    if idx == 0:
+        ax.text(main_x + 0.45, 1.5, '→ C', ha='center', fontsize=10, family='monospace', color='#555')
+
+        # Commit C
+        c_box = mpatches.FancyBboxPatch((7.5, 1.0), 2.5, 2.0, boxstyle="round,pad=0.1",
+            facecolor=COLORS['yellow_light'], edgecolor=COLORS['commit_yellow'], linewidth=2)
+        ax.add_patch(c_box)
+        ax.text(8.75, 2.0, 'C', ha='center', fontsize=12, fontweight='bold', color='#8B7000')
+
+        ax.annotate('', xy=(7.4, 2.0), xytext=(6.8, 2.0),
+            arrowprops=dict(arrowstyle='->', color=COLORS['commit_yellow'], lw=2))
+
+    else:
+        ax.text(main_x + 0.45, 1.5, '→ D', ha='center', fontsize=10, family='monospace', color='#555')
+
+        # Commit D (new)
+        d_box = mpatches.FancyBboxPatch((8.5, 1.0), 2.5, 2.0, boxstyle="round,pad=0.1",
+            facecolor='#E8F8F5', edgecolor=COLORS['tree_green'], linewidth=2.5)
+        ax.add_patch(d_box)
+        ax.text(9.75, 2.0, 'D (新!)', ha='center', fontsize=11, fontweight='bold', color=COLORS['tree_green'])
+
+        ax.annotate('', xy=(8.4, 2.0), xytext=(8.0, 2.0),
+            arrowprops=dict(arrowstyle='->', color=COLORS['commit_yellow'], lw=2))
+
+        # Commit C
+        c_box = mpatches.FancyBboxPatch((11.5, 1.0), 2.0, 2.0, boxstyle="round,pad=0.1",
+            facecolor=COLORS['yellow_light'], edgecolor=COLORS['commit_yellow'], linewidth=2)
+        ax.add_patch(c_box)
+        ax.text(12.5, 2.0, 'C', ha='center', fontsize=12, fontweight='bold', color='#8B7000')
+
+        ax.annotate('', xy=(11.4, 2.0), xytext=(11.05, 2.0),
+            arrowprops=dict(arrowstyle='->', color=COLORS['commit_yellow'], lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+## 游离的 HEAD | Detached HEAD
+
+```bash
+❱ git switch --detach 3452205
+HEAD is now at 3452205 Prepare lecture for tomorrow
+
+❱ cat .git/HEAD
+3452205...      # 没有 "ref:"，直接是哈希
+```
+
+::: {.callout-warning}
+## 注意！(Achtung!)
+
+在 Detached HEAD 状态下，新的 Commit 不绑定到任何分支，切换分支后这些 Commit 可能会变成"孤儿"而丢失。
+
+**解决方案**：使用 `git switch -c neuer-branch` 创建新分支。
+:::
+
+## 祖先引用 | Ancestry-Referenzen
+
+| 表示法 | 含义 |
+|---------|------|
+| `HEAD^` 或 `HEAD~1` | HEAD 的父节点 (Parent) |
+| `HEAD~3` | 曾祖父节点（回退 3 代） |
+| `HEAD^2` | 第二个父节点（Merge Commit 时） |
+
+```bash
+# 实际示例
+❱ git show HEAD~2           # 查看 2 代前的 Commit
+❱ git reset --soft HEAD~1   # 撤销最近 Commit（保留更改）
+❱ git rebase -i HEAD~4      # 交互式编辑最近 4 个 Commit
+```
+
+## 实用技巧：`git push -u origin HEAD`
+
+`git push -u origin HEAD` 推送当前分支（无需写分支名），`-u` 设置追踪关系。这在使用 Feature Branch 时特别方便：
+
+```bash
+❱ git switch -c feature/login
+❱ # ... 开发工作 ...
+❱ git push -u origin HEAD
+# → 自动创建远程分支并设置追踪
+```
+
+# 提交图与分支 | Der Commit-Graph und Branches
+
+## 提交图 | Der Commit-Graph
+
+```{python}
+#| label: fig-commit-graph
+#| fig-cap: "提交图：有向无环图 (DAG) | Commit-Graph: Directed Acyclic Graph"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('提交图 | Der Commit-Graph (DAG)', fontsize=15, fontweight='bold')
+
+# Main branch commits
+main_commits = [
+    {'label': 'A', 'x': 2.0, 'y': 4.5},
+    {'label': 'B', 'x': 4.5, 'y': 4.5},
+    {'label': 'C', 'x': 7.0, 'y': 4.5},
+    {'label': 'D', 'x': 9.5, 'y': 4.5},
+]
+
+# Feature branch commits
+feature_commits = [
+    {'label': 'E', 'x': 9.5, 'y': 2.0},
+    {'label': 'F', 'x': 12.0, 'y': 2.0},
+]
+
+# Draw main commits
+for c in main_commits:
+    circle = plt.Circle((c['x'], c['y']), 0.6, facecolor=COLORS['blue_light'],
+        edgecolor=COLORS['primary'], linewidth=2.5)
+    ax.add_patch(circle)
+    ax.text(c['x'], c['y'], c['label'], ha='center', va='center',
+            fontsize=14, fontweight='bold', color=COLORS['primary'])
+
+# Draw feature commits
+for c in feature_commits:
+    circle = plt.Circle((c['x'], c['y']), 0.6, facecolor=COLORS['green_light'],
+        edgecolor=COLORS['tree_green'], linewidth=2.5)
+    ax.add_patch(circle)
+    ax.text(c['x'], c['y'], c['label'], ha='center', va='center',
+            fontsize=14, fontweight='bold', color=COLORS['tree_green'])
+
+# Parent arrows (main)
+for i in range(len(main_commits) - 1):
+    ax.annotate('', xy=(main_commits[i]['x'] + 0.7, main_commits[i]['y']),
+        xytext=(main_commits[i+1]['x'] - 0.7, main_commits[i+1]['y']),
+        arrowprops=dict(arrowstyle='->', color=COLORS['primary'], lw=2))
+
+# Parent arrow C → E
+ax.annotate('', xy=(7.0 + 0.4, 4.5 - 0.45), xytext=(9.5 - 0.4, 2.0 + 0.45),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=2))
+
+# Parent arrow E → F
+ax.annotate('', xy=(feature_commits[0]['x'] + 0.7, feature_commits[0]['y']),
+    xytext=(feature_commits[1]['x'] - 0.7, feature_commits[1]['y']),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=2))
+
+# Branch labels
+main_label = mpatches.FancyBboxPatch((9.0, 5.5), 1.5, 0.7, boxstyle="round,pad=0.08",
+    facecolor=COLORS['primary'], edgecolor=COLORS['primary'], linewidth=1.5)
+ax.add_patch(main_label)
+ax.text(9.75, 5.85, 'main', ha='center', fontsize=10, fontweight='bold', color='white')
+ax.annotate('', xy=(9.5, 5.15), xytext=(9.75, 5.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['primary'], lw=1.5))
+
+feature_label = mpatches.FancyBboxPatch((11.2, 0.8), 1.8, 0.7, boxstyle="round,pad=0.08",
+    facecolor=COLORS['tree_green'], edgecolor=COLORS['tree_green'], linewidth=1.5)
+ax.add_patch(feature_label)
+ax.text(12.1, 1.15, 'feature', ha='center', fontsize=10, fontweight='bold', color='white')
+ax.annotate('', xy=(12.0, 1.55), xytext=(12.1, 1.5),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=1.5))
+
+# DAG properties
+props_box = mpatches.FancyBboxPatch((0.5, 0.3), 7.0, 1.2, boxstyle="round,pad=0.1",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=1.5)
+ax.add_patch(props_box)
+ax.text(4.0, 0.9, 'DAG 特性：有向 (Gerichtet: Parent ← Kind) | 无环 (Azyklisch: 无循环)\nBranch = 可移动的 Commit 指针 | Beim Committen wird der Pointer vorwärts bewegt',
+        ha='center', fontsize=8.5, color='#555', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+提交图是一个**有向无环图 (DAG)**：方向只从子节点指向父节点，不可能形成环。分支只是一个可以移动的 Commit 指针——每次提交时，指针向前移动到新的 Commit。
+
+## 合并分歧分支的两种策略 | Divergente Branches zusammenführen
+
+```{python}
+#| label: fig-merge-vs-rebase
+#| fig-cap: "两种策略：Rebase vs. Merge"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+# --- REBASE ---
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('Rebase (线性化 | Linearisieren)', fontsize=13, fontweight='bold', color=COLORS['rebase_blue'])
+
+# Before
+ax.text(5.0, 7.5, '之前 | Vorher', ha='center', fontsize=10, fontweight='bold', color=COLORS['neutral'])
+
+before_main = [(1.0, 6.5), (2.5, 6.5), (4.0, 6.5), (5.5, 6.5), (7.0, 6.5)]
+before_feat = [(4.0, 5.0), (5.5, 5.0)]
+labels_main = ['A', 'B', 'C', 'D', 'E']
+labels_feat = ['F', 'G']
+
+for i, ((x, y), l) in enumerate(zip(before_main, labels_main)):
+    c = plt.Circle((x, y), 0.35, facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=2)
+    ax.add_patch(c)
+    ax.text(x, y, l, ha='center', va='center', fontsize=9, fontweight='bold', color=COLORS['primary'])
+    if i > 0:
+        ax.annotate('', xy=(before_main[i-1][0]+0.4, y), xytext=(x-0.4, y),
+            arrowprops=dict(arrowstyle='->', color=COLORS['primary'], lw=1.5))
+
+for i, ((x, y), l) in enumerate(zip(before_feat, labels_feat)):
+    c = plt.Circle((x, y), 0.35, facecolor=COLORS['green_light'], edgecolor=COLORS['tree_green'], linewidth=2)
+    ax.add_patch(c)
+    ax.text(x, y, l, ha='center', va='center', fontsize=9, fontweight='bold', color=COLORS['tree_green'])
+    if i > 0:
+        ax.annotate('', xy=(before_feat[i-1][0]+0.4, y), xytext=(x-0.4, y),
+            arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=1.5))
+
+# Branch from C
+ax.annotate('', xy=(4.0, 6.1), xytext=(4.0, 5.4),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=1.5))
+
+ax.text(7.5, 6.5, '(main)', fontsize=8, color=COLORS['primary'])
+ax.text(6.0, 5.0, '(feature)', fontsize=8, color=COLORS['tree_green'])
+
+# After
+ax.text(5.0, 4.0, '之后 | Nachher (git rebase main)', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['rebase_blue'])
+
+after_all = [(0.5, 2.5), (1.8, 2.5), (3.1, 2.5), (4.4, 2.5), (5.7, 2.5), (7.0, 2.5), (8.3, 2.5)]
+after_labels = ['A', 'B', 'C', 'D', 'E', "F'", "G'"]
+after_colors = [COLORS['primary']]*5 + [COLORS['rebase_blue']]*2
+after_bg = [COLORS['blue_light']]*5 + ['#D6EAF8']*2
+
+for i, ((x, y), l, col, bg) in enumerate(zip(after_all, after_labels, after_colors, after_bg)):
+    c = plt.Circle((x, y), 0.35, facecolor=bg, edgecolor=col, linewidth=2)
+    ax.add_patch(c)
+    ax.text(x, y, l, ha='center', va='center', fontsize=9, fontweight='bold', color=col)
+    if i > 0:
+        ax.annotate('', xy=(after_all[i-1][0]+0.4, y), xytext=(x-0.4, y),
+            arrowprops=dict(arrowstyle='->', color=col, lw=1.5))
+
+ax.text(8.8, 2.5, '(feature)', fontsize=8, color=COLORS['rebase_blue'])
+
+# Warning
+ax.text(5.0, 1.2, '⚠️ F\' 和 G\' 有新的哈希！\nNie gepushte Commits rebasen!',
+        ha='center', fontsize=8, color=COLORS['danger'], fontweight='bold', linespacing=1.4)
+
+# --- MERGE ---
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('Merge (合并 | Zusammenführen)', fontsize=13, fontweight='bold', color=COLORS['merge_red'])
+
+# Before (same)
+ax.text(5.0, 7.5, '之前 | Vorher', ha='center', fontsize=10, fontweight='bold', color=COLORS['neutral'])
+
+for i, ((x, y), l) in enumerate(zip(before_main, labels_main)):
+    c = plt.Circle((x, y), 0.35, facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=2)
+    ax.add_patch(c)
+    ax.text(x, y, l, ha='center', va='center', fontsize=9, fontweight='bold', color=COLORS['primary'])
+    if i > 0:
+        ax.annotate('', xy=(before_main[i-1][0]+0.4, y), xytext=(x-0.4, y),
+            arrowprops=dict(arrowstyle='->', color=COLORS['primary'], lw=1.5))
+
+for i, ((x, y), l) in enumerate(zip(before_feat, labels_feat)):
+    c = plt.Circle((x, y), 0.35, facecolor=COLORS['green_light'], edgecolor=COLORS['tree_green'], linewidth=2)
+    ax.add_patch(c)
+    ax.text(x, y, l, ha='center', va='center', fontsize=9, fontweight='bold', color=COLORS['tree_green'])
+    if i > 0:
+        ax.annotate('', xy=(before_feat[i-1][0]+0.4, y), xytext=(x-0.4, y),
+            arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=1.5))
+
+ax.annotate('', xy=(4.0, 6.1), xytext=(4.0, 5.4),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=1.5))
+
+ax.text(7.5, 6.5, '(main)', fontsize=8, color=COLORS['primary'])
+ax.text(6.0, 5.0, '(feature)', fontsize=8, color=COLORS['tree_green'])
+
+# After
+ax.text(5.0, 4.0, '之后 | Nachher (git merge feature)', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['merge_red'])
+
+# Main line
+after_main_m = [(1.0, 3.0), (2.3, 3.0), (3.6, 3.0), (4.9, 3.0), (6.2, 3.0)]
+after_feat_m = [(3.6, 1.8), (4.9, 1.8)]
+merge_pt = (7.8, 3.0)
+
+for i, ((x, y), l) in enumerate(zip(after_main_m, labels_main)):
+    c = plt.Circle((x, y), 0.35, facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=2)
+    ax.add_patch(c)
+    ax.text(x, y, l, ha='center', va='center', fontsize=9, fontweight='bold', color=COLORS['primary'])
+    if i > 0:
+        ax.annotate('', xy=(after_main_m[i-1][0]+0.4, y), xytext=(x-0.4, y),
+            arrowprops=dict(arrowstyle='->', color=COLORS['primary'], lw=1.5))
+
+for i, ((x, y), l) in enumerate(zip(after_feat_m, labels_feat)):
+    c = plt.Circle((x, y), 0.35, facecolor=COLORS['green_light'], edgecolor=COLORS['tree_green'], linewidth=2)
+    ax.add_patch(c)
+    ax.text(x, y, l, ha='center', va='center', fontsize=9, fontweight='bold', color=COLORS['tree_green'])
+    if i > 0:
+        ax.annotate('', xy=(after_feat_m[i-1][0]+0.4, y), xytext=(x-0.4, y),
+            arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=1.5))
+
+ax.annotate('', xy=(3.6, 2.6), xytext=(3.6, 2.2),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=1.5))
+
+# Merge commit
+c_merge = plt.Circle(merge_pt, 0.4, facecolor=COLORS['red_light'], edgecolor=COLORS['merge_red'], linewidth=2.5)
+ax.add_patch(c_merge)
+ax.text(merge_pt[0], merge_pt[1], 'M', ha='center', va='center', fontsize=10,
+        fontweight='bold', color=COLORS['merge_red'])
+
+ax.annotate('', xy=(after_main_m[-1][0]+0.4, 3.0), xytext=(merge_pt[0]-0.45, 3.0),
+    arrowprops=dict(arrowstyle='->', color=COLORS['merge_red'], lw=1.5))
+ax.annotate('', xy=(after_feat_m[-1][0]+0.4, 1.8+0.15), xytext=(merge_pt[0]-0.3, merge_pt[1]-0.3),
+    arrowprops=dict(arrowstyle='->', color=COLORS['merge_red'], lw=1.5))
+
+ax.text(8.5, 3.0, '(main)', fontsize=8, color=COLORS['merge_red'])
+ax.text(5.4, 1.8, '(feature)', fontsize=8, color=COLORS['tree_green'])
+
+ax.text(5.0, 0.8, '✅ 两条历史都保留\n✅ 不会重写 Commit\n✅ 比 Rebase 更安全',
+        ha='center', fontsize=8, color=COLORS['tree_green'], fontweight='bold', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+### Rebase：线性化历史 | Geschichte linearisieren
+
+Rebase 将 feature 分支的 Commit "移植"到 main 分支的末端。`git rebase main`（在 feature 分支上执行）的结果是创建了 F' 和 G'——它们具有与原 F、G 相同的更改，但有全新的哈希值，因为它们的 parent 改变了。结果是一条干净的线性历史。
+
+::: {.callout-danger}
+## 黄金规则 (Goldene Regel)
+
+**永远不要 rebase 已经推送 (push) 过的 Commit！** 因为 rebase 会重写 Commit 哈希，这将导致与其他协作者的仓库不一致。
+:::
+
+### Merge：连接历史 | Historien verbinden
+
+Merge 创建一个新的 Merge Commit M，它有两个 parent（分别指向两条分支的最新 Commit）。两条历史都完整保留，没有 Commit 被重写。这比 Rebase 更安全。
+
+Merge Commit 与普通 Commit 的唯一区别在于它有多个 `parent` 行：
+
+```bash
+❱ git cat-file -p 546e070
+tree d18f261f6a6...
+parent 86e8bb5a6fd...    # ← 第一个 parent (main)
+parent fd61b5787f3...    # ← 第二个 parent (feature)
+author Thomas Lemberger <...>
+committer Thomas Lemberger <...>
+
+Merge branch 'support-constant-expressions-in-typedefs' into 'main'
+```
+
+## 三路合并 | Three-Way-Merge
+
+```{python}
+#| label: fig-three-way-merge
+#| fig-cap: "三路合并 | Three-Way-Merge"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('三路合并 | Three-Way-Merge', fontsize=15, fontweight='bold')
+
+# Three versions
+versions = [
+    {
+        'title': '共同祖先 (C)\nGemeinsamer\nVorfahr', 'icon': '📍',
+        'color': COLORS['highlight'], 'x': 7.0, 'y': 7.5
+    },
+    {
+        'title': '我们的版本 (E)\nUnsere Version\n(main)', 'icon': '🔵',
+        'color': COLORS['primary'], 'x': 3.0, 'y': 4.5
+    },
+    {
+        'title': '对方的版本 (G)\nFremde Version\n(feature)', 'icon': '🟢',
+        'color': COLORS['tree_green'], 'x': 11.0, 'y': 4.5
+    },
+]
+
+for v in versions:
+    box = mpatches.FancyBboxPatch((v['x'] - 1.8, v['y'] - 1.0), 3.6, 2.2,
+        boxstyle="round,pad=0.15", facecolor='white', edgecolor=v['color'], linewidth=2.5)
+    ax.add_patch(box)
+    ax.text(v['x'], v['y'] + 0.7, v['icon'], ha='center', fontsize=18)
+    ax.text(v['x'], v['y'] - 0.2, v['title'], ha='center', fontsize=9,
+            fontweight='bold', color=v['color'], linespacing=1.3)
+
+# Arrows from ancestor
+ax.annotate('', xy=(3.0, 5.55), xytext=(5.5, 6.8),
+    arrowprops=dict(arrowstyle='->', color=COLORS['primary'], lw=2))
+ax.annotate('', xy=(11.0, 5.55), xytext=(8.5, 6.8),
+    arrowprops=dict(arrowstyle='->', color=COLORS['tree_green'], lw=2))
+
+# Decision rules
+rules_box = mpatches.FancyBboxPatch((1.0, 0.5), 12.0, 3.0, boxstyle="round,pad=0.2",
+    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'], linewidth=2)
+ax.add_patch(rules_box)
+ax.text(7.0, 3.0, '合并规则 | Merge-Regeln', ha='center', fontsize=12,
+        fontweight='bold', color=COLORS['highlight'])
+
+rules = [
+    ('✅', '只有一方修改了文件', '→ 取该方版本 | Diese Version nehmen', COLORS['tree_green']),
+    ('✅', '双方做了相同修改', '→ 取该版本 | Diese Version nehmen', COLORS['tree_green']),
+    ('❌', '双方做了不同修改', '→ 冲突！ | Konflikt!', COLORS['danger']),
+]
+
+for i, (icon, zh, action, color) in enumerate(rules):
+    y = 2.2 - i * 0.6
+    ax.text(1.5, y, icon, fontsize=12, va='center')
+    ax.text(2.2, y, zh, fontsize=9, va='center', color='#444')
+    ax.text(8.5, y, action, fontsize=9, va='center', fontweight='bold', color=color)
+
+plt.tight_layout()
+plt.show()
+```
+
+Git 在合并 E 和 G 时比较三个版本：**共同祖先 (C)**、**我们的版本 (E)** 和**对方的版本 (G)**。如果只有一方修改了文件，就采用修改方的版本；如果双方做了相同的修改，就采用该修改；如果双方做了不同的修改，就会产生冲突。
+
+## 合并冲突 | Merge-Konflikte
+
+当 Git 无法自动决定采用哪个版本时，就会产生冲突。冲突的文件中会出现冲突标记：
+
+```
+<<<<<<< HEAD
+code from current branch
+=======
+code from incoming branch
+>>>>>>> feature
+```
+
+**解决步骤**：(1) 删除冲突标记；(2) 保留需要的代码；(3) 提交。
+
+# 总结 | Zusammenfassung
+
+```{python}
+#| label: fig-summary
+#| fig-cap: "Git 内部机制总结 | Zusammenfassung Git-Internals"
+
+fig, ax = plt.subplots(figsize=(15, 10))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('Git 内部机制 — 总结 | Git Internals — Zusammenfassung', fontsize=16, fontweight='bold')
+
+sections = [
+    {
+        'title': '1. 一切皆对象\nAlles ist ein Objekt',
+        'content': 'Blob | Tree | Commit\n通过 SHA-1 内容哈希\n标识和去重',
+        'color': COLORS['blob_blue'], 'x': 2.5, 'y': 8.0, 'icon': ''
+    },
+    {
+        'title': '2. Commit = 文本文件\nCommits sind\nTextdateien',
+        'content': '指向 Tree (完整快照!)\n+ Parent + 作者 + 消息\n可被重写 (Rebase)',
+        'color': COLORS['commit_yellow'], 'x': 7.5, 'y': 8.0, 'icon': ''
+    },
+    {
+        'title': '3. 完整性链\nIntegritätskette',
+        'content': '每个 Commit 哈希\n依赖其 Parent 内容\n→ 历史无法被篡改',
+        'color': COLORS['danger'], 'x': 12.5, 'y': 8.0, 'icon': ''
+    },
+    {
+        'title': '4. 分支 = 指针\nBranches sind\nnur Pointer',
+        'content': '41 字节文本文件\n创建分支几乎零成本\nHEAD → Branch → Commit',
+        'color': COLORS['branch_teal'], 'x': 2.5, 'y': 3.5, 'icon': ''
+    },
+    {
+        'title': '5. Merge vs. Rebase\nZwei Strategien',
+        'content': 'Merge: 保留完整历史\nRebase: 线性化历史\n⚠ 勿 rebase 已推送提交',
+        'color': COLORS['merge_red'], 'x': 7.5, 'y': 3.5, 'icon': ''
+    },
+    {
+        'title': '6. Three-Way-Merge\n三路合并',
+        'content': '比较: 祖先 + 双方\n自动合并 / 冲突\n手动解决冲突',
+        'color': COLORS['highlight'], 'x': 12.5, 'y': 3.5, 'icon': ''
+    },
+]
+
+for s in sections:
+    card = mpatches.FancyBboxPatch((s['x'] - 2.0, s['y'] - 2.2), 4.0, 4.5,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=s['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(s['x'], s['y'] + 1.8, s['icon'], ha='center', fontsize=20)
+    ax.text(s['x'], s['y'] + 0.8, s['title'], ha='center', fontsize=9,
+            fontweight='bold', color=s['color'], linespacing=1.3)
+    ax.text(s['x'], s['y'] - 0.9, s['content'], ha='center', fontsize=8,
+            color='#555', linespacing=1.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-tip}
+## 下周预告 | Ausblick nächste Woche
+
+**主题**：People Management 与 Teamwork
+
+**核心概念**：自我决定理论 (Self-Determination Theory)、有效沟通 (Effektive Kommunikation)、人格类型 (Persönlichkeitstypen)、心理安全感 (Psychologische Sicherheit)。
+
+**阅读作业**（12 月 10 日前）：
+
+- Software Engineering, Kapitel 22.2–22.3（含，11 页）
+- 人事管理 (Personalmanagement) 与 团队合作 (Teamwork)
+- TED Talk: *The puzzle of motivation | Dan Pink*
+:::

@@ -1,0 +1,1578 @@
+---
+title: "Entwurfsmuster -- 设计模式精讲"
+subtitle: "通俗故事 + 反面代码 + 重构代码 + UML | Softwaretechnik WS 25/26"
+author: "Klausurvorbereitung"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "模式导航 | Muster-Navigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available = set(f.name for f in fm.fontManager.ttflist)
+    for f in candidates.get(system, candidates['Linux']):
+        if f in available:
+            plt.rcParams['font.sans-serif'] = [f, 'DejaVu Sans']
+            break
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+# ── 通用 UML 绘图工具 ──
+
+def draw_uml_class(ax, x, y, w, name, attrs=None, methods=None,
+                   color='#333333', is_interface=False, is_abstract=False):
+    """
+    在 (x, y) 处绘制 UML 类框，y 为顶部坐标，向下扩展。
+    返回 (center_x, top_y, bottom_y)。
+    """
+    attrs = attrs or []
+    methods = methods or []
+    lh = 0.32
+    pad = 0.12
+
+    stereo_h = 0.3 if is_interface else 0
+    name_h = 0.45 + stereo_h
+    attr_h = max(0.35, len(attrs) * lh + pad) if attrs else 0.35
+    meth_h = max(0.35, len(methods) * lh + pad) if methods else 0.35
+    total = name_h + attr_h + meth_h
+
+    # 主背景框
+    rect = mpatches.FancyBboxPatch(
+        (x, y - total), w, total, boxstyle="round,pad=0.04",
+        facecolor='white', edgecolor=color, linewidth=1.8)
+    ax.add_patch(rect)
+
+    # 名称区
+    top = y
+    if is_interface:
+        ax.text(x + w/2, top - 0.2, '<<interface>>', ha='center',
+                fontsize=7, color=color, style='italic')
+    name_style = 'italic' if is_abstract else 'normal'
+    ax.text(x + w/2, top - stereo_h - 0.3, name, ha='center',
+            fontsize=8.5, fontweight='bold', color=color, style=name_style)
+
+    # 属性分隔线
+    attr_top = top - name_h
+    ax.plot([x + 0.05, x + w - 0.05], [attr_top, attr_top],
+            color=color, lw=0.8)
+    for i, a in enumerate(attrs):
+        ax.text(x + 0.12, attr_top - 0.1 - i * lh - 0.15, a,
+                fontsize=7, color='#444', family='monospace')
+
+    # 方法分隔线
+    meth_top = attr_top - attr_h
+    ax.plot([x + 0.05, x + w - 0.05], [meth_top, meth_top],
+            color=color, lw=0.8)
+    for i, m in enumerate(methods):
+        ax.text(x + 0.12, meth_top - 0.1 - i * lh - 0.15, m,
+                fontsize=7, color='#444', family='monospace')
+
+    cx = x + w / 2
+    bottom = y - total
+    return (cx, y, bottom)
+
+
+def draw_arrow(ax, start, end, style='->', color='#333', lw=1.5,
+               linestyle='-', head='normal'):
+    """绘制 UML 关系箭头。head: normal, open (继承), diamond (组合)"""
+    if head == 'open':
+        ax.annotate('', xy=end, xytext=start,
+            arrowprops=dict(arrowstyle='-|>', color=color, lw=lw,
+                            linestyle=linestyle,
+                            shrinkA=2, shrinkB=2))
+    elif head == 'diamond':
+        ax.annotate('', xy=end, xytext=start,
+            arrowprops=dict(arrowstyle='->', color=color, lw=lw,
+                            linestyle=linestyle, shrinkA=2, shrinkB=2))
+    else:
+        ax.annotate('', xy=end, xytext=start,
+            arrowprops=dict(arrowstyle='->', color=color, lw=lw,
+                            linestyle=linestyle, shrinkA=2, shrinkB=2))
+
+
+def draw_implements(ax, child_top, parent_bottom, color='#333'):
+    """从子类顶部到父接口底部画虚线三角箭头（实现）"""
+    ax.annotate('', xy=(parent_bottom[0], parent_bottom[1]),
+        xytext=(child_top[0], child_top[1]),
+        arrowprops=dict(arrowstyle='-|>', color=color, lw=1.5,
+                        linestyle='--', shrinkA=2, shrinkB=2))
+
+
+def draw_extends(ax, child_top, parent_bottom, color='#333'):
+    """从子类顶部到父类底部画实线三角箭头（继承）"""
+    ax.annotate('', xy=(parent_bottom[0], parent_bottom[1]),
+        xytext=(child_top[0], child_top[1]),
+        arrowprops=dict(arrowstyle='-|>', color=color, lw=1.5,
+                        linestyle='-', shrinkA=2, shrinkB=2))
+
+
+def draw_uses(ax, from_pt, to_pt, color='#333', label=''):
+    """虚线箭头表示依赖/使用"""
+    ax.annotate('', xy=to_pt, xytext=from_pt,
+        arrowprops=dict(arrowstyle='->', color=color, lw=1.2,
+                        linestyle='--', shrinkA=3, shrinkB=3))
+    if label:
+        mx = (from_pt[0] + to_pt[0]) / 2
+        my = (from_pt[1] + to_pt[1]) / 2
+        ax.text(mx, my + 0.15, label, fontsize=6.5, ha='center',
+                color=color, style='italic')
+
+
+def draw_association(ax, from_pt, to_pt, color='#333', label='',
+                     from_mult='', to_mult=''):
+    """实线箭头表示关联"""
+    ax.annotate('', xy=to_pt, xytext=from_pt,
+        arrowprops=dict(arrowstyle='->', color=color, lw=1.5,
+                        linestyle='-', shrinkA=3, shrinkB=3))
+    if from_mult:
+        ax.text(from_pt[0] + 0.15, from_pt[1] + 0.15, from_mult,
+                fontsize=6.5, color=color)
+    if to_mult:
+        ax.text(to_pt[0] - 0.3, to_pt[1] + 0.15, to_mult,
+                fontsize=6.5, color=color)
+```
+
+# 为什么需要设计模式 | Warum Entwurfsmuster?
+
+设计模式 (Entwurfsmuster) 不是凭空发明的规则，而是前人在反复遇到相似问题后总结出的**经过验证的解决方案模板**。它们的核心价值在于三点：让代码对扩展开放、对修改关闭 (Open-Closed Principle)；降低类与类之间的耦合 (Kopplung)；让团队成员通过模式名称就能快速理解设计意图。
+
+下面我们逐一讲解六个最重要的设计模式。每个模式都包含：一个通俗的小故事解释动机，一段"差的代码"展示没有模式时的痛点，一段用模式重构后的代码，对差代码问题的分析，以及该模式的 UML 类图。
+
+```{python}
+#| label: fig-pattern-overview
+#| fig-cap: "六大设计模式总览 | Ueberblick: Sechs Entwurfsmuster"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7.5)
+ax.axis('off')
+ax.set_title('六大设计模式总览 | Sechs Entwurfsmuster im Ueberblick',
+             fontsize=14, fontweight='bold')
+
+patterns = [
+    {'name': 'Strategy', 'zh': '策略模式', 'cat': '行为型',
+     'color': '#C62828', 'x': 1.2, 'y': 5.5},
+    {'name': 'Observer', 'zh': '观察者模式', 'cat': '行为型',
+     'color': '#AD1457', 'x': 5.0, 'y': 5.5},
+    {'name': 'Factory\nMethod', 'zh': '工厂方法', 'cat': '创建型',
+     'color': '#6A1B9A', 'x': 8.8, 'y': 5.5},
+    {'name': 'Singleton', 'zh': '单例模式', 'cat': '创建型',
+     'color': '#1565C0', 'x': 12.6, 'y': 5.5},
+    {'name': 'Adapter', 'zh': '适配器模式', 'cat': '结构型',
+     'color': '#00695C', 'x': 3.0, 'y': 1.8},
+    {'name': 'Decorator', 'zh': '装饰器模式', 'cat': '结构型',
+     'color': '#E65100', 'x': 7.0, 'y': 1.8},
+]
+
+# Category labels
+cats = [
+    ('行为型 | Verhaltensmuster', 7.2, '#B71C1C'),
+    ('创建型 | Erzeugungsmuster', 3.8, '#4A148C'),
+    ('结构型 | Strukturmuster', 0.2, '#004D40'),
+]
+
+for p in patterns:
+    card = mpatches.FancyBboxPatch((p['x'] - 1.0, p['y'] - 1.0), 2.6, 2.2,
+        boxstyle="round,pad=0.12", facecolor='white',
+        edgecolor=p['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(p['x'] + 0.3, p['y'] + 0.7, p['name'], ha='center',
+            fontsize=10, fontweight='bold', color=p['color'], linespacing=1.1)
+    ax.text(p['x'] + 0.3, p['y'] - 0.2, p['zh'], ha='center',
+            fontsize=9, color=p['color'])
+    ax.text(p['x'] + 0.3, p['y'] - 0.65, p['cat'], ha='center',
+            fontsize=7.5, color='#777')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Strategy 策略模式 | Strategiemuster
+
+## 小故事：餐厅结账
+
+想象你开了一家餐厅。一开始只接受现金支付，收银员的工作流程很简单。后来你增加了信用卡支付，收银员就需要在脑子里加一个判断："如果是现金就数钱，如果是信用卡就刷卡"。再后来又加了手机支付、比特币支付……每增加一种方式，收银员（也就是你的代码）就要多一个 if-else 分支。收银员的"结账手册"越来越厚，每次改一种支付方式的流程，都要翻遍整本手册去修改，而且很容易改错其他无关的部分。
+
+更聪明的做法是：收银员不需要知道每种支付方式的具体操作细节。他只需要说"请处理这笔支付"，然后把具体操作交给一个专门的"支付处理器"。想换支付方式？换一个处理器就行，收银员的工作流程完全不变。
+
+这就是**策略模式** (Strategy Pattern) 的核心思想：**将变化的算法封装到独立的类中，通过接口统一调用，使得算法可以在运行时自由替换。**
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 所有支付逻辑硬编码在一个方法中
+public class CashRegister {
+
+    // 每次新增支付方式，必须修改此方法 -- 违反 Open-Closed Principle
+    public void processPayment(String type, double amount) {
+        if (type.equals("cash")) {
+            System.out.println("收到现金: " + amount);
+            double change = calculateChange(amount);
+            System.out.println("找零: " + change);
+        } else if (type.equals("creditcard")) {
+            System.out.println("连接银行网关...");
+            System.out.println("信用卡扣款: " + amount);
+            System.out.println("打印签名单...");
+        } else if (type.equals("mobile")) {
+            System.out.println("生成二维码...");
+            System.out.println("等待手机确认...");
+            System.out.println("手机支付成功: " + amount);
+        }
+        // 如果要加比特币支付？再加一个 else if ...
+        // 如果现金流程要改？在这个越来越长的方法里找到对应分支修改
+    }
+
+    // 这个方法只跟现金有关，却放在 CashRegister 里
+    private double calculateChange(double amount) {
+        return amount - 29.99;
+    }
+}
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+```{python}
+#| label: fig-strategy-problems
+#| fig-cap: "策略模式解决的问题 | Probleme ohne Strategy Pattern"
+
+fig, ax = plt.subplots(figsize=(14, 7))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7.5)
+ax.axis('off')
+ax.set_title('没有 Strategy 模式时的四大问题', fontsize=13, fontweight='bold',
+             color='#C62828')
+
+problems = [
+    {
+        'title': '(1) 违反 Open-Closed Principle',
+        'desc': '每新增一种支付方式，都必须\n修改 processPayment 方法。\n对修改开放，对扩展关闭\n-- 恰好与原则相反。',
+        'x': 2.0, 'y': 5.5
+    },
+    {
+        'title': '(2) 违反单一职责原则 (SRP)',
+        'desc': 'CashRegister 同时了解现金、\n信用卡、手机支付的所有细节。\n一个类承担了太多职责。',
+        'x': 5.5, 'y': 5.5
+    },
+    {
+        'title': '(3) 不可测试 / 难以测试',
+        'desc': '想单独测试信用卡支付逻辑？\n必须调用整个 processPayment，\n还要传入特定 type 字符串。\n无法隔离测试。',
+        'x': 9.0, 'y': 5.5
+    },
+    {
+        'title': '(4) 高耦合，修改风险大',
+        'desc': '修改现金逻辑时可能误改\n信用卡分支。String 类型的\ntype 参数没有编译期检查，\n拼写错误只能运行时发现。',
+        'x': 12.5, 'y': 5.5
+    },
+]
+
+for p in problems:
+    card = mpatches.FancyBboxPatch((p['x'] - 1.5, p['y'] - 3.5), 3.2, 4.5,
+        boxstyle="round,pad=0.12", facecolor='#FDEDEC',
+        edgecolor='#C62828', linewidth=2)
+    ax.add_patch(card)
+    ax.text(p['x'] + 0.1, p['y'] + 0.5, p['title'], ha='center',
+            fontsize=8.5, fontweight='bold', color='#C62828')
+    ax.text(p['x'] + 0.1, p['y'] - 1.2, p['desc'], ha='center',
+            fontsize=7.5, color='#444', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+这段代码有四个核心问题。第一，它**违反了 Open-Closed Principle**：每新增一种支付方式都必须修改 `processPayment` 方法，类对修改开放而对扩展关闭，恰好与原则要求相反。第二，它**违反了单一职责原则 (SRP)**：`CashRegister` 类同时了解所有支付方式的实现细节，承担了过多职责。第三，各种支付逻辑**不可隔离测试**。第四，所有逻辑纠缠在一起导致**高耦合**，修改一种支付方式时可能误改其他分支。
+
+## 用 Strategy 模式重构 | Refactoring mit Strategy
+
+```java
+// 1. 定义策略接口: 所有支付方式的统一契约
+public interface PaymentStrategy {
+    void pay(double amount);
+}
+
+// 2. 具体策略: 现金支付
+public class CashPayment implements PaymentStrategy {
+    @Override
+    public void pay(double amount) {
+        System.out.println("收到现金: " + amount);
+        double change = amount - 29.99;
+        System.out.println("找零: " + change);
+    }
+}
+
+// 3. 具体策略: 信用卡支付
+public class CreditCardPayment implements PaymentStrategy {
+    @Override
+    public void pay(double amount) {
+        System.out.println("连接银行网关...");
+        System.out.println("信用卡扣款: " + amount);
+        System.out.println("打印签名单...");
+    }
+}
+
+// 4. 具体策略: 手机支付
+public class MobilePayment implements PaymentStrategy {
+    @Override
+    public void pay(double amount) {
+        System.out.println("生成二维码...");
+        System.out.println("等待手机确认...");
+        System.out.println("手机支付成功: " + amount);
+    }
+}
+
+// 5. 上下文: 收银台 -- 不再关心支付细节
+public class CashRegister {
+    private PaymentStrategy strategy;  // 依赖接口，不依赖具体类
+
+    public CashRegister(PaymentStrategy strategy) {  // Dependency Injection!
+        this.strategy = strategy;
+    }
+
+    public void setStrategy(PaymentStrategy strategy) {  // 运行时可替换
+        this.strategy = strategy;
+    }
+
+    public void processPayment(double amount) {
+        strategy.pay(amount);  // 委托给策略对象
+    }
+}
+
+// 使用:
+// CashRegister register = new CashRegister(new CashPayment());
+// register.processPayment(50.0);
+// register.setStrategy(new CreditCardPayment());  // 运行时切换
+// register.processPayment(50.0);
+```
+
+新增比特币支付？只需要写一个 `BitcoinPayment implements PaymentStrategy`，完全不需要修改 `CashRegister`。
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-strategy-uml
+#| fig-cap: "Strategy 模式 UML | Klassendiagramm Strategy Pattern"
+
+fig, ax = plt.subplots(figsize=(13, 8))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 8.5)
+ax.axis('off')
+ax.set_title('Strategy Pattern -- UML Klassendiagramm', fontsize=13, fontweight='bold')
+
+C = '#C62828'
+
+# PaymentStrategy (interface)
+ps = draw_uml_class(ax, 4.0, 8.0, 4.5,
+    'PaymentStrategy',
+    attrs=[],
+    methods=['+ pay(amount: double): void'],
+    color=C, is_interface=True)
+
+# CashRegister (context)
+cr = draw_uml_class(ax, 0.0, 4.5, 3.5,
+    'CashRegister',
+    attrs=['- strategy: PaymentStrategy'],
+    methods=['+ processPayment(amount): void',
+             '+ setStrategy(s): void'],
+    color='#333')
+
+# CashPayment
+cp = draw_uml_class(ax, 1.5, 2.2, 3.0,
+    'CashPayment',
+    attrs=[],
+    methods=['+ pay(amount): void'],
+    color=C)
+
+# CreditCardPayment
+cc = draw_uml_class(ax, 5.0, 2.2, 3.0,
+    'CreditCardPayment',
+    attrs=[],
+    methods=['+ pay(amount): void'],
+    color=C)
+
+# MobilePayment
+mp = draw_uml_class(ax, 8.5, 2.2, 3.0,
+    'MobilePayment',
+    attrs=[],
+    methods=['+ pay(amount): void'],
+    color=C)
+
+# CashRegister -> PaymentStrategy (关联)
+draw_association(ax, (cr[0] + 1.5, 4.5), (ps[0] - 0.5, ps[2]),
+                 color='#333', label='strategy')
+
+# 三个具体策略 implements PaymentStrategy
+draw_implements(ax, (cp[0], cp[1]), (ps[0] - 1.0, ps[2]), color=C)
+draw_implements(ax, (cc[0], cc[1]), (ps[0], ps[2]), color=C)
+draw_implements(ax, (mp[0], mp[1]), (ps[0] + 1.0, ps[2]), color=C)
+
+# 标注
+ax.text(12.0, 7.5, '<<interface>>\n统一契约', fontsize=8, color=C,
+        style='italic', linespacing=1.3)
+ax.text(12.0, 4.0, 'Context\n只持有接口引用', fontsize=8, color='#333',
+        style='italic', linespacing=1.3)
+ax.text(12.0, 1.5, 'Concrete Strategies\n各自封装算法', fontsize=8, color=C,
+        style='italic', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Observer 观察者模式 | Beobachtermuster
+
+## 小故事：报社与订阅者
+
+想象一家报社。传统做法是每个读者每天早上打电话到报社问："今天有新报纸吗？"如果一百个读者都这么做，报社的电话线就炸了，而且大部分时候回答都是"还没有"——这就是所谓的**轮询** (Polling)，效率极低。
+
+更聪明的做法是：读者只需要到报社登记一次说"我要订阅"。之后每当报社出了新报纸，就主动把报纸送到所有订阅者的信箱里。读者不想看了？打个电话取消订阅就行。
+
+这就是 **Observer 模式**的核心思想：**当一个对象 (Subject/Observable) 的状态发生变化时，自动通知所有依赖它的对象 (Observers)，而不需要观察者反复查询。Subject 和 Observers 之间是松耦合的——Subject 只知道 Observer 接口，不知道具体是谁在监听。**
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: NewsAgency 直接依赖每一个具体的显示终端
+public class NewsAgency {
+    private PhoneDisplay phoneDisplay;
+    private WebDisplay webDisplay;
+    private TVDisplay tvDisplay;
+
+    public NewsAgency(PhoneDisplay phone, WebDisplay web, TVDisplay tv) {
+        this.phoneDisplay = phone;
+        this.webDisplay = web;
+        this.tvDisplay = tv;
+    }
+
+    public void publishNews(String news) {
+        // 每增加一种显示终端，就要在这里加一行
+        phoneDisplay.showOnPhone(news);
+        webDisplay.renderOnWeb(news);
+        tvDisplay.displayOnTV(news);
+        // 新增 TabletDisplay? 修改 NewsAgency!
+        // 新增 SmartWatchDisplay? 再修改 NewsAgency!
+    }
+}
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+```{python}
+#| label: fig-observer-problems
+#| fig-cap: "Observer 模式解决的问题 | Probleme ohne Observer Pattern"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6.5)
+ax.axis('off')
+ax.set_title('没有 Observer 模式时的问题', fontsize=13, fontweight='bold',
+             color='#AD1457')
+
+probs = [
+    ('(1) 紧耦合', 'NewsAgency 直接依赖每一个\n具体的显示类。NewsAgency\n"认识"所有具体订阅者\n-- 违反 Law of Demeter 精神。', 2.5),
+    ('(2) 无法动态增减', '订阅者列表在编译时就固定了。\n无法在运行时动态添加或\n移除显示终端。', 7.0),
+    ('(3) 方法签名不统一', '每个显示类有不同的方法名：\nshowOnPhone, renderOnWeb,\ndisplayOnTV。没有统一接口。', 11.5),
+]
+
+for title, desc, x in probs:
+    card = mpatches.FancyBboxPatch((x - 2.0, 0.5), 4.2, 5.5,
+        boxstyle="round,pad=0.12", facecolor='#FCE4EC',
+        edgecolor='#AD1457', linewidth=2)
+    ax.add_patch(card)
+    ax.text(x + 0.1, 5.5, title, ha='center', fontsize=10,
+            fontweight='bold', color='#AD1457')
+    ax.text(x + 0.1, 3.5, desc, ha='center', fontsize=8.5,
+            color='#444', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+这段代码有三个核心问题。`NewsAgency` 直接依赖每一个具体的显示类 (`PhoneDisplay`, `WebDisplay`, `TVDisplay`)，形成了**紧耦合**。订阅者列表在编译时就固定了，**无法在运行时动态添加或移除观察者**。每个显示类有不同的方法名 (`showOnPhone`, `renderOnWeb`, `displayOnTV`)，**没有统一的接口**。
+
+## 用 Observer 模式重构 | Refactoring mit Observer
+
+```java
+// 1. Observer 接口: 所有观察者的统一契约
+public interface NewsObserver {
+    void update(String news);
+}
+
+// 2. Subject: 新闻社
+public class NewsAgency {
+    private List<NewsObserver> observers = new ArrayList<>();
+
+    public void subscribe(NewsObserver observer) {
+        observers.add(observer);
+    }
+
+    public void unsubscribe(NewsObserver observer) {
+        observers.remove(observer);
+    }
+
+    public void publishNews(String news) {
+        // 不需要知道具体是谁在监听!
+        for (NewsObserver observer : observers) {
+            observer.update(news);
+        }
+    }
+}
+
+// 3. 具体观察者: 手机
+public class PhoneDisplay implements NewsObserver {
+    @Override
+    public void update(String news) {
+        System.out.println("[手机推送] " + news);
+    }
+}
+
+// 4. 具体观察者: 网页
+public class WebDisplay implements NewsObserver {
+    @Override
+    public void update(String news) {
+        System.out.println("[网页横幅] " + news);
+    }
+}
+
+// 使用:
+// NewsAgency agency = new NewsAgency();
+// agency.subscribe(new PhoneDisplay());
+// agency.subscribe(new WebDisplay());
+// agency.publishNews("Breaking News!");  -- 两个都收到通知
+// 新增 TabletDisplay? 只需 implements NewsObserver，然后 subscribe
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-observer-uml
+#| fig-cap: "Observer 模式 UML | Klassendiagramm Observer Pattern"
+
+fig, ax = plt.subplots(figsize=(13, 9))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 9.5)
+ax.axis('off')
+ax.set_title('Observer Pattern -- UML Klassendiagramm', fontsize=13, fontweight='bold')
+
+C = '#AD1457'
+
+# NewsObserver (interface)
+no = draw_uml_class(ax, 7.0, 8.8, 4.0,
+    'NewsObserver',
+    attrs=[],
+    methods=['+ update(news: String): void'],
+    color=C, is_interface=True)
+
+# NewsAgency (subject)
+na = draw_uml_class(ax, 0.3, 8.8, 5.0,
+    'NewsAgency',
+    attrs=['- observers: List<NewsObserver>'],
+    methods=['+ subscribe(o: NewsObserver): void',
+             '+ unsubscribe(o: NewsObserver): void',
+             '+ publishNews(news: String): void'],
+    color='#333')
+
+# PhoneDisplay
+pd = draw_uml_class(ax, 5.0, 3.5, 3.5,
+    'PhoneDisplay',
+    attrs=[],
+    methods=['+ update(news): void'],
+    color=C)
+
+# WebDisplay
+wd = draw_uml_class(ax, 9.0, 3.5, 3.5,
+    'WebDisplay',
+    attrs=[],
+    methods=['+ update(news): void'],
+    color=C)
+
+# NewsAgency ---> NewsObserver (关联, 1..*)
+draw_association(ax, (na[0] + 2.0, 7.5), (no[0] - 0.5, no[2] + 0.15),
+                 color='#333')
+ax.text(6.2, 7.3, 'observers', fontsize=7, color='#333', style='italic')
+ax.text(7.0, 7.0, '0..*', fontsize=7, color='#333')
+
+# Concrete observers implement interface
+draw_implements(ax, (pd[0], pd[1]), (no[0] - 0.5, no[2]), color=C)
+draw_implements(ax, (wd[0], wd[1]), (no[0] + 0.5, no[2]), color=C)
+
+# Annotations
+ax.text(0.3, 3.5, 'Subject\n不了解具体观察者\nkennt keine konkreten\nObserver', fontsize=7.5,
+        color='#333', style='italic', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Factory Method 工厂方法模式 | Fabrikmethode
+
+## 小故事：物流公司的运输工具
+
+你经营一家物流公司，最初只用卡车运货。代码里到处写着 `new Truck()`。生意红火，客户要求加海运。问题来了：`new Truck()` 散落在二十个文件里，你要一个一个找出来，判断哪些该改成 `new Ship()`，哪些该保留——一场灾难。
+
+如果当初你没有在业务代码里直接 `new Truck()`，而是调用一个"工厂方法"来获取运输工具呢？那么你只需要换一个工厂实现，或者在工厂方法里加一行代码，业务逻辑完全不用动。
+
+**Factory Method 模式**的核心思想是：**将对象的创建过程从使用者中分离出来，由子类或专门的方法来决定创建哪种具体对象。** 使用者只依赖于产品接口，不需要知道具体创建了什么。
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 在业务逻辑中直接创建具体对象
+public class LogisticsApp {
+
+    public void planDelivery(String type, String cargo) {
+        // 业务代码和创建逻辑纠缠在一起
+        if (type.equals("road")) {
+            Truck truck = new Truck();       // 直接 new 具体类
+            truck.loadCargo(cargo);
+            truck.deliver();
+        } else if (type.equals("sea")) {
+            Ship ship = new Ship();          // 又直接 new 另一个具体类
+            ship.loadCargo(cargo);
+            ship.deliver();
+        }
+        // 加航空运输? 继续加 else if + new Airplane() ...
+        // loadCargo 和 deliver 的调用逻辑完全重复!
+    }
+}
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+这段代码的问题首先在于**创建逻辑与业务逻辑混在一起**：`planDelivery` 方法既负责决定创建哪种运输工具，又负责执行装货和运送的业务流程。其次，`loadCargo` 和 `deliver` 的调用在每个分支里都重复了——**违反 DRY 原则** (Don't Repeat Yourself)。第三，如果 `Truck` 的构造函数签名变了（比如需要传入最大载重），你得在所有创建 `Truck` 的地方修改。第四，无法在测试时替换具体的运输工具。
+
+## 用 Factory Method 重构 | Refactoring mit Factory Method
+
+```java
+// 1. 产品接口: 所有运输工具的统一契约
+public interface Transport {
+    void loadCargo(String cargo);
+    void deliver();
+}
+
+// 2. 具体产品
+public class Truck implements Transport {
+    @Override
+    public void loadCargo(String cargo) {
+        System.out.println("卡车装载: " + cargo);
+    }
+    @Override
+    public void deliver() {
+        System.out.println("公路运输中...");
+    }
+}
+
+public class Ship implements Transport {
+    @Override
+    public void loadCargo(String cargo) {
+        System.out.println("轮船装载: " + cargo);
+    }
+    @Override
+    public void deliver() {
+        System.out.println("海运中...");
+    }
+}
+
+// 3. 抽象创建者: 定义工厂方法 + 业务逻辑模板
+public abstract class Logistics {
+
+    // 工厂方法: 由子类决定创建什么
+    protected abstract Transport createTransport();
+
+    // 业务逻辑: 只依赖 Transport 接口，不重复!
+    public void planDelivery(String cargo) {
+        Transport transport = createTransport();  // 调用工厂方法
+        transport.loadCargo(cargo);
+        transport.deliver();
+    }
+}
+
+// 4. 具体创建者
+public class RoadLogistics extends Logistics {
+    @Override
+    protected Transport createTransport() {
+        return new Truck();   // 只在这里决定创建 Truck
+    }
+}
+
+public class SeaLogistics extends Logistics {
+    @Override
+    protected Transport createTransport() {
+        return new Ship();    // 只在这里决定创建 Ship
+    }
+}
+
+// 使用:
+// Logistics logistics = new RoadLogistics();
+// logistics.planDelivery("电子产品");
+// 换成海运? Logistics logistics = new SeaLogistics();
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-factory-uml
+#| fig-cap: "Factory Method 模式 UML | Klassendiagramm Factory Method"
+
+fig, ax = plt.subplots(figsize=(14, 10))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10.5)
+ax.axis('off')
+ax.set_title('Factory Method Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C_creator = '#6A1B9A'
+C_product = '#1565C0'
+
+# Transport (interface - product)
+tp = draw_uml_class(ax, 8.5, 10.0, 4.5,
+    'Transport',
+    attrs=[],
+    methods=['+ loadCargo(cargo: String): void',
+             '+ deliver(): void'],
+    color=C_product, is_interface=True)
+
+# Logistics (abstract - creator)
+lg = draw_uml_class(ax, 0.5, 10.0, 5.5,
+    'Logistics',
+    attrs=[],
+    methods=['# createTransport(): Transport',
+             '+ planDelivery(cargo: String): void'],
+    color=C_creator, is_abstract=True)
+
+# RoadLogistics
+rl = draw_uml_class(ax, 0.0, 5.0, 4.5,
+    'RoadLogistics',
+    attrs=[],
+    methods=['# createTransport(): Transport'],
+    color=C_creator)
+
+# SeaLogistics
+sl = draw_uml_class(ax, 5.5, 5.0, 4.5,
+    'SeaLogistics',
+    attrs=[],
+    methods=['# createTransport(): Transport'],
+    color=C_creator)
+
+# Truck
+tk = draw_uml_class(ax, 0.0, 2.0, 4.0,
+    'Truck',
+    attrs=[],
+    methods=['+ loadCargo(cargo): void',
+             '+ deliver(): void'],
+    color=C_product)
+
+# Ship
+sp = draw_uml_class(ax, 5.5, 2.0, 4.0,
+    'Ship',
+    attrs=[],
+    methods=['+ loadCargo(cargo): void',
+             '+ deliver(): void'],
+    color=C_product)
+
+# Logistics uses Transport (虚线箭头)
+draw_uses(ax, (lg[0] + 2.0, 8.7), (tp[0] - 1.0, 8.7),
+          color='#555', label='creates')
+
+# RoadLogistics extends Logistics
+draw_extends(ax, (rl[0], rl[1]), (lg[0] - 0.5, lg[2]), color=C_creator)
+
+# SeaLogistics extends Logistics
+draw_extends(ax, (sl[0], sl[1]), (lg[0] + 0.5, lg[2]), color=C_creator)
+
+# Truck implements Transport
+draw_implements(ax, (tk[0], tk[1]), (tp[0] - 1.0, tp[2]), color=C_product)
+
+# Ship implements Transport
+draw_implements(ax, (sp[0], sp[1]), (tp[0], tp[2]), color=C_product)
+
+# 虚线: RoadLogistics creates Truck
+draw_uses(ax, (rl[0], rl[2]), (tk[0], tk[1]),
+          color='#888', label='<<creates>>')
+
+# 虚线: SeaLogistics creates Ship
+draw_uses(ax, (sl[0], sl[2]), (sp[0], sp[1]),
+          color='#888', label='<<creates>>')
+
+# Labels
+ax.text(13.5, 9.5, 'Product\n(Interface)', fontsize=8, color=C_product,
+        style='italic', linespacing=1.3)
+ax.text(13.5, 7.0, 'Creator\n(Abstract)', fontsize=8, color=C_creator,
+        style='italic', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Singleton 单例模式 | Einzelstueck
+
+## 小故事：学校里只有一个校长
+
+想象一所学校。校长只有一位，不管是学生、老师还是家长去找校长，找到的都是同一个人。如果每次有人"请求校长"时都 `new Principal()` 创建一个新的，那学校就有一百个校长了——谁说了算？谁维护的信息是最新的？完全混乱。
+
+我们需要一种机制：**确保一个类在整个程序中只有一个实例，并提供一个全局访问点来获取它。**
+
+这就是 **Singleton 模式**。常见的应用场景包括：配置管理器 (ConfigManager)、日志记录器 (Logger)、数据库连接池、线程池等。
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 任何人都可以创建新实例
+public class ConfigManager {
+    private Map<String, String> config = new HashMap<>();
+
+    // 公开的构造函数 -- 谁都能 new
+    public ConfigManager() {
+        loadFromFile("config.properties");
+    }
+
+    public String get(String key) {
+        return config.get(key);
+    }
+
+    public void set(String key, String value) {
+        config.put(key, value);
+    }
+
+    private void loadFromFile(String path) { /* ... */ }
+}
+
+// 使用:
+// ConfigManager config1 = new ConfigManager();  // 第一个实例
+// config1.set("db.url", "localhost:5432");
+//
+// ConfigManager config2 = new ConfigManager();  // 第二个实例!
+// config2.get("db.url");  --> null! 因为是不同的实例!
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+```{python}
+#| label: fig-singleton-problems
+#| fig-cap: "Singleton 模式解决的问题 | Probleme ohne Singleton"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6.5)
+ax.axis('off')
+ax.set_title('没有 Singleton 时的问题', fontsize=13, fontweight='bold', color='#1565C0')
+
+probs = [
+    ('(1) 多实例导致数据不一致', 'config1 设置了 db.url，\nconfig2 读不到。\n两个实例各自维护独立状态，\n数据不同步。', 2.5),
+    ('(2) 重复初始化浪费资源', '每次 new 都重新从文件读取配置。\n如果是数据库连接池，\n每次 new 都创建新连接\n-- 资源浪费和泄漏。', 7.0),
+    ('(3) 没有全局访问点', '每个类都要自己创建或传递\nConfigManager 引用。\n在大型系统中极易出错\n且难以追踪。', 11.5),
+]
+
+for title, desc, x in probs:
+    card = mpatches.FancyBboxPatch((x - 2.0, 0.5), 4.2, 5.5,
+        boxstyle="round,pad=0.12", facecolor='#D6EAF8',
+        edgecolor='#1565C0', linewidth=2)
+    ax.add_patch(card)
+    ax.text(x + 0.1, 5.5, title, ha='center', fontsize=9.5,
+            fontweight='bold', color='#1565C0')
+    ax.text(x + 0.1, 3.2, desc, ha='center', fontsize=8.5,
+            color='#444', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+没有 Singleton 模式，任何代码都可以 `new ConfigManager()`，导致三个问题：多个实例的数据互相不可见，造成**数据不一致**；每次创建都重复执行昂贵的初始化（读取文件或建立连接），**浪费资源**；缺少一个统一的**全局访问点**，导致对象引用在系统中难以管理。
+
+## 用 Singleton 重构 | Refactoring mit Singleton
+
+```java
+public class ConfigManager {
+    // 1. 唯一实例，私有静态字段
+    private static ConfigManager instance;
+
+    private Map<String, String> config = new HashMap<>();
+
+    // 2. 私有构造函数 -- 禁止外部 new
+    private ConfigManager() {
+        loadFromFile("config.properties");
+    }
+
+    // 3. 全局访问点 -- 懒加载
+    public static ConfigManager getInstance() {
+        if (instance == null) {
+            instance = new ConfigManager();
+        }
+        return instance;
+    }
+
+    public String get(String key) {
+        return config.get(key);
+    }
+
+    public void set(String key, String value) {
+        config.put(key, value);
+    }
+
+    private void loadFromFile(String path) { /* ... */ }
+}
+
+// 使用:
+// ConfigManager.getInstance().set("db.url", "localhost:5432");
+// ConfigManager.getInstance().get("db.url");  --> "localhost:5432" 永远同一个实例!
+```
+
+::: {.callout-warning}
+## Singleton 的注意事项
+
+Singleton 经常被过度使用，甚至被称为"反模式"。原因是它本质上是一个全局变量，会引入隐藏的依赖关系，降低可测试性。使用前应确认：这个类是否**真的**在整个系统中只能有一个实例？如果只是为了"方便获取"，请优先考虑 Dependency Injection。
+:::
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-singleton-uml
+#| fig-cap: "Singleton 模式 UML | Klassendiagramm Singleton Pattern"
+
+fig, ax = plt.subplots(figsize=(10, 6))
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 6.5)
+ax.axis('off')
+ax.set_title('Singleton Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C = '#1565C0'
+
+sg = draw_uml_class(ax, 2.0, 6.0, 6.0,
+    'ConfigManager',
+    attrs=['- instance: ConfigManager  {static}',
+           '- config: Map<String,String>'],
+    methods=['- ConfigManager()  {private}',
+             '+ getInstance(): ConfigManager  {static}',
+             '+ get(key: String): String',
+             '+ set(key: String, val: String): void'],
+    color=C)
+
+# Self-referencing arrow
+ax.annotate('', xy=(8.1, 4.0), xytext=(8.1, 5.5),
+    arrowprops=dict(arrowstyle='->', color=C, lw=1.5,
+                    connectionstyle='arc3,rad=-0.5'))
+ax.text(9.0, 4.8, '<<creates>>\ninstance', fontsize=7.5,
+        color=C, style='italic', ha='center', linespacing=1.3)
+
+# Key features annotation
+note = mpatches.FancyBboxPatch((0.3, 0.3), 4.5, 2.5, boxstyle="round,pad=0.1",
+    facecolor='#FEF9E7', edgecolor='#F39C12', linewidth=1.5)
+ax.add_patch(note)
+ax.text(2.55, 2.4, '三个关键要素', fontsize=9, fontweight='bold',
+        color='#E65100')
+ax.text(2.55, 1.7, '(1) 私有构造函数', fontsize=8, color='#444')
+ax.text(2.55, 1.2, '(2) 私有静态实例字段', fontsize=8, color='#444')
+ax.text(2.55, 0.7, '(3) 公开静态 getInstance() 方法', fontsize=8, color='#444')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Adapter 适配器模式 | Adaptermuster
+
+## 小故事：出国旅行的插头转换器
+
+你带着一台欧式两脚插头的笔记本电脑去英国出差。英国的插座是三脚的，形状完全不同。你不可能把笔记本的电源线剪掉重接（修改现有代码），也不可能要求酒店把所有插座换成欧式的（修改第三方代码）。你需要的是一个**转换插头 (Adapter)**：一端插入英国插座，另一端提供欧式接口——两边的硬件都不用改。
+
+在软件中，这种情况非常常见：你有一个现有的类（或者第三方库），它的功能完全满足需求，但接口跟你系统期望的不匹配。**Adapter 模式将一个类的接口转换为客户端期望的另一个接口，使得原本接口不兼容的类可以一起工作。**
+
+## 差的代码 | Schlechter Code
+
+```java
+// 你的系统期望所有日志器都实现这个接口
+public interface Logger {
+    void log(String message);
+    void error(String message);
+}
+
+// 你的业务代码依赖 Logger 接口
+public class OrderService {
+    private Logger logger;
+
+    public OrderService(Logger logger) {
+        this.logger = logger;
+    }
+
+    public void placeOrder(String item) {
+        logger.log("处理订单: " + item);
+        // ... 业务逻辑 ...
+        logger.log("订单完成: " + item);
+    }
+}
+
+// 现在你要接入一个第三方日志库，但它的接口完全不同:
+public class FancyThirdPartyLogger {
+    public void writeInfo(String text, int level) {
+        System.out.println("[INFO-" + level + "] " + text);
+    }
+    public void writeError(String text, int level) {
+        System.out.println("[ERROR-" + level + "] " + text);
+    }
+}
+
+// 反面做法: 为了使用第三方库，修改 OrderService 的代码
+public class OrderService {
+    private FancyThirdPartyLogger logger;  // 直接依赖第三方具体类!
+
+    public void placeOrder(String item) {
+        logger.writeInfo("处理订单: " + item, 1);  // 方法名变了
+        // 所有使用 Logger 的地方都要改...
+        // 如果以后换另一个日志库? 再全部改一遍!
+    }
+}
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+核心问题是**业务代码直接依赖了第三方库的具体接口**。一旦这样做，你的系统中所有使用日志的地方都要从 `log()` 改成 `writeInfo()`，从 `error()` 改成 `writeError()`。这导致了大量修改、高耦合，并且以后更换日志库时又要全部推倒重来。正确的做法是保持业务代码依赖自己的接口 `Logger`，通过 Adapter 来桥接。
+
+## 用 Adapter 重构 | Refactoring mit Adapter
+
+```java
+// 1. 你的 Logger 接口不变
+public interface Logger {
+    void log(String message);
+    void error(String message);
+}
+
+// 2. 第三方库不变 (你无法修改它)
+public class FancyThirdPartyLogger {
+    public void writeInfo(String text, int level) { /* ... */ }
+    public void writeError(String text, int level) { /* ... */ }
+}
+
+// 3. Adapter: 桥接你的接口和第三方库
+public class FancyLoggerAdapter implements Logger {
+    private FancyThirdPartyLogger adaptee;  // 持有第三方对象
+
+    public FancyLoggerAdapter(FancyThirdPartyLogger adaptee) {
+        this.adaptee = adaptee;
+    }
+
+    @Override
+    public void log(String message) {
+        adaptee.writeInfo(message, 1);  // 转换调用
+    }
+
+    @Override
+    public void error(String message) {
+        adaptee.writeError(message, 3);  // 转换调用
+    }
+}
+
+// 4. 使用 -- OrderService 完全不用改!
+// FancyThirdPartyLogger thirdParty = new FancyThirdPartyLogger();
+// Logger logger = new FancyLoggerAdapter(thirdParty);
+// OrderService service = new OrderService(logger);
+// service.placeOrder("笔记本电脑");
+```
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-adapter-uml
+#| fig-cap: "Adapter 模式 UML | Klassendiagramm Adapter Pattern"
+
+fig, ax = plt.subplots(figsize=(14, 8.5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('Adapter Pattern (Object Adapter) -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C_target = '#00695C'
+C_adaptee = '#BF360C'
+C_adapter = '#4527A0'
+
+# Logger (Target interface)
+lg = draw_uml_class(ax, 0.3, 8.5, 4.0,
+    'Logger',
+    attrs=[],
+    methods=['+ log(msg: String): void',
+             '+ error(msg: String): void'],
+    color=C_target, is_interface=True)
+
+# Client
+cl = draw_uml_class(ax, 0.3, 4.8, 3.5,
+    'OrderService',
+    attrs=['- logger: Logger'],
+    methods=['+ placeOrder(item): void'],
+    color='#333')
+
+# FancyLoggerAdapter
+ad = draw_uml_class(ax, 5.0, 4.8, 4.5,
+    'FancyLoggerAdapter',
+    attrs=['- adaptee: FancyThirdPartyLogger'],
+    methods=['+ log(msg: String): void',
+             '+ error(msg: String): void'],
+    color=C_adapter)
+
+# FancyThirdPartyLogger (Adaptee)
+at = draw_uml_class(ax, 9.5, 8.5, 4.3,
+    'FancyThirdPartyLogger',
+    attrs=[],
+    methods=['+ writeInfo(text, level): void',
+             '+ writeError(text, level): void'],
+    color=C_adaptee)
+
+# Client -> Logger (uses)
+draw_association(ax, (cl[0] + 0.5, cl[1]), (lg[0], lg[2]),
+                 color='#333')
+ax.text(1.0, 5.8, 'logger', fontsize=7, color='#333', style='italic')
+
+# FancyLoggerAdapter implements Logger
+draw_implements(ax, (ad[0] - 0.5, ad[1]), (lg[0] + 1.5, lg[2]),
+                color=C_target)
+
+# FancyLoggerAdapter -> FancyThirdPartyLogger (关联)
+draw_association(ax, (ad[0] + 2.0, ad[1]), (at[0], at[2]),
+                 color=C_adaptee)
+ax.text(9.0, 6.0, 'adaptee', fontsize=7, color=C_adaptee, style='italic')
+
+# Annotations
+ax.text(0.3, 2.0, 'Client\n只依赖 Target 接口\n不知道 Adaptee 的存在',
+        fontsize=8, color='#333', style='italic', linespacing=1.4)
+
+note = mpatches.FancyBboxPatch((5.5, 0.5), 5.5, 1.8, boxstyle="round,pad=0.1",
+    facecolor='#FEF9E7', edgecolor='#F39C12', linewidth=1.5, linestyle='--')
+ax.add_patch(note)
+ax.text(8.25, 1.8, 'Adapter 同时知道两边:', fontsize=8, fontweight='bold',
+        color='#E65100', ha='center')
+ax.text(8.25, 1.2, '(1) 实现 Target 接口 (Logger)', fontsize=7.5,
+        color='#444', ha='center')
+ax.text(8.25, 0.7, '(2) 持有 Adaptee 引用 (FancyThirdPartyLogger)',
+        fontsize=7.5, color='#444', ha='center')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# Decorator 装饰器模式 | Dekorierer
+
+## 小故事：咖啡店的加料系统
+
+你走进一家咖啡店。菜单上有基础咖啡 (Espresso, Americano)，还可以加料：加牛奶 (+0.50)、加糖 (+0.20)、加奶油 (+0.70)。每种基础咖啡配上每种加料组合，一共有多少种？Espresso、Espresso加牛奶、Espresso加糖、Espresso加牛奶加糖、Espresso加牛奶加奶油…… 如果每种组合都写一个类 (`EspressoWithMilk`, `EspressoWithMilkAndSugar`, ……)，类的数量会爆炸式增长——这就是所谓的**类爆炸** (Klassenexplosion)。
+
+Decorator 模式的解决方案是：把"加料"看作是对基础咖啡的"装饰"(包装)。每种加料是一个装饰器，它包裹住一杯咖啡，增强它的功能（增加描述和价格）。你可以像套娃一样一层一层地包装：先用牛奶装饰器包 Espresso，再用奶油装饰器包住牛奶Espresso——组合是无限自由的，却不需要爆炸式的类数量。
+
+**Decorator 模式在不修改原有对象的前提下，动态地给对象添加额外职责，比子类继承更加灵活。**
+
+## 差的代码 | Schlechter Code
+
+```java
+// 反面示例: 为每种组合创建子类 -- 类爆炸!
+public class Espresso {
+    public String getDescription() { return "Espresso"; }
+    public double getCost() { return 1.99; }
+}
+
+public class EspressoWithMilk {
+    public String getDescription() { return "Espresso + Milk"; }
+    public double getCost() { return 1.99 + 0.50; }
+}
+
+public class EspressoWithMilkAndSugar {
+    public String getDescription() { return "Espresso + Milk + Sugar"; }
+    public double getCost() { return 1.99 + 0.50 + 0.20; }
+}
+
+public class EspressoWithMilkAndSugarAndCream {
+    public String getDescription() { return "Espresso + Milk + Sugar + Cream"; }
+    public double getCost() { return 1.99 + 0.50 + 0.20 + 0.70; }
+}
+
+public class AmericanoWithMilk {
+    public String getDescription() { return "Americano + Milk"; }
+    public double getCost() { return 2.49 + 0.50; }
+}
+// ... 还有 AmericanoWithSugar, AmericanoWithCream, AmericanoWithMilkAndSugar,
+// AmericanoWithMilkAndCream, AmericanoWithSugarAndCream,
+// AmericanoWithMilkAndSugarAndCream ...
+// 2 种基础 x 2^3 种加料组合 = 16 个类! 加一种新加料? 翻倍!
+```
+
+## 为什么差？| Warum ist das schlecht?
+
+```{python}
+#| label: fig-decorator-problems
+#| fig-cap: "没有 Decorator 模式时的类爆炸 | Klassenexplosion ohne Decorator"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6.5)
+ax.axis('off')
+ax.set_title('类爆炸问题 | Klassenexplosion', fontsize=13, fontweight='bold',
+             color='#E65100')
+
+# Show explosion
+ax.text(7.0, 6.0, '2 种基础咖啡 x 3 种加料的组合数', ha='center',
+        fontsize=12, fontweight='bold', color='#E65100')
+
+combos = [
+    'Espresso', 'Esp+Milk', 'Esp+Sugar', 'Esp+Cream',
+    'Esp+M+S', 'Esp+M+C', 'Esp+S+C', 'Esp+M+S+C',
+    'Americano', 'Ame+Milk', 'Ame+Sugar', 'Ame+Cream',
+    'Ame+M+S', 'Ame+M+C', 'Ame+S+C', 'Ame+M+S+C',
+]
+for i, c in enumerate(combos):
+    row = i // 8
+    col = i % 8
+    x = 0.8 + col * 1.65
+    y = 4.5 - row * 2.0
+    box = mpatches.FancyBboxPatch((x - 0.7, y - 0.3), 1.5, 0.7,
+        boxstyle="round,pad=0.04", facecolor='#FDEBD0',
+        edgecolor='#E65100', linewidth=1)
+    ax.add_patch(box)
+    ax.text(x + 0.05, y + 0.05, c, ha='center', fontsize=6.5,
+            color='#444')
+
+ax.text(7.0, 1.2, '= 16 个类! 新增 1 种加料 --> 32 个类! 再加 1 种 --> 64 个类!',
+        ha='center', fontsize=11, fontweight='bold', color='#C62828')
+ax.text(7.0, 0.5, '用 Decorator 模式: 2 个基础类 + 3 个装饰器类 = 5 个类 (无论怎么组合)',
+        ha='center', fontsize=10, fontweight='bold', color='#2E7D32')
+
+plt.tight_layout()
+plt.show()
+```
+
+核心问题是**类爆炸** (Klassenexplosion)：基础种类和装饰选项的组合呈指数级增长。2 种基础咖啡和 3 种加料就产生 16 个类（包含空组合），每新增一种加料，类的数量翻倍。每个类中的价格计算逻辑是重复的 (违反 DRY)，而且所有类之间没有统一的接口。
+
+## 用 Decorator 重构 | Refactoring mit Decorator
+
+```java
+// 1. 组件接口: 所有饮料（基础和装饰后）的统一契约
+public interface Beverage {
+    String getDescription();
+    double getCost();
+}
+
+// 2. 具体组件: 基础咖啡
+public class Espresso implements Beverage {
+    @Override
+    public String getDescription() { return "Espresso"; }
+    @Override
+    public double getCost() { return 1.99; }
+}
+
+public class Americano implements Beverage {
+    @Override
+    public String getDescription() { return "Americano"; }
+    @Override
+    public double getCost() { return 2.49; }
+}
+
+// 3. 抽象装饰器: 也实现 Beverage，同时持有一个 Beverage
+public abstract class CondimentDecorator implements Beverage {
+    protected Beverage beverage;  // 被装饰的对象
+
+    public CondimentDecorator(Beverage beverage) {
+        this.beverage = beverage;
+    }
+}
+
+// 4. 具体装饰器
+public class MilkDecorator extends CondimentDecorator {
+    public MilkDecorator(Beverage beverage) {
+        super(beverage);
+    }
+    @Override
+    public String getDescription() {
+        return beverage.getDescription() + " + Milk";  // 增强描述
+    }
+    @Override
+    public double getCost() {
+        return beverage.getCost() + 0.50;  // 增强价格
+    }
+}
+
+public class SugarDecorator extends CondimentDecorator {
+    public SugarDecorator(Beverage beverage) { super(beverage); }
+    @Override
+    public String getDescription() { return beverage.getDescription() + " + Sugar"; }
+    @Override
+    public double getCost() { return beverage.getCost() + 0.20; }
+}
+
+public class CreamDecorator extends CondimentDecorator {
+    public CreamDecorator(Beverage beverage) { super(beverage); }
+    @Override
+    public String getDescription() { return beverage.getDescription() + " + Cream"; }
+    @Override
+    public double getCost() { return beverage.getCost() + 0.70; }
+}
+
+// 使用: 像套娃一样自由组合!
+// Beverage order = new Espresso();                    // Espresso 1.99
+// order = new MilkDecorator(order);                   // + Milk   2.49
+// order = new SugarDecorator(order);                  // + Sugar  2.69
+// order = new CreamDecorator(order);                  // + Cream  3.39
+// System.out.println(order.getDescription());  --> "Espresso + Milk + Sugar + Cream"
+// System.out.println(order.getCost());          --> 3.39
+```
+
+总共只需要 2 个基础类 + 1 个抽象装饰器 + 3 个具体装饰器 = **6 个类**，可以生成任意组合。新增一种加料只需要新增一个装饰器类。
+
+## UML 类图 | Klassendiagramm
+
+```{python}
+#| label: fig-decorator-uml
+#| fig-cap: "Decorator 模式 UML | Klassendiagramm Decorator Pattern"
+
+fig, ax = plt.subplots(figsize=(14, 11))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 11.5)
+ax.axis('off')
+ax.set_title('Decorator Pattern -- UML Klassendiagramm',
+             fontsize=13, fontweight='bold')
+
+C_iface = '#E65100'
+C_concrete = '#2E7D32'
+C_decorator = '#4527A0'
+
+# Beverage (interface)
+bv = draw_uml_class(ax, 4.5, 11.0, 5.0,
+    'Beverage',
+    attrs=[],
+    methods=['+ getDescription(): String',
+             '+ getCost(): double'],
+    color=C_iface, is_interface=True)
+
+# Espresso
+es = draw_uml_class(ax, 0.3, 7.5, 3.5,
+    'Espresso',
+    attrs=[],
+    methods=['+ getDescription(): String',
+             '+ getCost(): double'],
+    color=C_concrete)
+
+# Americano
+am = draw_uml_class(ax, 0.3, 4.8, 3.5,
+    'Americano',
+    attrs=[],
+    methods=['+ getDescription(): String',
+             '+ getCost(): double'],
+    color=C_concrete)
+
+# CondimentDecorator (abstract)
+cd = draw_uml_class(ax, 5.5, 7.5, 5.0,
+    'CondimentDecorator',
+    attrs=['# beverage: Beverage'],
+    methods=[],
+    color=C_decorator, is_abstract=True)
+
+# MilkDecorator
+ml = draw_uml_class(ax, 4.0, 3.5, 3.0,
+    'MilkDecorator',
+    attrs=[],
+    methods=['+ getDescription(): String',
+             '+ getCost(): double'],
+    color=C_decorator)
+
+# SugarDecorator
+sg = draw_uml_class(ax, 7.5, 3.5, 3.0,
+    'SugarDecorator',
+    attrs=[],
+    methods=['+ getDescription(): String',
+             '+ getCost(): double'],
+    color=C_decorator)
+
+# CreamDecorator
+cr = draw_uml_class(ax, 11.0, 3.5, 2.8,
+    'CreamDecorator',
+    attrs=[],
+    methods=['+ getDescription(): String',
+             '+ getCost(): double'],
+    color=C_decorator)
+
+# Espresso implements Beverage
+draw_implements(ax, (es[0], es[1]), (bv[0] - 1.0, bv[2]), color=C_iface)
+
+# Americano implements Beverage
+draw_implements(ax, (am[0], am[1] + 0.5), (bv[0] - 1.5, bv[2] - 0.3),
+                color=C_iface)
+
+# CondimentDecorator implements Beverage
+draw_implements(ax, (cd[0], cd[1]), (bv[0] + 1.0, bv[2]), color=C_iface)
+
+# CondimentDecorator -> Beverage (关联 beverage)
+ax.annotate('', xy=(bv[0] + 2.5, bv[2] - 0.05),
+    xytext=(cd[0] + 2.5, cd[1] + 0.05),
+    arrowprops=dict(arrowstyle='->', color=C_decorator, lw=1.5,
+                    connectionstyle='arc3,rad=0.3'))
+ax.text(11.2, 9.0, 'beverage', fontsize=7, color=C_decorator, style='italic')
+
+# Concrete decorators extend CondimentDecorator
+draw_extends(ax, (ml[0], ml[1]), (cd[0] - 1.0, cd[2]), color=C_decorator)
+draw_extends(ax, (sg[0], sg[1]), (cd[0], cd[2]), color=C_decorator)
+draw_extends(ax, (cr[0], cr[1]), (cd[0] + 1.0, cd[2]), color=C_decorator)
+
+# Annotations
+note_box = mpatches.FancyBboxPatch((0.2, 0.3), 5.0, 2.2, boxstyle="round,pad=0.1",
+    facecolor='#FEF9E7', edgecolor='#F39C12', linewidth=1.5, linestyle='--')
+ax.add_patch(note_box)
+ax.text(2.7, 2.1, 'Decorator 的关键结构:', fontsize=8.5,
+        fontweight='bold', color='#E65100')
+ax.text(2.7, 1.5, '(1) Decorator 实现与被装饰者相同的接口', fontsize=7.5, color='#444')
+ax.text(2.7, 1.0, '(2) Decorator 持有一个被装饰者的引用', fontsize=7.5, color='#444')
+ax.text(2.7, 0.5, '(3) 方法中先调用被装饰者，再增强行为', fontsize=7.5, color='#444')
+
+plt.tight_layout()
+plt.show()
+```
+
+
+# 六大模式速查总结 | Zusammenfassung
+
+```{python}
+#| label: fig-final-summary
+#| fig-cap: "六大设计模式速查表 | Spickzettel: Sechs Entwurfsmuster"
+
+fig, ax = plt.subplots(figsize=(15, 13))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 14)
+ax.axis('off')
+ax.set_title('设计模式速查总结 | Entwurfsmuster Zusammenfassung',
+             fontsize=14, fontweight='bold')
+
+patterns_summary = [
+    {
+        'name': 'Strategy\n策略模式',
+        'problem': '算法硬编码在 if-else 中\n违反 OCP',
+        'solution': '将算法封装到接口的\n不同实现类中',
+        'key': 'Context 持有 Strategy 接口\n运行时可替换',
+        'color': '#C62828', 'y': 12.5
+    },
+    {
+        'name': 'Observer\n观察者模式',
+        'problem': 'Subject 直接依赖\n所有具体 Observer',
+        'solution': 'Subject 持有 Observer\n接口列表，状态变化时\n遍历通知',
+        'key': 'subscribe/unsubscribe\n动态增减观察者',
+        'color': '#AD1457', 'y': 10.5
+    },
+    {
+        'name': 'Factory Method\n工厂方法',
+        'problem': '业务代码中直接 new\n具体类，创建与使用\n耦合',
+        'solution': '由子类的工厂方法\n决定创建哪种对象',
+        'key': '抽象 Creator 定义模板\n+ 抽象工厂方法',
+        'color': '#6A1B9A', 'y': 8.5
+    },
+    {
+        'name': 'Singleton\n单例模式',
+        'problem': '多个实例导致\n数据不一致和资源浪费',
+        'solution': '私有构造函数 +\n静态 getInstance()',
+        'key': '全局唯一实例\n谨慎使用，优先考虑 DI',
+        'color': '#1565C0', 'y': 6.5
+    },
+    {
+        'name': 'Adapter\n适配器模式',
+        'problem': '现有类的接口与\n系统期望的接口不匹配',
+        'solution': 'Adapter 实现目标接口\n内部持有 Adaptee 引用\n转换方法调用',
+        'key': '不修改两端的代码\n只增加一个中间层',
+        'color': '#00695C', 'y': 4.5
+    },
+    {
+        'name': 'Decorator\n装饰器模式',
+        'problem': '组合爆炸\n(Klassenexplosion)',
+        'solution': 'Decorator 实现与被装饰者\n相同接口，持有其引用\n在方法中增强行为',
+        'key': '像套娃一样层层包装\n自由组合，无需子类爆炸',
+        'color': '#E65100', 'y': 2.5
+    },
+]
+
+# Column headers
+headers = [
+    ('模式 | Muster', 1.5),
+    ('解决什么问题 | Problem', 5.0),
+    ('怎么解决 | Loesung', 9.0),
+    ('关键点 | Kernidee', 12.8),
+]
+for text, x in headers:
+    hbox = mpatches.FancyBboxPatch((x - 1.7, 13.3), 3.5, 0.6,
+        boxstyle="round,pad=0.06", facecolor='#2C3E50',
+        edgecolor='white', linewidth=1)
+    ax.add_patch(hbox)
+    ax.text(x, 13.6, text, ha='center', fontsize=9,
+            fontweight='bold', color='white')
+
+for p in patterns_summary:
+    y = p['y']
+
+    # Name column
+    nbox = mpatches.FancyBboxPatch((0.0, y - 0.7), 3.0, 1.6,
+        boxstyle="round,pad=0.06", facecolor='white',
+        edgecolor=p['color'], linewidth=2)
+    ax.add_patch(nbox)
+    ax.text(1.5, y, p['name'], ha='center', fontsize=8.5,
+            fontweight='bold', color=p['color'], linespacing=1.2)
+
+    # Problem column
+    pbox = mpatches.FancyBboxPatch((3.3, y - 0.7), 3.5, 1.6,
+        boxstyle="round,pad=0.06", facecolor='#FDEDEC',
+        edgecolor='#C62828', linewidth=1)
+    ax.add_patch(pbox)
+    ax.text(5.05, y, p['problem'], ha='center', fontsize=7.5,
+            color='#444', linespacing=1.3)
+
+    # Solution column
+    sbox = mpatches.FancyBboxPatch((7.1, y - 0.7), 3.8, 1.6,
+        boxstyle="round,pad=0.06", facecolor='#D5F5E3',
+        edgecolor='#2E7D32', linewidth=1)
+    ax.add_patch(sbox)
+    ax.text(9.0, y, p['solution'], ha='center', fontsize=7.5,
+            color='#444', linespacing=1.3)
+
+    # Key column
+    kbox = mpatches.FancyBboxPatch((11.2, y - 0.7), 3.5, 1.6,
+        boxstyle="round,pad=0.06", facecolor='#FEF9E7',
+        edgecolor='#F39C12', linewidth=1)
+    ax.add_patch(kbox)
+    ax.text(12.95, y, p['key'], ha='center', fontsize=7.5,
+            color='#444', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-tip}
+## 考试中如何回答设计模式相关题目
+
+回答设计模式题时建议按以下结构组织答案：
+
+**(1) 指出问题**：当前代码违反了什么原则（OCP? SRP? DRY?）。
+
+**(2) 命名模式**：明确说出使用的设计模式名称及其类型（行为型/创建型/结构型）。
+
+**(3) 画 UML**：画出关键的接口、具体类、以及它们之间的关系（implements, extends, 关联）。
+
+**(4) 写代码**：展示重构后的核心代码，特别是接口定义和关键类。
+
+**(5) 说明好处**：新代码如何解决了原来的问题（可扩展、可测试、松耦合）。
+:::

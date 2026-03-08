@@ -1,0 +1,1354 @@
+---
+title: "第三章：整洁代码 (I) — Clean Code (I)"
+subtitle: "命名、注释与代码匠艺 | Variablenbenennung, Kommentare & Code-Handwerk"
+author: "Softwaretechnik WS 25/26"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    font_list = candidates.get(system, candidates['Linux'])
+    valid_fonts = [f for f in font_list if f in available_fonts]
+    if valid_fonts:
+        plt.rcParams['font.sans-serif'] = valid_fonts
+    plt.rcParams['font.monospace'] = valid_fonts + ['Consolas', 'Courier New', 'DejaVu Sans Mono']
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+COLORS = {
+    'primary': '#2E86AB',
+    'secondary': '#A23B72',
+    'success': '#2E8B57',
+    'warning': '#E8871E',
+    'danger': '#C1292E',
+    'info': '#5B8C5A',
+    'light': '#F5F5F5',
+    'dark': '#2C3E50',
+    'clean': '#27AE60',
+    'dirty': '#E74C3C',
+    'neutral': '#7F8C8D',
+    'highlight': '#F39C12',
+    'purple': '#8E44AD',
+    'blue_light': '#D6EAF8',
+    'green_light': '#D5F5E3',
+    'red_light': '#FDEDEC',
+    'yellow_light': '#FEF9E7',
+}
+```
+
+# 编程：艺术还是手艺？ | Programmieren: Kunst oder Handwerk?
+
+::: {.callout-note}
+## 核心观点 (Kernaussage)
+
+编程不是"艺术 (Kunst)"，而是**手艺 (Handwerk)**。它需要技巧、纪律和持续的练习——就像木匠或钟表匠的工作。
+:::
+
+## 代码的意义与任务 | Bedeutung und Aufgabe von Code
+
+同一个任务——对 1 到 10 求和——在不同语言中的表现天差地别。从底层的 x86 汇编到冗长的 COBOL，再到简洁的 Python 一行代码 `total = sum(range(1, 11))`，语言在进化，但**代码本身的核心地位不变**。
+
+```{python}
+#| label: fig-code-evolution
+#| fig-cap: "代码进化：从汇编到 Python | Code-Evolution: Von Assembly bis Python"
+
+fig, ax = plt.subplots(figsize=(13, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('同一任务 (sum 1..10) 在不同语言中的表达\nDieselbe Aufgabe in verschiedenen Sprachen',
+             fontsize=14, fontweight='bold')
+
+languages = [
+    {
+        'name': 'x86 Assembly',
+        'year': '~1970s',
+        'lines': '~15 行',
+        'readability': 1,
+        'color': '#E74C3C',
+        'x': 2.0,
+    },
+    {
+        'name': 'COBOL',
+        'year': '1959',
+        'lines': '~10 行',
+        'readability': 3,
+        'color': '#E67E22',
+        'x': 5.5,
+    },
+    {
+        'name': 'Java',
+        'year': '1995',
+        'lines': '~5 行',
+        'readability': 6,
+        'color': '#2980B9',
+        'x': 9.0,
+    },
+    {
+        'name': 'Python',
+        'year': '1991',
+        'lines': '1 行',
+        'readability': 9,
+        'color': '#27AE60',
+        'x': 12.5,
+    },
+]
+
+for lang in languages:
+    x = lang['x']
+    # 卡片背景
+    card = mpatches.FancyBboxPatch(
+        (x - 1.3, 1.0), 2.6, 5.5,
+        boxstyle="round,pad=0.2", facecolor='white',
+        edgecolor=lang['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    # 语言名
+    ax.text(x, 6.0, lang['name'], ha='center', va='center',
+            fontsize=11, fontweight='bold', color=lang['color'])
+    # 年代
+    ax.text(x, 5.3, lang['year'], ha='center', va='center',
+            fontsize=9, color='#888')
+    # 行数
+    ax.text(x, 4.5, f'代码量: {lang["lines"]}', ha='center', va='center',
+            fontsize=9, color='#555')
+    # 可读性条
+    bar_width = lang['readability'] * 0.22
+    bar = mpatches.FancyBboxPatch(
+        (x - bar_width / 2, 2.8), bar_width, 0.5,
+        boxstyle="round,pad=0.05", facecolor=lang['color'], alpha=0.7
+    )
+    ax.add_patch(bar)
+    ax.text(x, 3.5, f'可读性: {lang["readability"]}/10', ha='center',
+            va='center', fontsize=8, color='#555')
+    ax.text(x, 2.0, f'{lang["readability"]}', ha='center', va='center',
+            fontsize=16, fontweight='bold', color=lang['color'])
+
+# 底部箭头
+ax.annotate('', xy=(13, 1.2), xytext=(1, 1.2),
+            arrowprops=dict(arrowstyle='->', color='#999', lw=2.5))
+ax.text(7, 0.6, '抽象程度与可读性提升 -->', ha='center', fontsize=10,
+        color='#888', fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+## KI 时代还需要好代码吗？ | Brauchen wir guten Code trotz KI?
+
+::: {.callout-important}
+## 回答是：是的！(Ja!)
+
+即使 AI 可以生成代码，**人类仍然需要阅读、审查、维护和调试代码**。AI 生成的代码质量参差不齐，"整洁代码"的原则反而更加重要——它帮助我们判断 AI 输出的质量，也让代码库在长期维护中保持可控。
+:::
+
+# 坏代码的影响 | Der Einfluss von schlechtem Code
+
+## LeBlanc 定律 | Gesetz von LeBlanc
+
+::: {.callout-warning}
+## "以后再改" = "永远不改" (Spaeter = Niemals)
+
+这是 LeBlanc 定律的核心。每一次"先这样吧，以后再重构"的决定，几乎都不会真正被兑现。坏代码会不断累积。
+:::
+
+## 坏代码的恶性循环 | Der Teufelskreis
+
+```{python}
+#| label: fig-bad-code-cycle
+#| fig-cap: "坏代码的恶性循环 | Teufelskreis von schlechtem Code"
+
+fig, ax = plt.subplots(figsize=(9, 9))
+ax.set_xlim(-5, 5)
+ax.set_ylim(-5, 5)
+ax.set_aspect('equal')
+ax.axis('off')
+ax.set_title('坏代码的恶性循环\nTeufelskreis von schlechtem Code',
+             fontsize=15, fontweight='bold', pad=20)
+
+# 五个节点围成一圈
+cycle_items = [
+    ('坏代码\nSchlechter Code', '#CCE5FF', '#3498DB'),
+    ('修改困难\nSchwierige Aenderungen', '#FFEECC', '#E67E22'),
+    ('临时修补代替修复\nWorkarounds statt Fixes', '#FFDDBB', '#D35400'),
+    ('代码更烂\nNoch schlechterer Code', '#FFCCCC', '#E74C3C'),
+    ('技术债务攀升\nTechnical Debt steigt', '#EECCFF', '#8E44AD'),
+]
+
+n = len(cycle_items)
+radius = 3.2
+angles = [np.pi / 2 - 2 * np.pi * i / n for i in range(n)]
+
+positions = []
+for i, (label, bg_color, edge_color) in enumerate(cycle_items):
+    angle = angles[i]
+    x = radius * np.cos(angle)
+    y = radius * np.sin(angle)
+    positions.append((x, y))
+
+    box = mpatches.FancyBboxPatch(
+        (x - 1.4, y - 0.7), 2.8, 1.4,
+        boxstyle="round,pad=0.15", facecolor=bg_color,
+        edgecolor=edge_color, linewidth=2.5
+    )
+    ax.add_patch(box)
+    ax.text(x, y, label, ha='center', va='center',
+            fontsize=9, fontweight='bold', color='#333')
+
+# 箭头连接
+for i in range(n):
+    x1, y1 = positions[i]
+    x2, y2 = positions[(i + 1) % n]
+    dx = x2 - x1
+    dy = y2 - y1
+    dist = np.sqrt(dx ** 2 + dy ** 2)
+    # 缩短箭头起点和终点
+    shrink = 1.5
+    sx = x1 + shrink * dx / dist
+    sy = y1 + shrink * dy / dist
+    ex = x2 - shrink * dx / dist
+    ey = y2 - shrink * dy / dist
+    ax.annotate('', xy=(ex, ey), xytext=(sx, sy),
+                arrowprops=dict(arrowstyle='->', color='#999', lw=2.5,
+                                connectionstyle='arc3,rad=0.15'))
+
+plt.tight_layout()
+plt.show()
+```
+
+## 好代码 vs 坏代码示例 | Guter vs Schlechter Code
+
+```{python}
+#| label: fig-payment-comparison
+#| fig-cap: "PaymentProcessor: 坏代码 vs 好代码 | Schlechter vs Guter Code"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('代码结构对比: PaymentProcessor 示例\nStrukturvergleich am Beispiel PaymentProcessor',
+             fontsize=14, fontweight='bold')
+
+# 左侧：坏代码
+bad_box = mpatches.FancyBboxPatch(
+    (0.3, 0.5), 6.2, 8.5,
+    boxstyle="round,pad=0.3", facecolor=COLORS['red_light'],
+    edgecolor=COLORS['dirty'], linewidth=2.5
+)
+ax.add_patch(bad_box)
+ax.text(3.4, 8.5, '[x] 坏代码 (Schlechter Code)', ha='center', fontsize=13,
+        fontweight='bold', color=COLORS['dirty'])
+
+bad_items = [
+    'PaymentProcessor (一个巨大的类)',
+    '  processPayment(String type, ...)',
+    '  if type == "CC" ...',
+    '  else if type == "PP" ...',
+    '    (递归调用 fallback)',
+    '  else if type == "BT" ...',
+    '',
+    '问题:',
+    '  -- 类型用字符串区分 (String-basiert)',
+    '  -- 所有逻辑在一个方法中',
+    '  -- 添加新支付方式需修改现有代码',
+    '  -- 违反开放封闭原则 (OCP)',
+]
+for i, item in enumerate(bad_items):
+    color = COLORS['dirty'] if item.startswith('问题') or item.startswith('  --') else '#444'
+    weight = 'bold' if item.startswith('问题') else 'normal'
+    ax.text(0.8, 7.6 - i * 0.55, item, fontsize=8, color=color, fontweight=weight,
+            family='monospace')
+
+# 右侧：好代码
+good_box = mpatches.FancyBboxPatch(
+    (7.5, 0.5), 6.2, 8.5,
+    boxstyle="round,pad=0.3", facecolor=COLORS['green_light'],
+    edgecolor=COLORS['clean'], linewidth=2.5
+)
+ax.add_patch(good_box)
+ax.text(10.6, 8.5, '[+] 好代码 (Guter Code)', ha='center', fontsize=13,
+        fontweight='bold', color=COLORS['clean'])
+
+good_items = [
+    'interface PaymentMethod { pay(amount) }',
+    '',
+    'class CreditCard implements PaymentMethod',
+    'class PayPal implements PaymentMethod',
+    '  (含 fallback: PaymentMethod)',
+    'class BankTransfer implements PaymentMethod',
+    '',
+    'PaymentProcessor:',
+    '  processPayment(PaymentMethod, amount)',
+    '',
+    '优势:',
+    '  ++ 每个类一个职责 (SRP)',
+    '  ++ 新支付方式只需新增类',
+    '  ++ 多态替代条件分支',
+    '  ++ 遵循开放封闭原则 (OCP)',
+]
+for i, item in enumerate(good_items):
+    color = COLORS['clean'] if item.startswith('优势') or item.startswith('  ++') else '#444'
+    weight = 'bold' if item.startswith('优势') else 'normal'
+    ax.text(8.0, 7.6 - i * 0.48, item, fontsize=8, color=color, fontweight=weight,
+            family='monospace')
+
+# 中间箭头
+ax.annotate('重构\nRefactoring', xy=(7.5, 5), xytext=(6.5, 5),
+            arrowprops=dict(arrowstyle='->', color='#333', lw=3),
+            fontsize=10, fontweight='bold', ha='center', va='center')
+
+plt.tight_layout()
+plt.show()
+```
+
+# Clean Code 原则 | Prinzipien von Clean Code
+
+## 简洁性 | Einfachheit
+
+```{python}
+#| label: fig-clean-code-principles-simplicity
+#| fig-cap: "Clean Code 简洁性原则 | Prinzipien der Einfachheit"
+
+fig, ax = plt.subplots(figsize=(12, 7))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('Clean Code: 简洁性原则 | Einfachheit',
+             fontsize=15, fontweight='bold', pad=15)
+
+principles = [
+    {
+        'text': '逻辑直截了当\nLogik geradlinig',
+        'detail': '完成一个任务,做好一件事',
+        'color': '#27AE60',
+        'y': 7.5,
+    },
+    {
+        'text': '简单直接\nEinfach und direkt',
+        'detail': '没有不必要的复杂性',
+        'color': '#2ECC71',
+        'y': 6.0,
+    },
+    {
+        'text': '可被他人阅读和改进\nLesbar und verbesserbar',
+        'detail': '代码不是只给机器看的',
+        'color': '#58D68D',
+        'y': 4.5,
+    },
+    {
+        'text': '只提供一种解决方案\nEine Loesung, nicht mehrere',
+        'detail': '避免混淆的重复路径',
+        'color': '#82E0AA',
+        'y': 3.0,
+    },
+    {
+        'text': '所有信息在代码中清楚表达\nAlle Infos klar im Code',
+        'detail': '减少对外部文档的依赖',
+        'color': '#ABEBC6',
+        'y': 1.5,
+    },
+]
+
+for i, p in enumerate(principles):
+    # 编号圆
+    circle = plt.Circle((1.2, p['y']), 0.45, color=p['color'], alpha=0.9)
+    ax.add_patch(circle)
+    ax.text(1.2, p['y'], str(i + 1), ha='center', va='center',
+            fontsize=16, fontweight='bold', color='white')
+    # 原则文本
+    ax.text(2.2, p['y'] + 0.15, p['text'], fontsize=11, fontweight='bold',
+            color='#333', va='center')
+    # 详细说明
+    ax.text(6.5, p['y'], p['detail'], fontsize=9, color='#777',
+            va='center', fontstyle='italic')
+
+# 底部总结
+ax.text(6, 0.3, '>> 仔细的工作 (sorgfaeltige Arbeit) + 表达所有设计意图 (alle Design-Ideen ausdruecken) <<',
+        ha='center', fontsize=10, fontweight='bold', color=COLORS['dark'],
+        bbox=dict(boxstyle='round,pad=0.4', facecolor=COLORS['light'], edgecolor='#999'))
+
+plt.tight_layout()
+plt.show()
+```
+
+## 清晰性：最小惊讶原则 | Klarheit: Principle of Least Astonishment
+
+::: {.callout-tip}
+## Principle of Least Astonishment (最小惊讶原则)
+
+代码的行为应该与读者的预期一致。函数名叫 `getUser()` 就不应该默默地清除缓存；类名叫 `Student` 就不应该同时管理课程目录。**消除"读代码时的惊讶感"是清晰性的核心目标。**
+
+这通过三个手段实现：好的**变量命名 (Variablenbenennung)**、恰当的**注释 (Kommentare)**、一致的**格式化 (Formatierung)**。
+:::
+
+# 变量命名 | Variablenbenennung
+
+::: {.callout-note}
+## 参考文献 (Referenz)
+基于 Robert C. Martin: *Clean Code*, 第 2 章 (Kapitel 2)
+:::
+
+## 命名规则总览 | Namensregeln im Ueberblick
+
+```{python}
+#| label: fig-naming-rules-overview
+#| fig-cap: "命名规则总览 | Ueberblick aller Namensregeln"
+
+fig, ax = plt.subplots(figsize=(14, 10))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 12)
+ax.axis('off')
+ax.set_title('变量命名规则总览 | Regeln fuer Variablenbenennung',
+             fontsize=16, fontweight='bold', pad=15)
+
+rules = [
+    {
+        'title': '1. 选择表达目的的名称',
+        'de': 'Zweckbeschreibende Namen waehlen',
+        'good': 'daysSinceCreation, timeLimitInMs',
+        'bad': 'd, day, timelimit',
+        'color': '#2E86AB',
+    },
+    {
+        'title': '2. 避免错误信息',
+        'de': 'Fehlinformationen vermeiden',
+        'good': 'accountsByStudentName, students',
+        'bad': 'accounts, studentList (not a List)',
+        'color': '#27AE60',
+    },
+    {
+        'title': '3. 区分要明显',
+        'de': 'Unterschiede deutlich machen',
+        'good': 'getAccountByName vs getAccountById',
+        'bad': 'getAccount vs getAccountInfo',
+        'color': '#8E44AD',
+    },
+    {
+        'title': '4. 同一概念统一命名',
+        'de': 'Gleiche Konzepte konsistent benennen',
+        'good': '统一使用 fetch 或 get',
+        'bad': '混用 fetch / get / retrieve',
+        'color': '#E67E22',
+    },
+    {
+        'title': '5. 可发音的名称',
+        'de': 'Aussprechbare Namen verwenden',
+        'good': 'count, current, prefix',
+        'bad': 'cnt, curr, prfx',
+        'color': '#C0392B',
+    },
+    {
+        'title': '6. 可搜索的名称',
+        'de': 'Suchbare Namen verwenden',
+        'good': 'WORK_DAYS_PER_WEEK',
+        'bad': '5 (magic number)',
+        'color': '#16A085',
+    },
+    {
+        'title': '7. 避免幽默的名称',
+        'de': 'Humorige Namen vermeiden',
+        'good': 'deleteFolder(path)',
+        'bad': 'shinraTensei(path)',
+        'color': '#7F8C8D',
+    },
+    {
+        'title': '8. 避免编码前缀',
+        'de': 'Codierungen vermeiden',
+        'good': 'node, results',
+        'bad': 'p_node, l_results (Ungarische Not.)',
+        'color': '#2C3E50',
+    },
+    {
+        'title': '9. 避免心智映射',
+        'de': 'Mentale Mappings vermeiden',
+        'good': 'for (Student student : allStudents)',
+        'bad': 'var element = data.get(i)',
+        'color': '#D35400',
+    },
+]
+
+for i, rule in enumerate(rules):
+    y = 10.8 - i * 1.15
+
+    # 规则编号+标题
+    circle = plt.Circle((0.7, y), 0.35, color=rule['color'], alpha=0.85)
+    ax.add_patch(circle)
+    ax.text(0.7, y, str(i + 1), ha='center', va='center',
+            fontsize=12, fontweight='bold', color='white')
+    ax.text(1.3, y + 0.1, rule['title'], fontsize=10, fontweight='bold', color='#333')
+    ax.text(1.3, y - 0.25, rule['de'], fontsize=8, color='#888', fontstyle='italic')
+
+    # 好例子
+    ax.text(8.5, y + 0.1, f'[+] {rule["good"]}', fontsize=8,
+            color=COLORS['clean'], fontweight='bold', family='monospace')
+    # 坏例子
+    ax.text(8.5, y - 0.25, f'[x] {rule["bad"]}', fontsize=8,
+            color=COLORS['dirty'], family='monospace')
+
+plt.tight_layout()
+plt.show()
+```
+
+## 详解：选择表达目的的名称 | Zweckbeschreibende Namen
+
+```{python}
+#| label: fig-naming-purpose
+#| fig-cap: "名称应精确表达意图 | Namen sollen Absicht praezise ausdruecken"
+
+fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+# 坏例子
+ax1 = axes[0]
+ax1.set_xlim(0, 10)
+ax1.set_ylim(0, 8)
+ax1.axis('off')
+
+bad_frame = mpatches.FancyBboxPatch(
+    (0.3, 0.3), 9.4, 7.4,
+    boxstyle="round,pad=0.2", facecolor=COLORS['red_light'],
+    edgecolor=COLORS['dirty'], linewidth=2
+)
+ax1.add_patch(bad_frame)
+ax1.text(5, 7.2, '[x] 坏名称 (Schlechte Namen)', ha='center',
+         fontsize=12, fontweight='bold', color=COLORS['dirty'])
+
+bad_code = [
+    'public void addStudent(Stud s)',
+    '    throws DatabaseEntryException {',
+    '  String n = s.getName();',
+    '  TrieNode c = root;',
+    '  ...',
+    '}',
+]
+for i, line in enumerate(bad_code):
+    ax1.text(0.8, 6.0 - i * 0.7, line, fontsize=9, family='monospace', color='#555')
+
+ax1.text(5, 1.2, 's? n? c? -- 无法理解意图!', ha='center',
+         fontsize=10, fontweight='bold', color=COLORS['dirty'])
+
+# 好例子
+ax2 = axes[1]
+ax2.set_xlim(0, 10)
+ax2.set_ylim(0, 8)
+ax2.axis('off')
+
+good_frame = mpatches.FancyBboxPatch(
+    (0.3, 0.3), 9.4, 7.4,
+    boxstyle="round,pad=0.2", facecolor=COLORS['green_light'],
+    edgecolor=COLORS['clean'], linewidth=2
+)
+ax2.add_patch(good_frame)
+ax2.text(5, 7.2, '[+] 好名称 (Gute Namen)', ha='center',
+         fontsize=12, fontweight='bold', color=COLORS['clean'])
+
+good_code = [
+    'public void addStudent(Student student)',
+    '    throws DatabaseEntryException {',
+    '  String studentName = student.getName();',
+    '  TrieNode currentNode = root;',
+    '  ...',
+    '}',
+]
+for i, line in enumerate(good_code):
+    ax2.text(0.8, 6.0 - i * 0.7, line, fontsize=9, family='monospace', color='#555')
+
+ax2.text(5, 1.2, 'student, studentName, currentNode -- 一目了然!', ha='center',
+         fontsize=10, fontweight='bold', color=COLORS['clean'])
+
+plt.tight_layout()
+plt.show()
+```
+
+## 详解：避免错误信息 | Fehlinformationen vermeiden
+
+在强类型语言中，类型信息已经由编译器提供，不需要重复编码到变量名中。例如 `Collection<Student> studentList` 会误导读者以为底层实现是 `List`，而实际上可能是 `Set`。正确做法是直接命名为 `students`。
+
+在动态类型语言中，如果类型信息对理解至关重要，**则应通过名称显式表达**，例如 `accounts_by_student_name = dict()` 比 `accounts = dict()` 更清晰。
+
+```java
+// [x] 坏 (Bad)
+Map<String, Account> accounts;
+Collection<Student> studentList; // 不一定是 List!
+
+// [+] 好 (Good)
+Map<String, Account> accountsByStudentName;
+Collection<Student> students;
+```
+
+## 详解：区分要明显 | Unterschiede deutlich machen
+
+```{python}
+#| label: fig-naming-distinction
+#| fig-cap: "方法名的区分: 避免歧义 | Methodennamen: Ambiguitaet vermeiden"
+
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('方法名需要清晰区分 | Methodennamen muessen klar unterscheidbar sein',
+             fontsize=13, fontweight='bold')
+
+# 坏例子（上半部分）
+bad_box = mpatches.FancyBboxPatch(
+    (0.5, 4.5), 11, 3.0,
+    boxstyle="round,pad=0.2", facecolor=COLORS['red_light'],
+    edgecolor=COLORS['dirty'], linewidth=2
+)
+ax.add_patch(bad_box)
+ax.text(6, 7.0, '[x] 调用时无法区分 (Beim Aufruf nicht unterscheidbar)', ha='center',
+        fontsize=11, fontweight='bold', color=COLORS['dirty'])
+
+bad_methods = [
+    'findStudents()        -- 返回全部?',
+    'findStudents(prefix)  -- 按前缀搜索?',
+    'findStudent(name)     -- 按全名搜索?',
+]
+for i, m in enumerate(bad_methods):
+    ax.text(1.5, 6.2 - i * 0.55, m, fontsize=9, family='monospace', color='#555')
+
+# 好例子（下半部分）
+good_box = mpatches.FancyBboxPatch(
+    (0.5, 0.5), 11, 3.5,
+    boxstyle="round,pad=0.2", facecolor=COLORS['green_light'],
+    edgecolor=COLORS['clean'], linewidth=2
+)
+ax.add_patch(good_box)
+ax.text(6, 3.5, '[+] 名称自带语义 (Namen tragen Semantik)', ha='center',
+        fontsize=11, fontweight='bold', color=COLORS['clean'])
+
+good_methods = [
+    'getAllStudents()             -- 明确: 获取全部',
+    'findStudentsByPrefix(prefix) -- 明确: 按前缀',
+    'findStudentByName(name)      -- 明确: 按全名',
+]
+for i, m in enumerate(good_methods):
+    ax.text(1.5, 2.8 - i * 0.55, m, fontsize=9, family='monospace', color='#555')
+
+plt.tight_layout()
+plt.show()
+```
+
+## 好名称 vs 坏名称总结 | Gute vs Schlechte Namen
+
+```{python}
+#| label: fig-names-summary
+#| fig-cap: "名称质量评估框架 | Bewertungsrahmen fuer Namensqualitaet"
+
+fig, ax = plt.subplots(figsize=(13, 7))
+ax.set_xlim(0, 13)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('名称质量评估: 三维框架\nNamensqualitaet: Drei Dimensionen',
+             fontsize=14, fontweight='bold')
+
+categories = [
+    {
+        'title': '无表达力 (Unaussagekraeftig)',
+        'subtitle': '模糊、通用、罕见缩写',
+        'examples': 'data, element, foo, temp, c',
+        'color': COLORS['dirty'],
+        'bg': '#FFCCCC',
+        'x': 2.2,
+    },
+    {
+        'title': '误导性 (Irrefuehrend)',
+        'subtitle': '错误信息、歧义、易混淆',
+        'examples': 'person vs persons,\ngetData() vs fetchData(),\nCar.rate (速度?价格?方法?)',
+        'color': COLORS['warning'],
+        'bg': '#FFEECC',
+        'x': 6.5,
+    },
+    {
+        'title': '不实用 (Unpraktikabel)',
+        'subtitle': '难输入、太长/太短、幽默、编码',
+        'examples': 'dtaRcrd102, a,\ntheUltimateAnswerToLife...',
+        'color': COLORS['neutral'],
+        'bg': '#E8E8E8',
+        'x': 10.8,
+    },
+]
+
+# 坏名称区域
+ax.text(6.5, 8.5, '--- [x] 坏名称的三种类型 (Drei Typen schlechter Namen) ---',
+        ha='center', fontsize=12, fontweight='bold', color=COLORS['dirty'])
+
+for cat in categories:
+    box = mpatches.FancyBboxPatch(
+        (cat['x'] - 1.8, 4.8), 3.6, 3.2,
+        boxstyle="round,pad=0.15", facecolor=cat['bg'],
+        edgecolor=cat['color'], linewidth=2
+    )
+    ax.add_patch(box)
+    ax.text(cat['x'], 7.5, cat['title'], ha='center', fontsize=10,
+            fontweight='bold', color=cat['color'])
+    ax.text(cat['x'], 6.9, cat['subtitle'], ha='center', fontsize=8,
+            color='#666', fontstyle='italic')
+    ax.text(cat['x'], 5.8, cat['examples'], ha='center', fontsize=8,
+            color='#444', family='monospace')
+
+# 好名称区域
+ax.text(6.5, 4.0, '--- [+] 好名称的三个标准 (Drei Kriterien guter Namen) ---',
+        ha='center', fontsize=12, fontweight='bold', color=COLORS['clean'])
+
+good_cats = [
+    {
+        'title': '表达目的 (Zweckbeschreibend)',
+        'detail': 'elapsedTimeInDays vs d',
+        'x': 2.2,
+    },
+    {
+        'title': '清晰无歧义 (Klar)',
+        'detail': '一致、无惊讶、一词一义',
+        'x': 6.5,
+    },
+    {
+        'title': '可搜索可发音 (Suchbar)',
+        'detail': 'WORK_DAYS_PER_WEEK vs 5',
+        'x': 10.8,
+    },
+]
+
+for gc in good_cats:
+    box = mpatches.FancyBboxPatch(
+        (gc['x'] - 1.8, 1.0), 3.6, 2.5,
+        boxstyle="round,pad=0.15", facecolor=COLORS['green_light'],
+        edgecolor=COLORS['clean'], linewidth=2
+    )
+    ax.add_patch(box)
+    ax.text(gc['x'], 3.0, gc['title'], ha='center', fontsize=10,
+            fontweight='bold', color=COLORS['clean'])
+    ax.text(gc['x'], 2.2, gc['detail'], ha='center', fontsize=8,
+            color='#444', family='monospace')
+
+plt.tight_layout()
+plt.show()
+```
+
+# 最佳实践 | Best Practices
+
+## 类名 | Klassennamen
+
+::: {.callout-note}
+## 规则 (Regel)
+
+类名应为**名词或名词短语 (Substantive oder Substantivphrasen)**。技术术语如 `Manager`, `Visitor` 等应仅用于对应的技术概念，而非领域概念。`Data` 或 `Info` 等词没有实际含义，应避免使用。
+:::
+
+```java
+// [x] 坏
+public record CreateCourseName(String name) {}
+
+// [+] 好
+public record CourseName(String name) {}
+```
+
+## 方法名 | Methodennamen
+
+::: {.callout-note}
+## 规则 (Regel)
+
+方法名应为**动词或动词短语 (Verben oder Verbphrasen)**。
+:::
+
+```java
+// [x] 坏 — 名词做方法名，语义不清
+public void addition(CourseName course, CourseAttendance details) { }
+public boolean courseAttendance(CourseName course) { }
+
+// [+] 好 — 动词表达行为
+public void add(CourseName course, CourseAttendance details) { }
+public boolean didAttendCourse(CourseName course) { }
+```
+
+## 领域专用名称 | Domaenenspezifische Namen
+
+使用**领域语言 (Domaenensprache)** 来命名领域概念，使用**技术术语 (Fachbegriffe)** 来命名技术概念（算法、数据结构等），不要混淆两者。
+
+```java
+// [x] 坏 — 'List' 是技术术语，但这里实现的是 Map
+public class AttendanceList implements Map<CourseName, CourseAttendanceData>
+
+// [+] 好 — 名称与实际类型/概念一致
+public class AttendanceMap implements Map<CourseName, CourseAttendanceData>
+// 或直接
+public class Attendances implements Map<CourseName, CourseAttendanceData>
+```
+
+## 避免不必要的上下文 | Keine unnuetigen Kontexte
+
+```{python}
+#| label: fig-no-unnecessary-context
+#| fig-cap: "避免冗余上下文信息 | Redundante Kontextinformationen vermeiden"
+
+fig, ax = plt.subplots(figsize=(12, 5))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('上下文已经提供的信息不要在名称中重复\nKontextinformationen nicht wiederholen',
+             fontsize=13, fontweight='bold')
+
+examples = [
+    {
+        'bad': 'Student.getStudentName()',
+        'good': 'Student.getName()',
+        'reason': '"Student" 已在类名中',
+        'y': 4.5,
+    },
+    {
+        'bad': 'StudentDatabase.addStudentToDatabase(s)',
+        'good': 'StudentDatabase.add(student)',
+        'reason': '"Student" 和 "Database" 已在类名中',
+        'y': 3.0,
+    },
+    {
+        'bad': 'CourseAttendanceDetailsGrade grade',
+        'good': 'CourseGrade grade',
+        'reason': '在 CourseAttendanceData 内部无需重复上下文',
+        'y': 1.5,
+    },
+]
+
+for ex in examples:
+    # 坏
+    ax.text(0.5, ex['y'] + 0.15, f'[x] {ex["bad"]}', fontsize=9,
+            color=COLORS['dirty'], family='monospace', fontweight='bold')
+    # 好
+    ax.text(5.5, ex['y'] + 0.15, f'[+] {ex["good"]}', fontsize=9,
+            color=COLORS['clean'], family='monospace', fontweight='bold')
+    # 原因
+    ax.text(9.5, ex['y'] + 0.15, ex['reason'], fontsize=8,
+            color='#777', fontstyle='italic')
+    # 分隔线
+    ax.axhline(y=ex['y'] - 0.3, xmin=0.03, xmax=0.97, color='#ddd', linewidth=0.8)
+
+plt.tight_layout()
+plt.show()
+```
+
+# 注释 | Kommentare
+
+::: {.callout-important}
+## 核心规则 (Grundregel)
+
+**优先改善代码本身，而非添加注释** (Bevorzuge besseren Code statt Kommentaren)。
+
+注释用于表达那些我们**无法通过代码充分表达的信息**。每个注释都是一个"承认"——承认代码还不够清晰。
+:::
+
+## 有效的注释 | Gueltige Kommentare
+
+```{python}
+#| label: fig-good-comments
+#| fig-cap: "六种有效的注释类型 | Sechs Typen gueltiger Kommentare"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 11)
+ax.axis('off')
+ax.set_title('有效的注释类型 | Gueltige Kommentare',
+             fontsize=15, fontweight='bold', pad=15)
+
+good_comments = [
+    {
+        'type': '1. 澄清 (Klarstellung)',
+        'desc': '当代码无法更好地表达含义时',
+        'example': '// a is less than b\nassertTrue(a.compareTo(b) < 0);',
+        'color': '#2E86AB',
+    },
+    {
+        'type': '2. 意图说明 (Erklaerung der Absicht)',
+        'desc': '解释为什么选择了某种方案',
+        'example': '// We ignore grade F because\n// only the last grade per course is stored...',
+        'color': '#27AE60',
+    },
+    {
+        'type': '3. 后果警告 (Warnung vor Konsequenzen)',
+        'desc': '指出意外副作用或昂贵操作',
+        'example': '// WARNING: This method clears session cache',
+        'color': '#E74C3C',
+    },
+    {
+        'type': '4. 强调重要细节 (Verstaerkung)',
+        'desc': '突出容易被忽略的关键步骤',
+        'example': '// The trim is important.\n// It removes spaces that break parsing.',
+        'color': '#F39C12',
+    },
+    {
+        'type': '5. 非功能需求 (Nicht-funktionale Anford.)',
+        'desc': '记录环境假设、性能/安全要求',
+        'example': '// We assume UTF-8 encoding by default.',
+        'color': '#8E44AD',
+    },
+    {
+        'type': '6. TODO 注释 (TODO-Kommentare)',
+        'desc': '临时状态说明，关联 Issue Tracker',
+        'example': '// TODO: Remove after VersionManager update\n// cf. gitlab.com/.../issues/1234',
+        'color': '#16A085',
+    },
+]
+
+for i, c in enumerate(good_comments):
+    y = 9.8 - i * 1.55
+
+    # 类型标签
+    tag = mpatches.FancyBboxPatch(
+        (0.3, y - 0.35), 4.0, 0.9,
+        boxstyle="round,pad=0.1", facecolor=c['color'], alpha=0.15,
+        edgecolor=c['color'], linewidth=1.5
+    )
+    ax.add_patch(tag)
+    ax.text(2.3, y + 0.05, c['type'], ha='center', va='center',
+            fontsize=10, fontweight='bold', color=c['color'])
+
+    # 描述
+    ax.text(4.6, y + 0.1, c['desc'], fontsize=9, color='#555', va='center')
+
+    # 代码示例
+    ax.text(4.6, y - 0.35, c['example'], fontsize=7, color='#777',
+            va='center', family='monospace', fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+## 坏的注释 | Schlechte Kommentare
+
+```{python}
+#| label: fig-bad-comments
+#| fig-cap: "八种应避免的注释类型 | Acht Typen schlechter Kommentare"
+
+fig, ax = plt.subplots(figsize=(14, 10))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 12)
+ax.axis('off')
+ax.set_title('应避免的注释类型 | Schlechte Kommentare',
+             fontsize=15, fontweight='bold', color=COLORS['dirty'], pad=15)
+
+bad_comments = [
+    {
+        'type': '1. 含混不清 (Mumbling)',
+        'desc': '模糊的、引用不明确其他代码的注释',
+        'remedy': '-- 要么写清楚，要么不写',
+    },
+    {
+        'type': '2. 冗余注释 (Redundante Kommentare)',
+        'desc': '重复代码已说明的内容',
+        'remedy': '-- 直接删除',
+    },
+    {
+        'type': '3. 噪音注释 (Noise)',
+        'desc': '只说显而易见的事: "// The scanner"',
+        'remedy': '-- AI 特别喜欢生成这种注释!',
+    },
+    {
+        'type': '4. 误导注释 (Irrefuehrende Kommentare)',
+        'desc': '描述与代码实际行为不一致',
+        'remedy': '-- 比没有注释更糟糕',
+    },
+    {
+        'type': '5. 位置标记 (Positionsmarkierungen)',
+        'desc': '////// Constructors ////////',
+        'remedy': '-- 用语言结构（模块/类/方法）来组织',
+    },
+    {
+        'type': '6. 括号结束注释 (Blockende-Kommentare)',
+        'desc': '} // endWhile line 62',
+        'remedy': '-- 方法太长时应拆分方法',
+    },
+    {
+        'type': '7. 注释掉的代码 (Auskommentierter Code)',
+        'desc': '被注释掉的旧代码残留在文件中',
+        'remedy': '-- 删掉! 版本控制会保存旧版本',
+    },
+    {
+        'type': '8. 日记注释 (Tagebuch-Kommentare)',
+        'desc': '记录修改历史和作者信息',
+        'remedy': '-- 用版本控制 (Git) 替代',
+    },
+]
+
+for i, bc in enumerate(bad_comments):
+    y = 11.0 - i * 1.3
+
+    # 编号
+    circle = plt.Circle((0.8, y), 0.35, color=COLORS['dirty'], alpha=0.8)
+    ax.add_patch(circle)
+    ax.text(0.8, y, str(i + 1), ha='center', va='center',
+            fontsize=11, fontweight='bold', color='white')
+
+    # 类型
+    ax.text(1.5, y + 0.15, bc['type'], fontsize=10, fontweight='bold', color=COLORS['dirty'])
+    # 描述
+    ax.text(1.5, y - 0.25, bc['desc'], fontsize=8, color='#555')
+    # 建议
+    ax.text(9.5, y, bc['remedy'], fontsize=8, color=COLORS['clean'],
+            fontweight='bold', fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+## 典型坏注释案例分析 | Beispielanalyse schlechter Kommentare
+
+### 噪音注释 (Noise)
+
+```java
+// [x] 坏 — 每一行注释都在说废话
+/** The shell. */
+public class Shell {
+    // Student database
+    private final StudentDatabase database;
+    // Credit manager
+    private final CreditManager creditManager = new CreditManager();
+    // Scanner
+    private final Scanner scanner;
+
+// [+] 好 — 直接删除所有噪音
+public class Shell {
+    private final StudentDatabase database;
+    private final CreditManager creditManager = new CreditManager();
+    private final Scanner scanner;
+```
+
+### 注释掉的代码 (Auskommentierter Code)
+
+```java
+// [x] 坏 — 40 行被注释掉的代码残留在文件中
+private void printStudent(Stud student) {
+    System.out.println("  - " + student.getName() + " (ID: " + student.getId() + ")");
+}
+//
+//  private void addCourseToCatalog() {
+//    ... 40 lines of commented code ...
+//  }
+
+// [+] 好 — 直接删除，Git 会记住一切
+private void printStudent(Student student) {
+    System.out.println("  - " + student.getName() + " (ID: " + student.getId() + ")");
+}
+```
+
+### 日记注释 (Tagebuch-Kommentare)
+
+```java
+// [x] 坏 — 手动维护的修改日记
+// Initial version:
+// Author: Thomas Lemberger, Date: 2025-10-27
+// Change 1: Added ECTS credits
+// Change 2: CreditManager didn't work, commented for now
+// Chagne 3: Fixed indices in menu  <-- 还有拼写错误!
+
+// [+] 好 — 使用 git log 和 git blame
+// (不需要任何注释)
+```
+
+# 注释总结图 | Zusammenfassung Kommentare
+
+```{python}
+#| label: fig-comments-summary
+#| fig-cap: "注释使用决策流程 | Entscheidungsfluss fuer Kommentare"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('注释决策流程 | Wann braucht man einen Kommentar?',
+             fontsize=14, fontweight='bold', pad=15)
+
+# 起点
+start = mpatches.FancyBboxPatch(
+    (4.5, 8.5), 3, 1,
+    boxstyle="round,pad=0.15", facecolor=COLORS['primary'], edgecolor='white', lw=2
+)
+ax.add_patch(start)
+ax.text(6, 9.0, '需要写注释吗?\nKommentar noetig?', ha='center', va='center',
+        fontsize=10, fontweight='bold', color='white')
+
+# 第一个问题
+q1 = mpatches.FancyBboxPatch(
+    (3.5, 6.5), 5, 1.2,
+    boxstyle="round,pad=0.15", facecolor=COLORS['yellow_light'],
+    edgecolor=COLORS['highlight'], lw=2
+)
+ax.add_patch(q1)
+ax.text(6, 7.1, '能通过改善代码本身来表达吗?\nKann der Code selbst klarer werden?',
+        ha='center', va='center', fontsize=9, fontweight='bold', color='#333')
+
+# 能 -> 改善代码
+yes1 = mpatches.FancyBboxPatch(
+    (0.5, 4.5), 3.5, 1.2,
+    boxstyle="round,pad=0.15", facecolor=COLORS['green_light'],
+    edgecolor=COLORS['clean'], lw=2
+)
+ax.add_patch(yes1)
+ax.text(2.25, 5.1, '改善代码!\nCode verbessern!', ha='center', va='center',
+        fontsize=10, fontweight='bold', color=COLORS['clean'])
+
+# 不能 -> 第二个问题
+q2 = mpatches.FancyBboxPatch(
+    (5.5, 4.0), 6, 1.2,
+    boxstyle="round,pad=0.15", facecolor=COLORS['yellow_light'],
+    edgecolor=COLORS['highlight'], lw=2
+)
+ax.add_patch(q2)
+ax.text(8.5, 4.6, '属于六种有效注释之一吗?\nIst es ein gueltiger Kommentar-Typ?',
+        ha='center', va='center', fontsize=9, fontweight='bold', color='#333')
+
+# 是 -> 写注释
+yes2 = mpatches.FancyBboxPatch(
+    (8, 2.0), 3.5, 1.2,
+    boxstyle="round,pad=0.15", facecolor=COLORS['green_light'],
+    edgecolor=COLORS['clean'], lw=2
+)
+ax.add_patch(yes2)
+ax.text(9.75, 2.6, '写注释! 保持精确!\nKommentar schreiben!',
+        ha='center', va='center', fontsize=10, fontweight='bold', color=COLORS['clean'])
+
+# 否 -> 不写
+no2 = mpatches.FancyBboxPatch(
+    (2, 2.0), 3.5, 1.2,
+    boxstyle="round,pad=0.15", facecolor=COLORS['red_light'],
+    edgecolor=COLORS['dirty'], lw=2
+)
+ax.add_patch(no2)
+ax.text(3.75, 2.6, '不写!\nKein Kommentar!',
+        ha='center', va='center', fontsize=10, fontweight='bold', color=COLORS['dirty'])
+
+# 箭头
+# start -> q1
+ax.annotate('', xy=(6, 7.7), xytext=(6, 8.5),
+            arrowprops=dict(arrowstyle='->', color='#666', lw=2))
+# q1 -> yes1 (能)
+ax.annotate('', xy=(2.25, 5.7), xytext=(3.5, 6.8),
+            arrowprops=dict(arrowstyle='->', color=COLORS['clean'], lw=2))
+ax.text(2.2, 6.5, '能 (Ja)', fontsize=9, fontweight='bold', color=COLORS['clean'])
+# q1 -> q2 (不能)
+ax.annotate('', xy=(8.5, 5.2), xytext=(8.5, 6.5),
+            arrowprops=dict(arrowstyle='->', color=COLORS['warning'], lw=2))
+ax.text(9.0, 6.0, '不能 (Nein)', fontsize=9, fontweight='bold', color=COLORS['warning'])
+# q2 -> yes2 (是)
+ax.annotate('', xy=(9.75, 3.2), xytext=(9.5, 4.0),
+            arrowprops=dict(arrowstyle='->', color=COLORS['clean'], lw=2))
+ax.text(10.3, 3.7, '是 (Ja)', fontsize=9, fontweight='bold', color=COLORS['clean'])
+# q2 -> no2 (否)
+ax.annotate('', xy=(3.75, 3.2), xytext=(5.5, 4.3),
+            arrowprops=dict(arrowstyle='->', color=COLORS['dirty'], lw=2))
+ax.text(4.0, 3.9, '否 (Nein)', fontsize=9, fontweight='bold', color=COLORS['dirty'])
+
+# 底部总结
+ax.text(6, 0.6, '>> 每个注释都是对代码不够清晰的一种承认 (Jeder Kommentar ist ein Eingestaendnis) <<',
+        ha='center', fontsize=10, fontweight='bold', color=COLORS['dark'],
+        bbox=dict(boxstyle='round,pad=0.4', facecolor=COLORS['light'], edgecolor='#999'))
+
+plt.tight_layout()
+plt.show()
+```
+
+# 完整知识图谱 | Wissenslandkarte
+
+```{python}
+#| label: fig-knowledge-map
+#| fig-cap: "Clean Code (I) 知识图谱 | Wissenslandkarte Clean Code (I)"
+
+fig, ax = plt.subplots(figsize=(14, 10))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 12)
+ax.axis('off')
+ax.set_title('Clean Code (I) 完整知识图谱\nWissenslandkarte',
+             fontsize=16, fontweight='bold', pad=15)
+
+# 中心节点
+center = plt.Circle((7, 6), 1.2, color=COLORS['primary'], alpha=0.9)
+ax.add_patch(center)
+ax.text(7, 6, 'Clean\nCode', ha='center', va='center',
+        fontsize=16, fontweight='bold', color='white')
+
+# 分支定义
+branches = [
+    {
+        'label': '编程作为手艺\nHandwerk',
+        'x': 2, 'y': 10,
+        'color': '#8E44AD',
+        'children': ['非艺术\nnicht Kunst', '需要纪律\nDisziplin', '持续练习\nUebung'],
+    },
+    {
+        'label': '代码的意义\nBedeutung',
+        'x': 7, 'y': 10.5,
+        'color': '#2E86AB',
+        'children': ['语言在进化', 'AI 不取代代码', '可读性是关键'],
+    },
+    {
+        'label': '坏代码的影响\nSchlechter Code',
+        'x': 12, 'y': 10,
+        'color': '#E74C3C',
+        'children': ['LeBlanc 定律', '恶性循环', 'Technical Debt'],
+    },
+    {
+        'label': '命名规则\nBenennung',
+        'x': 1.5, 'y': 4,
+        'color': '#27AE60',
+        'children': ['表达意图', '避免误导', '可搜索发音', '统一一致'],
+    },
+    {
+        'label': '最佳实践\nBest Practices',
+        'x': 1.5, 'y': 1.5,
+        'color': '#F39C12',
+        'children': ['类名=名词', '方法名=动词', '领域语言', '无冗余上下文'],
+    },
+    {
+        'label': '有效注释\nGueltige Komm.',
+        'x': 12.5, 'y': 4,
+        'color': '#16A085',
+        'children': ['澄清/意图', '警告/强调', 'NFR/TODO'],
+    },
+    {
+        'label': '坏注释\nSchlechte Komm.',
+        'x': 12.5, 'y': 1.5,
+        'color': '#C0392B',
+        'children': ['冗余/噪音', '误导/日记', '注释掉的代码'],
+    },
+    {
+        'label': '核心原则\nPrinzipien',
+        'x': 7, 'y': 1,
+        'color': '#2C3E50',
+        'children': ['简洁性', '清晰性', '最小惊讶'],
+    },
+]
+
+for b in branches:
+    # 主节点
+    box = mpatches.FancyBboxPatch(
+        (b['x'] - 1.2, b['y'] - 0.45), 2.4, 0.9,
+        boxstyle="round,pad=0.1", facecolor=b['color'], alpha=0.15,
+        edgecolor=b['color'], linewidth=2
+    )
+    ax.add_patch(box)
+    ax.text(b['x'], b['y'], b['label'], ha='center', va='center',
+            fontsize=8, fontweight='bold', color=b['color'])
+
+    # 连线到中心
+    ax.plot([7, b['x']], [6, b['y']], color=b['color'], linewidth=1.5, alpha=0.4)
+
+    # 子节点
+    for j, child in enumerate(b['children']):
+        # 子节点偏移
+        offset_x = (j - len(b['children']) / 2 + 0.5) * 1.2
+        cx = b['x'] + offset_x * 0.3
+        cy = b['y'] - 0.8 - abs(offset_x) * 0.15
+
+        # 只画文字
+        ax.text(cx, cy, child, ha='center', va='center',
+                fontsize=6, color=b['color'], alpha=0.8,
+                bbox=dict(boxstyle='round,pad=0.1', facecolor='white',
+                          edgecolor=b['color'], alpha=0.3))
+
+plt.tight_layout()
+plt.show()
+```
+
+# 关键收获 | Takeaways
+
+```{python}
+#| label: fig-takeaways
+#| fig-cap: "本章核心收获 | Kern-Takeaways dieses Kapitels"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('Clean Code (I) — 核心收获\nKern-Takeaways', fontsize=16, fontweight='bold', pad=15)
+
+takeaways = [
+    {
+        'num': '1',
+        'title': '"以后再改" = "永远不改"',
+        'subtitle': 'Spaeter = Niemals (Gesetz von LeBlanc)',
+        'color': '#E74C3C',
+    },
+    {
+        'num': '2',
+        'title': '好的命名是最廉价的文档',
+        'subtitle': 'Gute Namen sind die billigste Dokumentation',
+        'color': '#27AE60',
+    },
+    {
+        'num': '3',
+        'title': '名称应表达意图，而非实现',
+        'subtitle': 'Namen druecken Absicht aus, nicht Implementierung',
+        'color': '#2E86AB',
+    },
+    {
+        'num': '4',
+        'title': '同一概念用同一个词',
+        'subtitle': 'Ein Wort pro Konzept — konsistent bleiben',
+        'color': '#F39C12',
+    },
+    {
+        'num': '5',
+        'title': '优先改善代码，而非添加注释',
+        'subtitle': 'Besserer Code > Kommentar',
+        'color': '#8E44AD',
+    },
+    {
+        'num': '6',
+        'title': '每个注释都是对代码不够清晰的承认',
+        'subtitle': 'Jeder Kommentar ist ein Eingestaendnis',
+        'color': '#C0392B',
+    },
+]
+
+for i, t in enumerate(takeaways):
+    y = 8.8 - i * 1.5
+
+    # 编号圆
+    circle = plt.Circle((1.2, y), 0.5, color=t['color'], alpha=0.9)
+    ax.add_patch(circle)
+    ax.text(1.2, y, t['num'], ha='center', va='center',
+            fontsize=18, fontweight='bold', color='white')
+
+    # 主标题
+    ax.text(2.3, y + 0.2, t['title'], fontsize=12, fontweight='bold', color='#333')
+    # 德文副标题
+    ax.text(2.3, y - 0.3, t['subtitle'], fontsize=9, fontstyle='italic', color='#888')
+
+plt.tight_layout()
+plt.show()
+```
+
+---
+
+::: {.callout-note}
+## 下一讲预告 | Ausblick
+
+**Clean Code 第二部分** 将涵盖：函数的结构 (Funktionen)、数据对象与数据结构 (Objekte und Datenstrukturen)、类的设计 (Klassen)、格式化 (Formatierung)、错误处理 (Fehlerbehandlung)，以及代码异味与启发式规则 (Code-Smells und Heuristiken)。
+
+阅读任务：Clean Code 第 3 章 (函数)、第 6 章 (对象与数据结构)、第 10 章 (类)。
+:::

@@ -1,0 +1,1594 @@
+---
+title: "第四章：整洁代码 (II) — Clean Code (II)"
+subtitle: "函数、类、格式化与错误处理 | Funktionen, Klassen, Formatierung & Fehlerbehandlung"
+author: "Softwaretechnik WS 25/26"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+---
+
+```{python}
+#| label: setup
+#| include: false
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.font_manager as fm
+import numpy as np
+import platform
+
+def set_chinese_font():
+    system = platform.system()
+    candidates = {
+        'Windows': ['Microsoft YaHei', 'SimHei', 'SimSun', 'KaiTi'],
+        'Darwin': ['Arial Unicode MS', 'PingFang SC', 'Heiti SC', 'STHeiti'],
+        'Linux': ['WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Droid Sans Fallback']
+    }
+    available_fonts = set(f.name for f in fm.fontManager.ttflist)
+    font_list = candidates.get(system, candidates['Linux'])
+    valid_fonts = [f for f in font_list if f in available_fonts]
+    if valid_fonts:
+        plt.rcParams['font.sans-serif'] = valid_fonts + ['DejaVu Sans']
+        plt.rcParams['font.monospace'] = valid_fonts + ['Consolas', 'Courier New', 'DejaVu Sans Mono']
+    plt.rcParams['axes.unicode_minus'] = False
+
+set_chinese_font()
+
+COLORS = {
+    'primary': '#2E86AB',
+    'secondary': '#A23B72',
+    'success': '#2E8B57',
+    'warning': '#E8871E',
+    'danger': '#C1292E',
+    'info': '#5B8C5A',
+    'light': '#F5F5F5',
+    'dark': '#2C3E50',
+    'clean': '#27AE60',
+    'dirty': '#E74C3C',
+    'neutral': '#7F8C8D',
+    'highlight': '#F39C12',
+    'purple': '#8E44AD',
+    'blue_light': '#D6EAF8',
+    'green_light': '#D5F5E3',
+    'red_light': '#FDEDEC',
+    'yellow_light': '#FEF9E7',
+}
+```
+
+# 回顾 | Recap
+
+::: {.callout-note}
+## 上一章要点 (Zusammenfassung Kapitel I)
+
+**命名 (Namen)**：选择有意义的、可发音的、可搜索的名称，避免编码和心理映射。
+
+**注释 (Kommentare)**：优先用更好的代码替代注释；好注释包括意图说明、警告、TODO；坏注释包括冗余注释、误导性注释、注释掉的代码。
+
+**风险管理 (Risikomanagement)**：项目风险、产品风险、商业风险，6 种风险类型。
+
+**项目计划 (Projektplanung)**：价格计算、项目计划内容、网络计划图、甘特图。
+:::
+
+```{python}
+#| label: fig-recap-overview
+#| fig-cap: "Clean Code I 回顾 | Recap von Clean Code I"
+
+fig, ax = plt.subplots(figsize=(12, 5))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('Clean Code I — 核心要点回顾\nKernpunkte von Clean Code I', fontsize=14, fontweight='bold')
+
+topics = [
+    {'title': '命名\nNamen', 'items': 'Zweckbeschreibend\nKonsistent\nSuchbar', 'color': '#2E86AB', 'x': 1.5},
+    {'title': '注释\nKommentare', 'items': 'Code > Comments\nGut vs. Schlecht', 'color': '#A23B72', 'x': 4.5},
+    {'title': '风险管理\nRisiko', 'items': '6 Risikoarten\n3 Risikokategorien', 'color': '#E8871E', 'x': 7.5},
+    {'title': '项目计划\nPlanung', 'items': 'Netzplan\nGantt-Diagramm', 'color': '#2E8B57', 'x': 10.5},
+]
+
+for t in topics:
+    card = mpatches.FancyBboxPatch(
+        (t['x'] - 1.2, 0.8), 2.4, 4.2,
+        boxstyle="round,pad=0.2", facecolor='white', edgecolor=t['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    ax.text(t['x'], 4.3, t['title'], ha='center', va='center',
+            fontsize=11, fontweight='bold', color=t['color'])
+    ax.text(t['x'], 2.5, t['items'], ha='center', va='center',
+            fontsize=9, color='#555', linespacing=1.6)
+
+plt.tight_layout()
+plt.show()
+```
+
+# 函数 | Funktionen
+
+::: {.callout-tip}
+## 推荐阅读 (Lesestoff)
+Robert C. Martin: *Clean Code*，第 3 章 (Kapitel 3)
+:::
+
+## 抽象层次 | Abstraktionsebenen
+
+每个方法都应该在**一个抽象层次**上运作。它所调用的方法应位于下一个更低的抽象层次。代码应该像**从上到下阅读**一样，沿着抽象阶梯一路向下。
+
+```{python}
+#| label: fig-abstraction-ladder
+#| fig-cap: "抽象阶梯：从上到下阅读 | Abstraktions-Leiter: Von oben nach unten lesen"
+
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('抽象阶梯 | Abstraktions-Leiter', fontsize=15, fontweight='bold')
+
+levels = [
+    {
+        'y': 8.2, 'color': '#2E86AB', 'label': 'Level 0 — 最高抽象',
+        'code': 'validateAndRegisterStudent(name, matrikelNr)',
+        'desc': '业务流程总览'
+    },
+    {
+        'y': 6.2, 'color': '#3498DB', 'label': 'Level 1 — 中等抽象',
+        'code': 'validateStudentData(...)  checkForDuplicates(...)  persistStudent(...)  sendWelcomeEmail(...)',
+        'desc': '各步骤分解'
+    },
+    {
+        'y': 4.2, 'color': '#5DADE2', 'label': 'Level 2 — 较低抽象',
+        'code': 'validateName(...)  validateMatriculationNumber(...)',
+        'desc': '具体验证逻辑'
+    },
+    {
+        'y': 2.2, 'color': '#85C1E9', 'label': 'Level 3 — 最低抽象',
+        'code': 'Pattern.compile("^\\\\d{7}$").matcher(matNr).matches()',
+        'desc': '正则表达式 / 字符串操作'
+    },
+]
+
+for i, lv in enumerate(levels):
+    box = mpatches.FancyBboxPatch(
+        (1.0, lv['y'] - 0.6), 10.0, 1.5,
+        boxstyle="round,pad=0.15", facecolor=lv['color'], alpha=0.15,
+        edgecolor=lv['color'], linewidth=2
+    )
+    ax.add_patch(box)
+    ax.text(1.3, lv['y'] + 0.5, lv['label'], fontsize=10, fontweight='bold', color=lv['color'])
+    ax.text(6.0, lv['y'] + 0.05, lv['code'], ha='center', fontsize=8.5,
+            family='monospace', color='#333')
+    ax.text(6.0, lv['y'] - 0.35, lv['desc'], ha='center', fontsize=8, color='#888')
+    if i < len(levels) - 1:
+        ax.annotate('', xy=(6.0, lv['y'] - 0.65), xytext=(6.0, lv['y'] - 0.95),
+                     arrowprops=dict(arrowstyle='->', color=lv['color'], lw=2))
+
+plt.tight_layout()
+plt.show()
+```
+
+### 坏例子 | Schlechtes Beispiel
+
+不同抽象层次混在同一个方法中——既有高层的 `databaseContainsStudent` 调用，又有低层的正则表达式细节：
+
+```java
+public void registerStudentBad(String name, String matriculationNumber) {
+    if (name == null || name.trim().isEmpty()) {          // ⚡ LOW-LEVEL
+        throw new IllegalArgumentException("Name cannot be empty");
+    }
+    Pattern pattern = Pattern.compile("^\\d{7}$");        // ⚡ LOW-LEVEL
+    if (!pattern.matcher(matriculationNumber).matches()) {
+        throw new IllegalArgumentException("...");
+    }
+    if (databaseContainsStudent(name)) {                  // higher level
+        throw new IllegalStateException("...");
+    }
+    persistStudent(name, matriculationNumber);             // higher level
+    sendWelcomeEmail(name);                                // higher level
+}
+```
+
+### 好例子 | Gutes Beispiel
+
+每一层只做一个抽象层次的事情，读起来像"为了……，我们……"的段落 (**UM-ZU-Absätze**)：
+
+```java
+public void validateAndRegisterStudent(String name, String matriculationNumber) {
+    validateStudentData(name, matriculationNumber);
+    checkForDuplicates(name);
+    persistStudent(name, matriculationNumber);
+    sendWelcomeEmail(name);
+}
+
+private void validateStudentData(String name, String matriculationNumber) {
+    validateName(name);
+    validateMatriculationNumber(matriculationNumber);
+}
+
+private void validateName(String name) {
+    if (name == null || name.trim().isEmpty()) {
+        throw new IllegalArgumentException("Name cannot be empty");
+    }
+}
+
+private void validateMatriculationNumber(String matriculationNumber) {
+    Pattern pattern = Pattern.compile("^\\d{7}$");
+    if (!pattern.matcher(matriculationNumber).matches()) {
+        throw new IllegalArgumentException("...");
+    }
+}
+```
+
+::: {.callout-important}
+## UM-ZU-Absätze (为了…段落)
+
+好代码可以用"**为了……**"的句式来描述：
+
+- **为了**验证并注册学生，我们验证学生数据、检查重复、保存学生、发送欢迎邮件。
+- **为了**验证学生数据，我们验证名字和学号。
+- **为了**验证名字，我们检查名字不为空且至少 2 个字符。
+
+每个段落描述**一个**抽象层次。
+:::
+
+## 函数参数 | Funktionsparameter
+
+从测试角度看，参数越多，组合越多，测试越难。但要注意：类的字段（成员变量）**也是隐含的参数**，同样需要测试所有可能状态。
+
+```{python}
+#| label: fig-params-discussion
+#| fig-cap: "显式参数 vs. 隐含状态 | Explizite Parameter vs. Impliziter Zustand"
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+# v1: explicit params
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('v1: 显式参数\nExplizite Parameter', fontsize=12, fontweight='bold', color=COLORS['clean'])
+
+code_v1 = [
+    'void addStudentToString(',
+    '    StringBuilder sb,',
+    '    Student student) {',
+    '  sb.append(student.getName());',
+    '  sb.append(", ");',
+    '  sb.append(student.getAge());',
+    '}',
+]
+for i, line in enumerate(code_v1):
+    ax.text(0.5, 6.0 - i * 0.7, line, fontsize=8.5, family='monospace', color='#333')
+
+box1 = mpatches.FancyBboxPatch((0.2, 0.3), 9.5, 1.2, boxstyle="round,pad=0.1",
+                                facecolor=COLORS['green_light'], edgecolor=COLORS['clean'], linewidth=1.5)
+ax.add_patch(box1)
+ax.text(5.0, 0.9, 'sb 来源清晰，测试时完全可控', ha='center', fontsize=9, color=COLORS['clean'])
+
+# v2: hidden state
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('v2: 隐含状态（类字段）\nImpliziter Zustand (Feld)', fontsize=12, fontweight='bold', color=COLORS['warning'])
+
+code_v2 = [
+    'private StringBuilder sb;',
+    '',
+    'void addStudentToString(',
+    '    Student student) {',
+    '  sb.append(student.getName());',
+    '  sb.append(", ");',
+    '  sb.append(student.getAge());',
+    '}',
+]
+for i, line in enumerate(code_v2):
+    ax.text(0.5, 6.2 - i * 0.65, line, fontsize=8.5, family='monospace', color='#333')
+
+box2 = mpatches.FancyBboxPatch((0.2, 0.3), 9.5, 1.2, boxstyle="round,pad=0.1",
+                                facecolor=COLORS['yellow_light'], edgecolor=COLORS['warning'], linewidth=1.5)
+ax.add_patch(box2)
+ax.text(5.0, 0.9, 'sb 是隐藏依赖，测试需先设置对象状态', ha='center', fontsize=9, color=COLORS['warning'])
+
+plt.tight_layout()
+plt.show()
+```
+
+## 避免副作用 | Nebeneffekte vermeiden
+
+### 例 1：输入参数被修改
+
+```java
+// 坏：修改了传入的 list，调用者可能不知道
+void updateStudentsBasedOnContext(Context context, List<Student> students) {
+    /* modify students */
+}
+
+// 好：返回新的 list，不修改原始数据
+List<Student> updateStudentsBasedOnContext(Context context, List<Student> students) {
+    /* return new list of modified students */
+}
+```
+
+### 例 2：hasNext() 偷偷消费了数据
+
+```java
+// 坏：hasNext() 竟然 fetchNext() 了！
+public class StudentIterator {
+    private Database database;
+
+    public boolean hasNext() {
+        Student next = database.fetchNext();  // ⚡ 副作用！
+        return next != null;
+    }
+    public Student next() {
+        return database.fetchNext();
+    }
+}
+// 结果：Alice 和 Charlie 丢失，只输出 Bob, Diana
+```
+
+### 例 3：Lazy Initialization 的竞态条件
+
+```java
+public class CourseRegistry {
+    private List<Course> allCourses;
+
+    // 看似无害，但非线程安全！
+    public List<Course> getAllCourses() {
+        if (allCourses == null) {
+            allCourses = loadCoursesFromDatabase();  // 耗时操作
+        }
+        return allCourses;
+    }
+}
+// Thread 1: 检查 null → true
+// Thread 2: 检查 null → true（还没被设置！）
+// → 两个线程同时加载数据库！
+```
+
+```{python}
+#| label: fig-side-effects
+#| fig-cap: "三类副作用 | Drei Arten von Seiteneffekten"
+
+fig, ax = plt.subplots(figsize=(13, 5))
+ax.set_xlim(0, 15)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('副作用的三大陷阱 | Drei Fallen von Seiteneffekten',
+             fontsize=14, fontweight='bold')
+
+effects = [
+    {'title': '修改输入参数\nInput-Mutation', 'icon': '⚡',
+     'desc': 'void update(List)\nvs.\nList update(List)',
+     'x': 2.5, 'color': '#E74C3C'},
+    {'title': '查询中隐藏修改\nHidden Mutation', 'icon': '👻',
+     'desc': 'hasNext() calls\nfetchNext() internally',
+     'x': 7.5, 'color': '#E67E22'},
+    {'title': '竞态条件\nRace Condition', 'icon': '🧵',
+     'desc': 'Lazy init without\nthread safety',
+     'x': 12.5, 'color': '#8E44AD'},
+]
+
+for e in effects:
+    card = mpatches.FancyBboxPatch(
+        (e['x'] - 2.0, 0.5), 4.0, 4.8,
+        boxstyle="round,pad=0.2", facecolor='white',
+        edgecolor=e['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    ax.text(e['x'], 4.6, e['icon'], ha='center', va='center', fontsize=22)
+    ax.text(e['x'], 3.8, e['title'], ha='center', va='center',
+            fontsize=10, fontweight='bold', color=e['color'])
+    ax.text(e['x'], 2.2, e['desc'], ha='center', va='center',
+            fontsize=9, family='monospace', color='#555', linespacing=1.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 命令与查询分离 | Anweisung und Abfrage trennen
+
+函数要么**执行操作 (Command)**，要么**返回信息 (Query)**，不应两者兼做。
+
+```java
+// 坏：remove 既是 Command 又是 Query
+if (students.remove(student)) {
+    System.out.println("Student removed");
+}
+
+// 好：分离 Query 和 Command
+if (students.contains(student)) {          // Query
+    students.remove(student);               // Command
+    System.out.println("Student removed");
+}
+```
+
+# 对象与数据结构 | Objekte und Datenstrukturen
+
+::: {.callout-tip}
+## 推荐阅读 (Lesestoff)
+Robert C. Martin: *Clean Code*，第 6 章 (Kapitel 6)
+:::
+
+## 对象 vs. 数据结构 | Objekt vs. Datenstruktur
+
+```{python}
+#| label: fig-object-vs-data
+#| fig-cap: "对象 vs. 数据结构 | Objekt vs. Datenstruktur"
+
+fig, axes = plt.subplots(1, 2, figsize=(13, 6))
+
+# Data Structure
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('数据结构 | Datenstruktur', fontsize=13, fontweight='bold', color=COLORS['primary'])
+
+data_box = mpatches.FancyBboxPatch((0.5, 4.5), 9.0, 3.0, boxstyle="round,pad=0.2",
+                                    facecolor=COLORS['blue_light'], edgecolor=COLORS['primary'], linewidth=2)
+ax.add_patch(data_box)
+ax.text(5.0, 6.5, 'CourseAttendance', fontsize=12, fontweight='bold', ha='center', color=COLORS['primary'])
+ax.text(5.0, 5.8, 'Status status  (public)', fontsize=9, ha='center', family='monospace', color='#555')
+ax.text(5.0, 5.3, 'Grade grade    (public)', fontsize=9, ha='center', family='monospace', color='#555')
+
+proc_box = mpatches.FancyBboxPatch((0.5, 0.5), 9.0, 3.5, boxstyle="round,pad=0.2",
+                                    facecolor='white', edgecolor=COLORS['neutral'], linewidth=1.5)
+ax.add_patch(proc_box)
+ax.text(5.0, 3.5, 'GradeProcessor (separate)', fontsize=10, fontweight='bold', ha='center', color=COLORS['neutral'])
+ax.text(5.0, 2.7, 'calculateGradeAverage(courses)', fontsize=9, ha='center', family='monospace')
+ax.text(5.0, 2.1, 'printTranscript(student, courses)', fontsize=9, ha='center', family='monospace')
+ax.text(5.0, 1.2, '数据暴露，行为在外部\nDaten offen, Verhalten extern', fontsize=8, ha='center',
+        color=COLORS['primary'], fontstyle='italic')
+
+# Object
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('对象 | Objekt', fontsize=13, fontweight='bold', color=COLORS['clean'])
+
+obj_box = mpatches.FancyBboxPatch((0.5, 0.5), 9.0, 7.0, boxstyle="round,pad=0.2",
+                                   facecolor=COLORS['green_light'], edgecolor=COLORS['clean'], linewidth=2)
+ax.add_patch(obj_box)
+ax.text(5.0, 7.0, 'Transcript', fontsize=12, fontweight='bold', ha='center', color=COLORS['clean'])
+
+hidden = mpatches.FancyBboxPatch((1.0, 4.8), 8.0, 1.8, boxstyle="round,pad=0.1",
+                                  facecolor='white', edgecolor='#ccc', linewidth=1, linestyle='--')
+ax.add_patch(hidden)
+ax.text(5.0, 5.9, 'private (hidden)', fontsize=8, ha='center', color='#999', fontstyle='italic')
+ax.text(5.0, 5.4, 'Student student', fontsize=9, ha='center', family='monospace', color='#999')
+ax.text(5.0, 5.0, 'List<CourseAttendance> courses', fontsize=9, ha='center', family='monospace', color='#999')
+
+ax.text(5.0, 3.9, 'public methods:', fontsize=9, ha='center', fontweight='bold', color=COLORS['clean'])
+ax.text(5.0, 3.2, 'calculateGradeAverage()', fontsize=9, ha='center', family='monospace')
+ax.text(5.0, 2.6, 'printTranscript()', fontsize=9, ha='center', family='monospace')
+ax.text(5.0, 1.5, '数据隐藏，行为在内部\nDaten verborgen, Verhalten intern', fontsize=8, ha='center',
+        color=COLORS['clean'], fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+## 迪米特法则 | Law of Demeter
+
+::: {.callout-warning}
+## "不要和陌生人说话" — "Don't talk to strangers"
+
+一个对象**只应调用**以下对象的方法：自身 (`this`)、参数对象、自己创建的对象、直接成员变量。
+
+**避免**：`object.getX().getY().getZ()` 这种链式调用。
+:::
+
+```{python}
+#| label: fig-law-of-demeter
+#| fig-cap: "迪米特法则：违反 vs. 解决方案 | Law of Demeter: Verletzung vs. Lösungen"
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 6))
+
+# Violation
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('违反\nVerletzung', fontsize=12, fontweight='bold', color=COLORS['danger'])
+
+chain = ['EnrollmentService', 'Course', 'Department', 'Secretary', 'Contact']
+chain_colors = [COLORS['danger'], '#E67E22', '#F39C12', '#F1C40F', '#E74C3C']
+for i, (name, c) in enumerate(zip(chain, chain_colors)):
+    y = 7.5 - i * 1.6
+    box = mpatches.FancyBboxPatch((1.5, y - 0.4), 7.0, 0.9,
+                                   boxstyle="round,pad=0.1", facecolor='white',
+                                   edgecolor=c, linewidth=2)
+    ax.add_patch(box)
+    ax.text(5.0, y, name, ha='center', va='center', fontsize=9, fontweight='bold', color=c)
+    if i < len(chain) - 1:
+        ax.annotate('', xy=(5.0, y - 0.5), xytext=(5.0, y - 1.1),
+                     arrowprops=dict(arrowstyle='->', color='#999', lw=1.5))
+        method = ['getDepartment()', 'getSecretary()', 'getContact()', 'getEmail()'][i]
+        ax.text(8.8, y - 0.8, method, fontsize=7, family='monospace', color='#999')
+
+ax.text(5.0, 0.5, 'course.getDepartment()\n  .getSecretary()\n  .getContact()\n  .getEmail()',
+        ha='center', fontsize=7.5, family='monospace', color=COLORS['danger'])
+
+# Solution A
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('方案 A：直接传递\nLösung A: Direkte Ref.', fontsize=12, fontweight='bold', color=COLORS['primary'])
+
+for i, (name, y) in enumerate([('EnrollmentService', 7.0), ('Contact', 4.5)]):
+    box = mpatches.FancyBboxPatch((2.0, y - 0.5), 6.0, 1.0,
+                                   boxstyle="round,pad=0.1", facecolor=COLORS['blue_light'],
+                                   edgecolor=COLORS['primary'], linewidth=2)
+    ax.add_patch(box)
+    ax.text(5.0, y, name, ha='center', va='center', fontsize=10, fontweight='bold', color=COLORS['primary'])
+
+ax.annotate('', xy=(5.0, 5.0), xytext=(5.0, 6.4),
+             arrowprops=dict(arrowstyle='->', color=COLORS['primary'], lw=2.5))
+ax.text(7.5, 5.7, 'getEmail()', fontsize=9, family='monospace', color=COLORS['primary'])
+
+ax.text(5.0, 2.5, 'enrollStudent(student,\n  course, secretaryContact)',
+        ha='center', fontsize=8.5, family='monospace', color='#555')
+ax.text(5.0, 1.3, 'Caller beschafft Contact', ha='center', fontsize=9,
+        color=COLORS['primary'], fontstyle='italic')
+
+# Solution B
+ax = axes[2]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('方案 B：Tell, Don\'t Ask\nLösung B: Tell, Don\'t Ask',
+             fontsize=12, fontweight='bold', color=COLORS['clean'])
+
+tell_chain = [
+    ('EnrollmentService', 7.5),
+    ('Course', 5.8),
+    ('Department', 4.1),
+    ('Secretary', 2.4),
+]
+for name, y in tell_chain:
+    box = mpatches.FancyBboxPatch((2.0, y - 0.4), 6.0, 0.9,
+                                   boxstyle="round,pad=0.1", facecolor=COLORS['green_light'],
+                                   edgecolor=COLORS['clean'], linewidth=2)
+    ax.add_patch(box)
+    ax.text(5.0, y, name, ha='center', va='center', fontsize=9, fontweight='bold', color=COLORS['clean'])
+
+methods_b = ['sendEnrollmentNotification(s)', 'notifyOfEnrollment(s)', 'sendNotification(s)']
+for i in range(3):
+    y_start = tell_chain[i][1] - 0.5
+    y_end = tell_chain[i + 1][1] + 0.55
+    ax.annotate('', xy=(5.0, y_end), xytext=(5.0, y_start),
+                 arrowprops=dict(arrowstyle='->', color=COLORS['clean'], lw=1.5))
+    ax.text(8.5, (y_start + y_end) / 2, methods_b[i], fontsize=7, family='monospace', color=COLORS['clean'])
+
+ax.text(5.0, 1.2, '每层只知道直接伙伴\nJede Schicht kennt nur Freunde',
+        ha='center', fontsize=9, color=COLORS['clean'], fontstyle='italic')
+
+plt.tight_layout()
+plt.show()
+```
+
+# 类 | Klassen
+
+::: {.callout-tip}
+## 推荐阅读 (Lesestoff)
+Robert C. Martin: *Clean Code*，第 10 章 (Kapitel 10)
+:::
+
+## 单一职责原则 | Single-Responsibility Principle (SRP)
+
+一个类只应有**一个变化的原因** (**ein Grund zur Änderung**)。"变化原因"指一个角色 (Aktor/Stakeholder) 向系统提出新需求。
+
+```{python}
+#| label: fig-srp
+#| fig-cap: "SRP：一个类承担三种职责 vs. 职责分离 | SRP: Drei Verantwortungen vs. Getrennt"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+# Bad: single class, many responsibilities
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('违反 SRP\nSRP-Verletzung', fontsize=13, fontweight='bold', color=COLORS['danger'])
+
+big_box = mpatches.FancyBboxPatch((1.0, 1.0), 8.0, 7.0, boxstyle="round,pad=0.2",
+                                   facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2.5)
+ax.add_patch(big_box)
+ax.text(5.0, 7.5, 'Employee', fontsize=13, fontweight='bold', ha='center', color=COLORS['danger'])
+
+methods = [
+    ('calculatePay()', 'Tarifvertrag', '#E74C3C', 6.2),
+    ('generateReport()', 'Personal', '#E67E22', 4.5),
+    ('save()', 'Datenbank', '#8E44AD', 2.8),
+]
+for name, actor, color, y in methods:
+    m_box = mpatches.FancyBboxPatch((1.5, y - 0.5), 7.0, 1.2, boxstyle="round,pad=0.1",
+                                     facecolor='white', edgecolor=color, linewidth=1.5)
+    ax.add_patch(m_box)
+    ax.text(3.5, y, name, fontsize=9, va='center', family='monospace', color=color)
+    ax.text(8.0, y, actor, fontsize=8, va='center', ha='right', color='#888', fontstyle='italic')
+
+# Good: separated
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('遵守 SRP\nSRP-Konform', fontsize=13, fontweight='bold', color=COLORS['clean'])
+
+classes = [
+    ('Employee (record)', 'id, name, salary', '#2E86AB', 7.5),
+    ('PayrollCalculator', 'calculatePay(e)', '#27AE60', 5.5),
+    ('Reporter', 'generateReport(e)', '#E67E22', 3.5),
+    ('Repository', 'save(e)', '#8E44AD', 1.5),
+]
+for cls_name, method, color, y in classes:
+    box = mpatches.FancyBboxPatch((1.0, y - 0.5), 8.0, 1.2, boxstyle="round,pad=0.1",
+                                   facecolor=COLORS['green_light'], edgecolor=color, linewidth=2)
+    ax.add_patch(box)
+    ax.text(2.0, y, cls_name, fontsize=9, va='center', fontweight='bold', color=color)
+    ax.text(8.5, y, method, fontsize=8, va='center', ha='right', family='monospace', color='#555')
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-warning}
+## 注意：少代码 ≠ 好设计 (Wenig Code ≠ Gutes Design)
+
+**内聚性高** (hohe Kohäsion) 的类才是好的。不要把一个逻辑上完整的 `Course` 类拆成 `CourseIdentification`、`CourseMetadata`、`CourseSettings`、`CoursePricing` 四个碎片——这是**过度拆分**。
+:::
+
+## 内聚与耦合 | Kohäsion und Kopplung
+
+```{python}
+#| label: fig-cohesion-coupling
+#| fig-cap: "内聚与耦合 | Kohäsion und Kopplung"
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+# Cohesion
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('内聚 (Kohäsion)\n类内元素的关联度', fontsize=12, fontweight='bold', color=COLORS['clean'])
+
+# High cohesion
+high_box = mpatches.FancyBboxPatch((0.5, 4.2), 4.0, 3.2, boxstyle="round,pad=0.15",
+                                    facecolor=COLORS['green_light'], edgecolor=COLORS['clean'], linewidth=2)
+ax.add_patch(high_box)
+ax.text(2.5, 7.0, 'High', fontsize=10, fontweight='bold', ha='center', color=COLORS['clean'])
+for i, pos in enumerate([(1.5, 5.8), (3.5, 5.8), (2.5, 5.0)]):
+    circle = plt.Circle(pos, 0.35, facecolor=COLORS['clean'], alpha=0.5)
+    ax.add_patch(circle)
+# draw connections
+for p1, p2 in [((1.5, 5.8), (3.5, 5.8)), ((1.5, 5.8), (2.5, 5.0)), ((3.5, 5.8), (2.5, 5.0))]:
+    ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color=COLORS['clean'], lw=2, alpha=0.6)
+
+# Low cohesion
+low_box = mpatches.FancyBboxPatch((5.5, 4.2), 4.0, 3.2, boxstyle="round,pad=0.15",
+                                   facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(low_box)
+ax.text(7.5, 7.0, 'Low', fontsize=10, fontweight='bold', ha='center', color=COLORS['danger'])
+for pos in [(6.5, 6.0), (8.5, 6.0), (7.5, 4.8)]:
+    circle = plt.Circle(pos, 0.35, facecolor=COLORS['danger'], alpha=0.5)
+    ax.add_patch(circle)
+
+ax.text(2.5, 1.5, '目标：尽可能高\nSollte hoch sein', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['clean'])
+
+# Coupling
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('耦合 (Kopplung)\n类间的依赖程度', fontsize=12, fontweight='bold', color=COLORS['danger'])
+
+# Tight coupling
+positions_left = [(1.5, 6.5), (3.5, 6.5), (1.5, 5.0), (3.5, 5.0)]
+for pos in positions_left:
+    box = mpatches.FancyBboxPatch((pos[0] - 0.4, pos[1] - 0.3), 0.8, 0.6,
+                                   boxstyle="round,pad=0.05", facecolor=COLORS['red_light'],
+                                   edgecolor=COLORS['danger'], linewidth=1.5)
+    ax.add_patch(box)
+for p1 in positions_left:
+    for p2 in positions_left:
+        if p1 != p2:
+            ax.plot([p1[0], p2[0]], [p1[1], p2[1]], color=COLORS['danger'], lw=1.5, alpha=0.4)
+ax.text(2.5, 4.2, 'Tight', fontsize=9, ha='center', fontweight='bold', color=COLORS['danger'])
+
+# Loose coupling
+positions_right = [(6.5, 6.5), (8.5, 6.5), (6.5, 5.0), (8.5, 5.0)]
+for pos in positions_right:
+    box = mpatches.FancyBboxPatch((pos[0] - 0.4, pos[1] - 0.3), 0.8, 0.6,
+                                   boxstyle="round,pad=0.05", facecolor=COLORS['green_light'],
+                                   edgecolor=COLORS['clean'], linewidth=1.5)
+    ax.add_patch(box)
+ax.plot([6.5, 8.5], [6.5, 6.5], color=COLORS['clean'], lw=1.5, alpha=0.5)
+ax.plot([6.5, 6.5], [5.0, 6.5], color=COLORS['clean'], lw=1.5, alpha=0.5)
+ax.text(7.5, 4.2, 'Loose', fontsize=9, ha='center', fontweight='bold', color=COLORS['clean'])
+
+ax.text(5.0, 1.5, '目标：尽可能低\nSollte gering sein', ha='center', fontsize=10,
+        fontweight='bold', color=COLORS['clean'])
+
+plt.tight_layout()
+plt.show()
+```
+
+## 依赖注入 | Dependency Injection (IoC)
+
+```{python}
+#| label: fig-dependency-injection
+#| fig-cap: "紧耦合 vs. 依赖注入 | Tight Coupling vs. Dependency Injection"
+
+fig, axes = plt.subplots(1, 3, figsize=(16, 6))
+
+# Tight coupling
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('紧耦合\nTight Coupling', fontsize=12, fontweight='bold', color=COLORS['danger'])
+
+svc_box = mpatches.FancyBboxPatch((1.0, 5.0), 8.0, 2.2, boxstyle="round,pad=0.15",
+                                   facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(svc_box)
+ax.text(5.0, 6.5, 'StudentService', fontsize=11, fontweight='bold', ha='center', color=COLORS['danger'])
+ax.text(5.0, 5.7, 'new TrieStudentDatabase()', fontsize=8.5, ha='center', family='monospace', color='#555')
+
+db_box = mpatches.FancyBboxPatch((1.5, 1.5), 7.0, 2.0, boxstyle="round,pad=0.15",
+                                  facecolor='white', edgecolor=COLORS['danger'], linewidth=2)
+ax.add_patch(db_box)
+ax.text(5.0, 2.5, 'TrieStudentDatabase', fontsize=10, ha='center', color=COLORS['danger'])
+
+ax.annotate('', xy=(5.0, 3.6), xytext=(5.0, 4.9),
+             arrowprops=dict(arrowstyle='->', color=COLORS['danger'], lw=2.5))
+ax.text(7.5, 4.2, 'creates', fontsize=9, color=COLORS['danger'], fontstyle='italic')
+ax.text(5.0, 0.7, 'Not testable!', fontsize=10, ha='center',
+        fontweight='bold', color=COLORS['danger'])
+
+# Dependency Injection
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('依赖注入\nDependency Injection', fontsize=12, fontweight='bold', color=COLORS['clean'])
+
+svc_box2 = mpatches.FancyBboxPatch((1.0, 5.0), 8.0, 2.2, boxstyle="round,pad=0.15",
+                                    facecolor=COLORS['green_light'], edgecolor=COLORS['clean'], linewidth=2)
+ax.add_patch(svc_box2)
+ax.text(5.0, 6.5, 'StudentService', fontsize=11, fontweight='bold', ha='center', color=COLORS['clean'])
+ax.text(5.0, 5.7, 'StudentDatabase db  (Interface!)', fontsize=8.5, ha='center',
+        family='monospace', color='#555')
+
+intf_box = mpatches.FancyBboxPatch((1.5, 2.8), 7.0, 1.5, boxstyle="round,pad=0.1",
+                                    facecolor=COLORS['yellow_light'], edgecolor=COLORS['highlight'],
+                                    linewidth=2, linestyle='--')
+ax.add_patch(intf_box)
+ax.text(5.0, 3.55, '<<interface>> StudentDatabase', fontsize=9, ha='center',
+        fontweight='bold', color=COLORS['highlight'])
+
+ax.annotate('', xy=(5.0, 4.35), xytext=(5.0, 4.95),
+             arrowprops=dict(arrowstyle='->', color=COLORS['clean'], lw=2, linestyle='--'))
+
+db_impl = mpatches.FancyBboxPatch((1.5, 0.5), 7.0, 1.5, boxstyle="round,pad=0.1",
+                                   facecolor='white', edgecolor=COLORS['clean'], linewidth=1.5)
+ax.add_patch(db_impl)
+ax.text(5.0, 1.25, 'TrieStudentDatabase (impl)', fontsize=9, ha='center', color=COLORS['clean'])
+ax.annotate('', xy=(5.0, 2.75), xytext=(5.0, 2.05),
+             arrowprops=dict(arrowstyle='->', color=COLORS['clean'], lw=1.5))
+
+# Test with Mock
+ax = axes[2]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 8)
+ax.axis('off')
+ax.set_title('Mock 测试\nTest mit Mock', fontsize=12, fontweight='bold', color=COLORS['purple'])
+
+test_box = mpatches.FancyBboxPatch((1.0, 5.0), 8.0, 2.2, boxstyle="round,pad=0.15",
+                                    facecolor='#F3E5F5', edgecolor=COLORS['purple'], linewidth=2)
+ax.add_patch(test_box)
+ax.text(5.0, 6.5, 'StudentService', fontsize=11, fontweight='bold', ha='center', color=COLORS['purple'])
+ax.text(5.0, 5.7, 'StudentDatabase db', fontsize=8.5, ha='center', family='monospace', color='#555')
+
+mock_box = mpatches.FancyBboxPatch((1.5, 1.5), 7.0, 2.5, boxstyle="round,pad=0.15",
+                                    facecolor='#F3E5F5', edgecolor=COLORS['purple'], linewidth=2, linestyle='--')
+ax.add_patch(mock_box)
+ax.text(5.0, 3.4, 'TestStudentDatabase', fontsize=10, fontweight='bold', ha='center', color=COLORS['purple'])
+ax.text(5.0, 2.5, 'lastAddedStudent = null', fontsize=8, ha='center', family='monospace', color='#888')
+
+ax.annotate('', xy=(5.0, 4.05), xytext=(5.0, 4.95),
+             arrowprops=dict(arrowstyle='->', color=COLORS['purple'], lw=2, linestyle='--'))
+ax.text(7.5, 4.5, 'inject', fontsize=9, color=COLORS['purple'], fontstyle='italic')
+ax.text(5.0, 0.7, 'No real DB needed!', fontsize=10, ha='center',
+        fontweight='bold', color=COLORS['purple'])
+
+plt.tight_layout()
+plt.show()
+```
+
+# 格式化 | Formatierung
+
+::: {.callout-tip}
+## 推荐阅读 (Lesestoff)
+Robert C. Martin: *Clean Code*，第 5 章 (Kapitel 5)
+:::
+
+## Chunking 与 Beacons
+
+人类阅读时不是逐字处理，而是识别**有意义的组块 (Chunks)**。短期记忆容量约 **7 ± 2 个 Chunks**。
+
+**Beacons** 是代码中的视觉锚点，帮助有经验的程序员快速定位——如循环结构、变量初始化、return 语句等。
+
+```{python}
+#| label: fig-chunking-beacons
+#| fig-cap: "Chunking 与 Beacons | Chunking und Beacons"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+
+# Bad formatting
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('没有格式化 — 无法 Chunking\nOhne Formatierung', fontsize=12, fontweight='bold', color=COLORS['danger'])
+
+bad_code = [
+    'public int findMax(int[] numbers){',
+    'int max=numbers[0];',
+    'for(int i=1;i<numbers.length;i++){',
+    'if(numbers[i]>max){',
+    'max=numbers[i];}}',
+    'return max;}',
+]
+for i, line in enumerate(bad_code):
+    ax.text(0.5, 8.5 - i * 1.0, line, fontsize=9, family='monospace', color='#333')
+
+ax.text(5.0, 1.5, 'No chunks visible!\nNo beacons identifiable!',
+        ha='center', fontsize=11, fontweight='bold', color=COLORS['danger'])
+
+# Good formatting with beacons
+ax = axes[1]
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('有格式化 — Beacons 清晰\nMit Formatierung', fontsize=12, fontweight='bold', color=COLORS['clean'])
+
+good_lines = [
+    ('public int findMax(int[] numbers) {', None),
+    ('    int max = numbers[0];', 'Beacon: Init'),
+    ('', None),
+    ('    for (int i = 1; i < numbers.length; i++) {', 'Beacon: Loop'),
+    ('        if (numbers[i] > max) {', 'Beacon: Cond.'),
+    ('            max = numbers[i];', None),
+    ('        }', None),
+    ('    }', None),
+    ('', None),
+    ('    return max;', 'Beacon: Return'),
+    ('}', None),
+]
+
+for i, (line, beacon) in enumerate(good_lines):
+    y = 9.0 - i * 0.72
+    color = '#333'
+    if beacon:
+        highlight = mpatches.FancyBboxPatch((0.3, y - 0.25), 7.5, 0.55,
+                                             boxstyle="round,pad=0.05",
+                                             facecolor=COLORS['green_light'], alpha=0.4,
+                                             edgecolor='none')
+        ax.add_patch(highlight)
+        ax.text(8.5, y, beacon, fontsize=7.5, color=COLORS['clean'],
+                fontweight='bold', fontstyle='italic')
+    ax.text(0.5, y, line, fontsize=8.5, family='monospace', color=color)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 格式化核心原则 | Grundregeln der Formatierung
+
+```{python}
+#| label: fig-formatting-rules
+#| fig-cap: "格式化核心原则 | Grundregeln der Formatierung"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('格式化核心原则 | Grundregeln der Formatierung',
+             fontsize=15, fontweight='bold')
+
+categories = [
+    {
+        'title': '垂直格式化\nVertikale Formatierung',
+        'x': 3.5, 'color': COLORS['primary'],
+        'rules': [
+            ('报纸隐喻', 'Zeitungsmetapher:\nWichtiges oben,\nDetails unten'),
+            ('概念间空行', 'Leerzeilen zwischen\nKonzepten'),
+            ('相关概念靠近', 'Verwandte Konzepte\nvertikal nah'),
+            ('小的类和函数', 'Kleine Klassen\nund Funktionen'),
+        ]
+    },
+    {
+        'title': '水平格式化\nHorizontale Formatierung',
+        'x': 10.5, 'color': COLORS['secondary'],
+        'rules': [
+            ('行长 80-100', 'Max 80-100\nZeichen pro Zeile'),
+            ('空格增强可读性', 'Leerzeichen für\nLesbarkeit'),
+            ('缩进层次清晰', 'Einrückung für\nklare Hierarchie'),
+            ('团队规则优先', 'Teamregeln über\npersönl. Präferenz'),
+        ]
+    },
+]
+
+for cat in categories:
+    header = mpatches.FancyBboxPatch(
+        (cat['x'] - 2.8, 8.0), 5.6, 1.3,
+        boxstyle="round,pad=0.15", facecolor=cat['color'], alpha=0.15,
+        edgecolor=cat['color'], linewidth=2.5
+    )
+    ax.add_patch(header)
+    ax.text(cat['x'], 8.65, cat['title'], ha='center', va='center',
+            fontsize=12, fontweight='bold', color=cat['color'])
+
+    for i, (zh, de) in enumerate(cat['rules']):
+        y = 6.8 - i * 1.7
+        rule_box = mpatches.FancyBboxPatch(
+            (cat['x'] - 2.6, y - 0.6), 5.2, 1.3,
+            boxstyle="round,pad=0.1", facecolor='white',
+            edgecolor=cat['color'], linewidth=1.5, alpha=0.8
+        )
+        ax.add_patch(rule_box)
+        ax.text(cat['x'] - 2.3, y + 0.3, zh, fontsize=9, fontweight='bold', color=cat['color'])
+        ax.text(cat['x'] - 2.3, y - 0.2, de, fontsize=7.5, color='#666', linespacing=1.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+## 报纸隐喻 | Die Zeitungsmetapher
+
+代码结构应像报纸文章：**标题 (Name) → 摘要 (高层方法) → 细节 (低层方法)**，从上到下，抽象度递减。
+
+```java
+public class WikiPage {
+    // 标题 → 最高层
+    public String render() { ... }
+
+    // 摘要 → 中间层
+    private String renderHtml() { ... }
+
+    // 细节 → 最底层
+    private void appendTag(String tag) { ... }
+}
+```
+
+## 垂直格式化细节 | Vertikale Formatierung: Details
+
+### 概念间留空行 | Vertikaler Raum zwischen Konzepten
+
+```java
+// 坏 — 没有呼吸空间
+public class Order {
+    private List<Item> items;
+    private double total;
+    public void addItem(Item item) {
+        items.add(item);
+        total += item.getPrice();
+    }
+}
+
+// 好 — 字段与方法之间有空行
+public class Order {
+    private List<Item> items;
+    private double total;
+
+    public void addItem(Item item) {
+        items.add(item);
+        total += item.getPrice();
+    }
+}
+```
+
+### 相关概念垂直靠近 | Verwandte Konzepte vertikal nah
+
+```java
+// 坏 — getter 和 setter 分隔 100 行
+public class WikiPage {
+    private String content;
+    public String getContent() { return content; }
+    public void renderHtml() { /* .. */ }
+    private void utilMethods() { /* .. */ }
+    public void setContent(String content) { this.content = content; } // 离 getContent 太远！
+}
+
+// 好 — getter/setter 在一起
+public class WikiPage {
+    private String content;
+    public void renderHtml() { /* .. */ }
+    private void utilMethods() { /* .. */ }
+    public String getContent() { return content; }
+    public void setContent(String content) { this.content = content; }
+}
+```
+
+### 变量声明靠近使用 | Variablen-Deklarationen nah an Verwendung
+
+```java
+public void processGreekLetters() {
+    int count = 0;                                          // 紧贴循环
+    String[] items = {"alpha", "beta", "gamma"};
+
+    for (String item : items) {
+        count++;
+        String message = "Processing " + item + " (item " + count + ")";  // 在使用处声明
+        System.out.println(message);
+    }
+
+    final String finalMessage;                              // 紧贴 if-else
+    if (count == 0) {
+        finalMessage = "No items processed";
+    } else {
+        finalMessage = "Processed " + count + " items";
+    }
+    System.out.println(finalMessage);
+}
+```
+
+### 调用者在被调用者上方 | Aufrufer über Aufgerufenem
+
+```java
+public class WikiPageResponder {
+    public Response makeResponse(FitNesseContext context, Request request) {
+        String pageName = getPageNameOrDefault(request, "FrontPage");  // 先出现
+        loadPage(pageName, context);
+    }
+
+    private String getPageNameOrDefault(Request request, String defaultPageName) { ... }  // 后出现
+
+    private void loadPage(String resource, FitNesseContext context) { ... }  // 最后
+}
+```
+
+## 水平格式化 | Horizontale Formatierung
+
+**行长**：最多 80-100 字符 (《纽约时报》用 ~60)。
+
+**空格**：用空格分隔不相关的元素，聚合相关的元素：
+
+```java
+// 坏
+int lineSize=line.length();
+totalChars+=lineSize;
+lineWidthHistogram.addLine(lineSize,lineCount);
+
+// 好
+int lineSize = line.length();
+totalChars += lineSize;
+lineWidthHistogram.addLine(lineSize, lineCount);
+```
+
+### Dummy-Scopes — 空块显式化
+
+```java
+// 坏 — 分号在 while 末尾，极易遗漏
+while (lineCount < 3 && (line = reader.readLine()) != null);
+
+// 好 — 空块明确标注
+while (lineCount < 3 && (line = reader.readLine()) != null) {
+    // intentionally empty - skip header lines
+}
+```
+
+## 团队规则 | Teamregeln
+
+::: {.callout-important}
+## Ein Team, ein Stil!
+
+一个团队，一种风格。团队规则优先于个人偏好。使用工具自动化格式化。
+
+**Java**: Google Java Style Guide, Spotless, google-java-format
+
+**Python**: PEP 8, black, ruff
+:::
+
+# 错误处理 | Fehlerbehandlung
+
+::: {.callout-tip}
+## 推荐阅读 (Lesestoff)
+Robert C. Martin: *Clean Code*，第 7 章 (Kapitel 7) + 补充内容
+:::
+
+## 什么是错误？ | Was ist ein Fehler?
+
+```{python}
+#| label: fig-error-types
+#| fig-cap: "两大类错误 | Zwei Fehlerarten"
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 7))
+
+# Programming errors
+ax = axes[0]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('编程错误 (Bugs)\nProgrammierfehler', fontsize=13, fontweight='bold', color=COLORS['danger'])
+
+errors_prog = [
+    ('算法错误', 'Algorithmische Fehler', 'divide(5, 0)'),
+    ('空指针', 'NullPointer-Deref.', 'sayHello(null)'),
+    ('前置条件违反', 'Vorbedingung verletzt', 'put(duplicateStudent)'),
+    ('假设违反', 'Annahme verletzt', 'magicNumber < 0 ?!'),
+]
+for i, (zh, de, code) in enumerate(errors_prog):
+    y = 7.5 - i * 1.7
+    box = mpatches.FancyBboxPatch((0.5, y - 0.5), 9.0, 1.3, boxstyle="round,pad=0.1",
+                                   facecolor=COLORS['red_light'], edgecolor=COLORS['danger'], linewidth=1.5)
+    ax.add_patch(box)
+    ax.text(1.0, y + 0.2, f'{zh} | {de}', fontsize=9, fontweight='bold', color=COLORS['danger'])
+    ax.text(1.0, y - 0.2, code, fontsize=8, family='monospace', color='#555')
+
+# Environment errors
+ax = axes[1]
+ax.set_xlim(0, 10)
+ax.set_ylim(0, 9)
+ax.axis('off')
+ax.set_title('环境错误\nFehler durch Umgebung', fontsize=13, fontweight='bold', color=COLORS['warning'])
+
+errors_env = [
+    ('用户输入无效', 'Ungültige Nutzereingabe', 'parseInt("abc")'),
+    ('网络问题', 'Netzwerkprobleme', 'Connection timeout'),
+    ('权限不足', 'Fehlende Berechtigungen', 'Access denied'),
+    ('文件系统问题', 'Dateisystem-Probleme', 'FileNotFoundException'),
+    ('内存不足', 'Out-of-Memory', 'java.lang.OutOfMemoryError'),
+]
+for i, (zh, de, code) in enumerate(errors_env):
+    y = 7.8 - i * 1.4
+    box = mpatches.FancyBboxPatch((0.5, y - 0.4), 9.0, 1.1, boxstyle="round,pad=0.1",
+                                   facecolor=COLORS['yellow_light'], edgecolor=COLORS['warning'], linewidth=1.5)
+    ax.add_patch(box)
+    ax.text(1.0, y + 0.15, f'{zh} | {de}', fontsize=9, fontweight='bold', color=COLORS['warning'])
+    ax.text(1.0, y - 0.15, code, fontsize=8, family='monospace', color='#555')
+
+plt.tight_layout()
+plt.show()
+```
+
+## 错误通信机制 | Fehler kommunizieren
+
+```{python}
+#| label: fig-error-communication
+#| fig-cap: "返回值 vs. 异常 | Rückgabewerte vs. Exceptions"
+
+fig, ax = plt.subplots(figsize=(14, 5))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 6)
+ax.axis('off')
+ax.set_title('错误通信机制 | Fehler kommunizieren', fontsize=14, fontweight='bold')
+
+mechs = [
+    {'name': 'Return Values', 'langs': 'C, Go, Rust', 'x': 2.5,
+     'color': '#3498DB', 'pro': 'Explicit\ncontrol flow', 'con': 'Easy to\nforget checks'},
+    {'name': 'Checked\nExceptions', 'langs': 'Java', 'x': 7.0,
+     'color': '#E67E22', 'pro': 'Compiler\nenforced', 'con': 'Propagation\noverhead'},
+    {'name': 'Unchecked\nExceptions', 'langs': 'Java, Python, C#', 'x': 11.5,
+     'color': '#8E44AD', 'pro': 'Flexible\ncleaner code', 'con': 'Can be\nforgotten'},
+]
+
+for m in mechs:
+    card = mpatches.FancyBboxPatch((m['x'] - 2.0, 0.3), 4.0, 5.2,
+                                    boxstyle="round,pad=0.2", facecolor='white',
+                                    edgecolor=m['color'], linewidth=2.5)
+    ax.add_patch(card)
+    ax.text(m['x'], 4.9, m['name'], ha='center', va='center',
+            fontsize=11, fontweight='bold', color=m['color'])
+    ax.text(m['x'], 4.0, m['langs'], ha='center', fontsize=9, color='#888')
+
+    # Pro
+    pro_box = mpatches.FancyBboxPatch((m['x'] - 1.7, 2.5), 3.4, 1.1, boxstyle="round,pad=0.05",
+                                       facecolor=COLORS['green_light'], edgecolor='none')
+    ax.add_patch(pro_box)
+    ax.text(m['x'], 3.0, m['pro'], ha='center', va='center', fontsize=8, color=COLORS['clean'])
+
+    # Con
+    con_box = mpatches.FancyBboxPatch((m['x'] - 1.7, 0.7), 3.4, 1.1, boxstyle="round,pad=0.05",
+                                       facecolor=COLORS['red_light'], edgecolor='none')
+    ax.add_patch(con_box)
+    ax.text(m['x'], 1.25, m['con'], ha='center', va='center', fontsize=8, color=COLORS['danger'])
+
+plt.tight_layout()
+plt.show()
+```
+
+## Checked vs. Unchecked Exceptions
+
+### Checked Exceptions (Java 特有)
+
+声明在方法签名上，调用者**必须**处理或继续向上抛出：
+
+```java
+// Java 标准库：BufferedReader
+public class BufferedReader {
+    public String readLine() throws IOException { /* .. */ }
+}
+
+// 调用者选择 1：处理
+private void handlingMethod() {
+    try (BufferedReader reader = new BufferedReader(new FileReader("students.txt"))) {
+        String line = reader.readLine();
+    } catch (IOException e) {
+        // .. handle e ..
+    }
+}
+
+// 调用者选择 2：继续向上抛出
+private void propagatingMethod() throws IOException {
+    try (BufferedReader reader = new BufferedReader(new FileReader("students.txt"))) {
+        String line = reader.readLine();
+    }
+}
+```
+
+::: {.callout-warning}
+## Checked Exception 的传播问题
+
+如果最底层 `loadConfigurationFile()` 抛出 `IOException`，那么整个调用链上每一层都必须声明 `throws IOException`——这**违反了抽象** (Abstraktionsverletzung)。如果将来不再抛出 `IOException`，所有调用者都得修改。
+:::
+
+### Unchecked Exceptions
+
+不需要声明，不需要强制处理（但不处理就会程序崩溃）。通常通过 Javadoc 中的 `@throws` 来文档化。
+
+```java
+/**
+ * @throws NullPointerException if student is null
+ * @throws IllegalStateException if the student has no finished courses
+ */
+public double calculateAverageGrade(Student student) {
+    if (student == null) {
+        throw new NullPointerException("Student cannot be null");
+    }
+    // ...
+}
+```
+
+## 在哪里处理错误？| Wo behandeln?
+
+::: {.callout-important}
+## 原则
+
+**尽量靠近错误源头处理**——但只在**能有意义地处理**的地方处理。
+
+`try` 块内应是一段**假设一切正常**的连贯逻辑。
+:::
+
+## 如何处理错误？| Wie behandeln?
+
+```{python}
+#| label: fig-error-handling
+#| fig-cap: "错误处理策略 | Fehlerbehandlungs-Strategien"
+
+fig, ax = plt.subplots(figsize=(14, 6))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 7)
+ax.axis('off')
+ax.set_title('错误处理策略 | Fehlerbehandlungs-Strategien', fontsize=14, fontweight='bold')
+
+strategies = [
+    {
+        'title': '编程错误\nProgrammierfehler',
+        'action': 'DO NOT CATCH!\nFix the code.',
+        'color': COLORS['danger'],
+        'x': 2.0, 'icon': '🐛'
+    },
+    {
+        'title': '重试\nRetry',
+        'action': 'Exponential\nBackoff',
+        'color': COLORS['primary'],
+        'x': 5.0, 'icon': '🔄'
+    },
+    {
+        'title': '回退\nFallback',
+        'action': 'Default values\nCache → DB → Default',
+        'color': COLORS['warning'],
+        'x': 8.0, 'icon': '🛡️'
+    },
+    {
+        'title': '熔断器\nCircuit Breaker',
+        'action': 'Max attempts\nthen fallback/fail',
+        'color': COLORS['purple'],
+        'x': 11.0, 'icon': '⚡'
+    },
+]
+
+for s in strategies:
+    card = mpatches.FancyBboxPatch(
+        (s['x'] - 1.3, 0.5), 2.6, 5.5,
+        boxstyle="round,pad=0.2", facecolor='white',
+        edgecolor=s['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    ax.text(s['x'], 5.5, s['icon'], ha='center', fontsize=22)
+    ax.text(s['x'], 4.6, s['title'], ha='center', va='center',
+            fontsize=10, fontweight='bold', color=s['color'])
+    ax.text(s['x'], 2.8, s['action'], ha='center', va='center',
+            fontsize=9, color='#555', linespacing=1.5)
+
+# Divider between bug and env errors
+ax.plot([3.5, 3.5], [0.7, 5.8], color='#ccc', lw=2, linestyle='--')
+ax.text(3.5, 6.3, 'Bugs', fontsize=9, ha='right', color=COLORS['danger'], fontweight='bold')
+ax.text(3.6, 6.3, 'Environment', fontsize=9, ha='left', color=COLORS['primary'], fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+```
+
+### 重试机制示例 | Retry-Mechanismus
+
+```python
+# 用户输入重试
+while True:
+    try:
+        age_input = input("Student age: ")
+        age = int(age_input)
+        if age < 12 or age > 100:
+            print("Age must be between 16 and 100.")
+            continue
+        return age
+    except ValueError:
+        print(f"'{age_input}' is not a valid number.")
+
+# 网络请求重试 (Exponential Backoff)
+import time
+attempts = 0
+while True:
+    try:
+        attempts += 1
+        return request_data_from_network(..)
+    except TimeoutError:
+        wait_time = 2 ** attempts
+        print(f"Timeout - retry in {wait_time}s")
+        time.sleep(wait_time)
+    except ConnectionError as e:
+        raise RuntimeError(f"Network error: {e}")
+```
+
+### 回退机制示例 | Fallback-Mechanismus
+
+```python
+def get_course_capacity(course_id):
+    try:
+        return cache.get_capacity(course_id)       # 先试缓存
+    except CacheConnectionError:
+        pass
+    try:
+        return database.get_capacity(course_id)     # 再试数据库
+    except DatabaseConnectionError:
+        pass
+    return DEFAULT_CAPACITY                          # 最后用默认值
+```
+
+### 熔断器示例 | Circuit-Breaker
+
+```python
+attempts = 0
+while attempts < MAX_ATTEMPTS:
+    try:
+        attempts += 1
+        return request_data_from_network(..)
+    except TimeoutError:
+        wait_time = 2 ** attempts
+        print(f"Timeout - retry in {wait_time}s")
+        time.sleep(wait_time)
+    except ConnectionError as e:
+        raise RuntimeError(f"Network error: {e}")
+
+return fallback(..)  # or raise exception
+```
+
+## 最佳实践 | Best Practices
+
+```{python}
+#| label: fig-best-practices
+#| fig-cap: "错误处理最佳实践 | Best Practices der Fehlerbehandlung"
+
+fig, ax = plt.subplots(figsize=(14, 8))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('错误处理最佳实践 | Best Practices', fontsize=15, fontweight='bold')
+
+practices = [
+    {
+        'zh': '封装错误类', 'de': 'Fehlerklassen kapseln',
+        'bad': 'catch (IOException e) { ... }\ncatch (InterruptedException e) { ... }',
+        'good': 'catch → Output.fatalError("...")',
+        'y': 8.5
+    },
+    {
+        'zh': '传递上下文', 'de': 'Kontext kommunizieren',
+        'bad': 'throw new ApplicationException()',
+        'good': 'throw new AppException(\n  "Failed to connect to " + url, e)',
+        'y': 6.5
+    },
+    {
+        'zh': '不返回 null', 'de': 'Keine Null zurückgeben',
+        'bad': 'return student;  // could be null',
+        'good': 'return Optional.ofNullable(student);',
+        'y': 4.5
+    },
+    {
+        'zh': '不传递 null', 'de': 'Keine Null übergeben',
+        'bad': 'registerStudent(null, "12345")',
+        'good': 'Objects.requireNonNull(name);',
+        'y': 2.5
+    },
+    {
+        'zh': '好的异常命名', 'de': 'Gute Exception-Namen',
+        'bad': 'FileNotFoundException',
+        'good': 'FileNotFound, ConnectionFailure',
+        'y': 0.5
+    },
+]
+
+for p in practices:
+    # Label
+    label_box = mpatches.FancyBboxPatch((0.2, p['y'] - 0.5), 3.2, 1.2,
+                                         boxstyle="round,pad=0.1", facecolor=COLORS['blue_light'],
+                                         edgecolor=COLORS['primary'], linewidth=1.5)
+    ax.add_patch(label_box)
+    ax.text(1.8, p['y'] + 0.2, p['zh'], ha='center', fontsize=9, fontweight='bold', color=COLORS['primary'])
+    ax.text(1.8, p['y'] - 0.15, p['de'], ha='center', fontsize=7.5, color='#666')
+
+    # Bad
+    bad_box = mpatches.FancyBboxPatch((3.8, p['y'] - 0.5), 4.5, 1.2,
+                                       boxstyle="round,pad=0.1", facecolor=COLORS['red_light'],
+                                       edgecolor=COLORS['danger'], linewidth=1)
+    ax.add_patch(bad_box)
+    ax.text(4.0, p['y'], '✗ ' + p['bad'], fontsize=7, family='monospace',
+            color=COLORS['danger'], va='center', linespacing=1.4)
+
+    # Good
+    good_box = mpatches.FancyBboxPatch((8.7, p['y'] - 0.5), 5.0, 1.2,
+                                        boxstyle="round,pad=0.1", facecolor=COLORS['green_light'],
+                                        edgecolor=COLORS['clean'], linewidth=1)
+    ax.add_patch(good_box)
+    ax.text(8.9, p['y'], '✓ ' + p['good'], fontsize=7, family='monospace',
+            color=COLORS['clean'], va='center', linespacing=1.4)
+
+plt.tight_layout()
+plt.show()
+```
+
+### 不返回 null | Keine Null zurückgeben
+
+```java
+// 坏
+public Student getStudentById(String studentId) {
+    Student student = studentDatabase.get(studentId);  // 可能是 null
+    return student;
+}
+
+// 好：Optional
+public Optional<Student> getStudentById(String studentId) {
+    Student student = studentDatabase.get(studentId);
+    return Optional.ofNullable(student);
+}
+
+// 好：抛出异常
+public Student getStudentById(String studentId) {
+    Student student = studentDatabase.get(studentId);
+    if (student == null) {
+        throw new StudentNotFound("Student with ID " + studentId + " not found.");
+    }
+    return student;
+}
+```
+
+### 不传递 null | Keine Null übergeben
+
+```java
+public void registerStudent(String name, String matriculationNumber) {
+    Objects.requireNonNull(name);
+    Objects.requireNonNull(matriculationNumber);
+    // proceed with registration
+}
+```
+
+### 异常命名 | Benennung von Exceptions
+
+::: {.callout-warning}
+## 去掉 "Exception" 后缀！
+
+Java 标准库的命名是**反面教材**：`IllegalArgumentException`、`FileNotFoundException` 中的 `Exception` 是多余的上下文。
+
+**最佳实践**：`ConnectionFailure`、`InvalidUserInput`、`DataNotFound`、`DatabaseError`
+:::
+
+# 总结 | Zusammenfassung
+
+```{python}
+#| label: fig-summary
+#| fig-cap: "Clean Code II 总结 | Zusammenfassung Clean Code II"
+
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 10)
+ax.axis('off')
+ax.set_title('Clean Code II — 总结 | Zusammenfassung', fontsize=16, fontweight='bold')
+
+sections = [
+    {
+        'title': '函数\nFunktionen',
+        'points': 'Abstraktionsebenen\nKeine Seiteneffekte\nCommand/Query trennen',
+        'color': '#2E86AB', 'x': 2.0, 'y': 7.5
+    },
+    {
+        'title': '对象 vs. 数据结构\nObjekte vs. Daten',
+        'points': 'Daten offen vs. verborgen\nLaw of Demeter\nTell, Don\'t Ask',
+        'color': '#A23B72', 'x': 6.0, 'y': 7.5
+    },
+    {
+        'title': '类\nKlassen',
+        'points': 'SRP\nKohäsion hoch\nKopplung niedrig\nDependency Injection',
+        'color': '#E8871E', 'x': 10.0, 'y': 7.5
+    },
+    {
+        'title': '格式化\nFormatierung',
+        'points': 'Zeitungsmetapher\nChunking & Beacons\nTeamregeln',
+        'color': '#2E8B57', 'x': 3.5, 'y': 3.0
+    },
+    {
+        'title': '错误处理\nFehlerbehandlung',
+        'points': 'Bugs vs. Umgebung\nChecked vs. Unchecked\nRetry / Fallback\nKein null',
+        'color': '#8E44AD', 'x': 8.5, 'y': 3.0
+    },
+]
+
+for s in sections:
+    card = mpatches.FancyBboxPatch(
+        (s['x'] - 1.8, s['y'] - 2.0), 3.6, 3.8,
+        boxstyle="round,pad=0.2", facecolor='white',
+        edgecolor=s['color'], linewidth=2.5
+    )
+    ax.add_patch(card)
+    ax.text(s['x'], s['y'] + 1.3, s['title'], ha='center', va='center',
+            fontsize=11, fontweight='bold', color=s['color'])
+    ax.text(s['x'], s['y'] - 0.5, s['points'], ha='center', va='center',
+            fontsize=8, color='#555', linespacing=1.6)
+
+plt.tight_layout()
+plt.show()
+```
+
+::: {.callout-note}
+## Clean Code 总原则 (Gesamtprinzipien)
+
+1. **命名**：有意义、一致、可搜索
+2. **注释**：代码 > 注释，但好注释很有价值
+3. **函数**：保持单一抽象层次，无副作用
+4. **类**：单一职责，高内聚低耦合
+5. **格式化**：团队统一，工具自动化
+6. **错误处理**：Bug 别捕获，环境错误合理处理
+:::
+
+::: {.callout-tip}
+## 下周预告 | Ausblick nächste Woche
+
+**主题**：Scrum — 敏捷项目管理
+
+**阅读作业**（11 月 19 日前）：
+
+- *Software Engineering*，Chapter 3–3.3 (19 pages)：Agile Methoden、Techniken der agilen Entwicklung、Agiles Projektmanagement
+- Scrum Master 视频
+:::
