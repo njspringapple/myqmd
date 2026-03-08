@@ -1,0 +1,1675 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.27">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Softwaretechnik WS 25/26">
+<meta name="dcterms.date" content="2026-03-08">
+
+<title>第十章：Requirements Engineering</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="swt-09_files/libs/clipboard/clipboard.min.js"></script>
+<script src="swt-09_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="swt-09_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="swt-09_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="swt-09_files/libs/quarto-html/popper.min.js"></script>
+<script src="swt-09_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="swt-09_files/libs/quarto-html/anchor.min.js"></script>
+<link href="swt-09_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="swt-09_files/libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="swt-09_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="swt-09_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="swt-09_files/libs/bootstrap/bootstrap-4d7f0bce1131f3e5f9547cd857cfbfc8.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<style>html{ scroll-behavior: smooth; }</style>
+
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">章节导航 | Kapitelnavigation</h2>
+   
+  <ul>
+  <li><a href="#回顾与本章目标-recap-und-ziel" id="toc-回顾与本章目标-recap-und-ziel" class="nav-link active" data-scroll-target="#回顾与本章目标-recap-und-ziel"><span class="header-section-number">1</span> 回顾与本章目标 | Recap und Ziel</a></li>
+  <li><a href="#recap需求工程基础-grundlagen" id="toc-recap需求工程基础-grundlagen" class="nav-link" data-scroll-target="#recap需求工程基础-grundlagen"><span class="header-section-number">2</span> Recap：需求工程基础 | Grundlagen</a>
+  <ul class="collapse">
+  <li><a href="#在流程中的定位-einordnung-im-prozess" id="toc-在流程中的定位-einordnung-im-prozess" class="nav-link" data-scroll-target="#在流程中的定位-einordnung-im-prozess"><span class="header-section-number">2.1</span> 在流程中的定位 | Einordnung im Prozess</a></li>
+  <li><a href="#需求分类-anforderungskategorien" id="toc-需求分类-anforderungskategorien" class="nav-link" data-scroll-target="#需求分类-anforderungskategorien"><span class="header-section-number">2.2</span> 需求分类 | Anforderungskategorien</a></li>
+  <li><a href="#歧义性需求-mehrdeutige-anforderungen" id="toc-歧义性需求-mehrdeutige-anforderungen" class="nav-link" data-scroll-target="#歧义性需求-mehrdeutige-anforderungen"><span class="header-section-number">2.3</span> 歧义性需求 | Mehrdeutige Anforderungen</a>
+  <ul class="collapse">
+  <li><a href="#案例分析-fallanalyse" id="toc-案例分析-fallanalyse" class="nav-link" data-scroll-target="#案例分析-fallanalyse"><span class="header-section-number">2.3.1</span> 案例分析 | Fallanalyse</a></li>
+  <li><a href="#量化主观需求-subjektive-anforderungen-quantifizieren" id="toc-量化主观需求-subjektive-anforderungen-quantifizieren" class="nav-link" data-scroll-target="#量化主观需求-subjektive-anforderungen-quantifizieren"><span class="header-section-number">2.3.2</span> 量化主观需求 | Subjektive Anforderungen quantifizieren</a></li>
+  </ul></li>
+  <li><a href="#需求定义中的困难-schwierigkeiten" id="toc-需求定义中的困难-schwierigkeiten" class="nav-link" data-scroll-target="#需求定义中的困难-schwierigkeiten"><span class="header-section-number">2.4</span> 需求定义中的困难 | Schwierigkeiten</a></li>
+  <li><a href="#需求获取技术-techniken-zur-anforderungserhebung" id="toc-需求获取技术-techniken-zur-anforderungserhebung" class="nav-link" data-scroll-target="#需求获取技术-techniken-zur-anforderungserhebung"><span class="header-section-number">2.5</span> 需求获取技术 | Techniken zur Anforderungserhebung</a></li>
+  <li><a href="#user-stories-用户故事" id="toc-user-stories-用户故事" class="nav-link" data-scroll-target="#user-stories-用户故事"><span class="header-section-number">2.6</span> User Stories | 用户故事</a></li>
+  </ul></li>
+  <li><a href="#需求规格说明-anforderungsspezifikation-kapitel-4.4" id="toc-需求规格说明-anforderungsspezifikation-kapitel-4.4" class="nav-link" data-scroll-target="#需求规格说明-anforderungsspezifikation-kapitel-4.4"><span class="header-section-number">3</span> 需求规格说明 | Anforderungsspezifikation (Kapitel 4.4)</a>
+  <ul class="collapse">
+  <li><a href="#需求的详细程度-detailstufen-von-anforderungen" id="toc-需求的详细程度-detailstufen-von-anforderungen" class="nav-link" data-scroll-target="#需求的详细程度-detailstufen-von-anforderungen"><span class="header-section-number">3.1</span> 需求的详细程度 | Detailstufen von Anforderungen</a></li>
+  <li><a href="#需求规格说明的表示法-notationen" id="toc-需求规格说明的表示法-notationen" class="nav-link" data-scroll-target="#需求规格说明的表示法-notationen"><span class="header-section-number">3.2</span> 需求规格说明的表示法 | Notationen</a>
+  <ul class="collapse">
+  <li><a href="#自然语言规格说明-natuerliche-sprache" id="toc-自然语言规格说明-natuerliche-sprache" class="nav-link" data-scroll-target="#自然语言规格说明-natuerliche-sprache"><span class="header-section-number">3.2.1</span> 自然语言规格说明 | Natuerliche Sprache</a></li>
+  <li><a href="#结构化自然语言-strukturierte-natuerliche-sprache" id="toc-结构化自然语言-strukturierte-natuerliche-sprache" class="nav-link" data-scroll-target="#结构化自然语言-strukturierte-natuerliche-sprache"><span class="header-section-number">3.2.2</span> 结构化自然语言 | Strukturierte Natuerliche Sprache</a></li>
+  <li><a href="#图形表示法-grafische-notationen" id="toc-图形表示法-grafische-notationen" class="nav-link" data-scroll-target="#图形表示法-grafische-notationen"><span class="header-section-number">3.2.3</span> 图形表示法 | Grafische Notationen</a></li>
+  </ul></li>
+  <li><a href="#需求规格说明的内容原则-inhaltsprinzipien" id="toc-需求规格说明的内容原则-inhaltsprinzipien" class="nav-link" data-scroll-target="#需求规格说明的内容原则-inhaltsprinzipien"><span class="header-section-number">3.3</span> 需求规格说明的内容原则 | Inhaltsprinzipien</a></li>
+  </ul></li>
+  <li><a href="#需求的存储-speicherung-von-anforderungen" id="toc-需求的存储-speicherung-von-anforderungen" class="nav-link" data-scroll-target="#需求的存储-speicherung-von-anforderungen"><span class="header-section-number">4</span> 需求的存储 | Speicherung von Anforderungen</a></li>
+  <li><a href="#需求验证-validierung-von-anforderungen" id="toc-需求验证-validierung-von-anforderungen" class="nav-link" data-scroll-target="#需求验证-validierung-von-anforderungen"><span class="header-section-number">5</span> 需求验证 | Validierung von Anforderungen</a></li>
+  <li><a href="#全章总结-gesamtzusammenfassung" id="toc-全章总结-gesamtzusammenfassung" class="nav-link" data-scroll-target="#全章总结-gesamtzusammenfassung"><span class="header-section-number">6</span> 全章总结 | Gesamtzusammenfassung</a></li>
+  </ul>
+</nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">第十章：Requirements Engineering</h1>
+<p class="subtitle lead">需求分析与规格说明 | Anforderungsanalyse und -spezifikation</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Softwaretechnik WS 25/26 </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">March 8, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="回顾与本章目标-recap-und-ziel" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> 回顾与本章目标 | Recap und Ziel</h1>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>前几章要点 (Zusammenfassung bisheriger Kapitel)
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>People Management</strong>：Maslow 需求层次与 SDT 自我决定理论 (能力感/自主性/归属感)、有效沟通 (Minto 金字塔/四耳模型)、Big Five 人格特质。<strong>Teamwork</strong>：Google Project Aristotle 发现心理安全 (Psychologische Sicherheit) 是团队成功的首要因素；Edmondson 三步框架；开放式与封闭式问题。</p>
+</div>
+</div>
+<div class="callout callout-style-default callout-important callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Important</span>本章目标 (Ziel dieser Vorlesung)
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>在本章结束时，你将理解需求工程 (Requirements Engineering) 的完整流程——从需求的分类与获取，到需求规格说明的编写方法，再到需求的存储与验证。你将掌握如何避免需求的歧义性，以及如何用不同的表示法 (Notation) 来精确描述系统行为。</p>
+</div>
+</div>
+<div id="cell-fig-chapter-overview" class="cell" data-execution_count="2">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">6</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'第十章 Requirements Engineering -- 概览 | Ueberblick'</span>, fontsize<span class="op">=</span><span class="dv">15</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>sections <span class="op">=</span> [</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'title'</span>: <span class="st">'Recap</span><span class="ch">\n</span><span class="st">需求回顾'</span>, <span class="st">'sub'</span>: <span class="st">'功能/非功能需求</span><span class="ch">\n</span><span class="st">歧义性问题'</span>, <span class="st">'marker'</span>: <span class="st">'R'</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: COLORS[<span class="st">'primary'</span>], <span class="st">'x'</span>: <span class="fl">2.0</span>},</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'title'</span>: <span class="st">'需求规格说明</span><span class="ch">\n</span><span class="st">Spezifikation'</span>, <span class="st">'sub'</span>: <span class="st">'自然语言/结构化</span><span class="ch">\n</span><span class="st">图形/数学'</span>, <span class="st">'marker'</span>: <span class="st">'S'</span>,</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: COLORS[<span class="st">'warning'</span>], <span class="st">'x'</span>: <span class="fl">5.5</span>},</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'title'</span>: <span class="st">'需求存储</span><span class="ch">\n</span><span class="st">Speicherung'</span>, <span class="st">'sub'</span>: <span class="st">'文档/Wiki</span><span class="ch">\n</span><span class="st">项目管理工具'</span>, <span class="st">'marker'</span>: <span class="st">'P'</span>,</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: COLORS[<span class="st">'purple'</span>], <span class="st">'x'</span>: <span class="fl">9.0</span>},</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'title'</span>: <span class="st">'需求验证</span><span class="ch">\n</span><span class="st">Validierung'</span>, <span class="st">'sub'</span>: <span class="st">'评审/原型</span><span class="ch">\n</span><span class="st">测试用例'</span>, <span class="st">'marker'</span>: <span class="st">'V'</span>,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: COLORS[<span class="st">'success'</span>], <span class="st">'x'</span>: <span class="fl">12.5</span>},</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s <span class="kw">in</span> sections:</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    card <span class="op">=</span> mpatches.FancyBboxPatch((s[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.5</span>, <span class="fl">0.5</span>), <span class="fl">3.0</span>, <span class="fl">4.5</span>,</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>s[<span class="st">'color'</span>], linewidth<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(card)</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>    marker_circle <span class="op">=</span> plt.Circle((s[<span class="st">'x'</span>], <span class="fl">4.5</span>), <span class="fl">0.35</span>, facecolor<span class="op">=</span>s[<span class="st">'color'</span>], edgecolor<span class="op">=</span><span class="st">'white'</span>, linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(marker_circle)</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">4.5</span>, s[<span class="st">'marker'</span>], ha<span class="op">=</span><span class="st">'center'</span>, va<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">12</span>,</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>            fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span><span class="st">'white'</span>)</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">3.4</span>, s[<span class="st">'title'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>            color<span class="op">=</span>s[<span class="st">'color'</span>], linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">1.6</span>, s[<span class="st">'sub'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">8.5</span>, color<span class="op">=</span><span class="st">'#555'</span>, linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(sections) <span class="op">-</span> <span class="dv">1</span>):</span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>    ax.annotate(<span class="st">''</span>, xy<span class="op">=</span>(sections[i<span class="op">+</span><span class="dv">1</span>][<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.6</span>, <span class="fl">2.8</span>),</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>        xytext<span class="op">=</span>(sections[i][<span class="st">'x'</span>] <span class="op">+</span> <span class="fl">1.6</span>, <span class="fl">2.8</span>),</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>        arrowprops<span class="op">=</span><span class="bu">dict</span>(arrowstyle<span class="op">=</span><span class="st">'-&gt;'</span>, color<span class="op">=</span>COLORS[<span class="st">'neutral'</span>], lw<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-chapter-overview" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-chapter-overview-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-chapter-overview-output-1.png" width="1334" height="470" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-chapter-overview-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: 本章概览 | Kapiteluebersicht
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="recap需求工程基础-grundlagen" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> Recap：需求工程基础 | Grundlagen</h1>
+<section id="在流程中的定位-einordnung-im-prozess" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="在流程中的定位-einordnung-im-prozess"><span class="header-section-number">2.1</span> 在流程中的定位 | Einordnung im Prozess</h2>
+<p>Requirements Engineering 回答的核心问题是：<strong>我们应该实现什么？</strong> (<em>Was sollen wir implementieren?</em>) 这是软件开发流程中最早也是最关键的环节之一。如果需求不明确、不完整或相互矛盾，后续的设计、实现和测试都将建立在不稳固的基础之上。</p>
+</section>
+<section id="需求分类-anforderungskategorien" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="需求分类-anforderungskategorien"><span class="header-section-number">2.2</span> 需求分类 | Anforderungskategorien</h2>
+<div id="cell-fig-req-categories" class="cell" data-execution_count="3">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">8</span>))</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">9</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'需求分类 | Anforderungskategorien'</span>, fontsize<span class="op">=</span><span class="dv">15</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Functional requirements</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>func_card <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">0.5</span>, <span class="fl">3.0</span>), <span class="fl">6.0</span>, <span class="fl">5.5</span>,</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>COLORS[<span class="st">'func_color'</span>], linewidth<span class="op">=</span><span class="dv">3</span>)</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>ax.add_patch(func_card)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">3.5</span>, <span class="fl">7.8</span>, <span class="st">'[F] 功能性需求'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">13</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>COLORS[<span class="st">'func_color'</span>])</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">3.5</span>, <span class="fl">7.2</span>, <span class="st">'Funktionale Anforderungen'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>,</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>COLORS[<span class="st">'func_color'</span>])</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>func_items <span class="op">=</span> [</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="st">'单个系统功能及其输入/输出</span><span class="ch">\n</span><span class="st">(Einzelne Systemfunktionen, Ein-/Ausgaben)'</span>,</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="st">'异常情况及其处理</span><span class="ch">\n</span><span class="st">(Ausnahmen und ihre Behandlung)'</span>,</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="st">'信息需求</span><span class="ch">\n</span><span class="st">(Informationsanforderungen)'</span>,</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, item <span class="kw">in</span> <span class="bu">enumerate</span>(func_items):</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> <span class="fl">6.0</span> <span class="op">-</span> i <span class="op">*</span> <span class="fl">1.2</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">1.0</span>, y, <span class="st">'*'</span>, fontsize<span class="op">=</span><span class="dv">12</span>, color<span class="op">=</span>COLORS[<span class="st">'func_color'</span>], fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">1.5</span>, y, item, fontsize<span class="op">=</span><span class="dv">8</span>, color<span class="op">=</span><span class="st">'#444'</span>, linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a><span class="co"># Non-functional requirements</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>nonfunc_card <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">7.5</span>, <span class="fl">3.0</span>), <span class="fl">6.0</span>, <span class="fl">5.5</span>,</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>    boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>COLORS[<span class="st">'nonfunc_color'</span>], linewidth<span class="op">=</span><span class="dv">3</span>)</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>ax.add_patch(nonfunc_card)</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">10.5</span>, <span class="fl">7.8</span>, <span class="st">'[NF] 非功能性需求'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">13</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>COLORS[<span class="st">'nonfunc_color'</span>])</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">10.5</span>, <span class="fl">7.2</span>, <span class="st">'Nichtfunktionale Anforderungen'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>,</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>COLORS[<span class="st">'nonfunc_color'</span>])</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>nonfunc_items <span class="op">=</span> [</span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>    <span class="st">'故障安全 / 访问控制</span><span class="ch">\n</span><span class="st">(Ausfallsicherheit / Zugriffssteuerung)'</span>,</span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>    <span class="st">'响应时间 / 内存使用</span><span class="ch">\n</span><span class="st">(Antwortzeiten / Speichernutzung)'</span>,</span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>    <span class="st">'数据格式</span><span class="ch">\n</span><span class="st">(Datenformate)'</span>,</span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, item <span class="kw">in</span> <span class="bu">enumerate</span>(nonfunc_items):</span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> <span class="fl">6.0</span> <span class="op">-</span> i <span class="op">*</span> <span class="fl">1.2</span></span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">8.0</span>, y, <span class="st">'*'</span>, fontsize<span class="op">=</span><span class="dv">12</span>, color<span class="op">=</span>COLORS[<span class="st">'nonfunc_color'</span>], fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">8.5</span>, y, item, fontsize<span class="op">=</span><span class="dv">8</span>, color<span class="op">=</span><span class="st">'#444'</span>, linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a><span class="co"># Common note</span></span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>note_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">2.0</span>, <span class="fl">0.5</span>), <span class="fl">10.0</span>, <span class="fl">2.0</span>, boxstyle<span class="op">=</span><span class="st">"round,pad=0.15"</span>,</span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>    facecolor<span class="op">=</span>COLORS[<span class="st">'yellow_light'</span>], edgecolor<span class="op">=</span>COLORS[<span class="st">'highlight'</span>], linewidth<span class="op">=</span><span class="fl">1.5</span>)</span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>ax.add_patch(note_box)</span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.0</span>, <span class="fl">1.8</span>, <span class="st">'!! 重要 | Wichtig'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>COLORS[<span class="st">'highlight'</span>])</span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.0</span>, <span class="fl">1.0</span>, <span class="st">'非功能性需求往往影响系统的整体结构 | 需求之间可能相互冲突</span><span class="ch">\n</span><span class="st">'</span></span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>        <span class="st">'Betreffen haeufig die Gesamtstruktur des Systems | Anforderungen koennen im Konflikt stehen'</span>,</span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>        ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">9</span>, color<span class="op">=</span><span class="st">'#555'</span>, linespacing<span class="op">=</span><span class="fl">1.4</span>)</span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-req-categories" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-req-categories-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-req-categories-output-1.png" width="1334" height="758" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-req-categories-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2: 需求分类 | Anforderungskategorien
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>功能性需求 (Funktionale Anforderungen) 描述系统应该提供的具体功能，包括每个功能的输入、输出、异常情况及其处理方式，以及信息需求。非功能性需求 (Nichtfunktionale Anforderungen) 涉及系统的质量属性，例如故障安全性、访问控制、响应时间、内存使用和数据格式等。非功能性需求往往影响系统的整体架构，而且不同的需求之间可能存在相互冲突。</p>
+</section>
+<section id="歧义性需求-mehrdeutige-anforderungen" class="level2" data-number="2.3">
+<h2 data-number="2.3" class="anchored" data-anchor-id="歧义性需求-mehrdeutige-anforderungen"><span class="header-section-number">2.3</span> 歧义性需求 | Mehrdeutige Anforderungen</h2>
+<section id="案例分析-fallanalyse" class="level3" data-number="2.3.1">
+<h3 data-number="2.3.1" class="anchored" data-anchor-id="案例分析-fallanalyse"><span class="header-section-number">2.3.1</span> 案例分析 | Fallanalyse</h3>
+<div id="cell-fig-ambiguity-example" class="cell" data-execution_count="4">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">9</span>))</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">10</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'歧义性需求案例 | Beispiel: Mehrdeutige Anforderungen'</span>, fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Original ambiguous requirement</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>orig_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">0.5</span>, <span class="fl">7.5</span>), <span class="fl">13.0</span>, <span class="fl">2.0</span>,</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>, facecolor<span class="op">=</span>COLORS[<span class="st">'red_light'</span>], edgecolor<span class="op">=</span>COLORS[<span class="st">'danger'</span>], linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>ax.add_patch(orig_box)</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.0</span>, <span class="fl">8.8</span>, <span class="st">'[X] 歧义需求 | Mehrdeutige Anforderung'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">11</span>,</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>        fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'danger'</span>])</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.0</span>, <span class="fl">7.9</span>, <span class="st">'"用户应该能够搜索门诊所有医生预约的列表"'</span>,</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>        ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">9.5</span>, color<span class="op">=</span><span class="st">'#444'</span>, fontstyle<span class="op">=</span><span class="st">'italic'</span>)</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Improved version</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>impr_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">0.5</span>, <span class="fl">2.5</span>), <span class="fl">13.0</span>, <span class="fl">4.5</span>,</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>, facecolor<span class="op">=</span>COLORS[<span class="st">'green_light'</span>], edgecolor<span class="op">=</span>COLORS[<span class="st">'success'</span>], linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>ax.add_patch(impr_box)</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.0</span>, <span class="fl">6.3</span>, <span class="st">'[OK] 改进后的需求 | Verbesserte Anforderung'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">11</span>,</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>        fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'success'</span>])</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>improved_lines <span class="op">=</span> [</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    <span class="st">'(1) 表格显示所有预约列表，包含以下列：'</span>,</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    <span class="st">'    姓名、名字、预约地点、预约日期'</span>,</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    <span class="st">'(2) 搜索栏允许用户在上述四列中搜索文本'</span>,</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, line <span class="kw">in</span> <span class="bu">enumerate</span>(improved_lines):</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">1.5</span>, <span class="fl">5.4</span> <span class="op">-</span> i <span class="op">*</span> <span class="fl">0.6</span>, line, fontsize<span class="op">=</span><span class="dv">9</span>, color<span class="op">=</span><span class="st">'#444'</span>, family<span class="op">=</span><span class="st">'monospace'</span>)</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a><span class="co"># Intentionally open details</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.0</span>, <span class="fl">3.3</span>, <span class="st">'故意留下的开放细节 | Absichtlich offene Implementierungsdetails:'</span>, ha<span class="op">=</span><span class="st">'center'</span>,</span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a>        fontsize<span class="op">=</span><span class="dv">9</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'success'</span>])</span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>open_details <span class="op">=</span> [</span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>    <span class="st">'搜索栏位置和可见性 | Position und Sichtbarkeit der Suchleiste'</span>,</span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>    <span class="st">'无限滚动还是分页? | Ewig scrollend oder Pagination?'</span>,</span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>    <span class="st">'即时搜索还是点击按钮? | Sofortige Suche oder nach Klick?'</span>,</span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>    <span class="st">'简单文本搜索还是正则? | Einfache Textsuche oder Regex?'</span>,</span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, detail <span class="kw">in</span> <span class="bu">enumerate</span>(open_details):</span>
+<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">3.0</span>, <span class="fl">2.7</span> <span class="op">-</span> i <span class="op">*</span> <span class="fl">0.45</span> <span class="op">+</span> <span class="fl">0.3</span>, <span class="st">'  -  '</span> <span class="op">+</span> detail, fontsize<span class="op">=</span><span class="dv">8</span>, color<span class="op">=</span><span class="st">'#666'</span>)</span>
+<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a><span class="co"># Arrow</span></span>
+<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>ax.annotate(<span class="st">''</span>, xy<span class="op">=</span>(<span class="fl">7.0</span>, <span class="fl">7.0</span>), xytext<span class="op">=</span>(<span class="fl">7.0</span>, <span class="fl">7.4</span>),</span>
+<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>    arrowprops<span class="op">=</span><span class="bu">dict</span>(arrowstyle<span class="op">=</span><span class="st">'-&gt;'</span>, color<span class="op">=</span>COLORS[<span class="st">'neutral'</span>], lw<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">8.0</span>, <span class="fl">7.1</span>, <span class="st">'改进 | Verbesserung'</span>, fontsize<span class="op">=</span><span class="dv">9</span>, color<span class="op">=</span>COLORS[<span class="st">'neutral'</span>],</span>
+<span id="cb3-47"><a href="#cb3-47" aria-hidden="true" tabindex="-1"></a>        fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb3-48"><a href="#cb3-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-49"><a href="#cb3-49" aria-hidden="true" tabindex="-1"></a><span class="co"># Bottom note</span></span>
+<span id="cb3-50"><a href="#cb3-50" aria-hidden="true" tabindex="-1"></a>note_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">1.0</span>, <span class="fl">0.3</span>), <span class="fl">12.0</span>, <span class="fl">1.5</span>, boxstyle<span class="op">=</span><span class="st">"round,pad=0.1"</span>,</span>
+<span id="cb3-51"><a href="#cb3-51" aria-hidden="true" tabindex="-1"></a>    facecolor<span class="op">=</span>COLORS[<span class="st">'yellow_light'</span>], edgecolor<span class="op">=</span>COLORS[<span class="st">'highlight'</span>], linewidth<span class="op">=</span><span class="fl">1.5</span>)</span>
+<span id="cb3-52"><a href="#cb3-52" aria-hidden="true" tabindex="-1"></a>ax.add_patch(note_box)</span>
+<span id="cb3-53"><a href="#cb3-53" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.0</span>, <span class="fl">1.3</span>, <span class="st">'!! 需求规格不是实现指令 (Keine Implementierungsanweisungen)'</span>, ha<span class="op">=</span><span class="st">'center'</span>,</span>
+<span id="cb3-54"><a href="#cb3-54" aria-hidden="true" tabindex="-1"></a>        fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'highlight'</span>])</span>
+<span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.0</span>, <span class="fl">0.7</span>, <span class="st">'只描述外部可观察行为 | 技术/架构只在影响行为时才提及'</span>,</span>
+<span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a>        ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">9</span>, color<span class="op">=</span><span class="st">'#555'</span>)</span>
+<span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-ambiguity-example" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-ambiguity-example-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-ambiguity-example-output-1.png" width="1334" height="854" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-ambiguity-example-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3: 歧义性需求案例：门诊预约列表 | Beispiel mehrdeutiger Anforderungen
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>原始需求”用户应该能够搜索门诊所有医生预约的列表”是模糊的，用户和开发者可能产生完全不同的理解。改进后的版本明确了两个组件（表格和搜索栏）以及具体的数据列。同时，它有意留下了一些实现细节（如搜索栏位置、分页方式等），因为这些属于实现决策而非需求描述。</p>
+</section>
+<section id="量化主观需求-subjektive-anforderungen-quantifizieren" class="level3" data-number="2.3.2">
+<h3 data-number="2.3.2" class="anchored" data-anchor-id="量化主观需求-subjektive-anforderungen-quantifizieren"><span class="header-section-number">2.3.2</span> 量化主观需求 | Subjektive Anforderungen quantifizieren</h3>
+<div id="cell-fig-quantify-subjective" class="cell" data-execution_count="5">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">6</span>))</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Left: Vague</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>ax <span class="op">=</span> axes[<span class="dv">0</span>]</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">10</span>)</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">8</span>)</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'[X] 模糊需求 | Vage Anforderung'</span>, fontsize<span class="op">=</span><span class="dv">12</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>             color<span class="op">=</span>COLORS[<span class="st">'danger'</span>])</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>vague_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">0.5</span>, <span class="fl">1.0</span>), <span class="fl">9.0</span>, <span class="fl">6.5</span>, boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>,</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    facecolor<span class="op">=</span>COLORS[<span class="st">'red_light'</span>], edgecolor<span class="op">=</span>COLORS[<span class="st">'danger'</span>], linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>ax.add_patch(vague_box)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">5.0</span>, <span class="fl">6.5</span>, <span class="st">'"系统应该简单易用,'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>,</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span><span class="st">'#444'</span>, fontstyle<span class="op">=</span><span class="st">'italic'</span>)</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">5.0</span>, <span class="fl">5.8</span>, <span class="st">'用户错误应该被最小化"'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>,</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span><span class="st">'#444'</span>, fontstyle<span class="op">=</span><span class="st">'italic'</span>)</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">5.0</span>, <span class="fl">4.2</span>, <span class="st">'问题 | Probleme:'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>,</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>        fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'danger'</span>])</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>problems <span class="op">=</span> [<span class="st">'"简单" -- 如何定义?'</span>, <span class="st">'"最小化" -- 达到什么程度?'</span>, <span class="st">'何时算达标? 如何测量?'</span>]</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, p <span class="kw">in</span> <span class="bu">enumerate</span>(problems):</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">1.5</span>, <span class="fl">3.2</span> <span class="op">-</span> i <span class="op">*</span> <span class="fl">0.7</span>, <span class="st">'?  '</span> <span class="op">+</span> p, fontsize<span class="op">=</span><span class="dv">9</span>, color<span class="op">=</span>COLORS[<span class="st">'danger'</span>])</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a><span class="co"># Right: Quantified</span></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>ax <span class="op">=</span> axes[<span class="dv">1</span>]</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">10</span>)</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">8</span>)</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'[OK] 量化需求 | Quantifizierte Anforderung'</span>, fontsize<span class="op">=</span><span class="dv">12</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>             color<span class="op">=</span>COLORS[<span class="st">'success'</span>])</span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>quant_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">0.5</span>, <span class="fl">1.0</span>), <span class="fl">9.0</span>, <span class="fl">6.5</span>, boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>,</span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>    facecolor<span class="op">=</span>COLORS[<span class="st">'green_light'</span>], edgecolor<span class="op">=</span>COLORS[<span class="st">'success'</span>], linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>ax.add_patch(quant_box)</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>quant_lines <span class="op">=</span> [</span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>    <span class="st">'经过两小时培训后,'</span>,</span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>    <span class="st">'医护人员应能独立完成:'</span>,</span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>    <span class="st">''</span>,</span>
+<span id="cb4-42"><a href="#cb4-42" aria-hidden="true" tabindex="-1"></a>    <span class="st">'1. 创建新患者档案'</span>,</span>
+<span id="cb4-43"><a href="#cb4-43" aria-hidden="true" tabindex="-1"></a>    <span class="st">'2. 在日历中添加新预约'</span>,</span>
+<span id="cb4-44"><a href="#cb4-44" aria-hidden="true" tabindex="-1"></a>    <span class="st">'3. 搜索/查看/取消预约'</span>,</span>
+<span id="cb4-45"><a href="#cb4-45" aria-hidden="true" tabindex="-1"></a>    <span class="st">''</span>,</span>
+<span id="cb4-46"><a href="#cb4-46" aria-hidden="true" tabindex="-1"></a>    <span class="st">'错误输入率不超过'</span>,</span>
+<span id="cb4-47"><a href="#cb4-47" aria-hidden="true" tabindex="-1"></a>    <span class="st">'平均 2 次/小时系统使用'</span>,</span>
+<span id="cb4-48"><a href="#cb4-48" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb4-49"><a href="#cb4-49" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, line <span class="kw">in</span> <span class="bu">enumerate</span>(quant_lines):</span>
+<span id="cb4-50"><a href="#cb4-50" aria-hidden="true" tabindex="-1"></a>    y <span class="op">=</span> <span class="fl">6.8</span> <span class="op">-</span> i <span class="op">*</span> <span class="fl">0.6</span></span>
+<span id="cb4-51"><a href="#cb4-51" aria-hidden="true" tabindex="-1"></a>    weight <span class="op">=</span> <span class="st">'bold'</span> <span class="cf">if</span> i <span class="kw">in</span> [<span class="dv">7</span>, <span class="dv">8</span>] <span class="cf">else</span> <span class="st">'normal'</span></span>
+<span id="cb4-52"><a href="#cb4-52" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">1.2</span>, y, line, fontsize<span class="op">=</span><span class="fl">8.5</span>, color<span class="op">=</span><span class="st">'#444'</span>, fontweight<span class="op">=</span>weight)</span>
+<span id="cb4-53"><a href="#cb4-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-54"><a href="#cb4-54" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb4-55"><a href="#cb4-55" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-quantify-subjective" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-quantify-subjective-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-quantify-subjective-output-1.png" width="1334" height="566" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-quantify-subjective-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4: 将主观需求量化 | Subjektive Anforderungen quantifizieren
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>将”简单易用”和”错误最小化”等主观描述转化为可测量的标准——例如”经过两小时培训后能独立完成特定操作”以及”错误率不超过每小时 2 次”——是编写高质量需求规格的关键技能。</p>
+</section>
+</section>
+<section id="需求定义中的困难-schwierigkeiten" class="level2" data-number="2.4">
+<h2 data-number="2.4" class="anchored" data-anchor-id="需求定义中的困难-schwierigkeiten"><span class="header-section-number">2.4</span> 需求定义中的困难 | Schwierigkeiten</h2>
+<div id="cell-fig-difficulties" class="cell" data-execution_count="6">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">7</span>))</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">8</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'需求定义中的困难 | Schwierigkeiten in der Anforderungsdefinition'</span>,</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>             fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>difficulties <span class="op">=</span> [</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'需求可能有歧义'</span>, <span class="st">'de'</span>: <span class="st">'Mehrdeutigkeit'</span>,</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#E53935'</span>, <span class="st">'x'</span>: <span class="fl">2.5</span>, <span class="st">'y'</span>: <span class="fl">6.0</span>},</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'利益相关者不知道</span><span class="ch">\n</span><span class="st">自己想要什么'</span>, <span class="st">'de'</span>: <span class="st">'Stakeholder wissen nicht,</span><span class="ch">\n</span><span class="st">was sie wollen'</span>,</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#D81B60'</span>, <span class="st">'x'</span>: <span class="fl">7.0</span>, <span class="st">'y'</span>: <span class="fl">6.0</span>},</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'利益相关者的领域知识</span><span class="ch">\n</span><span class="st">带来隐含需求'</span>, <span class="st">'de'</span>: <span class="st">'Implizite Anforderungen</span><span class="ch">\n</span><span class="st">durch Domaenenwissen'</span>,</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#8E24AA'</span>, <span class="st">'x'</span>: <span class="fl">11.5</span>, <span class="st">'y'</span>: <span class="fl">6.0</span>},</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'不同利益相关者</span><span class="ch">\n</span><span class="st">有不同的期望'</span>, <span class="st">'de'</span>: <span class="st">'Unterschiedliche</span><span class="ch">\n</span><span class="st">Vorstellungen'</span>,</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#5E35B1'</span>, <span class="st">'x'</span>: <span class="fl">2.5</span>, <span class="st">'y'</span>: <span class="fl">2.5</span>},</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'需求在项目过程中</span><span class="ch">\n</span><span class="st">不断变化'</span>, <span class="st">'de'</span>: <span class="st">'Anforderungen aendern</span><span class="ch">\n</span><span class="st">sich im Laufe des Projekts'</span>,</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#1E88E5'</span>, <span class="st">'x'</span>: <span class="fl">7.0</span>, <span class="st">'y'</span>: <span class="fl">2.5</span>},</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'动态环境'</span>, <span class="st">'de'</span>: <span class="st">'Dynamisches Umfeld'</span>,</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#00897B'</span>, <span class="st">'x'</span>: <span class="fl">11.5</span>, <span class="st">'y'</span>: <span class="fl">2.5</span>},</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> d <span class="kw">in</span> difficulties:</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>    card <span class="op">=</span> mpatches.FancyBboxPatch((d[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.8</span>, d[<span class="st">'y'</span>] <span class="op">-</span> <span class="fl">1.2</span>), <span class="fl">3.6</span>, <span class="fl">2.6</span>,</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.15"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>d[<span class="st">'color'</span>], linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(card)</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    ax.text(d[<span class="st">'x'</span>], d[<span class="st">'y'</span>] <span class="op">+</span> <span class="fl">0.7</span>, d[<span class="st">'zh'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">9</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>            color<span class="op">=</span>d[<span class="st">'color'</span>], linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    ax.text(d[<span class="st">'x'</span>], d[<span class="st">'y'</span>] <span class="op">-</span> <span class="fl">0.5</span>, d[<span class="st">'de'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>, color<span class="op">=</span><span class="st">'#666'</span>,</span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>            linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-difficulties" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-difficulties-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-difficulties-output-1.png" width="1334" height="662" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-difficulties-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;5: 需求定义中的常见困难 | Schwierigkeiten in der Anforderungsdefinition
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>需求定义面临六大常见困难：需求本身的歧义性；利益相关者往往不清楚自己真正需要什么；领域专家的隐含知识导致未被明确说明的需求；不同利益相关者对同一系统有不同的期望；需求在项目过程中不断演变；以及外部动态环境带来的不确定性。</p>
+</section>
+<section id="需求获取技术-techniken-zur-anforderungserhebung" class="level2" data-number="2.5">
+<h2 data-number="2.5" class="anchored" data-anchor-id="需求获取技术-techniken-zur-anforderungserhebung"><span class="header-section-number">2.5</span> 需求获取技术 | Techniken zur Anforderungserhebung</h2>
+<div id="cell-fig-elicitation-techniques" class="cell" data-execution_count="7">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">7</span>))</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">8</span>)</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'需求获取技术 | Techniken zur Anforderungserhebung'</span>, fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>techniques <span class="op">=</span> [</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'访谈'</span>, <span class="st">'de'</span>: <span class="st">'Interviews'</span>, <span class="st">'color'</span>: <span class="st">'#1565C0'</span>, <span class="st">'x'</span>: <span class="fl">1.5</span>, <span class="st">'y'</span>: <span class="fl">5.5</span>},</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'民族志观察'</span>, <span class="st">'de'</span>: <span class="st">'Ethnografie'</span>, <span class="st">'color'</span>: <span class="st">'#4527A0'</span>, <span class="st">'x'</span>: <span class="fl">4.5</span>, <span class="st">'y'</span>: <span class="fl">5.5</span>},</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'研讨会</span><span class="ch">\n</span><span class="st">(投票/优先级排序)'</span>, <span class="st">'de'</span>: <span class="st">'Workshops mit</span><span class="ch">\n</span><span class="st">Voting/Priorisierung'</span>,</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#AD1457'</span>, <span class="st">'x'</span>: <span class="fl">7.5</span>, <span class="st">'y'</span>: <span class="fl">5.5</span>},</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'问卷调查'</span>, <span class="st">'de'</span>: <span class="st">'Umfragen'</span>, <span class="st">'color'</span>: <span class="st">'#00695C'</span>, <span class="st">'x'</span>: <span class="fl">10.5</span>, <span class="st">'y'</span>: <span class="fl">5.5</span>},</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'用户画像'</span>, <span class="st">'de'</span>: <span class="st">'Personas'</span>, <span class="st">'color'</span>: <span class="st">'#E65100'</span>, <span class="st">'x'</span>: <span class="fl">3.0</span>, <span class="st">'y'</span>: <span class="fl">2.0</span>},</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'设计思维'</span>, <span class="st">'de'</span>: <span class="st">'Design Thinking'</span>, <span class="st">'color'</span>: <span class="st">'#827717'</span>, <span class="st">'x'</span>: <span class="fl">7.0</span>, <span class="st">'y'</span>: <span class="fl">2.0</span>},</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'分析现有文档</span><span class="ch">\n</span><span class="st">/遗留系统'</span>, <span class="st">'de'</span>: <span class="st">'Bestehende Doku /</span><span class="ch">\n</span><span class="st">Altsysteme analysieren'</span>,</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#37474F'</span>, <span class="st">'x'</span>: <span class="fl">11.0</span>, <span class="st">'y'</span>: <span class="fl">2.0</span>},</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> techniques:</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    card <span class="op">=</span> mpatches.FancyBboxPatch((t[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.3</span>, t[<span class="st">'y'</span>] <span class="op">-</span> <span class="fl">1.0</span>), <span class="fl">2.6</span>, <span class="fl">2.2</span>,</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.12"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>t[<span class="st">'color'</span>], linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(card)</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>    ax.text(t[<span class="st">'x'</span>], t[<span class="st">'y'</span>] <span class="op">+</span> <span class="fl">0.5</span>, t[<span class="st">'zh'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">9</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>            color<span class="op">=</span>t[<span class="st">'color'</span>], linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>    ax.text(t[<span class="st">'x'</span>], t[<span class="st">'y'</span>] <span class="op">-</span> <span class="fl">0.5</span>, t[<span class="st">'de'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>, color<span class="op">=</span><span class="st">'#666'</span>,</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>            linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-elicitation-techniques" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-elicitation-techniques-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-elicitation-techniques-output-1.png" width="1334" height="662" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-elicitation-techniques-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6: 需求获取技术 | Techniken zur Anforderungserhebung
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>需求获取的核心技术包括：访谈 (Interviews) 直接与利益相关者对话获取需求；民族志 (Ethnografie) 通过观察用户实际工作流程来发现隐含需求；研讨会 (Workshops) 借助投票或优先级排序来集体确定需求；问卷调查 (Umfragen) 用于大范围收集意见；用户画像 (Personas) 帮助理解典型用户的需求与行为模式；设计思维 (Design Thinking) 以用户为中心进行创新性需求探索；分析现有文档或遗留系统 (Altsysteme analysieren) 也是重要的需求来源。</p>
+</section>
+<section id="user-stories-用户故事" class="level2" data-number="2.6">
+<h2 data-number="2.6" class="anchored" data-anchor-id="user-stories-用户故事"><span class="header-section-number">2.6</span> User Stories | 用户故事</h2>
+<div id="cell-fig-user-stories" class="cell" data-execution_count="8">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">8</span>))</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Left: Story format</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>ax <span class="op">=</span> axes[<span class="dv">0</span>]</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">10</span>)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">9</span>)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'作为故事 | Als Story'</span>, fontsize<span class="op">=</span><span class="dv">12</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'primary'</span>])</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>story_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">0.5</span>, <span class="fl">0.5</span>), <span class="fl">9.0</span>, <span class="fl">8.0</span>, boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>,</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>    facecolor<span class="op">=</span>COLORS[<span class="st">'blue_light'</span>], edgecolor<span class="op">=</span>COLORS[<span class="st">'primary'</span>], linewidth<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>ax.add_patch(story_box)</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">5.0</span>, <span class="fl">7.8</span>, <span class="st">'模板 | Template:'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>COLORS[<span class="st">'primary'</span>])</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>parts <span class="op">=</span> [</span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Als'</span>, <span class="st">'[角色 / Rolle]'</span>, COLORS[<span class="st">'danger'</span>]),</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'moechte ich'</span>, <span class="st">'[功能 / Funktionalitaet]'</span>, COLORS[<span class="st">'primary'</span>]),</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'um'</span>, <span class="st">'[效益 / Nutzen]'</span>, COLORS[<span class="st">'success'</span>]),</span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'zu erzielen.'</span>, <span class="st">''</span>, COLORS[<span class="st">'dark'</span>]),</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> <span class="fl">6.5</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> de, zh, color <span class="kw">in</span> parts:</span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">1.5</span>, y, de, fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>color)</span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> zh:</span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>        ax.text(<span class="fl">5.5</span>, y, zh, fontsize<span class="op">=</span><span class="dv">9</span>, color<span class="op">=</span>color, fontstyle<span class="op">=</span><span class="st">'italic'</span>)</span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>    y <span class="op">-=</span> <span class="fl">0.8</span></span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a><span class="co"># Example</span></span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>ex_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">1.0</span>, <span class="fl">1.0</span>), <span class="fl">8.0</span>, <span class="fl">2.5</span>, boxstyle<span class="op">=</span><span class="st">"round,pad=0.1"</span>,</span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>    facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>COLORS[<span class="st">'primary'</span>], linewidth<span class="op">=</span><span class="dv">1</span>, linestyle<span class="op">=</span><span class="st">'--'</span>)</span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>ax.add_patch(ex_box)</span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">5.0</span>, <span class="fl">3.0</span>, <span class="st">'示例 | Beispiel:'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">9</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>COLORS[<span class="st">'primary'</span>])</span>
+<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">5.0</span>, <span class="fl">2.2</span>, <span class="st">'作为 [医护人员],</span><span class="ch">\n</span><span class="st">我想要 [搜索患者预约],</span><span class="ch">\n</span><span class="st">以便 [快速找到需要的信息]。'</span>,</span>
+<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>        ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">8.5</span>, color<span class="op">=</span><span class="st">'#444'</span>, linespacing<span class="op">=</span><span class="fl">1.4</span>)</span>
+<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a><span class="co"># Right: Scenario format</span></span>
+<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>ax <span class="op">=</span> axes[<span class="dv">1</span>]</span>
+<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">10</span>)</span>
+<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">9</span>)</span>
+<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'作为场景 | Als Szenario'</span>, fontsize<span class="op">=</span><span class="dv">12</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'purple'</span>])</span>
+<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a>scen_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">0.5</span>, <span class="fl">0.5</span>), <span class="fl">9.0</span>, <span class="fl">8.0</span>, boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>,</span>
+<span id="cb7-47"><a href="#cb7-47" aria-hidden="true" tabindex="-1"></a>    facecolor<span class="op">=</span>COLORS[<span class="st">'purple_light'</span>], edgecolor<span class="op">=</span>COLORS[<span class="st">'purple'</span>], linewidth<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb7-48"><a href="#cb7-48" aria-hidden="true" tabindex="-1"></a>ax.add_patch(scen_box)</span>
+<span id="cb7-49"><a href="#cb7-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-50"><a href="#cb7-50" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">5.0</span>, <span class="fl">7.8</span>, <span class="st">'模板 | Template:'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb7-51"><a href="#cb7-51" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>COLORS[<span class="st">'purple'</span>])</span>
+<span id="cb7-52"><a href="#cb7-52" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-53"><a href="#cb7-53" aria-hidden="true" tabindex="-1"></a>scenario_parts <span class="op">=</span> [</span>
+<span id="cb7-54"><a href="#cb7-54" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Initiale Annahme:'</span>, <span class="st">'初始假设'</span>),</span>
+<span id="cb7-55"><a href="#cb7-55" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Normal:'</span>, <span class="st">'正常流程'</span>),</span>
+<span id="cb7-56"><a href="#cb7-56" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Was falsch laufen kann:'</span>, <span class="st">'可能出错的地方'</span>),</span>
+<span id="cb7-57"><a href="#cb7-57" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Andere Aktivitaeten:'</span>, <span class="st">'其他活动'</span>),</span>
+<span id="cb7-58"><a href="#cb7-58" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Systemzustand bei</span><span class="ch">\n</span><span class="st">Beendigung:'</span>, <span class="st">'结束时系统状态'</span>),</span>
+<span id="cb7-59"><a href="#cb7-59" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb7-60"><a href="#cb7-60" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> <span class="fl">6.8</span></span>
+<span id="cb7-61"><a href="#cb7-61" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> de, zh <span class="kw">in</span> scenario_parts:</span>
+<span id="cb7-62"><a href="#cb7-62" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">1.2</span>, y, de, fontsize<span class="op">=</span><span class="dv">9</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'purple'</span>])</span>
+<span id="cb7-63"><a href="#cb7-63" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">6.5</span>, y, zh, fontsize<span class="op">=</span><span class="fl">8.5</span>, color<span class="op">=</span><span class="st">'#666'</span>)</span>
+<span id="cb7-64"><a href="#cb7-64" aria-hidden="true" tabindex="-1"></a>    y <span class="op">-=</span> <span class="fl">1.1</span></span>
+<span id="cb7-65"><a href="#cb7-65" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-66"><a href="#cb7-66" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb7-67"><a href="#cb7-67" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-user-stories" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-user-stories-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-user-stories-output-1.png" width="1334" height="758" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-user-stories-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;7: User Stories 的两种形式 | Zwei Formen von User Stories
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>User Stories 有两种常见形式。<strong>故事形式</strong>使用”作为 [角色]，我想要 [功能]，以便 [效益]“的模板，简洁地描述需求的主体、功能和价值。<strong>场景形式</strong>则更加详细，包括初始假设 (Initiale Annahme)、正常流程 (Normal)、可能出错的情况 (Was falsch laufen kann)、其他活动 (Andere Aktivitaeten) 和结束时的系统状态 (Systemzustand bei Beendigung)。</p>
+</section>
+</section>
+<section id="需求规格说明-anforderungsspezifikation-kapitel-4.4" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> 需求规格说明 | Anforderungsspezifikation (Kapitel 4.4)</h1>
+<section id="需求的详细程度-detailstufen-von-anforderungen" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="需求的详细程度-detailstufen-von-anforderungen"><span class="header-section-number">3.1</span> 需求的详细程度 | Detailstufen von Anforderungen</h2>
+<div id="cell-fig-detail-levels" class="cell" data-execution_count="9">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">6</span>))</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">7</span>)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'需求的详细程度 | Detailstufen von Anforderungen'</span>, fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>levels <span class="op">=</span> [</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'高层需求 (用户需求)'</span>, <span class="st">'de'</span>: <span class="st">'Benutzeranforderungen'</span>,</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>        <span class="st">'desc'</span>: <span class="st">'面向客户和管理层</span><span class="ch">\n</span><span class="st">自然语言/图形描述</span><span class="ch">\n</span><span class="st">Fuer Kunden und Management'</span>,</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>        <span class="st">'color'</span>: <span class="st">'#1565C0'</span>, <span class="st">'x'</span>: <span class="fl">2.5</span>, <span class="st">'w'</span>: <span class="fl">4.0</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'系统需求'</span>, <span class="st">'de'</span>: <span class="st">'Systemanforderungen'</span>,</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">'desc'</span>: <span class="st">'详细的功能描述</span><span class="ch">\n</span><span class="st">系统架构师/开发者使用</span><span class="ch">\n</span><span class="st">Detaillierte Beschreibung'</span>,</span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">'color'</span>: <span class="st">'#6A1B9A'</span>, <span class="st">'x'</span>: <span class="fl">7.0</span>, <span class="st">'w'</span>: <span class="fl">6.0</span></span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'软件设计规格'</span>, <span class="st">'de'</span>: <span class="st">'Software-Designspezifikation'</span>,</span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">'desc'</span>: <span class="st">'最详细的技术描述</span><span class="ch">\n</span><span class="st">作为实现基础</span><span class="ch">\n</span><span class="st">Als Basis fuer Implementierung'</span>,</span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>        <span class="st">'color'</span>: <span class="st">'#C62828'</span>, <span class="st">'x'</span>: <span class="fl">11.5</span>, <span class="st">'w'</span>: <span class="fl">8.0</span></span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i, lv <span class="kw">in</span> <span class="bu">enumerate</span>(levels):</span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>    y_pos <span class="op">=</span> <span class="fl">4.0</span></span>
+<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>    card <span class="op">=</span> mpatches.FancyBboxPatch((lv[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.8</span>, y_pos <span class="op">-</span> <span class="fl">1.5</span>), <span class="fl">3.6</span>, <span class="fl">3.5</span>,</span>
+<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.15"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>lv[<span class="st">'color'</span>], linewidth<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(card)</span>
+<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>    ax.text(lv[<span class="st">'x'</span>], y_pos <span class="op">+</span> <span class="fl">1.3</span>, lv[<span class="st">'zh'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a>            color<span class="op">=</span>lv[<span class="st">'color'</span>])</span>
+<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a>    ax.text(lv[<span class="st">'x'</span>], y_pos <span class="op">+</span> <span class="fl">0.7</span>, lv[<span class="st">'de'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">8.5</span>, color<span class="op">=</span>lv[<span class="st">'color'</span>])</span>
+<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a>    ax.text(lv[<span class="st">'x'</span>], y_pos <span class="op">-</span> <span class="fl">0.5</span>, lv[<span class="st">'desc'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>, color<span class="op">=</span><span class="st">'#555'</span>,</span>
+<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a>            linespacing<span class="op">=</span><span class="fl">1.4</span>)</span>
+<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Detail level indicator</span></span>
+<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a>    bar_y <span class="op">=</span> <span class="fl">1.5</span></span>
+<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a>    bar_w <span class="op">=</span> lv[<span class="st">'w'</span>]</span>
+<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a>    bar_x <span class="op">=</span> lv[<span class="st">'x'</span>] <span class="op">-</span> bar_w <span class="op">/</span> <span class="dv">2</span></span>
+<span id="cb8-41"><a href="#cb8-41" aria-hidden="true" tabindex="-1"></a>    bar <span class="op">=</span> mpatches.FancyBboxPatch((bar_x, bar_y), bar_w, <span class="fl">0.4</span>,</span>
+<span id="cb8-42"><a href="#cb8-42" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.02"</span>, facecolor<span class="op">=</span>lv[<span class="st">'color'</span>], edgecolor<span class="op">=</span><span class="st">'white'</span>, linewidth<span class="op">=</span><span class="dv">1</span>, alpha<span class="op">=</span><span class="fl">0.6</span>)</span>
+<span id="cb8-43"><a href="#cb8-43" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(bar)</span>
+<span id="cb8-44"><a href="#cb8-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-45"><a href="#cb8-45" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.0</span>, <span class="fl">0.8</span>, <span class="st">'详细程度 | Detailgrad'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>,</span>
+<span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a>        fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'neutral'</span>])</span>
+<span id="cb8-47"><a href="#cb8-47" aria-hidden="true" tabindex="-1"></a>ax.annotate(<span class="st">''</span>, xy<span class="op">=</span>(<span class="fl">12.5</span>, <span class="fl">0.8</span>), xytext<span class="op">=</span>(<span class="fl">1.5</span>, <span class="fl">0.8</span>),</span>
+<span id="cb8-48"><a href="#cb8-48" aria-hidden="true" tabindex="-1"></a>    arrowprops<span class="op">=</span><span class="bu">dict</span>(arrowstyle<span class="op">=</span><span class="st">'-&gt;'</span>, color<span class="op">=</span>COLORS[<span class="st">'neutral'</span>], lw<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb8-49"><a href="#cb8-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-50"><a href="#cb8-50" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(levels) <span class="op">-</span> <span class="dv">1</span>):</span>
+<span id="cb8-51"><a href="#cb8-51" aria-hidden="true" tabindex="-1"></a>    ax.annotate(<span class="st">''</span>, xy<span class="op">=</span>(levels[i<span class="op">+</span><span class="dv">1</span>][<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">2.0</span>, <span class="fl">4.0</span>),</span>
+<span id="cb8-52"><a href="#cb8-52" aria-hidden="true" tabindex="-1"></a>        xytext<span class="op">=</span>(levels[i][<span class="st">'x'</span>] <span class="op">+</span> <span class="fl">2.0</span>, <span class="fl">4.0</span>),</span>
+<span id="cb8-53"><a href="#cb8-53" aria-hidden="true" tabindex="-1"></a>        arrowprops<span class="op">=</span><span class="bu">dict</span>(arrowstyle<span class="op">=</span><span class="st">'-&gt;'</span>, color<span class="op">=</span>COLORS[<span class="st">'neutral'</span>], lw<span class="op">=</span><span class="fl">1.5</span>))</span>
+<span id="cb8-54"><a href="#cb8-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-55"><a href="#cb8-55" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb8-56"><a href="#cb8-56" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-detail-levels" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-detail-levels-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-detail-levels-output-1.png" width="1334" height="566" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-detail-levels-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;8: 需求的不同详细程度 | Detailstufen von Anforderungen
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>需求可以在不同的详细程度上进行规格说明。<strong>用户需求 (Benutzeranforderungen)</strong> 面向客户和管理层，用自然语言和图形描述。<strong>系统需求 (Systemanforderungen)</strong> 提供更详细的功能描述，供系统架构师和开发者使用。<strong>软件设计规格 (Software-Designspezifikation)</strong> 是最详细的技术描述，作为实现的直接基础。</p>
+</section>
+<section id="需求规格说明的表示法-notationen" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="需求规格说明的表示法-notationen"><span class="header-section-number">3.2</span> 需求规格说明的表示法 | Notationen</h2>
+<div id="cell-fig-notations" class="cell" data-execution_count="10">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">8</span>))</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">9</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'需求规格说明的表示法 | Notationen fuer Anforderungsspezifikationen'</span>,</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>             fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>notations <span class="op">=</span> [</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'自然语言'</span>, <span class="st">'de'</span>: <span class="st">'Natuerliche</span><span class="ch">\n</span><span class="st">Sprache'</span>,</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>        <span class="st">'desc'</span>: <span class="st">'自由文本描述</span><span class="ch">\n</span><span class="st">最易理解</span><span class="ch">\n</span><span class="st">但容易产生歧义'</span>,</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>        <span class="st">'marker'</span>: <span class="st">'NL'</span>,</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>        <span class="st">'color'</span>: COLORS[<span class="st">'natural'</span>], <span class="st">'x'</span>: <span class="fl">2.0</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'结构化自然语言'</span>, <span class="st">'de'</span>: <span class="st">'Strukturierte</span><span class="ch">\n</span><span class="st">natuerliche Sprache'</span>,</span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">'desc'</span>: <span class="st">'使用标准模板</span><span class="ch">\n</span><span class="st">限制语言自由度</span><span class="ch">\n</span><span class="st">减少歧义'</span>,</span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">'marker'</span>: <span class="st">'SN'</span>,</span>
+<span id="cb9-19"><a href="#cb9-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">'color'</span>: COLORS[<span class="st">'structured'</span>], <span class="st">'x'</span>: <span class="fl">5.5</span></span>
+<span id="cb9-20"><a href="#cb9-20" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb9-21"><a href="#cb9-21" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb9-22"><a href="#cb9-22" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'图形表示法'</span>, <span class="st">'de'</span>: <span class="st">'Grafische</span><span class="ch">\n</span><span class="st">Notationen'</span>,</span>
+<span id="cb9-23"><a href="#cb9-23" aria-hidden="true" tabindex="-1"></a>        <span class="st">'desc'</span>: <span class="st">'SysML, BPMN</span><span class="ch">\n</span><span class="st">UML, 自由图表</span><span class="ch">\n</span><span class="st">Wireframes'</span>,</span>
+<span id="cb9-24"><a href="#cb9-24" aria-hidden="true" tabindex="-1"></a>        <span class="st">'marker'</span>: <span class="st">'GN'</span>,</span>
+<span id="cb9-25"><a href="#cb9-25" aria-hidden="true" tabindex="-1"></a>        <span class="st">'color'</span>: COLORS[<span class="st">'graphical'</span>], <span class="st">'x'</span>: <span class="fl">9.0</span></span>
+<span id="cb9-26"><a href="#cb9-26" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb9-27"><a href="#cb9-27" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb9-28"><a href="#cb9-28" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'数学规格说明'</span>, <span class="st">'de'</span>: <span class="st">'Mathematische</span><span class="ch">\n</span><span class="st">Spezifikationen'</span>,</span>
+<span id="cb9-29"><a href="#cb9-29" aria-hidden="true" tabindex="-1"></a>        <span class="st">'desc'</span>: <span class="st">'数学函数</span><span class="ch">\n</span><span class="st">状态自动机</span><span class="ch">\n</span><span class="st">集合, 逻辑'</span>,</span>
+<span id="cb9-30"><a href="#cb9-30" aria-hidden="true" tabindex="-1"></a>        <span class="st">'marker'</span>: <span class="st">'MS'</span>,</span>
+<span id="cb9-31"><a href="#cb9-31" aria-hidden="true" tabindex="-1"></a>        <span class="st">'color'</span>: COLORS[<span class="st">'mathematical'</span>], <span class="st">'x'</span>: <span class="fl">12.5</span></span>
+<span id="cb9-32"><a href="#cb9-32" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb9-33"><a href="#cb9-33" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb9-34"><a href="#cb9-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-35"><a href="#cb9-35" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> n <span class="kw">in</span> notations:</span>
+<span id="cb9-36"><a href="#cb9-36" aria-hidden="true" tabindex="-1"></a>    card <span class="op">=</span> mpatches.FancyBboxPatch((n[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.5</span>, <span class="fl">1.0</span>), <span class="fl">3.0</span>, <span class="fl">7.0</span>,</span>
+<span id="cb9-37"><a href="#cb9-37" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>n[<span class="st">'color'</span>], linewidth<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb9-38"><a href="#cb9-38" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(card)</span>
+<span id="cb9-39"><a href="#cb9-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-40"><a href="#cb9-40" aria-hidden="true" tabindex="-1"></a>    marker_circle <span class="op">=</span> plt.Circle((n[<span class="st">'x'</span>], <span class="fl">7.3</span>), <span class="fl">0.4</span>, facecolor<span class="op">=</span>n[<span class="st">'color'</span>],</span>
+<span id="cb9-41"><a href="#cb9-41" aria-hidden="true" tabindex="-1"></a>                                edgecolor<span class="op">=</span><span class="st">'white'</span>, linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb9-42"><a href="#cb9-42" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(marker_circle)</span>
+<span id="cb9-43"><a href="#cb9-43" aria-hidden="true" tabindex="-1"></a>    ax.text(n[<span class="st">'x'</span>], <span class="fl">7.3</span>, n[<span class="st">'marker'</span>], ha<span class="op">=</span><span class="st">'center'</span>, va<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>,</span>
+<span id="cb9-44"><a href="#cb9-44" aria-hidden="true" tabindex="-1"></a>            fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span><span class="st">'white'</span>)</span>
+<span id="cb9-45"><a href="#cb9-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-46"><a href="#cb9-46" aria-hidden="true" tabindex="-1"></a>    ax.text(n[<span class="st">'x'</span>], <span class="fl">6.2</span>, n[<span class="st">'zh'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">11</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>n[<span class="st">'color'</span>])</span>
+<span id="cb9-47"><a href="#cb9-47" aria-hidden="true" tabindex="-1"></a>    ax.text(n[<span class="st">'x'</span>], <span class="fl">5.2</span>, n[<span class="st">'de'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">9</span>, color<span class="op">=</span>n[<span class="st">'color'</span>], linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb9-48"><a href="#cb9-48" aria-hidden="true" tabindex="-1"></a>    ax.text(n[<span class="st">'x'</span>], <span class="fl">3.2</span>, n[<span class="st">'desc'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">8</span>, color<span class="op">=</span><span class="st">'#555'</span>, linespacing<span class="op">=</span><span class="fl">1.5</span>)</span>
+<span id="cb9-49"><a href="#cb9-49" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-50"><a href="#cb9-50" aria-hidden="true" tabindex="-1"></a><span class="co"># Spectrum</span></span>
+<span id="cb9-51"><a href="#cb9-51" aria-hidden="true" tabindex="-1"></a>ax.annotate(<span class="st">''</span>, xy<span class="op">=</span>(<span class="fl">13.5</span>, <span class="fl">0.5</span>), xytext<span class="op">=</span>(<span class="fl">0.5</span>, <span class="fl">0.5</span>),</span>
+<span id="cb9-52"><a href="#cb9-52" aria-hidden="true" tabindex="-1"></a>    arrowprops<span class="op">=</span><span class="bu">dict</span>(arrowstyle<span class="op">=</span><span class="st">'-&gt;'</span>, color<span class="op">=</span>COLORS[<span class="st">'neutral'</span>], lw<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb9-53"><a href="#cb9-53" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">0.5</span>, <span class="fl">0.15</span>, <span class="st">'易于理解 | Leicht verstaendlich'</span>, fontsize<span class="op">=</span><span class="dv">8</span>, color<span class="op">=</span>COLORS[<span class="st">'natural'</span>])</span>
+<span id="cb9-54"><a href="#cb9-54" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">13.5</span>, <span class="fl">0.15</span>, <span class="st">'精确无歧义 | Praezise &amp; eindeutig'</span>, fontsize<span class="op">=</span><span class="dv">8</span>, color<span class="op">=</span>COLORS[<span class="st">'mathematical'</span>],</span>
+<span id="cb9-55"><a href="#cb9-55" aria-hidden="true" tabindex="-1"></a>        ha<span class="op">=</span><span class="st">'right'</span>)</span>
+<span id="cb9-56"><a href="#cb9-56" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-57"><a href="#cb9-57" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb9-58"><a href="#cb9-58" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-notations" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-notations-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-notations-output-1.png" width="1334" height="758" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-notations-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;9: 需求规格说明的四种表示法 | Vier Notationen fuer Anforderungsspezifikationen
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>四种表示法形成一个从易理解到精确无歧义的光谱。<strong>自然语言 (Natuerliche Sprache)</strong> 最容易被所有利益相关者理解，但最容易产生歧义。<strong>结构化自然语言 (Strukturierte natuerliche Sprache)</strong> 通过标准模板限制语言自由度来减少歧义。<strong>图形表示法 (Grafische Notationen)</strong> 包括 SysML、BPMN、UML 和 Wireframes 等。<strong>数学规格说明 (Mathematische Spezifikationen)</strong> 使用数学函数、状态自动机、集合和逻辑来达到最高精确度。</p>
+<section id="自然语言规格说明-natuerliche-sprache" class="level3" data-number="3.2.1">
+<h3 data-number="3.2.1" class="anchored" data-anchor-id="自然语言规格说明-natuerliche-sprache"><span class="header-section-number">3.2.1</span> 自然语言规格说明 | Natuerliche Sprache</h3>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>自然语言需求编写准则 (Richtlinien)
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ol type="1">
+<li><p><strong>确定标准格式</strong> (Standardformat festlegen)：所有需求统一使用同一格式。</p></li>
+<li><p><strong>明确标记约束力</strong> (Verbindlichkeit markieren)：强制性需求用”必须” (muss) 标记，可选需求用”应该” (sollte) 标记。</p></li>
+<li><p><strong>避免专业术语</strong> (Fachjargon vermeiden)：缩写和首字母缩略词在使用前必须重新引入和定义。</p></li>
+<li><p><strong>提供理由</strong> (Begruendung geben)：每条需求都应包含其必要性的理由——为什么这条需求重要？是谁提出的？</p></li>
+</ol>
+</div>
+</div>
+<p>标准格式的常见例子包括场景 (Szenarios)、每个从句另起一行的 User Stories、以及 Bug 报告和改进建议的标准模板。</p>
+</section>
+<section id="结构化自然语言-strukturierte-natuerliche-sprache" class="level3" data-number="3.2.2">
+<h3 data-number="3.2.2" class="anchored" data-anchor-id="结构化自然语言-strukturierte-natuerliche-sprache"><span class="header-section-number">3.2.2</span> 结构化自然语言 | Strukturierte Natuerliche Sprache</h3>
+<div id="cell-fig-structured-nl" class="cell" data-execution_count="11">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">8</span>))</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">12</span>)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">9</span>)</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'结构化自然语言模板 | Strukturierte natuerliche Sprache'</span>,</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>             fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Template card</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>template_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">0.5</span>, <span class="fl">0.5</span>), <span class="fl">11.0</span>, <span class="fl">8.0</span>,</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    boxstyle<span class="op">=</span><span class="st">"round,pad=0.25"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>COLORS[<span class="st">'structured'</span>], linewidth<span class="op">=</span><span class="dv">3</span>)</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>ax.add_patch(template_box)</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>fields <span class="op">=</span> [</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Anforderung-ID:'</span>, <span class="st">'REQ-001'</span>, <span class="fl">7.5</span>),</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Bezeichnung:'</span>, <span class="st">'预约搜索功能 | Terminsuchfunktion'</span>, <span class="fl">6.8</span>),</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Beschreibung:'</span>, <span class="st">'用户可以搜索门诊预约列表</span><span class="ch">\n</span><span class="st">(siehe detaillierte Beschreibung)'</span>, <span class="fl">5.8</span>),</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Quelle:'</span>, <span class="st">'访谈 #3 | Interview #3, Dr. Mueller'</span>, <span class="fl">4.8</span>),</span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Prioritaet:'</span>, <span class="st">'必须 (Muss)'</span>, <span class="fl">4.1</span>),</span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Abhaengigkeiten:'</span>, <span class="st">'REQ-003 (Datenbank-Zugang)'</span>, <span class="fl">3.4</span>),</span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Akzeptanzkriterium:'</span>, <span class="st">'搜索结果在 &lt;2s 内显示</span><span class="ch">\n</span><span class="st">Suchergebnisse in &lt;2s angezeigt'</span>, <span class="fl">2.4</span>),</span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>    (<span class="st">'Version:'</span>, <span class="st">'1.0 (2025-12-10)'</span>, <span class="fl">1.3</span>),</span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> label, value, y <span class="kw">in</span> fields:</span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>    label_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">1.0</span>, y <span class="op">-</span> <span class="fl">0.3</span>), <span class="fl">3.2</span>, <span class="fl">0.6</span>,</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.03"</span>, facecolor<span class="op">=</span>COLORS[<span class="st">'structured'</span>] <span class="op">+</span> <span class="st">'20'</span>,</span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>        edgecolor<span class="op">=</span>COLORS[<span class="st">'structured'</span>], linewidth<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(label_box)</span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">1.2</span>, y, label, fontsize<span class="op">=</span><span class="fl">8.5</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'structured'</span>])</span>
+<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>    ax.text(<span class="fl">4.5</span>, y, value, fontsize<span class="op">=</span><span class="fl">8.5</span>, color<span class="op">=</span><span class="st">'#444'</span>, linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-structured-nl" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-structured-nl-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-structured-nl-output-1.png" width="1142" height="758" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-structured-nl-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10: 结构化自然语言模板示例 | Beispiel: Strukturierte natuerliche Sprache
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>结构化自然语言通过预定义的模板字段（如需求 ID、描述、来源、优先级、依赖关系、验收标准和版本号）来规范需求的书写格式。每个字段都有明确的含义，减少了歧义的可能性。</p>
+</section>
+<section id="图形表示法-grafische-notationen" class="level3" data-number="3.2.3">
+<h3 data-number="3.2.3" class="anchored" data-anchor-id="图形表示法-grafische-notationen"><span class="header-section-number">3.2.3</span> 图形表示法 | Grafische Notationen</h3>
+<div id="cell-fig-graphical-notations" class="cell" data-execution_count="12">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">6</span>))</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">7</span>)</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'图形表示法 | Grafische Notationen'</span>, fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>graph_types <span class="op">=</span> [</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'SysML / BPMN'</span>, <span class="st">'desc'</span>: <span class="st">'系统和流程建模</span><span class="ch">\n</span><span class="st">System- und</span><span class="ch">\n</span><span class="st">Prozessmodellierung'</span>,</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#D84315'</span>, <span class="st">'x'</span>: <span class="fl">2.0</span>},</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'UML'</span>, <span class="st">'desc'</span>: <span class="st">'用例图 / 类图</span><span class="ch">\n</span><span class="st">活动图 / 序列图</span><span class="ch">\n</span><span class="st">(下节课详述)'</span>,</span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#6A1B9A'</span>, <span class="st">'x'</span>: <span class="fl">5.3</span>},</span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'Wireframes'</span>, <span class="st">'desc'</span>: <span class="st">'UI 设计原型</span><span class="ch">\n</span><span class="st">界面布局草图</span><span class="ch">\n</span><span class="st">UI-Design Prototypen'</span>,</span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#00695C'</span>, <span class="st">'x'</span>: <span class="fl">8.6</span>},</span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'自由图表'</span>, <span class="st">'desc'</span>: <span class="st">'工作流程图</span><span class="ch">\n</span><span class="st">服务架构需求</span><span class="ch">\n</span><span class="st">Freie Diagramme'</span>,</span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: <span class="st">'#37474F'</span>, <span class="st">'x'</span>: <span class="fl">11.9</span>},</span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb11-17"><a href="#cb11-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-18"><a href="#cb11-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> g <span class="kw">in</span> graph_types:</span>
+<span id="cb11-19"><a href="#cb11-19" aria-hidden="true" tabindex="-1"></a>    card <span class="op">=</span> mpatches.FancyBboxPatch((g[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.5</span>, <span class="fl">0.5</span>), <span class="fl">3.0</span>, <span class="fl">5.8</span>,</span>
+<span id="cb11-20"><a href="#cb11-20" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>g[<span class="st">'color'</span>], linewidth<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb11-21"><a href="#cb11-21" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(card)</span>
+<span id="cb11-22"><a href="#cb11-22" aria-hidden="true" tabindex="-1"></a>    ax.text(g[<span class="st">'x'</span>], <span class="fl">5.5</span>, g[<span class="st">'zh'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">11</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>g[<span class="st">'color'</span>])</span>
+<span id="cb11-23"><a href="#cb11-23" aria-hidden="true" tabindex="-1"></a>    ax.text(g[<span class="st">'x'</span>], <span class="fl">3.2</span>, g[<span class="st">'desc'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">8.5</span>, color<span class="op">=</span><span class="st">'#555'</span>, linespacing<span class="op">=</span><span class="fl">1.4</span>)</span>
+<span id="cb11-24"><a href="#cb11-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-25"><a href="#cb11-25" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb11-26"><a href="#cb11-26" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-graphical-notations" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-graphical-notations-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-graphical-notations-output-1.png" width="1334" height="566" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-graphical-notations-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;11: 图形表示法的常见类型 | Haeufige grafische Notationen
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>图形表示法在需求规格说明中有广泛应用。SysML 和 BPMN 用于系统和流程建模。UML (统一建模语言) 包括用例图、类图、活动图和序列图等多种图表类型，将在下节课详细介绍。Wireframes 用于 UI 设计的界面布局原型。自由图表则可以灵活地可视化工作流程或服务架构需求。</p>
+</section>
+</section>
+<section id="需求规格说明的内容原则-inhaltsprinzipien" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="需求规格说明的内容原则-inhaltsprinzipien"><span class="header-section-number">3.3</span> 需求规格说明的内容原则 | Inhaltsprinzipien</h2>
+<div class="callout callout-style-default callout-important callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Important</span>核心原则 (Kernprinzip)
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>理想情况</strong>：需求规格说明只描述从外部可观察到的行为 (Nur von aussen wahrnehmbares Verhalten)。</p>
+<p><strong>现实情况</strong>：技术和架构会影响可实现的行为。在必要时提及技术约束以解释需求决策，但在不损失信息的情况下应尽量避免。</p>
+<p><strong>需求规格说明不是实现指令</strong> (Keine Implementierungsanweisungen)。</p>
+</div>
+</div>
+</section>
+</section>
+<section id="需求的存储-speicherung-von-anforderungen" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> 需求的存储 | Speicherung von Anforderungen</h1>
+<div id="cell-fig-storage-methods" class="cell" data-execution_count="13">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">7</span>))</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">8</span>)</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'需求存储方式 | Speicherung von Anforderungen'</span>, fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>storage <span class="op">=</span> [</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'文档'</span>, <span class="st">'de'</span>: <span class="st">'Dokumente'</span>,</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>        <span class="st">'tools'</span>: <span class="st">'Word, PDF'</span>,</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>        <span class="st">'pros'</span>: <span class="st">'熟悉的工具</span><span class="ch">\n</span><span class="st">适合正式文档'</span>,</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>        <span class="st">'cons'</span>: <span class="st">'版本管理困难</span><span class="ch">\n</span><span class="st">难以追踪变更'</span>,</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>        <span class="st">'color'</span>: COLORS[<span class="st">'doc_color'</span>], <span class="st">'x'</span>: <span class="fl">2.5</span></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'Wiki'</span>, <span class="st">'de'</span>: <span class="st">'Wikis'</span>,</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">'tools'</span>: <span class="st">'Confluence, GitLab Wiki</span><span class="ch">\n</span><span class="st">Notion, Coda'</span>,</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">'pros'</span>: <span class="st">'协作编辑</span><span class="ch">\n</span><span class="st">版本历史'</span>,</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">'cons'</span>: <span class="st">'结构可能混乱</span><span class="ch">\n</span><span class="st">搜索可能不便'</span>,</span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">'color'</span>: COLORS[<span class="st">'wiki_color'</span>], <span class="st">'x'</span>: <span class="fl">7.0</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'项目管理工具'</span>, <span class="st">'de'</span>: <span class="st">'Projektmanagement-Tools'</span>,</span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>        <span class="st">'tools'</span>: <span class="st">'Jira, GitLab Issues</span><span class="ch">\n</span><span class="st">GitHub Issues'</span>,</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>        <span class="st">'pros'</span>: <span class="st">'可追踪状态</span><span class="ch">\n</span><span class="st">与开发流程集成'</span>,</span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>        <span class="st">'cons'</span>: <span class="st">'不适合长篇描述</span><span class="ch">\n</span><span class="st">工具依赖'</span>,</span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>        <span class="st">'color'</span>: COLORS[<span class="st">'tool_color'</span>], <span class="st">'x'</span>: <span class="fl">11.5</span></span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s <span class="kw">in</span> storage:</span>
+<span id="cb12-32"><a href="#cb12-32" aria-hidden="true" tabindex="-1"></a>    card <span class="op">=</span> mpatches.FancyBboxPatch((s[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">2.0</span>, <span class="fl">0.5</span>), <span class="fl">4.0</span>, <span class="fl">7.0</span>,</span>
+<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>s[<span class="st">'color'</span>], linewidth<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb12-34"><a href="#cb12-34" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(card)</span>
+<span id="cb12-35"><a href="#cb12-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-36"><a href="#cb12-36" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">7.0</span>, s[<span class="st">'zh'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">13</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>s[<span class="st">'color'</span>])</span>
+<span id="cb12-37"><a href="#cb12-37" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">6.4</span>, s[<span class="st">'de'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>, color<span class="op">=</span>s[<span class="st">'color'</span>])</span>
+<span id="cb12-38"><a href="#cb12-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-39"><a href="#cb12-39" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Tools</span></span>
+<span id="cb12-40"><a href="#cb12-40" aria-hidden="true" tabindex="-1"></a>    tools_box <span class="op">=</span> mpatches.FancyBboxPatch((s[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.7</span>, <span class="fl">5.0</span>), <span class="fl">3.4</span>, <span class="fl">1.0</span>,</span>
+<span id="cb12-41"><a href="#cb12-41" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.05"</span>, facecolor<span class="op">=</span>s[<span class="st">'color'</span>] <span class="op">+</span> <span class="st">'15'</span>, edgecolor<span class="op">=</span>s[<span class="st">'color'</span>],</span>
+<span id="cb12-42"><a href="#cb12-42" aria-hidden="true" tabindex="-1"></a>        linewidth<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb12-43"><a href="#cb12-43" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(tools_box)</span>
+<span id="cb12-44"><a href="#cb12-44" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">5.5</span>, s[<span class="st">'tools'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">8</span>, color<span class="op">=</span><span class="st">'#444'</span>, linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb12-45"><a href="#cb12-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-46"><a href="#cb12-46" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Pros</span></span>
+<span id="cb12-47"><a href="#cb12-47" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">4.3</span>, <span class="st">'[+] 优势:'</span>, fontsize<span class="op">=</span><span class="fl">8.5</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'success'</span>],</span>
+<span id="cb12-48"><a href="#cb12-48" aria-hidden="true" tabindex="-1"></a>            ha<span class="op">=</span><span class="st">'center'</span>)</span>
+<span id="cb12-49"><a href="#cb12-49" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">3.5</span>, s[<span class="st">'pros'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>, color<span class="op">=</span><span class="st">'#555'</span>, linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb12-50"><a href="#cb12-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-51"><a href="#cb12-51" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Cons</span></span>
+<span id="cb12-52"><a href="#cb12-52" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">2.5</span>, <span class="st">'[-] 劣势:'</span>, fontsize<span class="op">=</span><span class="fl">8.5</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'danger'</span>],</span>
+<span id="cb12-53"><a href="#cb12-53" aria-hidden="true" tabindex="-1"></a>            ha<span class="op">=</span><span class="st">'center'</span>)</span>
+<span id="cb12-54"><a href="#cb12-54" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">1.7</span>, s[<span class="st">'cons'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>, color<span class="op">=</span><span class="st">'#555'</span>, linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb12-55"><a href="#cb12-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-56"><a href="#cb12-56" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb12-57"><a href="#cb12-57" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-storage-methods" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-storage-methods-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-storage-methods-output-1.png" width="1334" height="662" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-storage-methods-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;12: 需求存储方式 | Speicherung von Anforderungen
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>需求的存储方式主要有三类。<strong>文档</strong> (Word, PDF) 是传统方式，工具熟悉且适合正式文档，但版本管理和变更追踪困难。<strong>Wiki</strong> (Confluence, GitLab Wiki, Notion, Coda) 支持协作编辑和版本历史，但结构可能变得混乱。<strong>项目管理工具</strong> (Jira, GitLab Issues, GitHub Issues) 可以追踪需求状态并与开发流程集成，但不太适合长篇描述。</p>
+<p>课程中提到 GitLab Issue Boards 作为项目管理工具的具体示例 (参见 <a href="https://gitlab.com/gitlab-org/gitlab/-/boards">gitlab.com/gitlab-org/gitlab/-/boards</a>)。GitLab 的 Issue Board 允许团队以看板 (Kanban) 的形式可视化和管理 Issues，支持通过标签和里程碑来组织需求工作流。</p>
+</section>
+<section id="需求验证-validierung-von-anforderungen" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> 需求验证 | Validierung von Anforderungen</h1>
+<div id="cell-fig-validation" class="cell" data-execution_count="14">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">6</span>))</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">7</span>)</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'需求验证方法 | Validierung von Anforderungen'</span>, fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>methods <span class="op">=</span> [</span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'评审'</span>, <span class="st">'de'</span>: <span class="st">'Reviews'</span>,</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>        <span class="st">'desc'</span>: <span class="st">'团队或外部专家</span><span class="ch">\n</span><span class="st">审查需求文档</span><span class="ch">\n</span><span class="st">Pruefung durch Team</span><span class="ch">\n</span><span class="st">oder Experten'</span>,</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>        <span class="st">'marker'</span>: <span class="st">'1'</span>, <span class="st">'color'</span>: <span class="st">'#1565C0'</span>, <span class="st">'x'</span>: <span class="fl">2.0</span></span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'原型反馈'</span>, <span class="st">'de'</span>: <span class="st">'Prototypen +</span><span class="ch">\n</span><span class="st">Feedback'</span>,</span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">'desc'</span>: <span class="st">'将原型交给</span><span class="ch">\n</span><span class="st">客户/用户</span><span class="ch">\n</span><span class="st">收集反馈</span><span class="ch">\n</span><span class="st">Funktionierendes</span><span class="ch">\n</span><span class="st">Programm oder</span><span class="ch">\n</span><span class="st">Designprototyp'</span>,</span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">'marker'</span>: <span class="st">'2'</span>, <span class="st">'color'</span>: <span class="st">'#6A1B9A'</span>, <span class="st">'x'</span>: <span class="fl">5.3</span></span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>    {</span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">'zh'</span>: <span class="st">'推导测试用例'</span>, <span class="st">'de'</span>: <span class="st">'Testfaelle</span><span class="ch">\n</span><span class="st">ableiten'</span>,</span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">'desc'</span>: <span class="st">'从需求推导出</span><span class="ch">\n</span><span class="st">具体的测试用例</span><span class="ch">\n</span><span class="st">验证可测试性</span><span class="ch">\n</span><span class="st">Testbarkeit</span><span class="ch">\n</span><span class="st">ueberpruefen'</span>,</span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>        <span class="st">'marker'</span>: <span class="st">'3'</span>, <span class="st">'color'</span>: <span class="st">'#00695C'</span>, <span class="st">'x'</span>: <span class="fl">8.6</span></span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>    },</span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> m <span class="kw">in</span> methods:</span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>    card <span class="op">=</span> mpatches.FancyBboxPatch((m[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.8</span>, <span class="fl">0.5</span>), <span class="fl">3.6</span>, <span class="fl">5.8</span>,</span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>m[<span class="st">'color'</span>], linewidth<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(card)</span>
+<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a>    marker_circle <span class="op">=</span> plt.Circle((m[<span class="st">'x'</span>], <span class="fl">5.8</span>), <span class="fl">0.35</span>, facecolor<span class="op">=</span>m[<span class="st">'color'</span>],</span>
+<span id="cb13-31"><a href="#cb13-31" aria-hidden="true" tabindex="-1"></a>                                edgecolor<span class="op">=</span><span class="st">'white'</span>, linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb13-32"><a href="#cb13-32" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(marker_circle)</span>
+<span id="cb13-33"><a href="#cb13-33" aria-hidden="true" tabindex="-1"></a>    ax.text(m[<span class="st">'x'</span>], <span class="fl">5.8</span>, m[<span class="st">'marker'</span>], ha<span class="op">=</span><span class="st">'center'</span>, va<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">12</span>,</span>
+<span id="cb13-34"><a href="#cb13-34" aria-hidden="true" tabindex="-1"></a>            fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span><span class="st">'white'</span>)</span>
+<span id="cb13-35"><a href="#cb13-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-36"><a href="#cb13-36" aria-hidden="true" tabindex="-1"></a>    ax.text(m[<span class="st">'x'</span>], <span class="fl">4.8</span>, m[<span class="st">'zh'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">12</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>m[<span class="st">'color'</span>])</span>
+<span id="cb13-37"><a href="#cb13-37" aria-hidden="true" tabindex="-1"></a>    ax.text(m[<span class="st">'x'</span>], <span class="fl">4.0</span>, m[<span class="st">'de'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">9</span>, color<span class="op">=</span>m[<span class="st">'color'</span>], linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb13-38"><a href="#cb13-38" aria-hidden="true" tabindex="-1"></a>    ax.text(m[<span class="st">'x'</span>], <span class="fl">2.2</span>, m[<span class="st">'desc'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">8</span>, color<span class="op">=</span><span class="st">'#555'</span>, linespacing<span class="op">=</span><span class="fl">1.4</span>)</span>
+<span id="cb13-39"><a href="#cb13-39" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-40"><a href="#cb13-40" aria-hidden="true" tabindex="-1"></a><span class="co"># Feedback loop</span></span>
+<span id="cb13-41"><a href="#cb13-41" aria-hidden="true" tabindex="-1"></a>feedback_box <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">10.5</span>, <span class="fl">1.5</span>), <span class="fl">3.0</span>, <span class="fl">3.5</span>,</span>
+<span id="cb13-42"><a href="#cb13-42" aria-hidden="true" tabindex="-1"></a>    boxstyle<span class="op">=</span><span class="st">"round,pad=0.15"</span>, facecolor<span class="op">=</span>COLORS[<span class="st">'yellow_light'</span>], edgecolor<span class="op">=</span>COLORS[<span class="st">'highlight'</span>],</span>
+<span id="cb13-43"><a href="#cb13-43" aria-hidden="true" tabindex="-1"></a>    linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb13-44"><a href="#cb13-44" aria-hidden="true" tabindex="-1"></a>ax.add_patch(feedback_box)</span>
+<span id="cb13-45"><a href="#cb13-45" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">12.0</span>, <span class="fl">4.3</span>, <span class="st">'反馈循环'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb13-46"><a href="#cb13-46" aria-hidden="true" tabindex="-1"></a>        color<span class="op">=</span>COLORS[<span class="st">'highlight'</span>])</span>
+<span id="cb13-47"><a href="#cb13-47" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">12.0</span>, <span class="fl">3.6</span>, <span class="st">'Feedback-Loop'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">9</span>, color<span class="op">=</span>COLORS[<span class="st">'highlight'</span>])</span>
+<span id="cb13-48"><a href="#cb13-48" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">12.0</span>, <span class="fl">2.5</span>, <span class="st">'验证结果反馈</span><span class="ch">\n</span><span class="st">到需求获取和</span><span class="ch">\n</span><span class="st">规格说明阶段</span><span class="ch">\n</span><span class="st">Zurueck zu</span><span class="ch">\n</span><span class="st">Elicitation &amp;</span><span class="ch">\n</span><span class="st">Spezifikation'</span>,</span>
+<span id="cb13-49"><a href="#cb13-49" aria-hidden="true" tabindex="-1"></a>        ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>, color<span class="op">=</span><span class="st">'#555'</span>, linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb13-50"><a href="#cb13-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-51"><a href="#cb13-51" aria-hidden="true" tabindex="-1"></a>ax.annotate(<span class="st">''</span>, xy<span class="op">=</span>(<span class="fl">10.4</span>, <span class="fl">3.2</span>), xytext<span class="op">=</span>(<span class="fl">8.8</span>, <span class="fl">3.2</span>),</span>
+<span id="cb13-52"><a href="#cb13-52" aria-hidden="true" tabindex="-1"></a>    arrowprops<span class="op">=</span><span class="bu">dict</span>(arrowstyle<span class="op">=</span><span class="st">'&lt;-'</span>, color<span class="op">=</span>COLORS[<span class="st">'highlight'</span>], lw<span class="op">=</span><span class="dv">2</span>))</span>
+<span id="cb13-53"><a href="#cb13-53" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-54"><a href="#cb13-54" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb13-55"><a href="#cb13-55" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-validation" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-validation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-validation-output-1.png" width="1334" height="566" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-validation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;13: 需求验证方法 | Methoden zur Validierung von Anforderungen
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>需求验证是确保需求正确性和完整性的关键步骤。<strong>评审 (Reviews)</strong> 由团队或外部专家审查需求文档，发现逻辑错误、遗漏和不一致之处。<strong>原型反馈</strong> 将可运行的程序原型 (funktionierendes Programm) 或设计原型 (Designprototyp) 交给客户和用户，收集他们的反馈。<strong>推导测试用例 (Testfaelle ableiten)</strong> 从需求出发推导具体的测试用例，如果一条需求无法被测试，那么它很可能不够具体或存在歧义。验证的结果应反馈到需求获取和规格说明阶段，形成持续改进的循环。</p>
+</section>
+<section id="全章总结-gesamtzusammenfassung" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> 全章总结 | Gesamtzusammenfassung</h1>
+<div id="cell-fig-full-summary" class="cell" data-execution_count="15">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">15</span>, <span class="dv">10</span>))</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">15</span>)</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">11</span>)</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'第十章 Requirements Engineering -- 知识地图</span><span class="ch">\n</span><span class="st">Kapitel 10: Wissenslandkarte'</span>,</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>             fontsize<span class="op">=</span><span class="dv">15</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Central theme</span></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>center <span class="op">=</span> mpatches.FancyBboxPatch((<span class="fl">5.5</span>, <span class="fl">4.5</span>), <span class="fl">4.0</span>, <span class="fl">2.0</span>, boxstyle<span class="op">=</span><span class="st">"round,pad=0.2"</span>,</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>    facecolor<span class="op">=</span>COLORS[<span class="st">'dark'</span>], edgecolor<span class="op">=</span><span class="st">'white'</span>, linewidth<span class="op">=</span><span class="dv">3</span>)</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>ax.add_patch(center)</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.5</span>, <span class="fl">5.8</span>, <span class="st">'Requirements'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">13</span>,</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>        fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span><span class="st">'white'</span>)</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">7.5</span>, <span class="fl">5.0</span>, <span class="st">'Engineering'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">12</span>, color<span class="op">=</span><span class="st">'white'</span>)</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a><span class="co"># Surrounding topics</span></span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>topics <span class="op">=</span> [</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'title'</span>: <span class="st">'需求分类</span><span class="ch">\n</span><span class="st">Kategorien'</span>, <span class="st">'items'</span>: <span class="st">'功能性 [F]</span><span class="ch">\n</span><span class="st">非功能性 [NF]</span><span class="ch">\n</span><span class="st">冲突与优先级'</span>,</span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: COLORS[<span class="st">'func_color'</span>], <span class="st">'x'</span>: <span class="fl">2.0</span>, <span class="st">'y'</span>: <span class="fl">8.5</span>},</span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'title'</span>: <span class="st">'歧义与困难</span><span class="ch">\n</span><span class="st">Mehrdeutigkeit'</span>, <span class="st">'items'</span>: <span class="st">'主观表述量化</span><span class="ch">\n</span><span class="st">隐含需求</span><span class="ch">\n</span><span class="st">利益相关者分歧'</span>,</span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: COLORS[<span class="st">'danger'</span>], <span class="st">'x'</span>: <span class="fl">7.5</span>, <span class="st">'y'</span>: <span class="fl">9.5</span>},</span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'title'</span>: <span class="st">'获取技术</span><span class="ch">\n</span><span class="st">Elicitation'</span>, <span class="st">'items'</span>: <span class="st">'访谈 / 民族志</span><span class="ch">\n</span><span class="st">研讨会 / Personas</span><span class="ch">\n</span><span class="st">设计思维'</span>,</span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: COLORS[<span class="st">'elicit'</span>], <span class="st">'x'</span>: <span class="fl">13.0</span>, <span class="st">'y'</span>: <span class="fl">8.5</span>},</span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'title'</span>: <span class="st">'规格表示法</span><span class="ch">\n</span><span class="st">Notationen'</span>, <span class="st">'items'</span>: <span class="st">'自然语言</span><span class="ch">\n</span><span class="st">结构化 / 图形</span><span class="ch">\n</span><span class="st">数学规格'</span>,</span>
+<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: COLORS[<span class="st">'specify'</span>], <span class="st">'x'</span>: <span class="fl">13.0</span>, <span class="st">'y'</span>: <span class="fl">3.0</span>},</span>
+<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'title'</span>: <span class="st">'存储方式</span><span class="ch">\n</span><span class="st">Speicherung'</span>, <span class="st">'items'</span>: <span class="st">'文档 / Wiki</span><span class="ch">\n</span><span class="st">Jira / GitLab Issues</span><span class="ch">\n</span><span class="st">GitLab Boards'</span>,</span>
+<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: COLORS[<span class="st">'purple'</span>], <span class="st">'x'</span>: <span class="fl">2.0</span>, <span class="st">'y'</span>: <span class="fl">3.0</span>},</span>
+<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'title'</span>: <span class="st">'验证方法</span><span class="ch">\n</span><span class="st">Validierung'</span>, <span class="st">'items'</span>: <span class="st">'评审 / 原型反馈</span><span class="ch">\n</span><span class="st">测试用例推导</span><span class="ch">\n</span><span class="st">反馈循环'</span>,</span>
+<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>     <span class="st">'color'</span>: COLORS[<span class="st">'validate'</span>], <span class="st">'x'</span>: <span class="fl">7.5</span>, <span class="st">'y'</span>: <span class="fl">1.0</span>},</span>
+<span id="cb14-30"><a href="#cb14-30" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb14-31"><a href="#cb14-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-32"><a href="#cb14-32" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> topics:</span>
+<span id="cb14-33"><a href="#cb14-33" aria-hidden="true" tabindex="-1"></a>    card <span class="op">=</span> mpatches.FancyBboxPatch((t[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.8</span>, t[<span class="st">'y'</span>] <span class="op">-</span> <span class="fl">1.2</span>), <span class="fl">3.6</span>, <span class="fl">2.6</span>,</span>
+<span id="cb14-34"><a href="#cb14-34" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.15"</span>, facecolor<span class="op">=</span><span class="st">'white'</span>, edgecolor<span class="op">=</span>t[<span class="st">'color'</span>], linewidth<span class="op">=</span><span class="dv">2</span>)</span>
+<span id="cb14-35"><a href="#cb14-35" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(card)</span>
+<span id="cb14-36"><a href="#cb14-36" aria-hidden="true" tabindex="-1"></a>    ax.text(t[<span class="st">'x'</span>], t[<span class="st">'y'</span>] <span class="op">+</span> <span class="fl">0.8</span>, t[<span class="st">'title'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">9</span>,</span>
+<span id="cb14-37"><a href="#cb14-37" aria-hidden="true" tabindex="-1"></a>            fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>t[<span class="st">'color'</span>], linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb14-38"><a href="#cb14-38" aria-hidden="true" tabindex="-1"></a>    ax.text(t[<span class="st">'x'</span>], t[<span class="st">'y'</span>] <span class="op">-</span> <span class="fl">0.5</span>, t[<span class="st">'items'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="fl">7.5</span>,</span>
+<span id="cb14-39"><a href="#cb14-39" aria-hidden="true" tabindex="-1"></a>            color<span class="op">=</span><span class="st">'#555'</span>, linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb14-40"><a href="#cb14-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-41"><a href="#cb14-41" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Draw line to center</span></span>
+<span id="cb14-42"><a href="#cb14-42" aria-hidden="true" tabindex="-1"></a>    dx <span class="op">=</span> <span class="fl">7.5</span> <span class="op">-</span> t[<span class="st">'x'</span>]</span>
+<span id="cb14-43"><a href="#cb14-43" aria-hidden="true" tabindex="-1"></a>    dy <span class="op">=</span> <span class="fl">5.5</span> <span class="op">-</span> t[<span class="st">'y'</span>]</span>
+<span id="cb14-44"><a href="#cb14-44" aria-hidden="true" tabindex="-1"></a>    dist <span class="op">=</span> (dx<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> dy<span class="op">**</span><span class="dv">2</span>)<span class="op">**</span><span class="fl">0.5</span></span>
+<span id="cb14-45"><a href="#cb14-45" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> dist <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb14-46"><a href="#cb14-46" aria-hidden="true" tabindex="-1"></a>        ux, uy <span class="op">=</span> dx<span class="op">/</span>dist, dy<span class="op">/</span>dist</span>
+<span id="cb14-47"><a href="#cb14-47" aria-hidden="true" tabindex="-1"></a>        ax.plot([t[<span class="st">'x'</span>] <span class="op">+</span> ux<span class="op">*</span><span class="fl">2.0</span>, <span class="fl">7.5</span> <span class="op">-</span> ux<span class="op">*</span><span class="fl">2.2</span>],</span>
+<span id="cb14-48"><a href="#cb14-48" aria-hidden="true" tabindex="-1"></a>                [t[<span class="st">'y'</span>] <span class="op">+</span> uy<span class="op">*</span><span class="fl">1.5</span>, <span class="fl">5.5</span> <span class="op">-</span> uy<span class="op">*</span><span class="fl">1.2</span>],</span>
+<span id="cb14-49"><a href="#cb14-49" aria-hidden="true" tabindex="-1"></a>                color<span class="op">=</span>t[<span class="st">'color'</span>], lw<span class="op">=</span><span class="fl">1.5</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, alpha<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb14-50"><a href="#cb14-50" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-51"><a href="#cb14-51" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb14-52"><a href="#cb14-52" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-full-summary" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-full-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-full-summary-output-1.png" width="1430" height="950" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-full-summary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;14: 全章知识地图 | Gesamte Wissenslandkarte
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div id="cell-fig-re-process-flow" class="cell" data-execution_count="16">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">14</span>, <span class="dv">5</span>))</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>ax.set_xlim(<span class="dv">0</span>, <span class="dv">14</span>)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="fl">5.5</span>)</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>ax.axis(<span class="st">'off'</span>)</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="st">'Requirements Engineering 完整流程 | Gesamtprozess'</span>, fontsize<span class="op">=</span><span class="dv">14</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>)</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>process_steps <span class="op">=</span> [</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'需求获取</span><span class="ch">\n</span><span class="st">Elicitation'</span>, <span class="st">'color'</span>: COLORS[<span class="st">'elicit'</span>], <span class="st">'x'</span>: <span class="fl">2.0</span>},</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'需求分析</span><span class="ch">\n</span><span class="st">Analyse'</span>, <span class="st">'color'</span>: COLORS[<span class="st">'analyze'</span>], <span class="st">'x'</span>: <span class="fl">5.0</span>},</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'需求规格</span><span class="ch">\n</span><span class="st">Spezifikation'</span>, <span class="st">'color'</span>: COLORS[<span class="st">'specify'</span>], <span class="st">'x'</span>: <span class="fl">8.0</span>},</span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a>    {<span class="st">'zh'</span>: <span class="st">'需求验证</span><span class="ch">\n</span><span class="st">Validierung'</span>, <span class="st">'color'</span>: COLORS[<span class="st">'validate'</span>], <span class="st">'x'</span>: <span class="fl">11.0</span>},</span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a>]</span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> s <span class="kw">in</span> process_steps:</span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>    card <span class="op">=</span> mpatches.FancyBboxPatch((s[<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.3</span>, <span class="fl">1.5</span>), <span class="fl">2.6</span>, <span class="fl">2.5</span>,</span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>        boxstyle<span class="op">=</span><span class="st">"round,pad=0.15"</span>, facecolor<span class="op">=</span>s[<span class="st">'color'</span>], edgecolor<span class="op">=</span><span class="st">'white'</span>,</span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>        linewidth<span class="op">=</span><span class="dv">2</span>, alpha<span class="op">=</span><span class="fl">0.85</span>)</span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a>    ax.add_patch(card)</span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a>    ax.text(s[<span class="st">'x'</span>], <span class="fl">2.8</span>, s[<span class="st">'zh'</span>], ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">10</span>, fontweight<span class="op">=</span><span class="st">'bold'</span>,</span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a>            color<span class="op">=</span><span class="st">'white'</span>, linespacing<span class="op">=</span><span class="fl">1.3</span>)</span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">len</span>(process_steps) <span class="op">-</span> <span class="dv">1</span>):</span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>    ax.annotate(<span class="st">''</span>, xy<span class="op">=</span>(process_steps[i<span class="op">+</span><span class="dv">1</span>][<span class="st">'x'</span>] <span class="op">-</span> <span class="fl">1.4</span>, <span class="fl">2.8</span>),</span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>        xytext<span class="op">=</span>(process_steps[i][<span class="st">'x'</span>] <span class="op">+</span> <span class="fl">1.4</span>, <span class="fl">2.8</span>),</span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a>        arrowprops<span class="op">=</span><span class="bu">dict</span>(arrowstyle<span class="op">=</span><span class="st">'-&gt;'</span>, color<span class="op">=</span>COLORS[<span class="st">'neutral'</span>], lw<span class="op">=</span><span class="fl">2.5</span>))</span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a><span class="co"># Feedback arrow</span></span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a>ax.annotate(<span class="st">''</span>, xy<span class="op">=</span>(<span class="fl">2.0</span>, <span class="fl">1.3</span>), xytext<span class="op">=</span>(<span class="fl">11.0</span>, <span class="fl">1.3</span>),</span>
+<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a>    arrowprops<span class="op">=</span><span class="bu">dict</span>(arrowstyle<span class="op">=</span><span class="st">'-&gt;'</span>, color<span class="op">=</span>COLORS[<span class="st">'highlight'</span>], lw<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb15-30"><a href="#cb15-30" aria-hidden="true" tabindex="-1"></a>                    connectionstyle<span class="op">=</span><span class="st">'arc3,rad=-0.3'</span>))</span>
+<span id="cb15-31"><a href="#cb15-31" aria-hidden="true" tabindex="-1"></a>ax.text(<span class="fl">6.5</span>, <span class="fl">0.2</span>, <span class="st">'反馈循环 | Feedback-Loop'</span>, ha<span class="op">=</span><span class="st">'center'</span>, fontsize<span class="op">=</span><span class="dv">9</span>,</span>
+<span id="cb15-32"><a href="#cb15-32" aria-hidden="true" tabindex="-1"></a>        fontweight<span class="op">=</span><span class="st">'bold'</span>, color<span class="op">=</span>COLORS[<span class="st">'highlight'</span>])</span>
+<span id="cb15-33"><a href="#cb15-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-34"><a href="#cb15-34" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb15-35"><a href="#cb15-35" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="fig-re-process-flow" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-re-process-flow-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="swt-09_files/figure-html/fig-re-process-flow-output-1.png" width="1334" height="486" class="figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-re-process-flow-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;15: RE 完整流程 | Requirements Engineering Gesamtprozess
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>下周预告 | Ausblick naechste Woche
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>主题</strong>：UML 建模 (Modellierung mit UML)</p>
+<p><strong>核心内容</strong>：活动图 (Aktivitaetsdiagramme)、序列图 (Sequenzdiagramme)、用例图 (Use-Case-Diagramme)、类图 (Klassendiagramme)。</p>
+<p><strong>准备</strong>：观看相关视频 (预计 12 月 23 日发布)。可选补充阅读：Software Engineering, Kapitel 5-5.4。无测验 (Kein Quiz)。</p>
+</div>
+</div>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+<script src="swt-09_files/libs/quarto-html/zenscroll-min.js"></script>
+</body></html>

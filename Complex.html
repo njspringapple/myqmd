@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>算法复杂度与 Landau 记号 — 可视化教程</title>
+<link href="https://cdn.tailwindcss.com" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --card2: #334155;
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --accent3: #f472b6;
+    --accent4: #34d399;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --border: #475569;
+  }
+
+  body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.8;
+    overflow-x: hidden;
+  }
+
+  code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* Navigation */
+  nav {
+    position: fixed; top: 0; left: 0; width: 260px; height: 100vh;
+    background: var(--card); border-right: 1px solid var(--border);
+    overflow-y: auto; z-index: 100; padding: 20px 0;
+    transition: transform 0.3s;
+  }
+  nav.hidden-nav { transform: translateX(-260px); }
+  nav a {
+    display: block; padding: 10px 24px; color: var(--text2);
+    text-decoration: none; font-size: 14px; transition: all 0.2s;
+    border-left: 3px solid transparent;
+  }
+  nav a:hover, nav a.active {
+    color: var(--accent); background: rgba(56,189,248,0.08);
+    border-left-color: var(--accent);
+  }
+  nav .nav-title {
+    padding: 12px 24px; font-weight: 700; font-size: 16px;
+    color: var(--accent); letter-spacing: 1px;
+  }
+  nav .nav-section {
+    padding: 16px 24px 6px; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 2px; color: var(--border); font-weight: 700;
+  }
+
+  /* Main content */
+  main {
+    margin-left: 260px; padding: 40px 60px 100px;
+    max-width: 1100px; transition: margin-left 0.3s;
+  }
+  main.full { margin-left: 0; }
+
+  .menu-btn {
+    display: none; position: fixed; top: 16px; left: 16px;
+    z-index: 200; background: var(--card); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px; border-radius: 8px; cursor: pointer;
+    font-size: 18px;
+  }
+
+  /* Sections */
+  section { margin-bottom: 64px; }
+  h1 {
+    font-size: 2.4em; font-weight: 700; margin-bottom: 12px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  h2 {
+    font-size: 1.6em; font-weight: 700; margin: 40px 0 16px;
+    color: var(--accent); border-bottom: 2px solid var(--border);
+    padding-bottom: 8px;
+  }
+  h3 {
+    font-size: 1.2em; font-weight: 600; margin: 24px 0 12px;
+    color: var(--accent2);
+  }
+  p { margin: 10px 0; color: var(--text); }
+
+  /* Cards */
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px; margin: 20px 0;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  }
+  .card.accent { border-left: 4px solid var(--accent); }
+  .card.accent2 { border-left: 4px solid var(--accent2); }
+  .card.accent3 { border-left: 4px solid var(--accent3); }
+  .card.accent4 { border-left: 4px solid var(--accent4); }
+
+  /* Formula boxes */
+  .formula {
+    background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.2);
+    border-radius: 8px; padding: 16px 20px; margin: 16px 0;
+    font-size: 1.05em; text-align: center; overflow-x: auto;
+  }
+  .formula.pink {
+    background: rgba(244,114,182,0.08); border-color: rgba(244,114,182,0.2);
+  }
+  .formula.green {
+    background: rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.2);
+  }
+  .formula.purple {
+    background: rgba(129,140,248,0.08); border-color: rgba(129,140,248,0.2);
+  }
+
+  /* Badge / Tag */
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; margin: 2px;
+  }
+  .badge-blue { background: rgba(56,189,248,0.15); color: var(--accent); }
+  .badge-pink { background: rgba(244,114,182,0.15); color: var(--accent3); }
+  .badge-green { background: rgba(52,211,153,0.15); color: var(--accent4); }
+  .badge-purple { background: rgba(129,140,248,0.15); color: var(--accent2); }
+
+  /* Comparison table */
+  .comp-table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    font-size: 14px;
+  }
+  .comp-table th {
+    background: var(--card2); padding: 12px 16px; text-align: left;
+    border-bottom: 2px solid var(--accent); font-weight: 600; color: var(--accent);
+  }
+  .comp-table td {
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  .comp-table tr:hover td { background: rgba(56,189,248,0.04); }
+
+  /* Canvas chart */
+  .chart-container {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin: 20px 0;
+    position: relative;
+  }
+  canvas { width: 100%; height: auto; display: block; }
+
+  /* Interactive demo */
+  .demo-box {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px; margin: 20px 0;
+  }
+  .slider-group { margin: 12px 0; }
+  .slider-group label {
+    display: block; font-size: 14px; color: var(--text2); margin-bottom: 4px;
+  }
+  input[type="range"] {
+    -webkit-appearance: none; width: 100%; height: 6px;
+    background: var(--card2); border-radius: 3px; outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px;
+    background: var(--accent); border-radius: 50%; cursor: pointer;
+  }
+  .result-display {
+    background: var(--card2); border-radius: 8px; padding: 16px;
+    margin-top: 16px; font-family: 'JetBrains Mono', monospace;
+    font-size: 14px; line-height: 2;
+  }
+
+  /* Absorption animation */
+  .absorb-demo {
+    display: flex; align-items: center; gap: 12px;
+    flex-wrap: wrap; margin: 16px 0;
+  }
+  .absorb-item {
+    padding: 8px 16px; border-radius: 8px; font-weight: 600;
+    font-family: 'JetBrains Mono', monospace; font-size: 14px;
+    transition: all 0.5s; position: relative;
+  }
+  .absorb-item.active { opacity: 1; transform: scale(1); }
+  .absorb-item.absorbed {
+    opacity: 0.3; transform: scale(0.85);
+    text-decoration: line-through;
+  }
+  .absorb-arrow { font-size: 20px; color: var(--accent); }
+
+  /* Steps / Process */
+  .step {
+    display: flex; gap: 16px; margin: 16px 0; align-items: flex-start;
+  }
+  .step-num {
+    min-width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; color: white; flex-shrink: 0;
+  }
+  .step-content { flex: 1; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 0; }
+  .tab {
+    padding: 10px 20px; background: var(--card2); border: 1px solid var(--border);
+    border-bottom: none; border-radius: 8px 8px 0 0; cursor: pointer;
+    color: var(--text2); font-size: 14px; font-weight: 500;
+    transition: all 0.2s;
+  }
+  .tab.active {
+    background: var(--card); color: var(--accent);
+    border-color: var(--accent);
+  }
+  .tab-content {
+    display: none; background: var(--card); border: 1px solid var(--border);
+    border-radius: 0 12px 12px 12px; padding: 24px;
+  }
+  .tab-content.active { display: block; }
+
+  /* Highlight */
+  .hl { color: var(--accent); font-weight: 600; }
+  .hl2 { color: var(--accent2); font-weight: 600; }
+  .hl3 { color: var(--accent3); font-weight: 600; }
+  .hl4 { color: var(--accent4); font-weight: 600; }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    nav { transform: translateX(-260px); }
+    nav.show { transform: translateX(0); }
+    main { margin-left: 0 !important; padding: 20px; }
+    .menu-btn { display: block; }
+    h1 { font-size: 1.8em; }
+  }
+
+  /* Animations */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  section { animation: fadeInUp 0.6s ease-out; }
+
+  /* Tooltip */
+  .tip {
+    position: relative; cursor: help;
+    border-bottom: 1px dashed var(--accent);
+  }
+  .tip:hover::after {
+    content: attr(data-tip);
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    background: var(--card2); color: var(--text); padding: 8px 12px;
+    border-radius: 6px; font-size: 12px; white-space: nowrap;
+    border: 1px solid var(--border); z-index: 10;
+  }
+
+  /* Code block */
+  .code-block {
+    background: #0d1117; border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 20px; margin: 12px 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    overflow-x: auto; line-height: 1.6; color: #c9d1d9;
+  }
+  .code-block .comment { color: #8b949e; }
+  .code-block .keyword { color: #ff7b72; }
+  .code-block .string { color: #a5d6ff; }
+  .code-block .func { color: #d2a8ff; }
+  .code-block .num { color: #79c0ff; }
+
+  /* Flow diagram */
+  .flow {
+    display: flex; align-items: center; gap: 8px;
+    flex-wrap: wrap; justify-content: center;
+    margin: 16px 0;
+  }
+  .flow-box {
+    padding: 10px 18px; border-radius: 8px; font-weight: 600;
+    font-size: 14px; text-align: center;
+  }
+  .flow-arrow {
+    font-size: 20px; color: var(--accent);
+  }
+
+  /* Grid layout for cards */
+  .card-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px; margin: 20px 0;
+  }
+
+  /* Pulse dot */
+  .pulse-dot {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; margin-right: 8px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Mobile menu button -->
+<button class="menu-btn" onclick="toggleNav()">☰</button>
+
+<!-- Navigation -->
+<nav id="sidebar">
+  <div class="nav-title">📐 复杂度教程</div>
+  <div class="nav-section">基础概念</div>
+  <a href="#intro" onclick="navClick(this)">概览与动机</a>
+  <a href="#landau" onclick="navClick(this)">Landau 记号</a>
+  <a href="#bigo" onclick="navClick(this)">大 O 记号</a>
+  <a href="#littleo" onclick="navClick(this)">小 o 记号</a>
+  <a href="#compare" onclick="navClick(this)">O 与 o 对比</a>
+  <div class="nav-section">核心技巧</div>
+  <a href="#dominant" onclick="navClick(this)">主导项化简</a>
+  <a href="#absorb" onclick="navClick(this)">复杂度吸收</a>
+  <a href="#transitive" onclick="navClick(this)">传递性规则</a>
+  <div class="nav-section">计算实例</div>
+  <a href="#timespace" onclick="navClick(this)">时间 & 空间复杂度</a>
+  <a href="#examples" onclick="navClick(this)">经典算法示例</a>
+  <a href="#matrix" onclick="navClick(this)">矩阵运算</a>
+  <a href="#trace" onclick="navClick(this)">矩阵的迹</a>
+  <div class="nav-section">进阶应用</div>
+  <a href="#covariance" onclick="navClick(this)">协方差矩阵</a>
+  <a href="#portfolio" onclick="navClick(this)">组合方差算法</a>
+  <a href="#interactive" onclick="navClick(this)">交互式计算器</a>
+  <a href="#growth" onclick="navClick(this)">增长率可视化</a>
+  <div class="nav-section">练习</div>
+  <a href="#ex1" onclick="navClick(this)">练习 1.1</a>
+  <a href="#ex2" onclick="navClick(this)">练习 1.2</a>
+  <a href="#ex3" onclick="navClick(this)">练习 1.3</a>
+</nav>
+
+<!-- Main Content -->
+<main id="main-content">
+
+<!-- ============ INTRO ============ -->
+<section id="intro">
+  <h1>算法复杂度与 Landau 记号</h1>
+  <p style="font-size:1.1em; color:var(--text2);">
+    从基本定义到实际应用 —— 理解算法如何随问题规模增长而变化
+  </p>
+
+  <div class="card-grid" style="margin-top:24px;">
+    <div class="card accent">
+      <h3 style="margin-top:0;">⏱️ 时间复杂度</h3>
+      <p style="font-size:14px;">统计算法执行的<span class="hl">基本算术运算</span>（<code>+</code> <code>-</code> <code>·</code> <code>/</code>）的次数。</p>
+    </div>
+    <div class="card accent2">
+      <h3 style="margin-top:0;">💾 空间复杂度</h3>
+      <p style="font-size:14px;">统计算法运行过程中需要<span class="hl2">临时存储的数字</span>的数量。</p>
+    </div>
+    <div class="card accent3">
+      <h3 style="margin-top:0;">📈 核心问题</h3>
+      <p style="font-size:14px;">当数据量翻倍时，用时是<span class="hl3">翻倍</span>还是变成<span class="hl3">四倍</span>？还是更多？</p>
+    </div>
+  </div>
+
+  <div class="card" style="background: linear-gradient(135deg, rgba(56,189,248,0.05), rgba(129,140,248,0.05));">
+    <p>我们通常<strong>不关心精确的操作次数</strong>，而关心<strong>复杂度</strong>（complexity）—— 即算法如何随着问题规模 <code>n</code> 的增长而变化。这就需要 <span class="hl">Landau 记号</span>来形式化描述。</p>
+  </div>
+</section>
+
+<!-- ============ LANDAU ============ -->
+<section id="landau">
+  <h2>📐 Landau 记号概述</h2>
+  <p>Landau 记号是分析算法复杂度的核心工具，它允许我们忽略常数因子和低阶项，只关注增长的"量级"。两个最重要的记号是<span class="hl">大 O（Big O）</span>和<span class="hl2">小 o（Little o）</span>。</p>
+
+  <div class="card-grid">
+    <div class="card accent" id="bigo">
+      <h3 style="margin-top:0;">大 O 记号 — O(·)</h3>
+      <span class="badge badge-blue">上界</span>
+      <span class="badge badge-blue">至多同阶</span>
+      <div class="formula" style="margin-top:12px;">
+        若 limsup<sub>n→∞</sub> |a<sub>n</sub> / b<sub>n</sub>| < ∞，则 a<sub>n</sub> = O(b<sub>n</sub>)
+      </div>
+      <p style="font-size:14px;"><strong>直觉</strong>：a<sub>n</sub> 的增长速度<span class="hl">不会超过</span> b<sub>n</sub>（至多差一个常数倍）。</p>
+      <p style="font-size:14px;"><strong>重要特例</strong>：</p>
+      <p style="font-size:14px;">• a<sub>n</sub> = O(1) ⟹ a<sub>n</sub> <span class="hl">有界</span></p>
+      <p style="font-size:14px;">• 1000n = O(n)，忽略常数因子</p>
+    </div>
+    <div class="card accent2" id="littleo">
+      <h3 style="margin-top:0;">小 o 记号 — o(·)</h3>
+      <span class="badge badge-purple">严格慢于</span>
+      <span class="badge badge-purple">可忽略</span>
+      <div class="formula purple" style="margin-top:12px;">
+        若 lim<sub>n→∞</sub> |a<sub>n</sub> / b<sub>n</sub>| = 0，则 a<sub>n</sub> = o(b<sub>n</sub>)
+      </div>
+      <p style="font-size:14px;"><strong>直觉</strong>：a<sub>n</sub> 的增长速度<span class="hl2">严格慢于</span> b<sub>n</sub>，比值趋于零。</p>
+      <p style="font-size:14px;"><strong>重要特例</strong>：</p>
+      <p style="font-size:14px;">• a<sub>n</sub> = o(1) ⟹ a<sub>n</sub> <span class="hl2">收敛到 0</span></p>
+      <p style="font-size:14px;">• n² = o(n³)，因为 n²/n³ = 1/n → 0</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ COMPARE ============ -->
+<section id="compare">
+  <h2>⚖️ 大 O 与 小 o 的对比</h2>
+
+  <table class="comp-table">
+    <thead>
+      <tr>
+        <th>属性</th>
+        <th style="color:var(--accent);">大 O（Big O）</th>
+        <th style="color:var(--accent2);">小 o（Little o）</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>定义</td>
+        <td>limsup |a<sub>n</sub>/b<sub>n</sub>| < ∞</td>
+        <td>lim |a<sub>n</sub>/b<sub>n</sub>| = 0</td>
+      </tr>
+      <tr>
+        <td>含义</td>
+        <td>a<sub>n</sub> 增长<strong>至多像</strong> b<sub>n</sub></td>
+        <td>a<sub>n</sub> 增长<strong>严格慢于</strong> b<sub>n</sub></td>
+      </tr>
+      <tr>
+        <td>类比</td>
+        <td>≤（不超过，忽略常数）</td>
+        <td><（严格小于）</td>
+      </tr>
+      <tr>
+        <td>蕴含关系</td>
+        <td colspan="2" style="text-align:center;">a<sub>n</sub> = o(b<sub>n</sub>) ⟹ a<sub>n</sub> = O(b<sub>n</sub>)，反之不成立</td>
+      </tr>
+      <tr>
+        <td>例：n² vs n²</td>
+        <td>n² = O(n²) ✅</td>
+        <td>n² = o(n²) ❌</td>
+      </tr>
+      <tr>
+        <td>例：n² vs n³</td>
+        <td>n² = O(n³) ✅</td>
+        <td>n² = o(n³) ✅</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="card accent4">
+    <h3 style="margin-top:0;">⚠️ 实践中的注意事项</h3>
+    <p style="font-size:14px;">Landau 记号<span class="hl4">忽略常数因子</span>。例如 a<sub>n</sub> = 1000n = O(n) 而 b<sub>n</sub> = 0.1n² = O(n²)。虽然 b<sub>n</sub> 的复杂度"更差"，但在 n < 10000 时，a<sub>n</sub> 实际上更大！</p>
+    <p style="font-size:14px;"><strong>结论</strong>：复杂度更差的算法在实际中可能因为常数、实现方式、硬件缓存等因素而更快。复杂度分析描述的是<strong>渐近行为</strong>。</p>
+  </div>
+</section>
+
+<!-- ============ DOMINANT ============ -->
+<section id="dominant">
+  <h2>🎯 主导项化简</h2>
+  <p>核心思想：一个表达式的复杂度由其<span class="hl">增长最快的项</span>（主导项）决定。</p>
+
+  <div class="card accent">
+    <h3 style="margin-top:0;">化简规则</h3>
+    <div class="formula">
+      10⁶ + 100n + 2n² = O(n²) = o(n³)
+    </div>
+    <p style="font-size:14px;">当 n → ∞ 时，n² 项的增长速度远超其他所有项，因此它"主导"了整个表达式。</p>
+
+    <div class="formula" style="margin-top:12px;">
+      1/n² + 1/n³ = O(1/n²) = o(1/n)
+    </div>
+    <p style="font-size:14px;">对于趋于 0 的序列，1/n² 衰减最慢（值最大），是主导项。</p>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin-top:0;">📋 常见增长率排序（从慢到快）</h3>
+    <div class="flow">
+      <div class="flow-box" style="background:rgba(52,211,153,0.15); color:var(--accent4);">O(1)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="background:rgba(52,211,153,0.1); color:var(--accent4);">O(log n)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="background:rgba(56,189,248,0.15); color:var(--accent);">O(n)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="background:rgba(129,140,248,0.15); color:var(--accent2);">O(n log n)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="background:rgba(244,114,182,0.15); color:var(--accent3);">O(n²)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="background:rgba(244,114,182,0.2); color:var(--accent3);">O(n³)</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box" style="background:rgba(255,100,100,0.2); color:#ff6464;">O(2ⁿ)</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ABSORB ============ -->
+<section id="absorb">
+  <h2>🧲 复杂度吸收</h2>
+  <p>当多个复杂度项相加时，<span class="hl">高阶项会"吸收"低阶项</span>。这是化简复杂度表达式的核心技巧。</p>
+
+  <div class="card accent">
+    <h3 style="margin-top:0;">吸收原理</h3>
+    <div class="formula">
+      O(f) + O(g) = O(max{f, g})
+    </div>
+    <p style="font-size:14px;">如果 f(n) ≤ g(n)（对足够大的 n），则 O(f) ⊆ O(g)，于是 O(f) + O(g) = O(g)。</p>
+  </div>
+
+  <div class="demo-box">
+    <h3 style="margin-top:0;">🔄 吸收过程动画演示</h3>
+    <p style="font-size:14px; color:var(--text2); margin-bottom:16px;">点击按钮观察复杂度项如何被逐步吸收：</p>
+
+    <div id="absorb-demo-area">
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+        <div class="absorb-item active" id="abs-1" style="background:rgba(52,211,153,0.15); color:var(--accent4);">O(d²)</div>
+        <span style="color:var(--text2); line-height:38px;">+</span>
+        <div class="absorb-item active" id="abs-2" style="background:rgba(56,189,248,0.15); color:var(--accent);">O(nd)</div>
+        <span style="color:var(--text2); line-height:38px;">+</span>
+        <div class="absorb-item active" id="abs-3" style="background:rgba(129,140,248,0.15); color:var(--accent2);">O(n²d + nd²)</div>
+        <span style="color:var(--text2); line-height:38px;">+</span>
+        <div class="absorb-item active" id="abs-4" style="background:rgba(244,114,182,0.15); color:var(--accent3);">O(d²)</div>
+      </div>
+      <div id="absorb-result" style="font-weight:700; font-size:1.1em; color:var(--accent); min-height:30px;"></div>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button onclick="runAbsorbDemo()" style="padding:8px 20px; background:var(--accent); color:var(--bg); border:none; border-radius:6px; cursor:pointer; font-weight:600;">▶ 开始演示</button>
+      <button onclick="resetAbsorbDemo()" style="padding:8px 20px; background:var(--card2); color:var(--text); border:1px solid var(--border); border-radius:6px; cursor:pointer;">↻ 重置</button>
+    </div>
+  </div>
+
+  <div class="card accent2" style="margin-top:16px;">
+    <h3 style="margin-top:0;">实际案例：组合方差算法的复杂度化简</h3>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <p style="font-size:14px;">各步骤复杂度：<code>colMeans</code> O(nd)，循环体 O(nd + d²)，循环 n 次 O(n²d + nd²)，最终乘法 O(d²)</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <p style="font-size:14px;">总复杂度 = O(nd) + O(n·(nd+d²)) + O(d²) = O(nd) + O(n²d + nd²) + O(d²)</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <p style="font-size:14px;"><span class="hl2">吸收</span>：O(nd) ⊆ O(n²d)，O(d²) ⊆ O(nd²)（当 n ≥ 1）</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <p style="font-size:14px;"><strong>最终结果</strong>：<span class="hl2">O(n²d + nd²)</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRANSITIVE ============ -->
+<section id="transitive">
+  <h2>🔗 传递性规则</h2>
+
+  <div class="card-grid">
+    <div class="card accent">
+      <h3 style="margin-top:0;">O 的传递性</h3>
+      <div class="formula">
+        a<sub>n</sub> = O(b<sub>n</sub>)，b<sub>n</sub> = O(c<sub>n</sub>)<br>⟹ a<sub>n</sub> = O(c<sub>n</sub>)
+      </div>
+    </div>
+    <div class="card accent2">
+      <h3 style="margin-top:0;">O 到 o 的传递</h3>
+      <div class="formula purple">
+        a<sub>n</sub> = O(b<sub>n</sub>)，b<sub>n</sub> = o(c<sub>n</sub>)<br>⟹ a<sub>n</sub> = o(c<sub>n</sub>)
+      </div>
+    </div>
+  </div>
+
+  <div class="card accent4">
+    <h3 style="margin-top:0;">应用实例（练习 1.2）</h3>
+    <p style="font-size:14px;">已知 a<sub>n</sub> = O(e<sub>n</sub> + e<sub>n</sub>²)。</p>
+    <p style="font-size:14px;"><strong>情况 1</strong>（e<sub>n</sub> → ∞）：此时 e<sub>n</sub>² 主导，(e<sub>n</sub> + e<sub>n</sub>²)/e<sub>n</sub>² = 1/e<sub>n</sub> + 1 → 1，因此 e<sub>n</sub> + e<sub>n</sub>² = O(e<sub>n</sub>²)，传递可得 <span class="hl4">a<sub>n</sub> = O(e<sub>n</sub>²)</span>。</p>
+    <p style="font-size:14px;"><strong>情况 2</strong>（e<sub>n</sub> → 0）：此时 e<sub>n</sub> 主导，(e<sub>n</sub> + e<sub>n</sub>²)/e<sub>n</sub> = 1 + e<sub>n</sub> → 1，因此 e<sub>n</sub> + e<sub>n</sub>² = O(e<sub>n</sub>)，传递可得 <span class="hl4">a<sub>n</sub> = O(e<sub>n</sub>)</span>。</p>
+  </div>
+</section>
+
+<!-- ============ TIME SPACE ============ -->
+<section id="timespace">
+  <h2>⏱️💾 时间与空间复杂度</h2>
+
+  <div class="card-grid">
+    <div class="card accent">
+      <h3 style="margin-top:0;">⏱️ 时间复杂度</h3>
+      <p style="font-size:14px;">统计基本算术运算（<code>+</code> <code>-</code> <code>×</code> <code>÷</code>）的总次数，用 Landau 记号表示其关于输入大小 n 的增长阶。</p>
+    </div>
+    <div class="card accent2">
+      <h3 style="margin-top:0;">💾 空间复杂度</h3>
+      <p style="font-size:14px;">统计算法运行过程中临时存储的数字个数。例如 n×d 矩阵需要 O(nd) 空间，d×d 矩阵需要 O(d²) 空间。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EXAMPLES ============ -->
+<section id="examples">
+  <h2>📊 经典算法示例</h2>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab(event, 'tab-mean')">均值</div>
+    <div class="tab" onclick="switchTab(event, 'tab-dist')">距离矩阵</div>
+    <div class="tab" onclick="switchTab(event, 'tab-matmul')">矩阵乘法</div>
+  </div>
+
+  <div class="tab-content active" id="tab-mean">
+    <h3 style="margin-top:0;">计算均值：(1/n) Σ X<sub>i</sub></h3>
+    <p style="font-size:14px;">给定 X<sub>1</sub>, …, X<sub>n</sub> ∈ ℝ：</p>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content"><p style="font-size:14px;">求和：n-1 次加法</p></div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content"><p style="font-size:14px;">除以 n：1 次除法</p></div>
+    </div>
+    <div class="formula green">
+      时间复杂度：n - 1 + 1 = n = <strong>O(n)</strong>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-dist">
+    <h3 style="margin-top:0;">距离矩阵 D ∈ ℝ<sup>n×n</sup>，D<sub>ij</sub> = |X<sub>i</sub> - X<sub>j</sub>|</h3>
+    <p style="font-size:14px;">给定 X<sub>1</sub>, …, X<sub>n</sub> ∈ ℝ：</p>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content"><p style="font-size:14px;">共有 n² 个元素需要计算</p></div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content"><p style="font-size:14px;">每个元素：1 次减法 + 取绝对值 = O(1)</p></div>
+    </div>
+    <div class="formula green">
+      时间复杂度：n² · O(1) = <strong>O(n²)</strong>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-matmul" id="matrix">
+    <h3 style="margin-top:0;">矩阵乘法 A ∈ ℝ<sup>m×n</sup> · B ∈ ℝ<sup>n×ℓ</sup></h3>
+    <p style="font-size:14px;">(AB)<sub>ij</sub> = Σ<sub>k=1</sub><sup>n</sup> A<sub>ik</sub> B<sub>kj</sub></p>
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content"><p style="font-size:14px;">每个输出元素：n 次乘法 + (n-1) 次加法 = O(n)</p></div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content"><p style="font-size:14px;">共有 m × ℓ 个输出元素</p></div>
+    </div>
+    <div class="formula green">
+      时间复杂度：m·ℓ · O(n) = <strong>O(mnℓ)</strong>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MATRIX / TRACE ============ -->
+<section id="matrix"></section>
+<section id="trace">
+  <h2>📐 矩阵的迹（Trace）</h2>
+  <p>tr(A) = Σ<sub>i=1</sub><sup>n</sup> A<sub>ii</sub>，即对角线元素之和。巧妙利用迹的性质可以大幅降低复杂度。</p>
+
+  <div class="card-grid">
+    <div class="card accent">
+      <h3 style="margin-top:0;">tr(A)</h3>
+      <p style="font-size:14px;">n 个对角元素求和</p>
+      <div class="formula" style="font-size:1.1em;"><strong>O(n)</strong></div>
+    </div>
+    <div class="card accent2">
+      <h3 style="margin-top:0;">tr(A + B)</h3>
+      <p style="font-size:14px;">= tr(A) + tr(B)，各 O(n) 再加 O(1)</p>
+      <div class="formula purple" style="font-size:1.1em;"><strong>O(n)</strong></div>
+      <p style="font-size:12px; color:var(--text2);">⚠️ 若先算 A+B 则需 O(n²)！</p>
+    </div>
+    <div class="card accent4">
+      <h3 style="margin-top:0;">tr(cA)</h3>
+      <p style="font-size:14px;">= c · tr(A)，O(n) + O(1)</p>
+      <div class="formula green" style="font-size:1.1em;"><strong>O(n)</strong></div>
+    </div>
+  </div>
+
+  <div class="card accent3" style="margin-top:16px;">
+    <h3 style="margin-top:0;">💡 关键洞察</h3>
+    <p style="font-size:14px;">利用<span class="hl3">数学性质</span>（如迹的线性性）可以避免不必要的中间计算。先计算 A+B（O(n²)）再取迹（O(n)）的"笨"方法总复杂度为 O(n²)，而直接 tr(A)+tr(B) 只需 O(n)。<strong>选择正确的计算顺序至关重要！</strong></p>
+  </div>
+</section>
+
+<!-- ============ COVARIANCE ============ -->
+<section id="covariance">
+  <h2>📈 协方差矩阵</h2>
+
+  <div class="card accent">
+    <h3 style="margin-top:0;">什么是协方差矩阵？</h3>
+    <p style="font-size:14px;">给定 d 维随机向量 X，其协方差矩阵 Σ 是一个 d×d 矩阵，Σ<sub>ij</sub> = Cov(X<sub>i</sub>, X<sub>j</sub>)。对角线是各分量的方差，非对角线是两两之间的协方差。</p>
+  </div>
+
+  <div class="card accent2">
+    <h3 style="margin-top:0;">样本估计公式</h3>
+    <div class="formula purple">
+      Σ̂ = (1/n) Σ<sub>i=1</sub><sup>n</sup> (X<sub>i</sub> - μ̂)(X<sub>i</sub> - μ̂)<sup>T</sup>
+    </div>
+    <div class="formula purple">
+      μ̂ = (1/n) Σ<sub>i=1</sub><sup>n</sup> X<sub>i</sub>
+    </div>
+    <p style="font-size:14px;">其中 X<sub>i</sub> ∈ ℝ<sup>d</sup> 是 n 个 d 维观测向量。</p>
+  </div>
+
+  <div class="card" style="background: linear-gradient(135deg, rgba(244,114,182,0.05), rgba(129,140,248,0.05));">
+    <h3 style="margin-top:0;">🏦 投资组合应用</h3>
+    <p style="font-size:14px;"><strong>场景</strong>：你买了 d 支 ETF，持有比例为 β = (β₁, …, β<sub>d</sub>)<sup>T</sup>。</p>
+    <p style="font-size:14px;"><strong>组合方差</strong>：σ²(β) = β<sup>T</sup> Σ β —— 衡量投资组合的风险。</p>
+    <p style="font-size:14px;"><strong>估计</strong>：用 n 天的历史数据估计 Σ̂，进而得到 σ̂²(β) = β<sup>T</sup> Σ̂ β。</p>
+  </div>
+</section>
+
+<!-- ============ PORTFOLIO ============ -->
+<section id="portfolio">
+  <h2>🧮 组合方差算法的复杂度分析</h2>
+
+  <div class="card">
+    <h3 style="margin-top:0;">算法伪代码</h3>
+    <div class="code-block">
+<span class="keyword">function</span> <span class="func">sigma_2</span>(X[n×d], beta[d]):<br>
+&nbsp;&nbsp;Sigma ← <span class="num">0</span><sub>d×d</sub> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// 初始化 d×d 零矩阵</span><br>
+&nbsp;&nbsp;mu ← <span class="func">colMeans</span>(X) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// 计算各列均值，O(nd)</span><br>
+&nbsp;&nbsp;<span class="keyword">for</span> i = <span class="num">1</span> <span class="keyword">to</span> n:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;v ← X[i] - mu &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// d 次减法</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;Sigma += v · v<sup>T</sup> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="comment">// 外积 d² + 矩阵加法 d²</span><br>
+&nbsp;&nbsp;<span class="keyword">return</span> beta<sup>T</sup> · Sigma · beta / n
+    </div>
+  </div>
+
+  <div class="card accent3">
+    <h3 style="margin-top:0;">⚠️ 注意：代码中 colMeans 在循环内部调用！</h3>
+    <p style="font-size:14px;">原始 R 代码在每次循环中重新计算 <code>colMeans(X)</code>，每次耗费 O(nd)。循环 n 次后，仅这部分就已经是 O(n²d)。这是一个<strong>可以优化的低效设计</strong>（将 colMeans 提到循环外只需 O(nd) 一次）。</p>
+  </div>
+
+  <div class="tabs" style="margin-top:20px;">
+    <div class="tab active" onclick="switchTab(event, 'tab-time')">⏱️ 时间复杂度</div>
+    <div class="tab" onclick="switchTab(event, 'tab-space')">💾 空间复杂度</div>
+  </div>
+
+  <div class="tab-content active" id="tab-time">
+    <h3 style="margin-top:0;">时间复杂度分析</h3>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <p style="font-size:14px;"><strong>colMeans(X)</strong>：对 d 列各做 n-1 次加法 → <span class="badge badge-blue">O(nd)</span></p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <p style="font-size:14px;"><strong>单次循环体</strong>：colMeans O(nd) + 减法 O(d) + 外积 O(d²) + 矩阵加法 O(d²) → <span class="badge badge-blue">O(nd + d²)</span></p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <p style="font-size:14px;"><strong>n 次循环</strong>：n × O(nd + d²) → <span class="badge badge-pink">O(n²d + nd²)</span></p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <p style="font-size:14px;"><strong>β<sup>T</sup>Σβ</strong>：矩阵向量乘 O(d²) + 内积 O(d) → <span class="badge badge-blue">O(d²)</span></p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px; background:rgba(56,189,248,0.05);">
+      <h3 style="margin-top:0;">🧲 吸收过程</h3>
+      <p style="font-size:14px;">
+        步骤 1 的 O(nd) 被步骤 3 的 O(n²d) <span class="hl">吸收</span>（因为 nd ≤ n²d）。<br>
+        步骤 4 的 O(d²) 被步骤 3 的 O(nd²) <span class="hl">吸收</span>（因为 d² ≤ nd²）。
+      </p>
+      <div class="formula" style="font-size:1.2em;">
+        总时间复杂度：<strong style="color:var(--accent);">O(n²d + nd²)</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-space">
+    <h3 style="margin-top:0;">空间复杂度分析</h3>
+    <div class="step">
+      <div class="step-num">X</div>
+      <div class="step-content"><p style="font-size:14px;">输入矩阵 n × d → <span class="badge badge-green">O(nd)</span></p></div>
+    </div>
+    <div class="step">
+      <div class="step-num">β</div>
+      <div class="step-content"><p style="font-size:14px;">参数向量 d × 1 → <span class="badge badge-green">O(d)</span></p></div>
+    </div>
+    <div class="step">
+      <div class="step-num">Σ̂</div>
+      <div class="step-content"><p style="font-size:14px;">协方差矩阵 d × d → <span class="badge badge-green">O(d²)</span></p></div>
+    </div>
+    <div class="formula green" style="font-size:1.2em; margin-top:16px;">
+      总空间复杂度：<strong style="color:var(--accent4);">O(nd + d²)</strong>
+    </div>
+    <p style="font-size:13px; color:var(--text2);">其中 O(d) 被 O(d²) 吸收。</p>
+  </div>
+</section>
+
+<!-- ============ INTERACTIVE ============ -->
+<section id="interactive">
+  <h2>🎛️ 交互式复杂度计算器</h2>
+  <p>调整参数 n（观测数）和 d（维度），观察各步骤及总体复杂度的变化。</p>
+
+  <div class="demo-box">
+    <div class="slider-group">
+      <label>n（观测/样本数量）：<strong id="n-val" style="color:var(--accent);">100</strong></label>
+      <input type="range" id="slider-n" min="10" max="2000" value="100" oninput="updateCalc()">
+    </div>
+    <div class="slider-group">
+      <label>d（维度/资产数）：<strong id="d-val" style="color:var(--accent2);">5</strong></label>
+      <input type="range" id="slider-d" min="2" max="200" value="5" oninput="updateCalc()">
+    </div>
+
+    <div class="result-display" id="calc-result">
+      <!-- filled by JS -->
+    </div>
+
+    <div style="margin-top:16px;">
+      <canvas id="bar-chart" width="700" height="250" style="border-radius:8px; max-width:100%;"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GROWTH CHART ============ -->
+<section id="growth">
+  <h2>📈 增长率可视化</h2>
+  <p>直观对比不同复杂度函数在 n 增大时的增长速度。</p>
+
+  <div class="chart-container">
+    <canvas id="growth-chart" width="800" height="400" style="max-width:100%;"></canvas>
+    <div style="display:flex; flex-wrap:wrap; gap:12px; margin-top:12px; justify-content:center; font-size:13px;">
+      <span><span class="pulse-dot" style="background:#34d399;"></span>O(log n)</span>
+      <span><span class="pulse-dot" style="background:#38bdf8;"></span>O(n)</span>
+      <span><span class="pulse-dot" style="background:#818cf8;"></span>O(n log n)</span>
+      <span><span class="pulse-dot" style="background:#f472b6;"></span>O(n²)</span>
+      <span><span class="pulse-dot" style="background:#fb923c;"></span>O(n³)</span>
+      <span><span class="pulse-dot" style="background:#ef4444;"></span>O(2ⁿ) [截断]</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EXERCISE 1.1 ============ -->
+<section id="ex1">
+  <h2>✏️ 练习 1.1 — 找 O 和 o 的上界</h2>
+  <p>对给定序列 a<sub>n</sub>，找更简单的 b<sub>n</sub> 和 c<sub>n</sub>，使得 a<sub>n</sub> = O(b<sub>n</sub>) 且 a<sub>n</sub> = o(c<sub>n</sub>)。</p>
+
+  <div class="card accent">
+    <h3 style="margin-top:0;">(a) a<sub>n</sub> = 100n<sup>-1</sup> + 20n<sup>0.5</sup> + 5n<sup>1.5</sup></h3>
+    <p style="font-size:14px;"><strong>主导项</strong>：n<sup>1.5</sup>（增长最快）</p>
+
+    <div class="step">
+      <div class="step-num">→</div>
+      <div class="step-content">
+        <p style="font-size:14px;">
+          取 <span class="hl">b<sub>n</sub> = n<sup>1.5</sup></span>：<br>
+          a<sub>n</sub>/b<sub>n</sub> = 100n<sup>-2.5</sup> + 20n<sup>-1</sup> + 5 → 5，极限有限 ✅ → a<sub>n</sub> = O(n<sup>1.5</sup>)
+        </p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">→</div>
+      <div class="step-content">
+        <p style="font-size:14px;">
+          取 <span class="hl2">c<sub>n</sub> = n<sup>2</sup></span>：<br>
+          a<sub>n</sub>/c<sub>n</sub> = 100n<sup>-3</sup> + 20n<sup>-1.5</sup> + 5n<sup>-0.5</sup> → 0 ✅ → a<sub>n</sub> = o(n<sup>2</sup>)
+        </p>
+      </div>
+    </div>
+
+    <div class="formula" style="margin-top:12px;">
+      <strong>结果</strong>：a<sub>n</sub> = O(n<sup>1.5</sup>) = o(n²)
+    </div>
+  </div>
+
+  <div class="card accent2">
+    <h3 style="margin-top:0;">(b) a<sub>n</sub> = 2log(n)/n + log(2)/n² + log(1+1/n)</h3>
+    <p style="font-size:14px;"><strong>关键提示</strong>：log(1+1/n) ≤ 1/n</p>
+
+    <div class="step">
+      <div class="step-num">→</div>
+      <div class="step-content">
+        <p style="font-size:14px;">
+          取 <span class="hl2">b<sub>n</sub> = log(n)/n</span>：三项分别与 b<sub>n</sub> 的比值为 2（常数）、→0、→0。<br>
+          因此 a<sub>n</sub> = O(log(n)/n)。
+        </p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">→</div>
+      <div class="step-content">
+        <p style="font-size:14px;">
+          取 <span class="hl2">c<sub>n</sub> = 1</span>：因为 b<sub>n</sub> = log(n)/n → 0 = o(1)，传递性可得 a<sub>n</sub> = o(1)。
+        </p>
+      </div>
+    </div>
+
+    <div class="formula purple" style="margin-top:12px;">
+      <strong>结果</strong>：a<sub>n</sub> = O(log(n)/n) = o(1)<br>
+      <span style="font-size:13px; color:var(--text2);">经典结论：序列极限为 0 ⟺ o(1)</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EXERCISE 1.2 ============ -->
+<section id="ex2">
+  <h2>✏️ 练习 1.2 — 主导项随极限变化</h2>
+  <p>设 a<sub>n</sub> = O(e<sub>n</sub> + e<sub>n</sub>²)，证明不同极限行为下的化简。</p>
+
+  <div class="card-grid">
+    <div class="card accent">
+      <h3 style="margin-top:0;">情况 1：e<sub>n</sub> → ∞</h3>
+      <span class="badge badge-blue">e<sub>n</sub>² 主导</span>
+      <p style="font-size:14px; margin-top:12px;">
+        (e<sub>n</sub> + e<sub>n</sub>²) / e<sub>n</sub>² = 1/e<sub>n</sub> + 1 → 1<br>
+        ⟹ e<sub>n</sub> + e<sub>n</sub>² = O(e<sub>n</sub>²)<br>
+        ⟹ <strong>a<sub>n</sub> = O(e<sub>n</sub>²)</strong>
+      </p>
+    </div>
+    <div class="card accent3">
+      <h3 style="margin-top:0;">情况 2：e<sub>n</sub> → 0</h3>
+      <span class="badge badge-pink">e<sub>n</sub> 主导</span>
+      <p style="font-size:14px; margin-top:12px;">
+        (e<sub>n</sub> + e<sub>n</sub>²) / e<sub>n</sub> = 1 + e<sub>n</sub> → 1<br>
+        ⟹ e<sub>n</sub> + e<sub>n</sub>² = O(e<sub>n</sub>)<br>
+        ⟹ <strong>a<sub>n</sub> = O(e<sub>n</sub>)</strong>
+      </p>
+    </div>
+  </div>
+
+  <div class="card accent4">
+    <h3 style="margin-top:0;">💡 一句话总结</h3>
+    <p style="font-size:14px;">e<sub>n</sub> 很大时 e<sub>n</sub>² 主导（平方比线性增长快），e<sub>n</sub> 很小时 e<sub>n</sub> 主导（平方比线性衰减快）。谁"更显眼"谁就是主导项。</p>
+  </div>
+</section>
+
+<!-- ============ EXERCISE 1.3 ============ -->
+<section id="ex3">
+  <h2>✏️ 练习 1.3 — 投资组合方差</h2>
+
+  <div class="card" style="background: linear-gradient(135deg, rgba(56,189,248,0.05), rgba(244,114,182,0.05));">
+    <h3 style="margin-top:0;">🏦 实际场景</h3>
+    <p style="font-size:14px;">
+      <strong>3 支 ETF，200 天历史数据</strong><br>
+      X<sub>i</sub> ∈ ℝ³ —— 每天 3 支 ETF 的收益率<br>
+      β = (0.3, 0.4, 0.3)<sup>T</sup> —— 投资比例<br>
+      σ̂²(β) = β<sup>T</sup> Σ̂ β —— 估计组合风险
+    </p>
+  </div>
+
+  <table class="comp-table" style="margin-top:20px;">
+    <thead>
+      <tr>
+        <th>分析项</th>
+        <th>公式</th>
+        <th>复杂度</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>存储 X</td>
+        <td>n × d 矩阵</td>
+        <td><span class="badge badge-green">O(nd)</span></td>
+      </tr>
+      <tr>
+        <td>存储 β</td>
+        <td>d × 1 向量</td>
+        <td><span class="badge badge-green">O(d)</span></td>
+      </tr>
+      <tr>
+        <td>存储 Σ̂</td>
+        <td>d × d 矩阵</td>
+        <td><span class="badge badge-green">O(d²)</span></td>
+      </tr>
+      <tr style="font-weight:600;">
+        <td>总空间</td>
+        <td>—</td>
+        <td><span class="badge badge-green" style="font-size:14px;">O(nd + d²)</span></td>
+      </tr>
+      <tr><td colspan="3" style="border-bottom:2px solid var(--accent);"></td></tr>
+      <tr>
+        <td>colMeans</td>
+        <td>d 列各做 n-1 次加法</td>
+        <td><span class="badge badge-blue">O(nd)</span></td>
+      </tr>
+      <tr>
+        <td>单次循环体</td>
+        <td>colMeans + 减法 + 外积 + 加法</td>
+        <td><span class="badge badge-blue">O(nd + d²)</span></td>
+      </tr>
+      <tr>
+        <td>n 次循环</td>
+        <td>n × O(nd + d²)</td>
+        <td><span class="badge badge-pink">O(n²d + nd²)</span></td>
+      </tr>
+      <tr>
+        <td>β<sup>T</sup>Σ̂β</td>
+        <td>矩阵向量乘 + 内积</td>
+        <td><span class="badge badge-blue">O(d²)</span></td>
+      </tr>
+      <tr style="font-weight:600;">
+        <td>总时间</td>
+        <td>循环吸收其余</td>
+        <td><span class="badge badge-pink" style="font-size:14px;">O(n²d + nd²)</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="card accent" style="margin-top:20px;">
+    <h3 style="margin-top:0;">🧲 吸收链</h3>
+    <div class="flow">
+      <div class="flow-box" style="background:rgba(56,189,248,0.15); color:var(--accent);">O(nd)</div>
+      <div class="flow-arrow">⊂</div>
+      <div class="flow-box" style="background:rgba(129,140,248,0.15); color:var(--accent2);">O(n²d)</div>
+      <div class="flow-arrow">⊂</div>
+      <div class="flow-box" style="background:rgba(244,114,182,0.15); color:var(--accent3);">O(n²d + nd²)</div>
+    </div>
+    <div class="flow" style="margin-top:8px;">
+      <div class="flow-box" style="background:rgba(52,211,153,0.15); color:var(--accent4);">O(d²)</div>
+      <div class="flow-arrow">⊂</div>
+      <div class="flow-box" style="background:rgba(129,140,248,0.15); color:var(--accent2);">O(nd²)</div>
+      <div class="flow-arrow">⊂</div>
+      <div class="flow-box" style="background:rgba(244,114,182,0.15); color:var(--accent3);">O(n²d + nd²)</div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<div style="text-align:center; padding:40px 0; color:var(--text2); font-size:13px; border-top:1px solid var(--border); margin-top:60px;">
+  📐 算法复杂度与 Landau 记号 — 可视化教程 &nbsp;|&nbsp; 基于课程笔记与练习
+</div>
+
+</main>
+
+<script>
+// ========== Navigation ==========
+function toggleNav() {
+  const nav = document.getElementById('sidebar');
+  nav.classList.toggle('show');
+}
+
+function navClick(el) {
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+  el.classList.add('active');
+  if (window.innerWidth <= 900) {
+    document.getElementById('sidebar').classList.remove('show');
+  }
+}
+
+// Highlight nav on scroll
+window.addEventListener('scroll', () => {
+  const sections = document.querySelectorAll('section[id]');
+  let current = '';
+  sections.forEach(s => {
+    if (window.scrollY >= s.offsetTop - 100) current = s.id;
+  });
+  document.querySelectorAll('nav a').forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+  });
+});
+
+// ========== Tabs ==========
+function switchTab(event, tabId) {
+  const parent = event.target.closest('section') || event.target.parentElement.parentElement;
+  parent.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  parent.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById(tabId).classList.add('active');
+}
+
+// ========== Absorb Demo ==========
+let absorbStep = 0;
+function runAbsorbDemo() {
+  const result = document.getElementById('absorb-result');
+  absorbStep++;
+
+  if (absorbStep === 1) {
+    document.getElementById('abs-4').classList.add('absorbed');
+    result.innerHTML = '步骤 1：O(d²) 被 O(n²d + nd²) <span style="color:var(--accent)">吸收</span>（d² ≤ nd²）';
+  } else if (absorbStep === 2) {
+    document.getElementById('abs-2').classList.add('absorbed');
+    result.innerHTML = '步骤 2：O(nd) 被 O(n²d + nd²) <span style="color:var(--accent)">吸收</span>（nd ≤ n²d）';
+  } else if (absorbStep === 3) {
+    document.getElementById('abs-1').classList.add('absorbed');
+    result.innerHTML = '步骤 3：另一个 O(d²) 也被吸收 → 最终结果：<span style="color:var(--accent); font-size:1.2em;">O(n²d + nd²)</span>';
+  }
+}
+
+function resetAbsorbDemo() {
+  absorbStep = 0;
+  ['abs-1','abs-2','abs-3','abs-4'].forEach(id => {
+    document.getElementById(id).classList.remove('absorbed');
+  });
+  document.getElementById('absorb-result').innerHTML = '';
+}
+
+// ========== Interactive Calculator ==========
+function updateCalc() {
+  const n = parseInt(document.getElementById('slider-n').value);
+  const d = parseInt(document.getElementById('slider-d').value);
+  document.getElementById('n-val').textContent = n;
+  document.getElementById('d-val').textContent = d;
+
+  const colMeans = n * d;
+  const singleLoop = n * d + d * d;
+  const totalLoop = n * singleLoop;
+  const quadForm = d * d + d;
+  const total = totalLoop + colMeans + quadForm;
+
+  const fmt = (x) => x.toLocaleString();
+
+  document.getElementById('calc-result').innerHTML = `
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      <div>
+        <span style="color:var(--text2);">colMeans (O(nd))：</span>
+        <span style="color:var(--accent);">${fmt(colMeans)}</span>
+      </div>
+      <div>
+        <span style="color:var(--text2);">单次循环 (O(nd+d²))：</span>
+        <span style="color:var(--accent2);">${fmt(singleLoop)}</span>
+      </div>
+      <div>
+        <span style="color:var(--text2);">n次循环 (O(n²d+nd²))：</span>
+        <span style="color:var(--accent3);">${fmt(totalLoop)}</span>
+      </div>
+      <div>
+        <span style="color:var(--text2);">β<sup>T</sup>Σβ (O(d²))：</span>
+        <span style="color:var(--accent4);">${fmt(quadForm)}</span>
+      </div>
+    </div>
+    <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
+      <span style="color:var(--text2);">总运算次数 ≈ </span>
+      <span style="color:var(--accent); font-size:1.3em; font-weight:700;">${fmt(total)}</span>
+      <span style="color:var(--text2);"> &nbsp;|&nbsp; 循环占比：</span>
+      <span style="color:var(--accent3); font-weight:700;">${(totalLoop / total * 100).toFixed(1)}%</span>
+    </div>
+  `;
+
+  // Bar chart
+  drawBarChart(colMeans, singleLoop, totalLoop, quadForm);
+}
+
+function drawBarChart(cm, sl, tl, qf) {
+  const canvas = document.getElementById('bar-chart');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const data = [
+    { label: 'colMeans\nO(nd)', val: cm, color: '#38bdf8' },
+    { label: '单次循环\nO(nd+d²)', val: sl, color: '#818cf8' },
+    { label: 'n次循环\nO(n²d+nd²)', val: tl, color: '#f472b6' },
+    { label: 'β^TΣβ\nO(d²)', val: qf, color: '#34d399' }
+  ];
+
+  const maxVal = Math.max(...data.map(d => d.val));
+  const barW = 100;
+  const gap = (W - data.length * barW) / (data.length + 1);
+  const topPad = 30, bottomPad = 50;
+  const chartH = H - topPad - bottomPad;
+
+  data.forEach((d, i) => {
+    const x = gap + i * (barW + gap);
+    const barH = maxVal > 0 ? (d.val / maxVal) * chartH : 0;
+    const y = topPad + chartH - barH;
+
+    // Bar
+    ctx.fillStyle = d.color + '30';
+    ctx.strokeStyle = d.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, barH, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    // Value
+    ctx.fillStyle = d.color;
+    ctx.font = '12px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    const valStr = d.val > 1e6 ? (d.val / 1e6).toFixed(1) + 'M' :
+                   d.val > 1e3 ? (d.val / 1e3).toFixed(1) + 'K' :
+                   d.val.toString();
+    ctx.fillText(valStr, x + barW / 2, y - 8);
+
+    // Label
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '11px Noto Sans SC, sans-serif';
+    const lines = d.label.split('\n');
+    lines.forEach((line, li) => {
+      ctx.fillText(line, x + barW / 2, H - bottomPad + 16 + li * 14);
+    });
+  });
+}
+
+// ========== Growth Chart ==========
+function drawGrowthChart() {
+  const canvas = document.getElementById('growth-chart');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const padL = 60, padR = 30, padT = 30, padB = 50;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background grid
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 5; i++) {
+    const y = padT + (chartH / 5) * i;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(W - padR, y);
+    ctx.stroke();
+  }
+
+  const maxN = 50;
+  const maxY = 600;
+
+  const functions = [
+    { fn: n => Math.log2(n + 1), color: '#34d399', label: 'log n' },
+    { fn: n => n, color: '#38bdf8', label: 'n' },
+    { fn: n => n * Math.log2(n + 1), color: '#818cf8', label: 'n log n' },
+    { fn: n => n * n, color: '#f472b6', label: 'n²' },
+    { fn: n => n * n * n / 100, color: '#fb923c', label: 'n³/100' },
+    { fn: n => Math.min(Math.pow(1.3, n), maxY), color: '#ef4444', label: '1.3ⁿ' },
+  ];
+
+  functions.forEach(f => {
+    ctx.strokeStyle = f.color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (let i = 0; i <= maxN; i++) {
+      const x = padL + (i / maxN) * chartW;
+      const val = Math.min(f.fn(i), maxY);
+      const y = padT + chartH - (val / maxY) * chartH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  });
+
+  // Axes
+  ctx.strokeStyle = '#64748b';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT);
+  ctx.lineTo(padL, padT + chartH);
+  ctx.lineTo(padL + chartW, padT + chartH);
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '12px Noto Sans SC, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('n →', padL + chartW / 2, H - 8);
+  ctx.save();
+  ctx.translate(16, padT + chartH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('运算次数 →', 0, 0);
+  ctx.restore();
+
+  // Tick labels
+  ctx.font = '10px JetBrains Mono, monospace';
+  for (let i = 0; i <= 5; i++) {
+    const n = Math.round((maxN / 5) * i);
+    const x = padL + (i / 5) * chartW;
+    ctx.fillText(n.toString(), x, padT + chartH + 16);
+  }
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 5; i++) {
+    const val = Math.round((maxY / 5) * (5 - i));
+    const y = padT + (chartH / 5) * i;
+    ctx.fillText(val.toString(), padL - 8, y + 4);
+  }
+}
+
+// ========== roundRect polyfill ==========
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    if (typeof r === 'number') r = [r, r, r, r];
+    this.moveTo(x + r[0], y);
+    this.lineTo(x + w - r[1], y);
+    this.quadraticCurveTo(x + w, y, x + w, y + r[1]);
+    this.lineTo(x + w, y + h - r[2]);
+    this.quadraticCurveTo(x + w, y + h, x + w - r[2], y + h);
+    this.lineTo(x + r[3], y + h);
+    this.quadraticCurveTo(x, y + h, x, y + h - r[3]);
+    this.lineTo(x, y + r[0]);
+    this.quadraticCurveTo(x, y, x + r[0], y);
+    this.closePath();
+  };
+}
+
+// ========== Init ==========
+window.addEventListener('load', () => {
+  updateCalc();
+  drawGrowthChart();
+});
+window.addEventListener('resize', () => {
+  drawGrowthChart();
+});
+</script>
+
+</body>
+</html>

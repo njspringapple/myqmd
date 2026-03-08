@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>条件数与梯度下降</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'Segoe UI','PingFang SC',sans-serif;background:#0d1117;color:#c9d1d9;padding:16px}
+.wrap{max-width:900px;margin:0 auto}
+h1{text-align:center;color:#58a6ff;font-size:22px;margin-bottom:4px}
+.sub{text-align:center;color:#8b949e;font-size:13px;margin-bottom:12px}
+.info{padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px;font-size:13px;line-height:1.7;margin-bottom:12px;border-left:3px solid #58a6ff}
+.grn{color:#3fb950}.red{color:#f85149}.org{color:#f0883e}
+.row{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:10px}
+.pnl{text-align:center}
+.pnl h2{font-size:15px;margin-bottom:4px;font-weight:600}
+canvas{border:1px solid #30363d;border-radius:6px;display:block;max-width:calc(100vw - 40px)}
+.st{margin-top:4px;font-size:12px;color:#8b949e}
+.st .v{color:#58a6ff;font-weight:700;font-family:monospace}
+.st .w{color:#f85149;font-weight:700}
+.ctrl{text-align:center;padding:10px 14px;background:#161b22;border:1px solid #30363d;border-radius:6px;margin-bottom:12px;max-width:560px;margin-left:auto;margin-right:auto}
+.lv{color:#f0883e;font-weight:700;font-size:20px;font-family:'Courier New',monospace}
+.sr{margin:6px 0}
+input[type=range]{width:220px;vertical-align:middle;accent-color:#f0883e}
+.br{margin-top:8px}
+button{padding:6px 14px;font-size:13px;margin:2px 3px;cursor:pointer;border:1px solid #30363d;border-radius:4px;background:#21262d;color:#c9d1d9;transition:.15s}
+button:hover{background:#30363d;border-color:#58a6ff}
+.bg{background:#238636!important;border-color:#2ea043!important;color:#fff!important}
+.bg:hover{background:#2ea043!important}
+.br2{background:#b62324!important;border-color:#da3633!important;color:#fff!important}
+.br2:hover{background:#da3633!important}
+.ps{font-size:11px;padding:4px 8px}
+.msg{text-align:center;font-size:13px;min-height:40px;margin-bottom:8px;line-height:1.6}
+.leg{text-align:center;font-size:11px;color:#6e7681;margin-top:6px;line-height:1.8}
+.leg span{margin:0 6px}
+.tip{padding:8px 12px;background:#1c2333;border:1px solid #30363d;border-radius:6px;font-size:12px;line-height:1.7;margin-bottom:10px;text-align:center}
+@media(max-width:860px){.row{flex-direction:column;align-items:center}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>📐 条件数如何影响梯度下降</h1>
+<p class="sub">俯视等高线图 — 等高线越圆 → 优化越顺；越扁 → 锯齿震荡</p>
+
+<div class="info">
+<b>核心规则：梯度 ⊥ 等高线。</b>右图等高线几乎竖直 → 梯度几乎水平 → 小球左右横穿峡谷，纵向几乎不动！<br>
+<b>左图</b>：f = x² + y²，κ = 1，正圆等高线，梯度直指圆心 → 一条直线到达。<br>
+<b>右图</b>：f = 50x² + y²，κ = 50，窄椭圆等高线，梯度偏离目标方向 60°+ → <span class="org">来回锯齿</span>。
+</div>
+
+<div class="ctrl">
+<label>学习率 α = <span class="lv" id="lrD">0.019</span></label>
+<div class="sr">
+<small style="color:#6e7681">0.001</small>
+<input type="range" id="lrS" min="1" max="200" value="19">
+<small style="color:#6e7681">0.200</small>
+</div>
+<div style="margin-bottom:6px">
+<small style="color:#6e7681">预设：</small>
+<button class="ps" onclick="setLR(5)">α=0.005 慢</button>
+<button class="ps" onclick="setLR(19)">α=0.019 震荡</button>
+<button class="ps" onclick="setLR(30)">α=0.030 发散!</button>
+</div>
+<div class="br">
+<button class="bg" id="goBtn" onclick="toggle()">▶ 开始</button>
+<button onclick="doOneStep()">⏭ 单步</button>
+<button class="br2" onclick="rst()">↺ 重置</button>
+</div>
+</div>
+
+<div class="msg" id="msg"><span style="color:#6e7681">点击「单步」逐步观察——注意右图小球每步的跳跃方向</span></div>
+
+<div class="row">
+<div class="pnl">
+<h2><span class="grn">●</span> κ = 1（正圆等高线）</h2>
+<canvas id="c1" width="400" height="400"></canvas>
+<div class="st">步数 <span class="v" id="n1">0</span> ｜ f = <span class="v" id="f1">29.00</span></div>
+</div>
+<div class="pnl">
+<h2><span class="red">●</span> κ = 50（窄椭圆等高线）</h2>
+<canvas id="c2" width="400" height="400"></canvas>
+<div class="st">步数 <span class="v" id="n2">0</span> ｜ f = <span class="v" id="f2">225.00</span><span class="w" id="dw" style="display:none"> ⚠发散</span></div>
+</div>
+</div>
+
+<div class="leg">
+<span style="color:#3fb950">● 起点(2,5)</span>
+<span style="color:#f0883e">— 轨迹</span>
+<span style="color:#f85149">● 当前位置</span>
+<span style="color:#d29922">━→ 负梯度(实际走的方向)</span>
+<span style="color:#58a6ff">╌⇢ 朝向最低点(理想方向)</span>
+</div>
+
+<div class="tip" id="stepTip" style="display:none"></div>
+</div>
+
+<script>
+const c1=document.getElementById('c1'),c2=document.getElementById('c2');
+const ctx1=c1.getContext('2d'),ctx2=c2.getContext('2d');
+const W=400,H=400,RNG=7,SC=W/(2*RNG);
+
+let lr=0.019;
+let pa=[{x:2,y:5}],pb=[{x:2,y:5}];
+let ns=0,run=false,dv=false,tid=null;
+let hm1,hm2;
+
+function mkHM(a,b){
+    const id=ctx1.createImageData(W,H),d=id.data;
+    for(let py=0;py<H;py++){
+        for(let px=0;px<W;px++){
+            const mx=(px-W/2)/SC,my=-(py-H/2)/SC;
+            const f=a*mx*mx+b*my*my;
+            const t=Math.pow(Math.min(f/300,1),0.45);
+            const i=(py*W+px)*4;
+            d[i]=8+t*42|0;
+            d[i+1]=12+t*35|0;
+            d[i+2]=28+t*38|0;
+            d[i+3]=255;
+        }
+    }
+    return id;
+}
+
+function tc(mx,my){return[W/2+mx*SC,H/2-my*SC]}
+
+function drawContours(ctx,a,b){
+    const levels=[];
+    if(a===1){
+        for(let i=1;i<=10;i++) levels.push(i*5);
+    } else {
+        for(let i=1;i<=14;i++) levels.push(i*35);
+    }
+    for(const c of levels){
+        const rx=Math.sqrt(c/a)*SC,ry=Math.sqrt(c/b)*SC;
+        if(rx<2||ry<2||rx>W||ry>H) continue;
+        ctx.beginPath();
+        ctx.ellipse(W/2,H/2,rx,ry,0,0,Math.PI*2);
+        ctx.strokeStyle='rgba(100,170,235,0.25)';
+        ctx.lineWidth=1;
+        ctx.stroke();
+    }
+}
+
+function drawAxes(ctx){
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,0.1)';
+    ctx.setLineDash([4,4]);
+    ctx.beginPath();
+    ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);
+    ctx.moveTo(W/2,0);ctx.lineTo(W/2,H);
+    ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle='#484f58';
+    ctx.font='11px sans-serif';
+    ctx.fillText('x',W-14,H/2-6);
+    ctx.fillText('y',W/2+6,14);
+    // Tick marks
+    ctx.fillStyle='#3d444d';
+    ctx.font='9px monospace';
+    for(let v=-6;v<=6;v+=2){
+        if(v===0)continue;
+        const[px,py]=tc(v,0);
+        ctx.fillText(v,px-5,py+12);
+        const[px2,py2]=tc(0,v);
+        ctx.fillText(v,px2+4,py2+3);
+    }
+}
+
+function drawTarget(ctx){
+    const[cx,cy]=tc(0,0);
+    ctx.beginPath();ctx.arc(cx,cy,5,0,Math.PI*2);
+    ctx.fillStyle='rgba(248,81,73,0.5)';ctx.fill();
+    ctx.beginPath();ctx.arc(cx,cy,2,0,Math.PI*2);
+    ctx.fillStyle='#f85149';ctx.fill();
+}
+
+function drawPath(ctx,path){
+    if(path.length<1)return;
+    // Lines with step numbers
+    if(path.length>=2){
+        ctx.beginPath();
+        for(let i=0;i<path.length;i++){
+            const[cx,cy]=tc(path[i].x,path[i].y);
+            i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy);
+        }
+        ctx.strokeStyle='rgba(240,136,62,0.8)';
+        ctx.lineWidth=2;
+        ctx.stroke();
+
+        // Intermediate dots with step numbers for first few steps
+        for(let i=1;i<path.length;i++){
+            const[cx,cy]=tc(path[i].x,path[i].y);
+            ctx.beginPath();ctx.arc(cx,cy,2.5,0,Math.PI*2);
+            ctx.fillStyle='#f0883e';ctx.fill();
+            // Step number labels for first steps
+            if(i<=6 && path.length<=30){
+                ctx.font='9px monospace';
+                ctx.fillStyle='rgba(13,17,23,0.7)';
+                const tw=ctx.measureText(i+'').width;
+                ctx.fillRect(cx+5,cy-10,tw+4,12);
+                ctx.fillStyle='#8b949e';
+                ctx.fillText(i+'',cx+7,cy);
+            }
+        }
+    }
+    // Start dot
+    const[sx,sy]=tc(path[0].x,path[0].y);
+    ctx.beginPath();ctx.arc(sx,sy,6,0,Math.PI*2);
+    ctx.fillStyle='#3fb950';ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=1.5;ctx.stroke();
+    ctx.font='bold 9px monospace';ctx.fillStyle='#fff';ctx.fillText('0',sx-3,sy+3);
+
+    // Current dot
+    if(path.length>1){
+        const p=path[path.length-1];
+        const[cx,cy]=tc(p.x,p.y);
+        ctx.beginPath();ctx.arc(cx,cy,7,0,Math.PI*2);
+        ctx.fillStyle='#f85149';ctx.fill();
+        ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+    }
+}
+
+function drawArrow(ctx,fx,fy,tx,ty,col,w,dash){
+    ctx.save();
+    ctx.strokeStyle=col;ctx.lineWidth=w;
+    if(dash)ctx.setLineDash(dash);
+    ctx.beginPath();ctx.moveTo(fx,fy);ctx.lineTo(tx,ty);ctx.stroke();
+    const a=Math.atan2(ty-fy,tx-fx),hl=8;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(tx,ty);
+    ctx.lineTo(tx-hl*Math.cos(a-0.4),ty-hl*Math.sin(a-0.4));
+    ctx.lineTo(tx-hl*Math.cos(a+0.4),ty-hl*Math.sin(a+0.4));
+    ctx.closePath();
+    ctx.fillStyle=col;ctx.fill();
+    ctx.restore();
+}
+
+function drawDirections(ctx,px,py,gx,gy){
+    const[cx,cy]=tc(px,py);
+    const al=45;
+    // Negative gradient (yellow) — actual GD direction
+    const gm=Math.sqrt(gx*gx+gy*gy);
+    if(gm>0.01){
+        const dx=(-gx/gm)*al*SC/SC, dy=(gy/gm)*al;
+        // in screen coords: neg gradient is (-gx, +gy) because y is flipped
+        const ngx=-gx/gm, ngy=gy/gm;
+        drawArrow(ctx,cx,cy,cx+ngx*al,cy+ngy*al,'#d29922',2.5);
+    }
+    // Direction toward minimum (blue dashed) — ideal direction
+    const dm=Math.sqrt(px*px+py*py);
+    if(dm>0.01){
+        const dx=-px/dm, dy=py/dm; // screen: toward origin
+        drawArrow(ctx,cx,cy,cx+dx*al,cy+dy*al,'#58a6ff',2,[5,3]);
+    }
+}
+
+function drawGradPerp(ctx,px,py,a,b){
+    // Draw a short tangent line on the contour through current point to show gradient⊥contour
+    const fv=a*px*px+b*py*py;
+    if(fv<0.5)return;
+    const[cx,cy]=tc(px,py);
+
+    // Tangent direction to ellipse at (px,py): perpendicular to gradient (a*2*px, b*2*py)
+    const gx=2*a*px, gy=2*b*py;
+    const gm=Math.sqrt(gx*gx+gy*gy);
+    if(gm<0.01)return;
+    // Tangent in math coords: (-gy, gx)/gm
+    const tx=-gy/gm, ty=gx/gm;
+    // Convert to screen
+    const len=30;
+    const sx=tx*len, sy=-ty*len;
+    ctx.save();
+    ctx.strokeStyle='rgba(100,170,235,0.5)';
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([3,3]);
+    ctx.beginPath();
+    ctx.moveTo(cx-sx,cy-sy);
+    ctx.lineTo(cx+sx,cy+sy);
+    ctx.stroke();
+    ctx.restore();
+
+    // Label ⊥
+    ctx.font='bold 12px sans-serif';
+    ctx.fillStyle='rgba(100,170,235,0.6)';
+    // Place ⊥ symbol at perpendicular corner
+    const ngx=-gx/gm, ngy=gy/gm; // neg gradient screen dir
+    ctx.fillText('⊥',cx+ngx*14+sx*0.4-5,cy+ngy*14+sy*0.4+4);
+}
+
+function drawLabel(ctx,txt,x,y,col){
+    ctx.font='11px monospace';
+    const tw=ctx.measureText(txt).width;
+    ctx.fillStyle='rgba(13,17,23,0.8)';
+    ctx.fillRect(x-4,y-12,tw+8,16);
+    ctx.fillStyle=col||'#8b949e';
+    ctx.fillText(txt,x,y);
+}
+
+function drawAngle(ctx,px,py,gx,gy){
+    const gm=Math.sqrt(gx*gx+gy*gy);
+    const dm=Math.sqrt(px*px+py*py);
+    if(gm<0.01||dm<0.01)return;
+    const cosA=(gx*px+gy*py)/(gm*dm);
+    const ang=Math.acos(Math.max(-1,Math.min(1,cosA)))*180/Math.PI;
+    drawLabel(ctx,'梯度偏角 '+ang.toFixed(0)+'°',8,H-8,'#d29922');
+}
+
+function drawCoordLabel(ctx,p,prefix){
+    const[cx,cy]=tc(p.x,p.y);
+    const txt=prefix+'('+p.x.toFixed(2)+', '+p.y.toFixed(2)+')';
+    ctx.font='10px monospace';
+    const tw=ctx.measureText(txt).width;
+    let lx=cx+12,ly=cy-8;
+    if(lx+tw>W-5)lx=cx-tw-16;
+    if(ly<14)ly=cy+16;
+    ctx.fillStyle='rgba(13,17,23,0.8)';
+    ctx.fillRect(lx-3,ly-10,tw+6,14);
+    ctx.fillStyle='#c9d1d9';
+    ctx.fillText(txt,lx,ly);
+}
+
+// === Main render ===
+function render(){
+    // Canvas 1: κ=1
+    ctx1.putImageData(hm1,0,0);
+    drawContours(ctx1,1,1);
+    drawAxes(ctx1);
+    drawTarget(ctx1);
+    drawPath(ctx1,pa);
+    const a=pa[pa.length-1];
+    drawGradPerp(ctx1,a.x,a.y,1,1);
+    drawDirections(ctx1,a.x,a.y,2*a.x,2*a.y);
+    drawLabel(ctx1,'f = x² + y²',8,14);
+    drawAngle(ctx1,a.x,a.y,2*a.x,2*a.y);
+    if(pa.length<=10) drawCoordLabel(ctx1,a,'');
+
+    // Canvas 2: κ=50
+    ctx2.putImageData(hm2,0,0);
+    drawContours(ctx2,50,1);
+    drawAxes(ctx2);
+    drawTarget(ctx2);
+    drawPath(ctx2,pb);
+    if(!dv){
+        const b=pb[pb.length-1];
+        drawGradPerp(ctx2,b.x,b.y,50,1);
+        drawDirections(ctx2,b.x,b.y,100*b.x,2*b.y);
+        drawAngle(ctx2,b.x,b.y,100*b.x,2*b.y);
+        if(pb.length<=10) drawCoordLabel(ctx2,b,'');
+    } else {
+        ctx2.fillStyle='rgba(248,81,73,0.1)';
+        ctx2.fillRect(0,0,W,H);
+        ctx2.fillStyle='#f85149';
+        ctx2.font='bold 18px sans-serif';
+        ctx2.textAlign='center';
+        ctx2.fillText('⚠ 发散！',W/2,H/2-10);
+        ctx2.font='13px sans-serif';
+        ctx2.fillText('稳定需 α < 2/λmax = 0.020',W/2,H/2+14);
+        ctx2.textAlign='start';
+    }
+    drawLabel(ctx2,'f = 50x² + y²',8,14);
+
+    // Stats
+    document.getElementById('n1').textContent=ns;
+    document.getElementById('n2').textContent=ns;
+    const fv1=a.x**2+a.y**2;
+    document.getElementById('f1').textContent=fv1<0.01?fv1.toExponential(1):fv1.toFixed(2);
+    if(!dv){
+        const b=pb[pb.length-1];
+        const fv2=50*b.x**2+b.y**2;
+        document.getElementById('f2').textContent=fv2<0.01?fv2.toExponential(1):fv2.toFixed(2);
+    } else {
+        document.getElementById('f2').textContent='∞';
+    }
+    updMsg();
+}
+
+function updMsg(){
+    const m=document.getElementById('msg');
+    const tip=document.getElementById('stepTip');
+    if(dv){
+        m.innerHTML='<span style="color:#f85149">⚠ κ=50 发散了！最大稳定学习率 = 2/λ<sub>max</sub> = 2/100 = 0.020</span>';
+        tip.style.display='none';
+    } else if(ns===1){
+        const b=pb[pb.length-1];
+        tip.style.display='block';
+        tip.innerHTML='<b>第 1 步解析：</b>起点 (2, 5)，∇f = (100×2, 2×5) = <span class="red">(200, 10)</span><br>'+
+            'x 方向梯度是 y 方向的 <b>20 倍</b>！所以负梯度几乎纯水平 →<br>'+
+            'x: 2 − 0.019×200 = <span class="org">'+b.x.toFixed(2)+'</span>（从右飞到左！），y: 5 − 0.019×10 = <span class="org">'+b.y.toFixed(2)+'</span>（几乎没动）';
+        m.innerHTML='<span style="color:#d29922">👆 看右图：小球水平穿越峡谷！因为梯度 ⊥ 等高线，等高线竖着 → 梯度横着</span>';
+    } else if(ns===2){
+        const b=pb[pb.length-1];
+        tip.style.display='block';
+        tip.innerHTML='<b>第 2 步：</b>到了左侧，梯度又指向右边 → 再飞回来！x = <span class="org">'+b.x.toFixed(2)+'</span>，y = <span class="org">'+b.y.toFixed(2)+'</span><br>'+
+            'x 来回弹跳 (+2 → −1.8 → +1.6 …)，y 每步只挪 0.18 → 这就是<b>锯齿震荡</b>';
+        m.innerHTML='<span style="color:#f0883e">🔄 锯齿形成！x 来回横穿，y 缓慢下降。两个方向的"步调"完全不匹配</span>';
+    } else if(ns>=3 && ns<=6){
+        tip.style.display='block';
+        const b=pb[pb.length-1];
+        tip.innerHTML='步 '+ns+'：右图 x='+b.x.toFixed(2)+'，y='+b.y.toFixed(2)+' — x 不断左右弹跳（幅度递减），y 缓慢接近 0';
+        m.innerHTML='<span style="color:#d29922">💡 对比：左图直奔目标（黄箭头≈蓝箭头），右图锯齿前进（黄箭头 ⊥ 蓝箭头）</span>';
+    } else if(ns>6){
+        tip.style.display='none';
+        const a2=pa[pa.length-1];
+        const fv1=a2.x**2+a2.y**2;
+        if(fv1<0.01){
+            m.innerHTML='<span style="color:#3fb950">✅ 左图(κ=1)已收敛！右图还在慢慢挪……这就是高条件数的代价</span>';
+        } else {
+            m.innerHTML='<span style="color:#8b949e">持续运行中…… 注意左图收敛速度远快于右图</span>';
+        }
+    } else if(ns===0){
+        tip.style.display='none';
+        m.innerHTML='<span style="color:#6e7681">点击「单步」逐步观察——注意右图小球每步的跳跃方向</span>';
+    }
+}
+
+// === Step ===
+function doStep(){
+    if(ns>=500)return;
+    const a=pa[pa.length-1];
+    pa.push({x:a.x-lr*2*a.x, y:a.y-lr*2*a.y});
+
+    if(!dv){
+        const b=pb[pb.length-1];
+        const nx=b.x-lr*100*b.x;
+        const ny=b.y-lr*2*b.y;
+        if(Math.abs(nx)>20||Math.abs(ny)>20){
+            dv=true;
+            pb.push({x:Math.max(-RNG,Math.min(RNG,nx)),y:Math.max(-RNG,Math.min(RNG,ny))});
+            document.getElementById('dw').style.display='inline';
+        } else {
+            pb.push({x:nx,y:ny});
+        }
+    }
+    ns++;
+}
+
+function anim(){
+    if(!run)return;
+    doStep();render();
+
+    const a=pa[pa.length-1];
+    const fv1=a.x**2+a.y**2;
+    let done=fv1<1e-5;
+    if(!dv){
+        const b=pb[pb.length-1];
+        done=done&&(50*b.x**2+b.y**2<1e-5);
+    }
+    if(done||ns>=500||dv){
+        run=false;
+        document.getElementById('goBtn').textContent='▶ 开始';
+        render();
+        return;
+    }
+    const dl=ns<6?350:ns<20?150:40;
+    tid=setTimeout(()=>requestAnimationFrame(anim),dl);
+}
+
+function toggle(){
+    if(run){
+        run=false;clearTimeout(tid);
+        document.getElementById('goBtn').textContent='▶ 继续';
+    } else {
+        run=true;
+        document.getElementById('goBtn').textContent='⏸ 暂停';
+        anim();
+    }
+}
+
+function doOneStep(){
+    if(run){run=false;clearTimeout(tid);}
+    doStep();render();
+    document.getElementById('goBtn').textContent='▶ 继续';
+}
+
+function rst(){
+    run=false;clearTimeout(tid);dv=false;
+    pa=[{x:2,y:5}];pb=[{x:2,y:5}];ns=0;
+    document.getElementById('dw').style.display='none';
+    document.getElementById('goBtn').textContent='▶ 开始';
+    render();
+}
+
+function setLR(v){
+    lr=v/1000;
+    document.getElementById('lrS').value=v;
+    document.getElementById('lrD').textContent=lr.toFixed(3);
+    rst();
+}
+
+document.getElementById('lrS').addEventListener('input',function(){
+    lr=this.value/1000;
+    document.getElementById('lrD').textContent=lr.toFixed(3);
+    rst();
+});
+
+hm1=mkHM(1,1);
+hm2=mkHM(50,1);
+render();
+</script>
+</body>
+</html>
