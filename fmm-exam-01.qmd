@@ -1,0 +1,755 @@
+---
+title: "矩阵标准型与矩阵变换 — 练习题"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+    self-contained: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## 第一部分：概念辨析（选择题）
+
+### 题目 1：标准型的适用范围
+
+以下哪种标准型对 **所有方阵** 都一定存在？
+
+A. 对角型
+B. Schur标准型（上三角）
+C. 行阶梯型
+D. 特征分解
+
+::: {.callout-tip collapse="true" title="答案与解析"}
+**答案：B**
+
+- 对角型要求矩阵可对角化（特征向量够用），不是所有方阵都行
+- Schur标准型对 **所有方阵** 都存在，$Q^TAQ = U$
+- 行阶梯型对任意矩阵（含非方阵）都存在，但它不是"方阵专属"的标准型，且不保持特征值
+- 特征分解同样要求可对角化
+:::
+
+---
+
+### 题目 2：哪些变换保持特征值？
+
+以下分解中，**不保持** 原矩阵特征值的是？
+
+A. $A = PDP^{-1}$（特征分解）
+B. $A = QUQ^T$（Schur分解）
+C. $A = U\Sigma V^T$（SVD分解）
+D. $A = PJP^{-1}$（Jordan分解）
+
+::: {.callout-tip collapse="true" title="答案与解析"}
+**答案：C**
+
+SVD分解属于 **非相似变换类**，左右两侧的正交矩阵 $U$ 和 $V$ 不同，不是 $P^{-1}AP$ 的形式，因此不保持特征值。$\Sigma$ 的对角元素是奇异值，不是特征值。
+
+其余三个都是相似变换 $P^{-1}AP$ 的形式，中间矩阵的对角线（或Jordan块的对角线）就是原矩阵的特征值。
+:::
+
+---
+
+### 题目 3：相似变换的本质
+
+关于相似变换 $B = P^{-1}AP$，以下说法 **错误** 的是？
+
+A. A 和 B 有相同的特征值
+B. P 必须是正交矩阵
+C. A 和 B 描述的是同一个线性变换在不同基下的表示
+D. 任意可逆矩阵 P 都可以进行相似变换
+
+::: {.callout-tip collapse="true" title="答案与解析"}
+**答案：B**
+
+P 只需要是 **可逆矩阵** 即可，不要求正交。当目标是Schur分解时，P（即Q）恰好是正交矩阵，这是特殊情况，不是一般要求。
+:::
+
+---
+
+### 题目 4：SVD vs 特征分解
+
+以下关于SVD和特征分解的比较，**正确** 的是？
+
+A. 两者都只适用于方阵
+B. SVD的奇异值就是原矩阵的特征值
+C. SVD对任意矩阵都存在，特征分解要求方阵且可对角化
+D. 特征分解使用两组不同的基，SVD使用同一组基
+
+::: {.callout-tip collapse="true" title="答案与解析"}
+**答案：C**
+
+- A 错误：SVD对任意 $m \times n$ 矩阵都适用
+- B 错误：奇异值 $= \sqrt{\lambda(A^TA)}$，不是 A 的特征值
+- C 正确
+- D 说反了：特征分解 $PDP^{-1}$ 是同一组基（原地往返），SVD $U\Sigma V^T$ 是两组不同的基（单程旅行）
+:::
+
+---
+
+### 题目 5：投影变换的性质
+
+投影矩阵 $P$ 满足的核心性质是？
+
+A. $P^T = P^{-1}$
+B. $P^2 = I$
+C. $P^2 = P$
+D. $\det(P) = 1$
+
+::: {.callout-tip collapse="true" title="答案与解析"}
+**答案：C**
+
+投影矩阵满足 **幂等性** $P^2 = P$，即"投两次和投一次结果一样"。A 是正交矩阵的性质，B 是对合矩阵的性质。
+:::
+
+---
+
+## 第二部分：概念填空
+
+### 题目 6：符号对应
+
+请将以下符号与其常见含义配对：
+
+| 符号 | 含义 |
+|:----:|:----:|
+| Q | ________ |
+| $\Sigma$ | ________ |
+| J | ________ |
+| R | ________ |
+| $\Lambda$ | ________ |
+
+::: {.callout-tip collapse="true" title="答案"}
+| 符号 | 含义 |
+|:----:|:----:|
+| Q | 正交矩阵 |
+| $\Sigma$ | 奇异值对角矩阵 |
+| J | Jordan标准型 |
+| R | 行阶梯矩阵 |
+| $\Lambda$ | 对角矩阵（特征值） |
+:::
+
+---
+
+### 题目 7：分解公式填空
+
+请补全以下矩阵分解的公式：
+
+1. 特征分解：$A = P \cdot$ ________ $\cdot P^{-1}$
+2. Schur分解：$A = Q \cdot$ ________ $\cdot Q^T$
+3. SVD分解：$A =$ ________ $\cdot \Sigma \cdot V^T$
+4. Jordan分解：$A = P \cdot$ ________ $\cdot P^{-1}$
+5. Cholesky分解：$A =$ ________ $\cdot L^T$
+
+::: {.callout-tip collapse="true" title="答案"}
+1. $D$（对角矩阵）
+2. $U$（上三角矩阵）
+3. $U$（左奇异向量矩阵，注意此处 U 与 Schur 中的 U 含义不同）
+4. $J$（Jordan标准型）
+5. $L$（下三角矩阵）
+:::
+
+---
+
+### 题目 8：变换分类
+
+将以下分解按 "保持特征值" 和 "不保持特征值" 分类：
+
+特征分解、SVD、Schur分解、LU分解、Jordan分解、QR分解
+
+- 保持特征值（相似变换类）：________
+- 不保持特征值（非相似变换类）：________
+
+::: {.callout-tip collapse="true" title="答案"}
+- 保持特征值：特征分解、Schur分解、Jordan分解
+- 不保持特征值：SVD、LU分解、QR分解
+:::
+
+---
+
+### 题目 9：三步拆解
+
+特征变换将矩阵 A 的作用拆解为三步：________ → ________ → ________
+
+SVD变换将矩阵 A 的作用拆解为三步：________ → ________ → ________
+
+::: {.callout-tip collapse="true" title="答案"}
+- 特征变换：**换基** → **伸缩** → **复原基**（同一组基，原地往返）
+- SVD变换：**换基（$V^T$）** → **伸缩（$\Sigma$）** → **换到另一组基（$U$）**（两组不同的基，单程旅行）
+:::
+
+---
+
+### 题目 10：奇异值与特征值的关系
+
+矩阵 A 的奇异值等于 ________ 的特征值的 ________。
+
+这个关系成立是因为 $A^TA$ 一定是 ________ 矩阵，其特征值保证 ________。
+
+::: {.callout-tip collapse="true" title="答案"}
+矩阵 A 的奇异值等于 **$A^TA$** 的特征值的 **平方根**。
+
+这个关系成立是因为 $A^TA$ 一定是 **对称半正定** 矩阵，其特征值保证 **非负**（所以开根号有意义）。
+:::
+
+---
+
+## 第三部分：R 编程实践
+
+### 题目 11：验证相似变换保持特征值
+
+**任务**：随机生成一个 $3\times3$ 矩阵 A 和一个可逆矩阵 P，计算 $B = P^{-1}AP$，验证 A 和 B 的特征值相同。
+
+请补全以下代码中的空白处：
+
+```{r}
+#| eval: false
+# TODO: 请补全代码
+
+# 1. 生成随机 3x3 矩阵 A
+A <- matrix(________, nrow = 3)
+
+# 2. 生成随机可逆矩阵 P
+P <- matrix(________, nrow = 3)
+
+# 3. 计算 B = P^{-1} A P
+B <- ________
+
+# 4. 分别求 A 和 B 的特征值并比较
+eig_A <- ________
+eig_B <- ________
+
+cat("A 的特征值：", round(eig_A, 4), "\n")
+cat("B 的特征值：", round(eig_B, 4), "\n")
+```
+
+::: {.callout-tip collapse="true" title="参考答案"}
+```{r}
+set.seed(42)
+
+A <- matrix(rnorm(9), nrow = 3)
+P <- matrix(rnorm(9), nrow = 3)
+
+B <- solve(P) %*% A %*% P
+
+eig_A <- eigen(A)$values
+eig_B <- eigen(B)$values
+
+cat("A 的特征值：", round(eig_A, 4), "\n")
+cat("B 的特征值：", round(eig_B, 4), "\n")
+
+# 排序后比较（特征值顺序可能不同）
+cat("\n排序后差异：", round(sort(Mod(eig_A)) - sort(Mod(eig_B)), 10), "\n")
+```
+:::
+
+---
+
+### 题目 12：特征分解与矩阵幂
+
+**任务**：对一个可对角化的对称矩阵 A，用特征分解计算 $A^{10}$，并与直接矩阵乘法的结果对比。
+
+**提示**：如果 $A = PDP^{-1}$，则 $A^{10} = PD^{10}P^{-1}$，而 $D^{10}$ 只需把对角元素各自取10次方。
+
+请补全以下代码中的空白处：
+
+```{r}
+#| eval: false
+# TODO: 请补全代码
+
+A <- matrix(c(4, 2, 1,
+              2, 5, 3,
+              1, 3, 6), nrow = 3, byrow = TRUE)
+
+# 方法一：特征分解
+eig <- eigen(A)
+P <- eig$vectors
+D <- diag(eig$values)
+
+# 用特征分解算 A^10
+D10 <- diag(________) # 对角元素取10次方
+A10_eig <- ________     # P D^10 P^{-1}
+
+# 方法二：暴力矩阵乘法
+A10_brute <- A
+for (i in 2:10) {
+  A10_brute <- A10_brute %*% A
+}
+
+# 比较两种方法
+cat("最大误差：", max(abs(A10_eig - A10_brute)), "\n")
+```
+
+::: {.callout-tip collapse="true" title="参考答案"}
+```{r}
+A <- matrix(c(4, 2, 1,
+              2, 5, 3,
+              1, 3, 6), nrow = 3, byrow = TRUE)
+
+eig <- eigen(A)
+P <- eig$vectors
+D <- diag(eig$values)
+
+# 特征分解法
+D10 <- diag(eig$values^10)
+A10_eig <- P %*% D10 %*% solve(P)
+
+# 暴力法
+A10_brute <- A
+for (i in 2:10) {
+  A10_brute <- A10_brute %*% A
+}
+
+cat("特征分解法 A^10:\n")
+print(round(A10_eig, 2))
+
+cat("\n暴力乘法 A^10:\n")
+print(round(A10_brute, 2))
+
+cat("\n最大误差：", max(abs(A10_eig - A10_brute)), "\n")
+```
+:::
+
+---
+
+### 题目 13：Schur分解与QR迭代
+
+**任务**：对下面的矩阵 A，手动实现 QR 迭代求 Schur 标准型，并与 R 内置的 `Schur()` 函数结果对比。
+
+请补全以下代码中的空白处：
+
+```{r}
+#| eval: false
+# TODO: 请补全代码
+
+A <- matrix(c(3, 1, 0,
+              1, 4, 2,
+              0, 2, 5), nrow = 3, byrow = TRUE)
+
+# --- 手动 QR 迭代 ---
+A_iter <- A
+Q_total <- diag(3)
+tol <- 1e-10
+
+for (i in 1:200) {
+  qr_result <- qr(A_iter)
+  Q <- qr.Q(qr_result)
+  R <- qr.R(qr_result)
+
+  A_iter <- ________       # 新的 A = R * Q
+  Q_total <- ________      # 累积正交矩阵
+
+  # 检查下三角是否接近零
+  if (sum(abs(A_iter[lower.tri(A_iter)])) < tol) {
+    cat("第", i, "次迭代收敛\n")
+    break
+  }
+}
+
+cat("\n手动 QR 迭代得到的上三角矩阵 U:\n")
+print(round(A_iter, 4))
+
+# --- R 内置 Schur 分解 ---
+library(Matrix)
+schur_result <- Schur(A)
+cat("\n内置 Schur 分解的 T:\n")
+print(round(schur_result@T, 4))
+```
+
+::: {.callout-tip collapse="true" title="参考答案"}
+```{r}
+A <- matrix(c(3, 1, 0,
+              1, 4, 2,
+              0, 2, 5), nrow = 3, byrow = TRUE)
+
+A_iter <- A
+Q_total <- diag(3)
+tol <- 1e-10
+
+for (i in 1:200) {
+  qr_result <- qr(A_iter)
+  Q <- qr.Q(qr_result)
+  R <- qr.R(qr_result)
+
+  A_iter <- R %*% Q
+  Q_total <- Q_total %*% Q
+
+  if (sum(abs(A_iter[lower.tri(A_iter)])) < tol) {
+    cat("第", i, "次迭代收敛\n")
+    break
+  }
+}
+
+cat("\n手动 QR 迭代 - 上三角矩阵 U:\n")
+print(round(A_iter, 4))
+
+cat("\n验证 Q^T A Q = U:\n")
+print(round(t(Q_total) %*% A %*% Q_total, 4))
+
+cat("\n验证 Q 正交性 (Q^T Q ≈ I):\n")
+print(round(t(Q_total) %*% Q_total, 6))
+
+# 对比内置函数
+library(Matrix)
+schur_result <- Schur(A)
+cat("\n内置 Schur 分解的 T:\n")
+print(round(schur_result$T, 4))
+
+cat("\n对角线比较（都是特征值）:\n")
+cat("手动：", round(diag(A_iter), 4), "\n")
+cat("内置：", round(diag(schur_result$T), 4), "\n")
+```
+:::
+
+---
+
+### 题目 14：SVD 分解实践
+
+**任务**：对一个 $4 \times 3$ 的非方阵进行 SVD 分解，验证以下三件事：
+
+1. $U\Sigma V^T$ 还原回 A
+2. 奇异值 $= \sqrt{\lambda(A^TA)}$
+3. U 和 V 都是正交矩阵
+
+请补全以下代码中的空白处：
+
+```{r}
+#| eval: false
+# TODO: 请补全代码
+
+A <- matrix(c(1, 2, 3,
+              4, 5, 6,
+              7, 8, 9,
+              10, 11, 12), nrow = 4, byrow = TRUE)
+
+svd_result <- svd(A)
+U <- svd_result$u
+d <- svd_result$d         # 奇异值向量
+V <- svd_result$v
+
+# 验证 1：还原
+A_reconstructed <- ________
+cat("还原误差：", max(abs(A - A_reconstructed)), "\n")
+
+# 验证 2：奇异值 = sqrt(A^T A 的特征值)
+ATA <- ________
+eig_ATA <- ________
+cat("SVD 奇异值：", round(d, 6), "\n")
+cat("sqrt(λ(A^TA))：", round(________, 6), "\n")
+
+# 验证 3：正交性
+cat("U^T U ≈ I?  误差：", max(abs(t(U) %*% U - diag(ncol(U)))), "\n")
+cat("V^T V ≈ I?  误差：", max(abs(________)), "\n")
+```
+
+::: {.callout-tip collapse="true" title="参考答案"}
+```{r}
+A <- matrix(c(1, 2, 3,
+              4, 5, 6,
+              7, 8, 9,
+              10, 11, 12), nrow = 4, byrow = TRUE)
+
+svd_result <- svd(A)
+U <- svd_result$u
+d <- svd_result$d
+V <- svd_result$v
+
+# 验证 1：还原 A = U diag(d) V^T
+A_reconstructed <- U %*% diag(d) %*% t(V)
+cat("还原误差：", max(abs(A - A_reconstructed)), "\n")
+
+# 验证 2：奇异值 = sqrt(A^TA的特征值)
+ATA <- t(A) %*% A
+eig_ATA <- eigen(ATA)$values
+cat("\nSVD 奇异值：     ", round(d, 6), "\n")
+cat("sqrt(λ(A^TA))：  ", round(sqrt(eig_ATA), 6), "\n")
+
+# 验证 3：正交性
+cat("\nU^T U ≈ I?  最大误差：", max(abs(t(U) %*% U - diag(ncol(U)))), "\n")
+cat("V^T V ≈ I?  最大误差：", max(abs(t(V) %*% V - diag(ncol(V)))), "\n")
+```
+:::
+
+---
+
+### 题目 15：行阶梯型与矩阵的秩
+
+**任务**：用高斯消元将矩阵化为行阶梯形，观察秩的变化，并验证行变换 **改变** 特征值。
+
+```{r}
+library(pracma)
+
+# 一个秩为 2 的 3x3 矩阵
+A <- matrix(c(1, 2, 3,
+              4, 5, 6,
+              7, 8, 9), nrow = 3, byrow = TRUE)
+
+# 化为行最简形
+R <- rref(A)
+
+cat("原矩阵 A:\n")
+print(A)
+cat("\n行最简形 R:\n")
+print(R)
+
+# 观察秩
+cat("\nA 的秩：", qr(A)$rank, "\n")
+
+# 比较特征值 —— 行变换会改变特征值吗？
+eig_A <- eigen(A)$values
+eig_R <- eigen(R)$values
+cat("\nA 的特征值：", round(eig_A, 4), "\n")
+cat("R 的特征值：", round(eig_R, 4), "\n")
+cat("结论：特征值",
+    ifelse(all(abs(sort(Mod(eig_A)) - sort(Mod(eig_R))) < 1e-6),
+           "相同", "不同"), "\n")
+```
+
+---
+
+### 题目 16：投影矩阵验证
+
+**任务**：给定矩阵 A，构造投影到 $\text{Col}(A)$ 的投影矩阵 $P = A(A^TA)^{-1}A^T$，验证 $P^2 = P$。然后对一个向量 b 做投影，验证残差 $b - Pb$ 垂直于列空间。
+
+请补全以下代码中的空白处：
+
+```{r}
+#| eval: false
+# TODO: 请补全代码
+
+A <- matrix(c(1, 0,
+              1, 1,
+              1, 2), nrow = 3, byrow = TRUE)
+
+# 构造投影矩阵
+P_proj <- ________  # A (A^T A)^{-1} A^T
+
+# 验证幂等性 P^2 = P
+cat("P^2 = P?  误差：", max(abs(________ - P_proj)), "\n")
+
+# 对 b 做投影
+b <- c(1, 2, 4)
+b_proj <- ________       # Pb
+residual <- ________     # b - Pb
+
+# 验证残差垂直于 Col(A)：A^T * residual ≈ 0
+cat("A^T * 残差：", round(as.vector(t(A) %*% residual), 10), "\n")
+```
+
+::: {.callout-tip collapse="true" title="参考答案"}
+```{r}
+A <- matrix(c(1, 0,
+              1, 1,
+              1, 2), nrow = 3, byrow = TRUE)
+
+# 投影矩阵
+P_proj <- A %*% solve(t(A) %*% A) %*% t(A)
+
+cat("投影矩阵 P:\n")
+print(round(P_proj, 4))
+
+# 验证幂等性
+cat("\nP^2 = P?  最大误差：", max(abs(P_proj %*% P_proj - P_proj)), "\n")
+
+# 投影
+b <- c(1, 2, 4)
+b_proj <- P_proj %*% b
+residual <- b - b_proj
+
+cat("\n原向量 b：", b, "\n")
+cat("投影 Pb：", round(b_proj, 4), "\n")
+cat("残差 b-Pb：", round(residual, 4), "\n")
+
+# 残差垂直于列空间
+cat("\nA^T * 残差（应≈0）：", round(as.vector(t(A) %*% residual), 10), "\n")
+```
+:::
+
+---
+
+### 题目 17：对称矩阵的谱分解
+
+**任务**：对一个对称矩阵 A，验证谱分解 $A = Q\Lambda Q^T$ 中 Q 是正交矩阵（$Q^TQ = I$），且 $Q\Lambda Q^T$ 还原出 A。
+
+**追加思考**：对称矩阵的 Schur 分解和谱分解有什么关系？
+
+请补全以下代码中的空白处：
+
+```{r}
+#| eval: false
+# TODO: 请补全代码
+
+A <- matrix(c(6, 2, 1,
+              2, 3, 1,
+              1, 1, 1), nrow = 3, byrow = TRUE)
+
+eig <- eigen(A)
+Q <- eig$vectors
+Lambda <- diag(eig$values)
+
+# 验证正交性
+cat("Q^T Q ≈ I?  误差：", ________, "\n")
+
+# 验证还原
+A_restored <- ________
+cat("还原误差：", max(abs(A - A_restored)), "\n")
+
+# 思考：对称矩阵的 Schur 形式是什么？
+```
+
+::: {.callout-tip collapse="true" title="参考答案"}
+```{r}
+A <- matrix(c(6, 2, 1,
+              2, 3, 1,
+              1, 1, 1), nrow = 3, byrow = TRUE)
+
+eig <- eigen(A)
+Q <- eig$vectors
+Lambda <- diag(eig$values)
+
+cat("特征值：", round(eig$values, 4), "\n\n")
+
+# 正交性
+cat("Q^T Q ≈ I?  最大误差：", max(abs(t(Q) %*% Q - diag(3))), "\n")
+
+# 还原
+A_restored <- Q %*% Lambda %*% t(Q)
+cat("还原误差：", max(abs(A - A_restored)), "\n")
+
+cat("\n思考：对称矩阵的 Schur 标准型 Q^TAQ = U 中，")
+cat("U 就是对角矩阵Λ！\n")
+cat("因为对称矩阵一定可对角化，且特征向量正交，")
+cat("所以谱分解就是Schur分解的特殊情况。\n")
+```
+:::
+
+---
+
+### 题目 18：SVD 与伪逆（最小二乘）
+
+**任务**：用 SVD 手动构造矩阵 A 的伪逆 $A^+$，再用它求 $Ax = b$ 的最小二乘解。与 R 内置的 `lm()` 结果对比。
+
+**提示**：$A^+ = V \Sigma^+ U^T$，其中 $\Sigma^+$ 是把 $\Sigma$ 的非零对角元素取倒数。
+
+请补全以下代码中的空白处：
+
+```{r}
+#| eval: false
+# TODO: 请补全代码
+
+A <- matrix(c(1, 1,
+              1, 2,
+              1, 3), nrow = 3, byrow = TRUE)
+b <- c(1, 2, 2)
+
+# SVD
+svd_result <- svd(A)
+U <- svd_result$u
+d <- svd_result$d
+V <- svd_result$v
+
+# 构造伪逆
+d_inv <- ________           # 奇异值取倒数
+A_pinv <- ________          # V diag(d_inv) U^T
+
+# 最小二乘解
+x_svd <- ________           # A^+ b
+
+# 用 lm 对比
+fit <- lm(b ~ A[,2])        # 注意第一列全1是截距
+x_lm <- coef(fit)
+
+cat("SVD伪逆解：", round(x_svd, 6), "\n")
+cat("lm 回归系数：", round(x_lm, 6), "\n")
+
+# 验证 A A^+ b 是投影
+b_proj <- A %*% x_svd
+cat("\n投影 A*x_hat：", round(b_proj, 4), "\n")
+cat("残差垂直性 A^T(b-Ax)：",
+    round(as.vector(t(A) %*% (b - b_proj)), 10), "\n")
+```
+
+::: {.callout-tip collapse="true" title="参考答案"}
+```{r}
+A <- matrix(c(1, 1,
+              1, 2,
+              1, 3), nrow = 3, byrow = TRUE)
+b <- c(1, 2, 2)
+
+svd_result <- svd(A)
+U <- svd_result$u
+d <- svd_result$d
+V <- svd_result$v
+
+# 伪逆
+d_inv <- 1 / d
+A_pinv <- V %*% diag(d_inv) %*% t(U)
+
+# 最小二乘解
+x_svd <- A_pinv %*% b
+
+# lm 对比
+fit <- lm(b ~ A[,2])
+x_lm <- coef(fit)
+
+cat("SVD伪逆解：", round(x_svd, 6), "\n")
+cat("lm 回归系数：", round(x_lm, 6), "\n")
+
+# 投影验证
+b_proj <- A %*% x_svd
+cat("\n投影 Ax_hat：", round(b_proj, 4), "\n")
+cat("原始 b：    ", b, "\n")
+cat("残差 b-Ax：", round(b - b_proj, 4), "\n")
+cat("残差垂直性 A^T(b-Ax)：",
+    round(as.vector(t(A) %*% (b - b_proj)), 10), "\n")
+```
+:::
+
+---
+
+## 第四部分：综合思考
+
+### 题目 19：分解选择（选择题）
+
+你面对以下场景，应该优先选用哪种分解？
+
+**(a)** 需要快速计算一个对称正定矩阵的行列式：
+
+A. SVD　　B. LU　　C. Cholesky　　D. Jordan
+
+**(b)** 矩阵不是方阵，需要降维：
+
+A. 特征分解　　B. SVD　　C. Schur分解　　D. Jordan分解
+
+**(c)** 方阵不可对角化，需要分析其幂次行为：
+
+A. 特征分解　　B. 谱分解　　C. Jordan分解　　D. QR分解
+
+::: {.callout-tip collapse="true" title="答案"}
+**(a) C — Cholesky**：正定矩阵 $A = LL^T$，$\det(A) = \det(L)^2 = (\prod l_{ii})^2$，比LU更快。
+
+**(b) B — SVD**：SVD 对任意 $m \times n$ 矩阵都适用，奇异值给出各方向的重要性，截断小奇异值即可降维。
+
+**(c) C — Jordan分解**：不可对角化时，Jordan标准型是"退路"，Jordan块的结构直接决定 $A^k$ 的行为（多项式增长 vs 指数增长）。
+:::
+
+---
+
+### 题目 20：关系图补全
+
+请根据笔记中的关系图，回答以下判断（对/错）：
+
+1. 行阶梯形是通过相似变换得到的。（____）
+2. 若一个方阵可对角化，则其 Schur 标准型的上三角部分全为零（即退化为对角阵）。（____）
+3. Jordan标准型是对角化失败时的"退路"。（____）
+4. Schur标准型只对对称矩阵存在。（____）
+
+::: {.callout-tip collapse="true" title="答案"}
+1. **错**。行阶梯形是通过初等行变换（非相似变换）得到的，会改变特征值。
+2. **不一定对**。可对角化意味着存在 $PDP^{-1}$，但 Schur 分解用的是正交矩阵 Q，对于可对角化但非对称的矩阵，Schur 形的上三角部分不一定为零。只有 **对称矩阵** 的 Schur 形才一定是对角阵。
+3. **对**。当特征向量不够用（不可对角化）时，Jordan标准型是最接近对角形的"次简"形式。
+4. **错**。Schur标准型对 **所有方阵** 都存在，这是它的核心优势。
+:::

@@ -1,0 +1,1790 @@
+---
+title: "第四章：最大似然估计"
+subtitle: "从得分方程到效率最优的完整旅程 | Von der Score-Gleichung zur optimalen Effizienz"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+在第三章中，我们认识了似然函数和最大似然估计的基本概念。现在，想象你已经是一位合格的制图师，能够从勘测点画出一张地图。本章要回答的核心问题是：**这张地图画得到底有多好？它的质量保证是什么？**
+
+*Im letzten Kapitel haben wir die Likelihood-Funktion kennengelernt. Nun fragen wir: Wie gut ist unsere Karte wirklich? Welche Qualitatsgarantien haben wir?*
+
+具体来说，我们要建立最大似然估计的三大支柱：
+
+1. **得分方程与 Fisher 信息** —— 似然函数的"地形学"：斜率（得分）和曲率（Fisher 信息）
+2. **渐近正态性与 Cramer-Rao 下界** —— MLE 不仅越来越准，而且是**最准的**
+3. **似然比与模型误指定** —— 即使地图画法有偏差，似然方法依然有用
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图 | Lernroadmap dieses Kapitels"
+#| fig-height: 4.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 14), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+steps_x <- c(1.5, 3.7, 5.9, 8.1, 10.3, 12.5)
+steps_y <- rep(4.2, 6)
+arrows(steps_x[-6] + 0.85, steps_y[-6], steps_x[-1] - 0.85, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("得分方程\nFisher信息", "渐近正态性\n相合性", 
+               "Cramer-Rao\n下界与效率",
+               "似然比\n卡方分布", 
+               "参数变换\n模型误指定",
+               "似然原理\n数值计算")
+labels_de <- c("Score\nFisher-Info", "Asympt.\nNormalitat", 
+               "Cramer-Rao\nBound",
+               "Likelihood-\nRatio",
+               "Transformation\nMisspecification",
+               "Likelihood-\nPrinzip")
+colors <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#E0E7FF", "#FEE2E2", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DB2777", "#6366F1", "#DC2626", "#16A34A")
+
+for (i in 1:6) {
+  rect(steps_x[i] - 0.85, steps_y[i] - 0.9, steps_x[i] + 0.85, steps_y[i] + 0.9,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.25, labels_cn[i], cex = 0.6, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.45, col = "#64748B", font = 3)
+  text(steps_x[i] - 0.6, steps_y[i] + 0.75, paste0("\u00a74.", i), 
+       cex = 0.55, col = borders[i], font = 2)
+}
+
+arrows(0.5, 1.2, 13.5, 1.2, col = "#DC2626", lwd = 2, length = 0.15)
+text(7, 1.6, "从局部性质到全局保证，层层递进  >>>", cex = 0.85, col = "#DC2626")
+```
+
+**最终目标**：理解下面这条链路中每一个符号的含义——
+
+$$
+s(\theta_0) \;\xrightarrow{\text{Bartlett恒等式}}\; I(\theta_0) \;\xrightarrow{\text{渐近正态}}\; \hat{\theta} \overset{a}{\sim} N\!\left(\theta_0, I^{-1}(\theta_0)\right) \;\xrightarrow{\text{Cramer-Rao}}\; \text{方差下界}
+$$
+
+现在看不懂？**完全没关系**——读完本章，这条链将变得水到渠成。
+
+{{< pagebreak >}}
+
+# 得分方程 {#sec-score}
+
+> **Die Score-Gleichung**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- **得分函数（Score-Funktion）** 的定义与直觉
+- **第一 Bartlett 恒等式**：得分函数期望为零
+- **第二 Bartlett 恒等式**：得分函数方差 = Fisher 信息
+- **Fisher 信息矩阵**的定义与几何直觉
+- MLE 的形式化定义
+- 非 Fisher 正则分布的例子（均匀分布）
+:::
+
+## 从第三章出发：回顾与深入
+
+> **Anknupfung an Kapitel 3: Ruckblick und Vertiefung**
+
+回顾第三章的设定：数据来自未知的数据生成过程
+
+$$
+Y_i \sim G(y), \quad \text{i.i.d.}, \quad i = 1, \ldots, n
+$$
+
+我们用参数化模型族 $\mathcal{F} = \{F(\cdot;\theta), \theta \in \Theta\}$ 来逼近它。第三章已经证明，$\mathcal{F}$ 中离 $G(\cdot)$ 最近的分布（按 KL 散度度量）对应的参数 $\theta_0$ 满足
+
+$$
+E\!\left[\frac{\partial \log f(Y; \theta_0)}{\partial \theta}\right] = \int \frac{\partial \log f(y; \theta_0)}{\partial \theta} \, dG(y) = 0
+$$
+
+本章将围绕**对数似然函数**展开：
+
+$$
+l(\theta) = \sum_{i=1}^{n} \log f(y_i; \theta) \tag{4.2}
+$$
+
+有时我们写成 $l(\theta; y)$ 来强调似然函数依赖于数据。如果将数据视为随机的（用 $Y_i$ 替代 $y_i$），似然函数本身也是随机的。
+
+## 得分函数与第一 Bartlett 恒等式
+
+> **Score-Funktion und erste Bartlett-Identitat**
+
+::: {.callout-tip icon="false"}
+## 地形师的比喻 | Die Gelande-Metapher
+
+想象似然函数是一座山丘的剖面图。**得分函数**就是这座山丘在每个位置 $\theta$ 处的**坡度**（斜率）。山顶处坡度为零——这正是我们要找的最高点。
+
+而"得分函数期望为零"意味着：如果你在山丘上随机放置很多探测器，它们测量到的**平均坡度**恰好为零——山丘在真参数处"平均"达到峰值。
+
+*Die Score-Funktion ist die Steigung des Likelihood-Hugels. Am Gipfel ist die Steigung null. Die erste Bartlett-Identitat sagt: Im Durchschnitt uber alle moglichen Daten ist die Steigung am wahren Parameter null.*
+:::
+
+为什么得分函数期望为零？有两条路径可以理解这一点。
+
+**路径一：从 KL 散度出发（一般情形）**。这正是上面回顾的 $E\!\left[\frac{\partial \log f(Y; \theta_0)}{\partial \theta}\right] = 0$，期望关于真实分布 $G(\cdot)$ 取。
+
+**路径二：从密度积分为一出发（模型正确的情形）**。假设 $G(\cdot) \in \mathcal{F}$，即真实分布恰好在模型族中。对于任意 $\theta \in \Theta$，密度积分为一：
+
+$$
+\int f(y; \theta) \, dy = 1 \tag{4.4}
+$$
+
+对 $\theta$ 求导（利用 Fisher 正则性：积分与微分可交换）：
+
+$$
+0 = \frac{\partial}{\partial \theta} \int f(y;\theta) \, dy = \int \frac{\partial f(y;\theta)}{\partial \theta} \, dy
+$$
+
+关键技巧——将 $\frac{\partial f}{\partial \theta}$ 改写为 $\frac{\partial \log f}{\partial \theta} \cdot f$：
+
+$$
+0 = \int \frac{\partial \log f(y;\theta)}{\partial \theta} f(y;\theta) \, dy = E\!\left[s(\theta; Y)\right]
+$$
+
+其中 $s(\theta; y) = \frac{\partial}{\partial \theta} \log f(y; \theta)$ 就是**得分函数**。
+
+::: {.callout-important icon="false"}
+## 性质：第一 Bartlett 恒等式 | Erste Bartlett-Identitat
+
+$$
+E\!\left[s(\theta; Y)\right] = 0 \tag{4.5}
+$$
+
+期望关于密度 $f(\cdot; \theta)$ 取——注意密度中的参数与得分中的参数**相同**。
+
+**解读**：虽然对于不同的数据集，似然函数的峰值位置会变化，但**平均而言**，似然函数在 $\theta_0$ 处有一个峰值，因为平均斜率为零。
+:::
+
+```{r}
+#| label: fig-score-function
+#| fig-cap: "得分函数与对数似然的关系：得分为零处即为 MLE | Score-Funktion und Log-Likelihood"
+#| fig-height: 8
+
+set.seed(42)
+y_data <- rnorm(50, mean = 3, sd = 2)
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+# 对数似然
+mu_range <- seq(0, 6, by = 0.02)
+ll_vals <- sapply(mu_range, function(mu) sum(dnorm(y_data, mu, 2, log = TRUE)))
+
+plot(mu_range, ll_vals, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(mu), ylab = expression(l(mu)),
+     main = expression(paste("对数似然函数 l(", mu, ") | Log-Likelihood")),
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+mu_mle <- mean(y_data)
+abline(v = mu_mle, col = "#DC2626", lty = 2, lwd = 2)
+points(mu_mle, max(ll_vals), pch = 23, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+text(mu_mle + 0.15, max(ll_vals) - 1,
+     bquote(hat(mu)[MLE] == .(round(mu_mle, 3))),
+     col = "#DC2626", font = 2, cex = 1)
+
+# 得分函数
+score_vals <- sapply(mu_range, function(mu) sum((y_data - mu) / 4))
+
+plot(mu_range, score_vals, type = "l", col = "#EA580C", lwd = 3,
+     xlab = expression(mu), ylab = expression(s(mu)),
+     main = expression(paste("得分函数 s(", mu, ") = ", partialdiff, "l / ", 
+                             partialdiff, mu, " | Score-Funktion")),
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = 0, col = "#94A3B8", lty = 3)
+abline(v = mu_mle, col = "#DC2626", lty = 2, lwd = 2)
+points(mu_mle, 0, pch = 16, col = "#DC2626", cex = 2)
+text(mu_mle + 0.2, 2, expression(paste("s(", hat(mu), ") = 0")),
+     col = "#DC2626", font = 2, cex = 1)
+
+par(mfrow = c(1, 1))
+```
+
+## 第二 Bartlett 恒等式与 Fisher 信息
+
+> **Zweite Bartlett-Identitat und Fisher-Information**
+
+现在对第一 Bartlett 恒等式 (4.5) 的两边再关于 $\theta$ 求导。为了处理多维参数 $\theta$（列向量），我们对 $\theta^\top$ 求导：
+
+$$
+0 = \frac{\partial}{\partial \theta^\top} \int \frac{\partial \log f(y;\theta)}{\partial \theta} f(y;\theta) \, dy
+$$
+
+用乘法法则展开：
+
+$$
+0 = \int \frac{\partial^2 \log f(y;\theta)}{\partial \theta \partial \theta^\top} f(y;\theta) \, dy + \int \frac{\partial \log f(y;\theta)}{\partial \theta} \frac{\partial \log f(y;\theta)}{\partial \theta^\top} f(y;\theta) \, dy
+$$
+
+即
+
+$$
+E\!\left[s(\theta;Y)\,s^\top(\theta;Y)\right] = E\!\left[-\frac{\partial^2 \log f(Y;\theta)}{\partial \theta \partial \theta^\top}\right]
+$$
+
+因为 $E[s(\theta;Y)] = 0$，左边正是得分函数的**方差**。
+
+::: {.callout-important icon="false"}
+## 性质：第二 Bartlett 恒等式 | Zweite Bartlett-Identitat
+
+$$
+\text{Var}\!\left[s(\theta; Y)\right] = E\!\left[-\frac{\partial^2 \log f(Y;\theta)}{\partial \theta \partial \theta^\top}\right] \tag{4.6}
+$$
+
+右边定义为 **Fisher 信息矩阵**。
+:::
+
+::: {.callout-tip icon="false"}
+## Fisher 信息的直觉 | Intuition der Fisher-Information
+
+把似然函数想象成一座山。Fisher 信息度量的是山顶的**曲率**——即山有多"尖"。
+
+- **曲率大（Fisher 信息大）**：山顶尖锐如针尖，稍微偏离真参数，似然就急剧下降。这意味着数据对参数非常"敏感"，估计精度高。
+- **曲率小（Fisher 信息小）**：山顶平坦如高原，偏离真参数后似然变化不大。数据对参数不"敏感"，估计精度低。
+
+*Grosse Fisher-Information = scharfer Gipfel = prazise Schatzung. Kleine Fisher-Information = flacher Gipfel = unprazise Schatzung.*
+:::
+
+```{r}
+#| label: fig-fisher-curvature
+#| fig-cap: "Fisher 信息与似然曲率：样本量越大，山峰越尖锐（仿教材 Fig. 4.1）| Fisher-Information und Kruemmung"
+#| fig-height: 5.5
+
+set.seed(123)
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+mu_true <- 0
+mu_range2 <- seq(-3, 3, by = 0.02)
+n_vals <- c(5, 50, 500)
+cols <- c("#1E293B", "#2563EB", "#9333EA")
+ltys <- c(1, 1, 1)
+
+plot(NULL, xlim = c(-3, 3), ylim = c(-28, 0),
+     xlab = expression(mu), ylab = expression(l(mu)),
+     main = expression(paste("不同样本量下的对数似然函数 | Log-Likelihood fur verschiedene n")),
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (k in seq_along(n_vals)) {
+  set.seed(100 + k)
+  y_k <- rnorm(n_vals[k], mu_true, 1)
+  ll_k <- sapply(mu_range2, function(mu) sum(dnorm(y_k, mu, 1, log = TRUE)))
+  ll_k <- ll_k - max(ll_k)
+  lines(mu_range2, ll_k, col = cols[k], lwd = 2.5, lty = ltys[k])
+}
+
+legend("topright",
+       legend = c(
+         expression(paste("n = 5,   I(", mu, ") = 5")),
+         expression(paste("n = 50,  I(", mu, ") = 50")),
+         expression(paste("n = 500, I(", mu, ") = 500"))
+       ),
+       col = cols, lwd = 2.5, lty = ltys, bty = "n", cex = 0.9)
+
+text(2, -2, "n 越大\n山峰越尖锐!", col = "#DC2626", font = 2, cex = 0.9)
+arrows(1.8, -3.5, 0.5, -6, col = "#DC2626", lwd = 1.5, length = 0.1)
+```
+
+Fisher 信息随样本量线性增长。对于 $N(\mu, 1)$，$I(\mu) = n / \sigma^2 = n$。更多的数据意味着更多的信息，山峰更尖锐，估计更精确。
+
+## 正式定义
+
+> **Formale Definitionen**
+
+::: {.callout-important icon="false"}
+## 定义 4.1：得分函数与 Fisher 信息 | Definition 4.1: Score-Funktion und Fisher-Information
+
+对数似然函数的一阶导数称为**得分函数**：
+
+$$
+s(\theta; y_1, \ldots, y_n) = \frac{\partial l(\theta; y_1, \ldots, y_n)}{\partial \theta} \tag{4.7}
+$$
+
+对得分函数求导并取负期望，得到 **Fisher 信息矩阵**：
+
+$$
+I(\theta) = -E\!\left[\frac{\partial s(\theta; Y_1, \ldots, Y_n)}{\partial \theta^\top}\right] = -E\!\left[\frac{\partial^2 l(\theta; Y_1, \ldots, Y_n)}{\partial \theta \partial \theta^\top}\right] \tag{4.8}
+$$
+
+如果数据生成过程在模型族内，得分函数的方差等于 Fisher 信息：
+
+$$
+\text{Var}\!\left[s(\theta; Y)\right] = I(\theta)
+$$
+:::
+
+::: {.callout-important icon="false"}
+## 定义 4.2：最大似然估计 | Definition 4.2: Maximum-Likelihood-Schatzung
+
+对于随机样本 $y_1, \ldots, y_n$，最大似然估计定义为：
+
+$$
+\hat{\theta} = \arg\max_\theta \, l(\theta) = \arg\max_\theta \, l(\theta; y_1, \ldots, y_n)
+$$
+
+对于 Fisher 正则分布，MLE 满足得分方程：
+
+$$
+s(\hat{\theta}) = s(\hat{\theta}; y_1, \ldots, y_n) = 0
+$$
+:::
+
+由于得分函数的方差非负，第二 Bartlett 恒等式 (4.6) 意味着对数似然的二阶导数（至少在期望意义下）为负。这保证了似然函数是**凹的**，因此最大值是唯一的。这个性质仅在期望意义下成立——对于具体的样本，可能出现局部极大值。
+
+## 例 4.1：非 Fisher 正则分布（均匀分布）
+
+> **Beispiel 4.1: Nicht Fisher-regulare Verteilung (Gleichverteilung)**
+
+并非所有分布都能通过求导来找 MLE。以 $Y_i \sim \text{Uniform}[0, \theta]$ 为例。
+
+密度为 $f(y_i; \theta) = 1/\theta$（当 $0 \leq y_i \leq \theta$ 时），似然函数为：
+
+$$
+L(\theta) = \begin{cases} (1/\theta)^n & \text{若 } \theta \geq \max(y_1, \ldots, y_n) \\ 0 & \text{否则} \end{cases}
+$$
+
+对数似然 $l(\theta) = -n \log \theta$ 在允许范围内关于 $\theta$ 单调递减，所以最大值在 $\theta$ 的**最小允许值**处取到，即 $\hat{\theta} = y_{\max} = \max(y_1, \ldots, y_n)$。
+
+```{r}
+#| label: fig-uniform-mle
+#| fig-cap: "均匀分布 U[0, theta] 的似然函数：不连续，最大值在 y_max 处（仿教材 Fig. 4.2）| Likelihood der Gleichverteilung"
+#| fig-height: 5
+
+set.seed(42)
+n_unif <- 20; theta_true <- 5
+y_unif <- runif(n_unif, 0, theta_true)
+y_max <- max(y_unif)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+theta_range <- seq(y_max - 0.01, 10, by = 0.01)
+like_unif <- (1 / theta_range)^n_unif
+
+plot(theta_range, like_unif, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(theta), ylab = expression(L(theta)),
+     main = expression(paste("均匀分布 U[0, ", theta, "] 的似然函数 | Likelihood")),
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B",
+     xlim = c(0, 10))
+grid(col = "#E2E8F0")
+
+segments(0, 0, y_max - 0.01, 0, col = "#DC2626", lwd = 3)
+points(y_max, (1/y_max)^n_unif, pch = 16, col = "#DC2626", cex = 2.5)
+
+abline(v = theta_true, col = "#16A34A", lty = 3, lwd = 2)
+text(theta_true + 0.1, max(like_unif) * 0.7,
+     expression(paste("真实值 ", theta[0])),
+     col = "#16A34A", font = 2, cex = 0.9, pos = 4)
+text(y_max, (1/y_max)^n_unif * 1.1,
+     bquote(hat(theta) == y[max] ~ "=" ~ .(round(y_max, 3))),
+     col = "#DC2626", font = 2, cex = 0.9, pos = 4)
+
+text(2, max(like_unif) * 0.3, expression(paste("L(", theta, ") = 0")),
+     col = "#DC2626", cex = 1, font = 2)
+arrows(2.5, max(like_unif) * 0.25, 1, 0.0001, col = "#DC2626", lwd = 1.5, length = 0.1)
+```
+
+这个 MLE 是**有偏的**。我们可以推导出 $y_{\max}$ 的分布：
+
+$$
+P(y_{\max} \leq y) = F^n(y) = \left(\frac{y}{\theta_0}\right)^n, \quad 0 \leq y \leq \theta_0
+$$
+
+密度为 $f(y_{\max}) = n y^{n-1} / \theta_0^n$，期望为：
+
+$$
+E(y_{\max}) = \int_0^{\theta_0} y \cdot \frac{n y^{n-1}}{\theta_0^n} \, dy = \frac{n}{n+1} \theta_0
+$$
+
+MLE 系统性地**低估**真参数，偏差为 $-\theta_0/(n+1)$。
+
+```{r}
+#| label: fig-uniform-bias
+#| fig-cap: "均匀分布 MLE 的偏差随样本量减小 | Bias des Gleichverteilungs-MLE nimmt mit n ab"
+#| fig-height: 5
+
+set.seed(42)
+theta_true_u <- 5
+n_vals_u <- c(5, 10, 50, 200)
+n_sim_u <- 10000
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+cols_u <- c("#DC2626", "#EA580C", "#2563EB", "#16A34A")
+
+plot(NULL, xlim = c(2, 5.5), ylim = c(0, 12),
+     xlab = expression(hat(theta) == y[max]),
+     ylab = "密度 | Dichte",
+     main = expression(paste("y"[max], " 的抽样分布：有偏但渐近无偏 | Stichprobenverteilung")),
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (k in seq_along(n_vals_u)) {
+  ymax_samples <- replicate(n_sim_u, max(runif(n_vals_u[k], 0, theta_true_u)))
+  d <- density(ymax_samples, adjust = 1.2)
+  lines(d$x, d$y, col = cols_u[k], lwd = 2.5)
+  
+  theoretical_mean <- n_vals_u[k] / (n_vals_u[k] + 1) * theta_true_u
+  abline(v = theoretical_mean, col = cols_u[k], lty = 3, lwd = 1)
+}
+
+abline(v = theta_true_u, col = "#1E293B", lwd = 2.5, lty = 2)
+text(theta_true_u, 11, expression(theta[0] == 5), col = "#1E293B", font = 2, cex = 0.9)
+
+legend("topleft",
+       legend = c(paste0("n = ", n_vals_u, ", E = ", 
+                         round(n_vals_u / (n_vals_u + 1) * theta_true_u, 3))),
+       col = cols_u, lwd = 2.5, bty = "n", cex = 0.85)
+```
+
+{{< pagebreak >}}
+
+# 渐近正态性 {#sec-asymptotic}
+
+> **Asymptotische Normalitat**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 似然函数本身是**随机的**
+- MLE 的**渐近正态性**：本章的核心结果
+- 如何利用渐近正态性构造**置信区间**
+- 二项分布的完整 MLE 推导示例
+- 渐近正态性的**证明思路**
+:::
+
+## 似然函数的随机性
+
+> **Die Zufalligkeit der Likelihood-Funktion**
+
+似然函数基于数据，而数据是随机的，因此似然函数本身是一个随机对象。不同的数据集会产生不同形状的似然曲线，MLE 的位置也随之变化。
+
+```{r}
+#| label: fig-random-likelihood
+#| fig-cap: "二项分布的随机似然函数（仿教材 Fig. 4.3）：n=10（左）和 n=100（右），线宽正比于出现概率 | Zufallige Likelihood-Funktionen"
+#| fig-height: 8
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+pi_true <- 0.3
+
+for (n_binom in c(10, 100)) {
+  pi_range <- seq(0.001, 0.999, length.out = 300)
+  
+  # 对数似然函数
+  plot(NULL, xlim = c(0, 1), ylim = c(-40, 0),
+       xlab = expression(pi), ylab = "log likelihood",
+       main = bquote("对数似然, n =" ~ .(n_binom)),
+       cex.main = 1.1, col.main = "#1E293B")
+  grid(col = "#E2E8F0")
+  
+  possible_y <- 0:n_binom
+  probs <- dbinom(possible_y, n_binom, pi_true)
+  
+  n_show <- min(n_binom + 1, 30)
+  top_idx <- order(probs, decreasing = TRUE)[1:n_show]
+  
+  for (idx in top_idx) {
+    yy <- possible_y[idx]
+    pp <- probs[idx]
+    ll <- yy * log(pi_range) + (n_binom - yy) * log(1 - pi_range)
+    lines(pi_range, ll, col = adjustcolor("#2563EB", pp * 3), lwd = pp * 15 + 0.3)
+  }
+  abline(v = pi_true, col = "#DC2626", lty = 2, lwd = 2)
+  
+  # MLE 分布
+  mle_vals <- possible_y / n_binom
+  plot(mle_vals, probs, type = "h", col = "#9333EA", lwd = 3,
+       xlab = expression(hat(pi) == y/n), ylab = "概率 | Wahrscheinlichkeit",
+       main = bquote("MLE 分布, n =" ~ .(n_binom)),
+       cex.main = 1.1, col.main = "#1E293B",
+       xlim = c(0, 1))
+  grid(col = "#E2E8F0")
+  abline(v = pi_true, col = "#DC2626", lty = 2, lwd = 2)
+  text(pi_true + 0.03, max(probs) * 0.9, expression(pi[0] == 0.3),
+       col = "#DC2626", font = 2, cex = 0.8, pos = 4)
+}
+
+par(mfrow = c(1, 1))
+```
+
+从图中可以观察到三个关键特征。首先，对数似然函数是随机的。其次，似然函数的最大值出现在真参数 $\pi_0$ 的附近。第三，随着样本量增大，MLE 的分布越来越接近正态分布。
+
+## MLE 的渐近正态性：核心定理
+
+> **Asymptotische Normalitat des MLE: Das Kernresultat**
+
+::: {.callout-important icon="false"}
+## 性质 4.1：MLE 的渐近正态性 | Eigenschaft 4.1: Asymptotische Normalitat
+
+假设 Fisher 正则分布，参数为 $\theta_0$，i.i.d. 样本 $Y_1, \ldots, Y_n$。最大似然估计渐近正态分布：
+
+$$
+\hat{\theta} \overset{a}{\sim} N\!\left(\theta_0, I^{-1}(\theta_0)\right) \tag{4.9}
+$$
+:::
+
+这是最大似然理论中**最核心的结果**。它意味着：
+
+1. MLE 是**相合的**：$\hat{\theta} \to \theta_0$（当 $n \to \infty$）
+2. MLE 的**方差**由 Fisher 信息的逆决定
+3. 我们可以直接构造**置信区间**
+
+实际中，$I(\theta_0)$ 依赖于未知的 $\theta_0$，我们用估计值 $\hat{\theta}$ 替代，得到 $I(\hat{\theta})$。对 $\hat{\theta}$ 的第 $k$ 个分量：
+
+$$
+\frac{\hat{\theta}_k - \theta_{k0}}{\sqrt{[\text{Var}(\hat{\theta})]_{kk}}} \overset{a}{\sim} N(0, 1) \tag{4.10}
+$$
+
+其中 $[\text{Var}(\hat{\theta})]_{kk}$ 是 $I^{-1}(\hat{\theta})$ 的第 $k$ 个对角元素。
+
+```{r}
+#| label: fig-asymptotic-normality-demo
+#| fig-cap: "MLE 渐近正态性的模拟验证：泊松分布 | Simulation der asymptotischen Normalitat: Poisson"
+#| fig-height: 5.5
+
+set.seed(2024)
+lambda_true <- 4
+n_vals_an <- c(5, 30, 200)
+n_sim_an <- 10000
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+cols_an <- c("#DC2626", "#EA580C", "#16A34A")
+
+plot(NULL, xlim = c(1, 7), ylim = c(0, 3),
+     xlab = expression(hat(lambda)[MLE] == bar(X)),
+     ylab = "密度 | Dichte",
+     main = expression(paste("Poisson MLE 的渐近正态性 | Asymptotische Normalitat")),
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (k in seq_along(n_vals_an)) {
+  nn <- n_vals_an[k]
+  mle_samples <- replicate(n_sim_an, mean(rpois(nn, lambda_true)))
+  d <- density(mle_samples, adjust = 1.2)
+  lines(d$x, d$y, col = cols_an[k], lwd = 2.5)
+  
+  # 理论正态曲线
+  x_theory <- seq(1, 7, length.out = 300)
+  y_theory <- dnorm(x_theory, lambda_true, sqrt(lambda_true / nn))
+  lines(x_theory, y_theory, col = cols_an[k], lwd = 1.5, lty = 3)
+}
+
+abline(v = lambda_true, col = "#1E293B", lwd = 2, lty = 2)
+text(lambda_true + 0.1, 2.8, expression(lambda[0] == 4), col = "#1E293B", font = 2)
+
+legend("topright",
+       legend = c(paste0("n = ", n_vals_an, " (模拟)"),
+                  "理论正态曲线"),
+       col = c(cols_an, "#6B7280"),
+       lwd = c(rep(2.5, 3), 1.5), lty = c(1, 1, 1, 3), bty = "n", cex = 0.8)
+```
+
+## 例 4.2：二项分布的完整推导
+
+> **Beispiel 4.2: Vollstandige Herleitung fur die Binomialverteilung**
+
+设 $Y \sim B(n, \pi)$。对数似然为：
+
+$$
+l(\pi) = y \log(\pi) + (n - y) \log(1 - \pi)
+$$
+
+**得分函数**：
+
+$$
+\frac{\partial l(\pi)}{\partial \pi} = \frac{y}{\pi} - \frac{n - y}{1 - \pi}
+$$
+
+**验证第一 Bartlett 恒等式**（利用 $E[Y] = n\pi$）：
+
+$$
+E\!\left[\frac{\partial l(\pi)}{\partial \pi}\right] = \frac{n\pi}{\pi} - \frac{n - n\pi}{1 - \pi} = n - n = 0
+$$
+
+**令得分为零求 MLE**：
+
+$$
+\frac{y}{\hat{\pi}} - \frac{n - y}{1 - \hat{\pi}} = 0 \quad \Longrightarrow \quad \hat{\pi} = \frac{y}{n}
+$$
+
+**Fisher 信息**：
+
+$$
+\frac{\partial^2 l(\pi)}{\partial \pi^2} = -\frac{y}{\pi^2} - \frac{n - y}{(1 - \pi)^2}
+$$
+
+$$
+I(\pi) = E\!\left[-\frac{\partial^2 l}{\partial \pi^2}\right] = \frac{n\pi}{\pi^2} + \frac{n - n\pi}{(1 - \pi)^2} = \frac{n}{\pi(1 - \pi)}
+$$
+
+因此 MLE $\hat{\pi} = y/n$ 的渐近方差为 $I^{-1}(\pi) = \pi(1-\pi)/n$。
+
+```{r}
+#| label: binomial-mle-demo
+#| code-fold: false
+
+# 二项分布 MLE 的完整计算
+n_binom <- 50; y_obs <- 18; pi_hat <- y_obs / n_binom
+
+fisher_info <- n_binom / (pi_hat * (1 - pi_hat))
+var_mle <- 1 / fisher_info
+se_mle <- sqrt(var_mle)
+
+ci_lower <- pi_hat - 1.96 * se_mle
+ci_upper <- pi_hat + 1.96 * se_mle
+
+cat("二项分布 MLE 完整推导 | Vollstandige Binomial-MLE:\n\n")
+cat("  观测: y =", y_obs, ", n =", n_binom, "\n")
+cat("  MLE: pi_hat = y/n =", pi_hat, "\n")
+cat("  Fisher信息: I(pi_hat) = n/(pi_hat*(1-pi_hat)) =", round(fisher_info, 2), "\n")
+cat("  渐近方差: 1/I =", round(var_mle, 6), "\n")
+cat("  渐近标准误: sqrt(1/I) =", round(se_mle, 4), "\n")
+cat("  95% 置信区间: [", round(ci_lower, 4), ",", round(ci_upper, 4), "]\n")
+```
+
+## 渐近正态性的证明思路
+
+> **Beweisskizze der asymptotischen Normalitat**
+
+::: {.callout-tip collapse="true"}
+## 点击展开证明思路 | Klicken fur die Beweisskizze
+
+MLE 满足 $0 = s(\hat{\theta})$。在 $\theta_0$ 处做 Taylor 展开：
+
+$$
+0 = s(\hat{\theta}) = s(\theta_0) + \frac{\partial s(\tilde{\theta})}{\partial \theta^\top}(\hat{\theta} - \theta_0) \tag{4.12}
+$$
+
+其中 $\tilde{\theta}$ 介于 $\hat{\theta}$ 和 $\theta_0$ 之间。解出：
+
+$$
+\hat{\theta} - \theta_0 = -\left[\frac{\partial s(\tilde{\theta})}{\partial \theta^\top}\right]^{-1} s(\theta_0) \tag{4.13}
+$$
+
+**步骤 1**：得分 $s(\theta_0) = \sum_{i=1}^n s_i(\theta_0)$ 是独立同分布随机变量之和，均值为 0。由中心极限定理：
+
+$$
+s(\theta_0) \overset{a}{\sim} N\!\big(0, I(\theta_0)\big) \tag{4.14}
+$$
+
+**步骤 2**：二阶导数 $\frac{\partial s(\theta)}{\partial \theta^\top} = \sum_{i=1}^n \frac{\partial s_i(\theta)}{\partial \theta^\top}$ 以 $n$ 的速度增长，其逆以 $1/n$ 的速度减小。因此 $\hat{\theta} \to \theta_0$，从而 $\tilde{\theta} \to \theta_0$。
+
+**步骤 3**：将 $\frac{\partial s(\theta_0)}{\partial \theta^\top}$ 分解为期望部分 $-I(\theta_0)$ 加上波动部分 $U(\theta_0)$。后者的标准差为 $\sqrt{n}$ 量级，远小于 $I(\theta_0)$ 的 $n$ 量级，因此可忽略。
+
+**最终**：
+
+$$
+\hat{\theta} - \theta_0 \approx I^{-1}(\theta_0) s(\theta_0) \tag{4.16}
+$$
+
+利用 (4.14) 直接证明 (4.9)。
+:::
+
+{{< pagebreak >}}
+
+# Cramer-Rao 下界 {#sec-cramer-rao}
+
+> **Die Cramer-Rao-Schranke**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- Cramer-Rao 不等式的精确陈述
+- **MLE 是有效的**：在所有无偏估计中方差最小
+- 证明的核心工具：Cauchy-Schwarz 不等式
+:::
+
+## 方差有多小才算到头？
+
+> **Wie klein kann die Varianz werden?**
+
+渐近正态性告诉我们 MLE 的方差是 $I^{-1}(\theta_0)$。但这真的是**最小**可能达到的方差吗？Cramer-Rao 下界回答了这个问题：**是的。**
+
+::: {.callout-tip icon="false"}
+## 射击场的比喻 | Die Schiesstand-Metapher
+
+想象一个射击比赛。每种估计方法就是一位射手，靶心是真参数 $\theta_0$。Cramer-Rao 下界告诉你：**无论射手技术多高超，他的散布（方差）不可能小于 $1/I(\theta)$**。而 MLE 这位射手恰好**达到了这个理论极限**——他是最准的。
+
+*Egal wie geschickt der Schutze ist: Seine Streuung kann nicht kleiner als $1/I(\theta)$ sein. Der MLE erreicht genau diese Grenze.*
+:::
+
+::: {.callout-important icon="false"}
+## 性质 4.2：Cramer-Rao 下界 | Eigenschaft 4.2: Cramer-Rao-Schranke
+
+设 $\hat{\theta} = t(Y_1, \ldots, Y_n)$ 是基于 i.i.d. 数据的估计量，$Y_i \sim F(\cdot;\theta)$（Fisher 正则）。则均方误差满足：
+
+$$
+MSE(\hat{\theta}, \theta) \geq \text{Bias}^2(\hat{\theta}, \theta) + \frac{\left(1 + \frac{\partial \text{Bias}(\hat{\theta}, \theta)}{\partial \theta}\right)^2}{I(\theta)}
+$$
+
+特别地，对于**无偏估计**：
+
+$$
+MSE(\hat{\theta}, \theta) = \text{Var}(\hat{\theta}) \geq \frac{1}{I(\theta)} \tag{4.17}
+$$
+:::
+
+```{r}
+#| label: fig-cramer-rao
+#| fig-cap: "Cramer-Rao 下界可视化：MLE 的方差恰好达到下界 | Cramer-Rao-Schranke: MLE erreicht die Grenze"
+#| fig-height: 5.5
+
+set.seed(2024)
+pi_true_cr <- 0.3
+n_vals_cr <- seq(10, 500, by = 10)
+n_sim_cr <- 5000
+
+var_mle_sim <- numeric(length(n_vals_cr))
+cr_bound <- numeric(length(n_vals_cr))
+
+for (k in seq_along(n_vals_cr)) {
+  nn <- n_vals_cr[k]
+  pi_hats <- replicate(n_sim_cr, {
+    y <- rbinom(1, nn, pi_true_cr)
+    y / nn
+  })
+  var_mle_sim[k] <- var(pi_hats)
+  cr_bound[k] <- pi_true_cr * (1 - pi_true_cr) / nn
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(n_vals_cr, var_mle_sim, type = "p", pch = 16, cex = 0.6,
+     col = adjustcolor("#2563EB", 0.5),
+     xlab = "样本量 n | Stichprobengrosse n",
+     ylab = expression(paste("Var(", hat(pi), ")")),
+     main = expression(paste("Cramer-Rao 下界 vs MLE 的实际方差 | CR-Schranke vs. MLE-Varianz")),
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(n_vals_cr, cr_bound, col = "#DC2626", lwd = 3, lty = 2)
+
+legend("topright",
+       legend = c("MLE 模拟方差", 
+                  expression(paste("Cramer-Rao 下界: ", pi(1-pi)/n))),
+       pch = c(16, NA), lty = c(NA, 2), lwd = c(NA, 3),
+       col = c("#2563EB", "#DC2626"), bty = "n", cex = 0.9)
+
+text(300, 0.003, "MLE 恰好触及下界\n--> 有效!", col = "#16A34A", font = 2, cex = 1)
+```
+
+::: {.callout-tip collapse="true"}
+## 点击展开 Cramer-Rao 证明 | Klicken fur den Beweis
+
+对于无偏估计 $\hat{\theta} = t(Y)$，有 $E[t(Y)] = \theta$。对 $\theta$ 求导：
+
+$$
+1 = \int t(y) \frac{\partial f(y;\theta)}{\partial \theta} \, dy = \int t(y) \frac{\partial \log f(y;\theta)}{\partial \theta} f(y;\theta) \, dy = \int t(y) \, s(\theta;y) \, f(y;\theta) \, dy
+$$
+
+由于 $E[s(\theta;Y)] = 0$ 且 $E[t(Y)] = \theta$：
+
+$$
+1 = \int (t(y) - \theta)(s(\theta;y) - 0) f(y;\theta) \, dy = \text{Cov}\!\big(t(Y), s(\theta;Y)\big)
+$$
+
+由 **Cauchy-Schwarz 不等式**：
+
+$$
+1 = \text{Cov}^2\!\big(t(Y), s(\theta;Y)\big) \leq \text{Var}(t(Y)) \cdot \text{Var}(s(\theta;Y)) = \text{Var}(\hat{\theta}) \cdot I(\theta)
+$$
+
+因此 $\text{Var}(\hat{\theta}) \geq 1/I(\theta)$。
+:::
+
+这意味着 MLE 在所有（渐近）无偏估计中是**效率最高的**。用一句话总结：**最大似然方法对数据的利用达到了理论上的最优。**
+
+*Die Maximum-Likelihood-Methode nutzt die Daten optimal aus.*
+
+{{< pagebreak >}}
+
+# 似然比 {#sec-likelihood-ratio}
+
+> **Der Likelihood-Quotient**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **似然比**的定义与直觉
+- 似然比的**渐近卡方分布**
+- "水平"视角（MLE 位置）vs "垂直"视角（似然值）
+:::
+
+## 两个视角看似然函数
+
+> **Zwei Perspektiven auf die Likelihood-Funktion**
+
+```{r}
+#| label: fig-two-perspectives
+#| fig-cap: "似然函数的两个视角：水平（MLE 位置）和垂直（似然值）（仿教材 Fig. 4.4）| Zwei Perspektiven"
+#| fig-height: 5.5
+
+set.seed(42)
+y_data_lr <- rnorm(30, 3, 2)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+mu_range_lr <- seq(0, 6, by = 0.02)
+ll_lr <- sapply(mu_range_lr, function(mu) sum(dnorm(y_data_lr, mu, 2, log = TRUE)))
+
+plot(mu_range_lr, ll_lr, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(theta), ylab = expression(l(theta)),
+     main = "似然函数的两个视角 | Zwei Perspektiven der Likelihood",
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+mu_hat_lr <- mean(y_data_lr)
+ll_hat <- max(ll_lr)
+theta0_lr <- 3
+ll_theta0 <- sum(dnorm(y_data_lr, theta0_lr, 2, log = TRUE))
+
+points(mu_hat_lr, ll_hat, pch = 23, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+points(theta0_lr, ll_theta0, pch = 16, col = "#16A34A", cex = 2)
+
+# 水平箭头
+arrows(theta0_lr, ll_theta0 - 3, mu_hat_lr, ll_theta0 - 3,
+       col = "#EA580C", lwd = 2.5, length = 0.12, code = 3)
+text((theta0_lr + mu_hat_lr) / 2, ll_theta0 - 4,
+     expression(hat(theta) - theta[0] ~ "(水平)"),
+     col = "#EA580C", font = 2, cex = 0.9)
+
+# 垂直箭头
+arrows(mu_hat_lr + 0.8, ll_theta0, mu_hat_lr + 0.8, ll_hat,
+       col = "#9333EA", lwd = 2.5, length = 0.12, code = 3)
+text(mu_hat_lr + 1.5, (ll_theta0 + ll_hat) / 2,
+     expression(l(hat(theta)) - l(theta[0]) ~ "(垂直)"),
+     col = "#9333EA", font = 2, cex = 0.9)
+
+text(mu_hat_lr + 0.15, ll_hat + 0.5,
+     expression(l(hat(theta))), col = "#DC2626", font = 2, cex = 0.9)
+text(theta0_lr - 0.15, ll_theta0 + 0.5,
+     expression(l(theta[0])), col = "#16A34A", font = 2, cex = 0.9)
+```
+
+渐近正态性 (4.9) 描述的是**水平**视角：$\hat{\theta} - \theta_0$ 的分布。似然比描述的是**垂直**视角：$l(\hat{\theta}) - l(\theta_0)$ 的分布。
+
+::: {.callout-important icon="false"}
+## 定义 4.3：对数似然比 | Definition 4.3: Log-Likelihood-Quotient
+
+$$
+lr(\hat{\theta}; \theta) = 2\!\left[l(\hat{\theta}) - l(\theta)\right] = 2 \log \frac{L(\hat{\theta})}{L(\theta)} \tag{4.18}
+$$
+
+其中 $L(\theta) = \exp(l(\theta))$ 是似然函数。
+:::
+
+似然比始终非负（因为 $l(\hat{\theta})$ 是最大值）。因子 2 的作用将在下面的渐近分布中变得明显。
+
+::: {.callout-important icon="false"}
+## 性质 4.3：似然比的渐近分布 | Eigenschaft 4.3: Asymptotische Verteilung
+
+对于 Fisher 正则分布，随着样本量 $n$ 增大：
+
+$$
+2\!\left[l(\hat{\theta}) - l(\theta_0)\right] \overset{a}{\sim} \chi^2_p \tag{4.19}
+$$
+
+其中 $p$ 是参数 $\theta$ 的维度。
+:::
+
+这个结果在统计检验中起核心作用，将在第 5 章重新使用。
+
+```{r}
+#| label: fig-lr-chisq
+#| fig-cap: "似然比统计量的渐近卡方分布验证 | Verifikation der asymptotischen Chi-Quadrat-Verteilung"
+#| fig-height: 5.5
+
+set.seed(2024)
+mu_true_lr <- 5; sigma_lr <- 2
+n_lr <- 50; n_sim_lr <- 10000
+
+lr_stats <- replicate(n_sim_lr, {
+  y <- rnorm(n_lr, mu_true_lr, sigma_lr)
+  mu_hat <- mean(y)
+  ll_hat <- sum(dnorm(y, mu_hat, sigma_lr, log = TRUE))
+  ll_0 <- sum(dnorm(y, mu_true_lr, sigma_lr, log = TRUE))
+  2 * (ll_hat - ll_0)
+})
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+hist(lr_stats, breaks = 60, freq = FALSE, col = adjustcolor("#2563EB", 0.3),
+     border = "white", xlab = expression(2 * (l(hat(theta)) - l(theta[0]))),
+     ylab = "密度 | Dichte",
+     main = expression(paste("似然比统计量 vs ", chi[1]^2, " 分布 | LR-Statistik vs. ", chi[1]^2)),
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B",
+     xlim = c(0, 12))
+grid(col = "#E2E8F0")
+
+x_chi <- seq(0.01, 12, length.out = 300)
+lines(x_chi, dchisq(x_chi, df = 1), col = "#DC2626", lwd = 3)
+
+legend("topright",
+       legend = c("模拟直方图 | Simulation",
+                  expression(chi[1]^2 ~ "理论密度 | Theorie")),
+       fill = c(adjustcolor("#2563EB", 0.3), NA),
+       border = c("white", NA),
+       col = c(NA, "#DC2626"), lwd = c(NA, 3), lty = c(NA, 1),
+       bty = "n", cex = 0.9)
+```
+
+::: {.callout-tip collapse="true"}
+## 点击展开证明思路 | Klicken fur die Beweisskizze
+
+在 $\hat{\theta}$ 处对 $l(\theta_0)$ 做 Taylor 展开：
+
+$$
+l(\theta_0) \approx l(\hat{\theta}) + \underbrace{\frac{\partial l(\hat{\theta})}{\partial \theta^\top}}_{= 0} (\theta_0 - \hat{\theta}) + \frac{1}{2}(\theta_0 - \hat{\theta})^\top \frac{\partial^2 l(\hat{\theta})}{\partial \theta \partial \theta^\top}(\theta_0 - \hat{\theta})
+$$
+
+因此
+
+$$
+2[l(\hat{\theta}) - l(\theta_0)] \approx -(\theta_0 - \hat{\theta})^\top \frac{\partial^2 l(\hat{\theta})}{\partial \theta \partial \theta^\top}(\theta_0 - \hat{\theta})
+$$
+
+用 $-I(\theta_0)$ 近似二阶导数，再利用 $\hat{\theta} - \theta_0 \approx I^{-1}(\theta_0) s(\theta_0)$，得到
+
+$$
+2[l(\hat{\theta}) - l(\theta_0)] \approx s(\theta_0)^\top I^{-1}(\theta_0) s(\theta_0)
+$$
+
+因为 $s(\theta_0) \overset{a}{\sim} N(0, I(\theta_0))$，这是一个正态随机向量的二次型，服从 $\chi^2_p$ 分布。
+:::
+
+{{< pagebreak >}}
+
+# 参数变换 {#sec-transformation}
+
+> **Parametertransformation**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 参数变换下 MLE 的**不变性**
+- 变换后 Fisher 信息的计算
+- 为什么参数变换在实际中很有用
+:::
+
+模型的参数常常是受限的。例如二项分布中 $0 \leq \pi \leq 1$。在受限空间中做数值优化可能很麻烦。一种常用策略是做参数变换，转到无约束空间中工作。
+
+以二项分布为例，可以使用 logit 变换：
+
+$$
+\gamma = \log \frac{\pi}{1 - \pi} \quad \Longleftrightarrow \quad \pi = \frac{\exp(\gamma)}{1 + \exp(\gamma)}
+$$
+
+$\pi \in (0, 1)$ 而 $\gamma \in (-\infty, +\infty)$——变换消除了约束。
+
+**MLE 的不变性**：如果 $\hat{\theta}$ 是 $\theta$ 的 MLE，那么 $\hat{\gamma} = h(\hat{\theta})$ 就是 $\gamma = h(\theta)$ 的 MLE。这是因为对 $\hat{\gamma} = h(\hat{\theta})$，得分函数自然为零。
+
+**Fisher 信息的变换**：设 $\gamma = h(\theta)$，$\theta = h^{-1}(\gamma)$。则
+
+$$
+I_\gamma(\gamma) = \frac{\partial \theta}{\partial \gamma} I_\theta(\theta) \frac{\partial \theta}{\partial \gamma}
+$$
+
+渐近分布变为
+
+$$
+\hat{\gamma} \overset{a}{\sim} N\!\left(\gamma, \frac{\partial \gamma}{\partial \theta} I_\theta^{-1}(\theta) \frac{\partial \gamma}{\partial \theta}\right)
+$$
+
+```{r}
+#| label: fig-parameter-transform
+#| fig-cap: "参数变换示例：pi 空间 vs logit 空间的对数似然 | Parametertransformation: pi vs. logit"
+#| fig-height: 5
+
+set.seed(42)
+n_tr <- 50; y_tr <- 18
+pi_hat_tr <- y_tr / n_tr
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# pi 空间
+pi_range_tr <- seq(0.01, 0.99, by = 0.005)
+ll_pi <- y_tr * log(pi_range_tr) + (n_tr - y_tr) * log(1 - pi_range_tr)
+
+plot(pi_range_tr, ll_pi, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(pi), ylab = expression(l(pi)),
+     main = expression(paste("原始参数空间 ", pi, " ", epsilon, " (0,1)")),
+     cex.main = 1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(v = pi_hat_tr, col = "#DC2626", lty = 2, lwd = 2)
+text(pi_hat_tr + 0.03, max(ll_pi) - 1,
+     bquote(hat(pi) == .(pi_hat_tr)), col = "#DC2626", font = 2, cex = 0.9, pos = 4)
+
+# logit 空间
+gamma_range <- seq(-4, 2, by = 0.02)
+pi_from_gamma <- exp(gamma_range) / (1 + exp(gamma_range))
+ll_gamma <- y_tr * log(pi_from_gamma) + (n_tr - y_tr) * log(1 - pi_from_gamma)
+
+gamma_hat <- log(pi_hat_tr / (1 - pi_hat_tr))
+
+plot(gamma_range, ll_gamma, type = "l", col = "#9333EA", lwd = 3,
+     xlab = expression(gamma == log(pi / (1 - pi))),
+     ylab = expression(l[gamma](gamma)),
+     main = expression(paste("logit 变换后 ", gamma, " ", epsilon, " ", R)),
+     cex.main = 1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(v = gamma_hat, col = "#DC2626", lty = 2, lwd = 2)
+text(gamma_hat + 0.15, max(ll_gamma) - 1,
+     bquote(hat(gamma) == .(round(gamma_hat, 3))),
+     col = "#DC2626", font = 2, cex = 0.9, pos = 4)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: transform-fisher
+#| code-fold: false
+
+# Fisher 信息在变换下的关系
+# I_pi = n / (pi * (1 - pi))
+I_pi <- n_tr / (pi_hat_tr * (1 - pi_hat_tr))
+
+# d(pi)/d(gamma) = exp(gamma)/(1+exp(gamma))^2 = pi*(1-pi)
+dpi_dgamma <- pi_hat_tr * (1 - pi_hat_tr)
+I_gamma <- dpi_dgamma^2 * I_pi
+
+# 等价地: I_gamma = n * pi * (1-pi)
+I_gamma_direct <- n_tr * pi_hat_tr * (1 - pi_hat_tr)
+
+cat("Fisher 信息变换 | Transformation der Fisher-Information:\n\n")
+cat("  I_pi(pi_hat)      =", round(I_pi, 2), "\n")
+cat("  d(pi)/d(gamma)    =", round(dpi_dgamma, 4), "\n")
+cat("  I_gamma = (d pi/d gamma)^2 * I_pi =", round(I_gamma, 4), "\n")
+cat("  直接计算 I_gamma = n*pi*(1-pi)    =", round(I_gamma_direct, 4), "\n\n")
+cat("  Var(gamma_hat) = 1/I_gamma =", round(1/I_gamma, 4), "\n")
+cat("  Var(pi_hat)    = 1/I_pi    =", round(1/I_pi, 6), "\n")
+```
+
+{{< pagebreak >}}
+
+# 模型误指定 {#sec-misspecification}
+
+> **Fehlspezifizierte Modelle**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 当 $G(\cdot) \notin \mathcal{F}$ 时会发生什么
+- **三明治方差**（Sandwich-Varianz）的推导
+- **稳健标准误**（robuste Standardfehler）的实际计算
+- 为什么 MLE 即使在模型错误时仍然有用
+:::
+
+## 当地图画法不够用时
+
+> **Wenn das Kartensystem nicht ausreicht**
+
+到目前为止，许多结果都假设 $G(\cdot) \in \mathcal{F}$（真实分布恰好在模型族中）。但现实中这几乎从不成立。好消息是：MLE 仍然有用——它仍然找到 $\mathcal{F}$ 中离 $G(\cdot)$ 最近的分布。
+
+::: {.callout-tip icon="false"}
+## 三明治的比喻 | Die Sandwich-Metapher
+
+当模型正确时，似然函数曲面的"曲率"（Fisher 信息 $I$）和得分函数的"颤动"（方差 $V$）恰好匹配——这就是第二 Bartlett 恒等式 $V = I$。
+
+当模型错误时，这种优雅的对称被打破：$V \neq I$。方差公式变成一个"三明治"：$I^{-1} V I^{-1}$——两片 $I^{-1}$ 面包夹着 $V$ 这块馅。
+
+*Bei korrektem Modell: $V = I$. Bei Fehlspezifikation: $V \neq I$, und die Varianzformel wird zum "Sandwich": $I^{-1} V I^{-1}$.*
+:::
+
+**关键变化**：第一 Bartlett 恒等式仍然成立（因为 $\theta_0$ 正是通过让得分期望为零来定义的），但第二 Bartlett 恒等式不再成立。我们需要分别定义：
+
+Fisher 矩阵：
+
+$$
+I(\theta_0) = -\int \frac{\partial^2 l(\theta_0)}{\partial \theta \partial \theta^\top} \, dG(y) \tag{4.25}
+$$
+
+得分函数的方差：
+
+$$
+V(\theta_0) = \int s(\theta) s^\top(\theta) \, dG(y) = \text{Var}\!\left[s(\theta_0)\right] \tag{4.26}
+$$
+
+::: {.callout-important icon="false"}
+## 性质 4.4：误指定模型下的渐近分布 | Eigenschaft 4.4: Asymptotik bei Fehlspezifikation
+
+$$
+\hat{\theta} \overset{a}{\sim} N\!\left(\theta_0, I^{-1}(\theta_0) V(\theta_0) I^{-1}(\theta_0)\right) \tag{4.27}
+$$
+
+当模型正确时 $V = I$，退化为 $I^{-1}$。
+:::
+
+实际中 $G(\cdot)$ 未知，我们用数据来估计 $I$ 和 $V$：
+
+$$
+\hat{I}(\theta_0) = \frac{1}{n}\sum_{i=1}^{n} -\frac{\partial^2 \log f(y_i; \hat{\theta})}{\partial \theta \partial \theta^\top}
+$$
+
+$$
+\hat{V}(\theta_0) = \frac{1}{n}\sum_{i=1}^{n} \frac{\partial \log f(y_i; \hat{\theta})}{\partial \theta} \frac{\partial \log f(y_i; \hat{\theta})}{\partial \theta^\top}
+$$
+
+这些稳健方差估计由 Eicker (1967)、Huber (1967) 和 White (1980) 在回归模型的异方差情形下独立提出。
+
+```{r}
+#| label: fig-sandwich-demo
+#| fig-cap: "模型正确 vs 模型错误下的方差估计 | Korrekt vs. fehlspezifiziertes Modell"
+#| fig-height: 5.5
+
+set.seed(2024)
+n_mis <- 200; n_sim_mis <- 5000
+
+# 真实分布: 混合正态 (G 不在 F 中)
+generate_mixture <- function(n) {
+  idx <- rbinom(n, 1, 0.3)
+  idx * rnorm(n, 5, 1) + (1 - idx) * rnorm(n, 2, 0.5)
+}
+
+# 模型: N(mu, sigma^2) — 不含混合正态
+mle_results <- replicate(n_sim_mis, {
+  y <- generate_mixture(n_mis)
+  mu_hat <- mean(y)
+  sigma2_hat <- mean((y - mu_hat)^2)
+  
+  # 模型方差 (假设模型正确)
+  var_naive <- sigma2_hat / n_mis
+  
+  # 三明治方差
+  scores <- (y - mu_hat) / sigma2_hat
+  V_hat <- mean(scores^2)
+  I_hat <- 1 / sigma2_hat
+  var_sandwich <- V_hat / (n_mis * I_hat^2)
+  
+  c(mu_hat = mu_hat, var_naive = var_naive, var_sandwich = var_sandwich)
+})
+
+mu_hats <- mle_results["mu_hat", ]
+true_var <- var(mu_hats)
+avg_naive <- mean(mle_results["var_naive", ])
+avg_sandwich <- mean(mle_results["var_sandwich", ])
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+d_mle <- density(mu_hats, adjust = 1.2)
+plot(d_mle$x, d_mle$y, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(hat(mu)), ylab = "密度 | Dichte",
+     main = "模型误指定下的 MLE 分布 | MLE bei Fehlspezifikation",
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+x_seq_mis <- seq(min(d_mle$x), max(d_mle$x), length.out = 300)
+lines(x_seq_mis, dnorm(x_seq_mis, mean(mu_hats), sqrt(avg_naive)),
+      col = "#DC2626", lwd = 2.5, lty = 2)
+lines(x_seq_mis, dnorm(x_seq_mis, mean(mu_hats), sqrt(avg_sandwich)),
+      col = "#16A34A", lwd = 2.5, lty = 3)
+
+legend("topright",
+       legend = c(
+         bquote("实际分布  Var =" ~ .(round(true_var, 5))),
+         bquote("朴素方差  " ~ I^{-1} ~ "=" ~ .(round(avg_naive, 5))),
+         bquote("三明治方差 " ~ I^{-1}*V*I^{-1} ~ "=" ~ .(round(avg_sandwich, 5)))
+       ),
+       col = c("#2563EB", "#DC2626", "#16A34A"),
+       lwd = c(3, 2.5, 2.5), lty = c(1, 2, 3), bty = "n", cex = 0.8)
+```
+
+```{r}
+#| label: sandwich-summary
+cat("模型误指定下的方差比较 | Varianzvergleich bei Fehlspezifikation:\n\n")
+cat("  真实方差 (模拟):          ", round(true_var, 6), "\n")
+cat("  朴素方差 I^{-1} (平均):   ", round(avg_naive, 6), "\n")
+cat("  三明治方差 (平均):         ", round(avg_sandwich, 6), "\n\n")
+cat("结论: 朴素方差低估了真实不确定性。三明治方差更接近真实值。\n")
+cat("Fazit: Naive Varianz unterschatzt. Sandwich-Varianz ist naher am wahren Wert.\n")
+```
+
+{{< pagebreak >}}
+
+# 数值计算：Newton-Raphson 与 Fisher 计分 {#sec-numerical}
+
+> **Numerische Berechnung: Newton-Raphson und Fisher-Scoring**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **Newton-Raphson** 方法求 MLE 的基本思路
+- **Fisher 计分**：用 Fisher 信息替代二阶导数
+- 步长控制与收敛条件
+:::
+
+## Newton-Raphson 方法
+
+> **Das Newton-Raphson-Verfahren**
+
+::: {.callout-tip icon="false"}
+## 登山者的比喻 | Die Bergsteiger-Metapher
+
+想象你蒙着眼在山上寻找山顶。你能做两件事：感受脚下的坡度（一阶导数）和感受地面的曲率（二阶导数）。Newton-Raphson 就像一位聪明的登山者：他根据当前位置的坡度和曲率，**一步跳到**他估计的山顶位置。每跳一步，他就更接近真正的山顶。
+
+*Newton-Raphson = ein schlauer Bergsteiger, der anhand von Steigung und Kruemmung direkt zum geschatzten Gipfel springt.*
+:::
+
+目标是求解 $s(\hat{\theta}) = 0$。对得分函数在当前位置 $\theta^{(t)}$ 做线性近似：
+
+$$
+0 \approx s(\theta^{(t)}) + \frac{\partial s(\theta^{(t)})}{\partial \theta^\top}(\hat{\theta} - \theta^{(t)})
+$$
+
+解出更新公式。**Fisher 计分**用 $-I(\theta^{(t)})$ 替代 $\frac{\partial s}{\partial \theta^\top}$（用期望代替实际二阶导数），得到迭代：
+
+$$
+\theta^{(t+1)} = \theta^{(t)} + I^{-1}(\theta^{(t)}) s(\theta^{(t)}; y)
+$$
+
+```{r}
+#| label: fig-newton-raphson
+#| fig-cap: "Newton-Raphson 迭代过程可视化 | Newton-Raphson-Iterationsschritte"
+#| fig-height: 8
+
+set.seed(42)
+y_nr <- c(3, 7, 2, 8, 5, 6, 4, 9, 1, 5)  # Poisson data
+lambda_true_nr <- 5
+
+# Poisson: score = sum(y)/lambda - n, Fisher info = n/lambda
+n_nr <- length(y_nr)
+y_sum <- sum(y_nr)
+
+score_fn <- function(lam) y_sum / lam - n_nr
+fisher_fn <- function(lam) n_nr / lam^2
+
+# 迭代过程
+lambda_current <- 1.0  # 起始值（远离真值）
+trajectory <- lambda_current
+
+for (iter in 1:6) {
+  s_val <- score_fn(lambda_current)
+  I_val <- fisher_fn(lambda_current)
+  lambda_current <- lambda_current + s_val / I_val
+  trajectory <- c(trajectory, lambda_current)
+}
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+# 得分函数
+lam_range_nr <- seq(0.5, 10, by = 0.05)
+score_vals_nr <- sapply(lam_range_nr, score_fn)
+
+plot(lam_range_nr, score_vals_nr, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(lambda), ylab = expression(s(lambda)),
+     main = "得分函数与 Newton-Raphson 迭代 | Score-Funktion mit NR-Iteration",
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = 0, col = "#94A3B8", lty = 3)
+
+cols_iter <- colorRampPalette(c("#DC2626", "#16A34A"))(length(trajectory) - 1)
+for (j in 1:(length(trajectory) - 1)) {
+  lam_j <- trajectory[j]
+  s_j <- score_fn(lam_j)
+  
+  points(lam_j, s_j, pch = 16, col = cols_iter[j], cex = 1.8)
+  text(lam_j, s_j + 1.5, bquote(theta^{(.(j-1))}), 
+       col = cols_iter[j], cex = 0.7, font = 2)
+  
+  # 切线
+  slope <- -fisher_fn(lam_j)
+  x_line <- seq(lam_j - 1.5, lam_j + 3, length.out = 50)
+  y_line <- s_j + slope * (x_line - lam_j)
+  lines(x_line, y_line, col = adjustcolor(cols_iter[j], 0.4), lwd = 1.5, lty = 2)
+}
+
+points(tail(trajectory, 1), 0, pch = 23, bg = "#16A34A", col = "white", cex = 2.5, lwd = 2)
+
+# 轨迹图
+plot(0:(length(trajectory) - 1), trajectory, type = "b", 
+     pch = 16, col = "#2563EB", lwd = 2.5, cex = 1.5,
+     xlab = "迭代步数 | Iteration", ylab = expression(lambda^{(t)}),
+     main = "收敛轨迹 | Konvergenzpfad",
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = mean(y_nr), col = "#DC2626", lty = 2, lwd = 2)
+text(4, mean(y_nr) + 0.3, bquote(hat(lambda) == bar(y) ~ "=" ~ .(mean(y_nr))),
+     col = "#DC2626", font = 2, cex = 0.9)
+
+par(mfrow = c(1, 1))
+```
+
+**算法总结**：
+
+1. 选择初始值 $\theta^{(0)}$，令 $t = 0$
+2. 计算 $\theta^{(t+1)} := \theta^{(t)} + I^{-1}(\theta^{(t)}) s(\theta^{(t)}; y)$
+3. 重复直到 $||\theta^{(t+1)} - \theta^{(t)}|| < d$
+4. 令 $\hat{\theta} = \theta^{(t+1)}$
+
+如果初始值离目标太远，可以使用**步长缩减**：$\theta^{(t+1)} = \theta^{(t)} + \delta \cdot I^{-1}(\theta^{(t)}) s(\theta^{(t)}; y)$，其中 $0 < \delta < 1$。步长甚至可以自适应选择 $\delta^{(t)}$，这可以追溯到 Robbins and Monro (1951)。
+
+{{< pagebreak >}}
+
+# 似然原理 {#sec-likelihood-principle}
+
+> **Das Likelihood-Prinzip**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **似然原理**的含义：似然函数包含关于参数的全部信息
+- 删失数据的似然构造
+- 正确使用似然 vs 简单忽略缺失值的巨大差距
+:::
+
+::: {.callout-important icon="false"}
+## 定义 4.4：似然原理 | Definition 4.4: Likelihood-Prinzip
+
+**似然原理**指出：对参数 $\theta$ 的推断，所有相关信息都包含在**当前数据**的似然函数中。
+
+*Das Likelihood-Prinzip besagt: Alle relevante Information uber den Parameter ist in der Likelihood-Funktion der vorliegenden Daten enthalten.*
+:::
+
+## 删失数据的例子
+
+> **Beispiel: Zensierte Daten**
+
+::: {.callout-tip icon="false"}
+## 测量仪器的比喻 | Die Messgeratemetapher
+
+想象你用一把量程有限的温度计测温。当真实温度低于温度计的下限 $c$ 时，你只能看到"低于 $c$"——这就是**删失**。如果你简单地把所有"低于 $c$"的读数当作 $c$ 来计算平均值，你会系统性地高估温度。
+
+似然原理告诉你正确的做法：对于能精确测量的数据用密度贡献，对于删失数据用概率 $P(Y \leq c)$ 贡献。
+
+*Wenn das Thermometer einen Messwert nicht anzeigen kann (Zensierung), darf man ihn nicht einfach als $c$ behandeln. Das Likelihood-Prinzip zeigt, wie man korrekt vorgeht.*
+:::
+
+假设测量值 $Y$ 服从对数正态分布：$\log Y \sim N(\mu, \sigma^2)$。精度阈值为 $c$，低于 $c$ 的观测被删失。正确的对数似然为：
+
+$$
+l(\mu, \sigma^2) = \sum_{i=1}^{n} \mathbf{1}\{Y_i > c\} \left[-\frac{1}{2}\log\sigma^2 - \frac{(\log y_i - \mu)^2}{2\sigma^2}\right] + \sum_{i=1}^{n} \mathbf{1}\{Y_i \leq c\} \log \Phi\!\left(\frac{\log c - \mu}{\sigma}\right)
+$$
+
+其中 $\Phi(\cdot)$ 是标准正态分布函数。第一项是"正常观测"的贡献（就是通常的正态对数似然），第二项是"删失观测"的贡献——我们只知道真值不超过 $c$，因此用累积概率 $P(Y \leq c)$ 作为似然贡献。
+
+```{r}
+#| label: fig-censored-data
+#| fig-cap: "删失数据示例（仿教材 Fig. 4.6）：灰色点是真实值，但在实际中不可观测 | Zensierte Daten"
+#| fig-height: 5
+
+set.seed(42)
+n_cens <- 100
+z_true <- rnorm(n_cens, mean = -1, sd = 1)
+y_true <- exp(z_true)
+c_threshold <- 0.05
+y_observed <- pmax(y_true, c_threshold)
+is_censored <- y_true <= c_threshold
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(1:n_cens, y_observed, pch = 16, cex = 1,
+     col = ifelse(is_censored, "#94A3B8", "#2563EB"),
+     xlab = "观测编号 | Beobachtung",
+     ylab = "y",
+     main = "删失数据：灰色为不可观测的真实值 | Zensierte Daten",
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = c_threshold, col = "#DC2626", lwd = 2, lty = 2)
+text(90, c_threshold + 0.15, paste("阈值 c =", c_threshold),
+     col = "#DC2626", font = 2, cex = 0.9)
+
+# 显示真实值（灰色）
+points(which(is_censored), y_true[is_censored], pch = 1, 
+       col = adjustcolor("#94A3B8", 0.6), cex = 1)
+
+legend("topright",
+       legend = c("正常观测 | Beobachtet", 
+                  "删失观测 | Zensiert",
+                  "真实值（不可见）| Wahrer Wert"),
+       pch = c(16, 16, 1), col = c("#2563EB", "#94A3B8", "#94A3B8"),
+       bty = "n", cex = 0.85)
+
+cat("\n删失比例:", round(mean(is_censored) * 100, 1), "%\n")
+```
+
+```{r}
+#| label: censored-mle
+#| code-fold: false
+
+# 比较两种估计方法
+z_obs <- log(y_observed)
+
+# 方法 1: 简单 L2 损失（忽略删失结构）
+mu_naive <- mean(z_obs)
+sigma2_naive <- var(z_obs)
+
+# 方法 2: 正确的似然方法
+library(stats)
+
+neg_loglik_censored <- function(par) {
+  mu <- par[1]; sigma <- exp(par[2])  # 用 exp 保证正
+  ll <- 0
+  for (i in 1:n_cens) {
+    if (y_observed[i] > c_threshold) {
+      ll <- ll + dnorm(log(y_observed[i]), mu, sigma, log = TRUE)
+    } else {
+      ll <- ll + pnorm(log(c_threshold), mu, sigma, log.p = TRUE)
+    }
+  }
+  -ll
+}
+
+opt_result <- optim(c(0, 0), neg_loglik_censored, method = "Nelder-Mead")
+mu_mle_cens <- opt_result$par[1]
+sigma_mle_cens <- exp(opt_result$par[2])
+
+cat("删失数据的两种估计方法比较 | Vergleich zweier Methoden:\n\n")
+cat("  真实参数: mu = -1, sigma = 1\n\n")
+cat("  方法 1 (简单均值, 忽略删失):\n")
+cat("    mu_hat   =", round(mu_naive, 3), "\n")
+cat("    sigma_hat =", round(sqrt(sigma2_naive), 3), "\n\n")
+cat("  方法 2 (似然原理, 正确处理删失):\n")
+cat("    mu_hat   =", round(mu_mle_cens, 3), "\n")
+cat("    sigma_hat =", round(sigma_mle_cens, 3), "\n\n")
+cat("结论: 似然原理给出了远更准确的估计!\n")
+cat("Fazit: Das Likelihood-Prinzip liefert viel genauere Schatzungen!\n")
+```
+
+这个例子生动地说明了似然原理的力量：简单地忽略删失结构会导致严重的偏差，而正确构造似然函数则能从不完整的数据中提取最大信息。
+
+似然是统计学的基石，它的适用性直接延伸到比这里讨论的更复杂的模型。有了效率保证（Cramer-Rao 下界），我们可以确信自己对数据的利用达到了最优。
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心概念链
+
+```{r}
+#| label: fig-summary-chain
+#| fig-cap: "本章知识逻辑链 | Logikkette der Konzepte dieses Kapitels"
+#| fig-height: 6.5
+#| fig-width: 12
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 12), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("第四章知识逻辑链 | Logikkette Kapitel 4")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+nx <- c(2, 6, 10, 2, 6, 10)
+ny <- c(6.5, 6.5, 6.5, 3.5, 3.5, 3.5)
+labels <- c(
+  "得分函数\nBartlett恒等式\nScore + Bartlett",
+  "Fisher信息\n曲率=信息\nFisher-Information",
+  "渐近正态性\nMLE ~ N\nAsympt. Normalitat",
+  "Cramer-Rao\n方差下界\nUntere Schranke",
+  "似然比\n卡方分布\nLR ~ Chi^2",
+  "误指定/似然原理\n稳健推断\nSandwich/Prinzip"
+)
+fills <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#FEE2E2", "#E0E7FF", "#D1FAE5")
+bords <- c("#2563EB", "#D97706", "#DB2777", "#DC2626", "#6366F1", "#16A34A")
+
+for (i in 1:6) {
+  rect(nx[i]-1.3, ny[i]-0.7, nx[i]+1.3, ny[i]+0.7,
+       col = fills[i], border = bords[i], lwd = 2)
+  text(nx[i], ny[i], labels[i], cex = 0.55, font = 2, col = "#1E293B")
+}
+
+draw_arrow <- function(x1, y1, x2, y2, label, ...) {
+  arrows(x1, y1, x2, y2, col = "#64748B", lwd = 2, length = 0.12, ...)
+  mx <- (x1 + x2) / 2; my <- (y1 + y2) / 2
+  text(mx, my + 0.35, label, cex = 0.55, col = "#EA580C", font = 3)
+}
+
+draw_arrow(3.3, 6.5, 4.7, 6.5, "负二阶导数")
+draw_arrow(7.3, 6.5, 8.7, 6.5, "Taylor + CLT")
+draw_arrow(2, 5.8, 2, 4.2, "Cauchy-Schwarz")
+draw_arrow(6, 5.8, 6, 4.2, "Taylor二次型")
+draw_arrow(10, 5.8, 10, 4.2, "V != I / 删失")
+```
+
+## 公式速查表
+
+| 公式 | 名称 | 编号 |
+|:-----|:-----|:----:|
+| $s(\theta; y) = \frac{\partial l(\theta)}{\partial \theta}$ | 得分函数 | 4.7 |
+| $E[s(\theta; Y)] = 0$ | 第一 Bartlett 恒等式 | 4.5 |
+| $\text{Var}[s(\theta;Y)] = I(\theta)$ | 第二 Bartlett 恒等式 | 4.6 |
+| $I(\theta) = -E\!\left[\frac{\partial^2 l}{\partial \theta \partial \theta^\top}\right]$ | Fisher 信息 | 4.8 |
+| $\hat{\theta} \overset{a}{\sim} N(\theta_0, I^{-1}(\theta_0))$ | 渐近正态性 | 4.9 |
+| $MSE(\hat{\theta}) \geq 1/I(\theta)$ | Cramer-Rao 下界（无偏） | 4.17 |
+| $2[l(\hat{\theta}) - l(\theta_0)] \overset{a}{\sim} \chi^2_p$ | 似然比分布 | 4.19 |
+| $I_\gamma = (\partial\theta/\partial\gamma) I_\theta (\partial\theta/\partial\gamma)$ | Fisher 信息变换 | -- |
+| $\text{Var}(\hat{\theta}) = I^{-1} V I^{-1}$ | 三明治方差 | 4.27 |
+
+## 本章的五个核心洞察
+
+| 编号 | 洞察 | 关键词 |
+|:----:|:------|:------|
+| 1 | 得分函数在真参数处平均为零 | Bartlett 恒等式 |
+| 2 | Fisher 信息度量似然曲面的曲率，决定估计精度 | 信息 = 曲率 |
+| 3 | MLE 渐近正态且达到 Cramer-Rao 下界——**最优** | 效率 |
+| 4 | 模型错误时仍可用，但方差公式变成"三明治" | 稳健性 |
+| 5 | 似然函数包含关于参数的**全部信息** | 似然原理 |
+
+{{< pagebreak >}}
+
+# 练习题 {#sec-exercises}
+
+> **Ubungsaufgaben**
+
+## 练习 1：Bernoulli 似然
+
+考虑两个 Bernoulli 样本，参数为 $p$。第一组：10 次试验中 2 次成功。第二组：100 次试验中 20 次成功。
+
+```{r}
+#| label: exercise1
+#| code-fold: false
+
+# Exercise 1: 两组 Bernoulli 样本的似然比较
+
+# a) 写出似然函数并计算
+p_range <- seq(0.001, 0.999, length.out = 500)
+
+# 样本 1: n=10, y=2
+ll_1 <- 2 * log(p_range) + 8 * log(1 - p_range)
+# 样本 2: n=100, y=20
+ll_2 <- 20 * log(p_range) + 80 * log(1 - p_range)
+
+cat("a) 似然函数:\n")
+cat("   l_1(p) = 2*log(p) + 8*log(1-p)\n")
+cat("   l_2(p) = 20*log(p) + 80*log(1-p)\n\n")
+
+# b) MLE
+cat("b) MLE:\n")
+cat("   样本 1: p_hat = 2/10  =", 2/10, "\n")
+cat("   样本 2: p_hat = 20/100 =", 20/100, "\n")
+cat("   一般情况: p_hat = y/n (通过令得分为零求解)\n\n")
+
+# c) 比较
+I_1 <- 10 / (0.2 * 0.8)
+I_2 <- 100 / (0.2 * 0.8)
+cat("c) Fisher 信息比较:\n")
+cat("   I_1(p_hat) = n/(p_hat*(1-p_hat)) =", I_1, "\n")
+cat("   I_2(p_hat) =", I_2, "\n")
+cat("   样本 2 的信息量是样本 1 的 10 倍 --> 估计更精确\n")
+```
+
+```{r}
+#| label: fig-exercise1
+#| fig-cap: "练习 1：两组 Bernoulli 样本的对数似然比较 | Ubung 1: Vergleich der Log-Likelihoods"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 归一化以便比较
+ll_1_norm <- ll_1 - max(ll_1)
+ll_2_norm <- ll_2 - max(ll_2)
+
+plot(p_range, ll_1_norm, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "p", ylab = expression(l(p) - l(hat(p))),
+     main = "两组样本的归一化对数似然 | Normierte Log-Likelihoods",
+     ylim = c(-15, 0),
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(p_range, ll_2_norm, col = "#DC2626", lwd = 3)
+abline(v = 0.2, col = "#16A34A", lty = 2, lwd = 2)
+legend("topright",
+       legend = c("n=10, y=2", "n=100, y=20"),
+       col = c("#2563EB", "#DC2626"), lwd = 3, bty = "n", cex = 0.9)
+text(0.5, -3, "n=100 的曲线更窄 --> 更多信息!",
+     col = "#EA580C", font = 2, cex = 0.9)
+```
+
+## 练习 2：几何分布
+
+$f(x|p) = p(1-p)^{x-1}$，$x \in \{1, 2, 3, \ldots\}$。
+
+```{r}
+#| label: exercise2
+#| code-fold: false
+
+# a) 对数似然
+cat("a) 对数似然:\n")
+cat("   l(p) = n*log(p) + (sum(x_i) - n)*log(1-p)\n\n")
+
+# b) MLE
+cat("b) 令得分为零: dl/dp = n/p - (sum(x_i)-n)/(1-p) = 0\n")
+cat("   解得: p_hat = n / sum(x_i) = 1 / x_bar\n")
+cat("   二阶导数: d2l/dp2 = -n/p^2 - (sum(x_i)-n)/(1-p)^2 < 0 --> 确是极大值\n\n")
+
+# c) 渐近分布
+cat("c) Fisher 信息:\n")
+cat("   I(p) = E[-d2l/dp2] = n/p^2 + (n/p - n)/(1-p)^2\n")
+cat("        = n/p^2 + n(1-p)/(p(1-p)^2) = n/p^2 + n/(p(1-p))\n")
+cat("        = n(1-p+p) / (p^2(1-p)) = n / (p^2(1-p))\n\n")
+cat("   渐近分布: p_hat ~ N(p, p^2(1-p)/n)\n")
+
+# 数值验证
+set.seed(42)
+p_true_geo <- 0.3; n_geo <- 200; n_sim_geo <- 10000
+
+p_hat_geo <- replicate(n_sim_geo, {
+  x <- rgeom(n_geo, p_true_geo) + 1  # R 的 rgeom 从 0 开始
+  n_geo / sum(x)
+})
+
+cat("\n数值验证 (p_true = 0.3, n = 200):\n")
+cat("  E[p_hat] =", round(mean(p_hat_geo), 4), " (理论: 0.3)\n")
+cat("  Var[p_hat] =", round(var(p_hat_geo), 6), 
+    " (理论:", round(p_true_geo^2 * (1 - p_true_geo) / n_geo, 6), ")\n")
+```
+
+## 练习 3：给定密度的 MLE
+
+密度 $f(x_i; \theta) = \frac{1}{\sqrt{2\pi}} \theta^{-3/2} x_i^2 \exp\!\left(-\frac{x_i^2}{2\theta}\right)$，其中 $E(X_i) = 0$，$\text{Var}(X_i) = 3\theta$。
+
+```{r}
+#| label: exercise3
+#| code-fold: false
+
+# a) MLE
+cat("a) 对数似然:\n")
+cat("   l(theta) = -n/2*log(2*pi) - 3n/2*log(theta) + 2*sum(log|x_i|) - sum(x_i^2)/(2*theta)\n")
+cat("   得分: dl/dtheta = -3n/(2*theta) + sum(x_i^2)/(2*theta^2) = 0\n")
+cat("   解得: theta_hat = sum(x_i^2) / (3n)\n\n")
+
+# b) Fisher 信息
+cat("b) 二阶导数: d2l/dtheta2 = 3n/(2*theta^2) - sum(x_i^2)/theta^3\n")
+cat("   E[-d2l/dtheta2] = -3n/(2*theta^2) + E[sum(x_i^2)]/theta^3\n")
+cat("   由 E[X_i^2] = Var(X_i) = 3*theta:\n")
+cat("   I(theta) = -3n/(2*theta^2) + 3n*theta/theta^3 = -3n/(2*theta^2) + 3n/theta^2\n")
+cat("            = 3n/(2*theta^2)\n\n")
+
+# c) T(X) 的分布
+cat("c) T(X) = sum(x_i^2)/(2*theta^2) - 3n/(2*theta)\n")
+cat("   注意 theta_hat = sum(x_i^2)/(3n)\n")
+cat("   所以 sum(x_i^2) = 3n*theta_hat\n")
+cat("   T(X) = 3n*theta_hat/(2*theta^2) - 3n/(2*theta)\n")
+cat("        = (3n/(2*theta)) * (theta_hat/theta - 1)\n")
+cat("   由渐近正态性: theta_hat ~ N(theta, 2*theta^2/(3n))\n")
+cat("   所以 T(X) 渐近正态 N(0, 某个方差)\n\n")
+
+# d) 置信区间
+x_data <- c(-2, 1, 0, -0.5, 2, 1, 0, 0.5, 2, -1, 0, 0.5, 2, 1, 0, -0.5)
+n_ex3 <- length(x_data)
+theta_hat_ex3 <- sum(x_data^2) / (3 * n_ex3)
+I_ex3 <- 1.5 * n_ex3 / theta_hat_ex3^2
+se_ex3 <- sqrt(1 / I_ex3)
+
+ci_lower_ex3 <- theta_hat_ex3 - 1.96 * se_ex3
+ci_upper_ex3 <- theta_hat_ex3 + 1.96 * se_ex3
+
+cat("d) 数据: x = (", paste(x_data, collapse = ", "), ")\n")
+cat("   sum(x_i^2) =", sum(x_data^2), "\n")
+cat("   n =", n_ex3, "\n")
+cat("   theta_hat = sum(x_i^2)/(3n) =", round(theta_hat_ex3, 4), "\n")
+cat("   I(theta_hat) = 1.5n/theta_hat^2 =", round(I_ex3, 4), "\n")
+cat("   SE = sqrt(1/I) =", round(se_ex3, 4), "\n")
+cat("   95% Wald CI: [", round(ci_lower_ex3, 4), ",", round(ci_upper_ex3, 4), "]\n")
+```
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 得分函数与 Fisher 信息
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Score-Funktion | 得分函数 | score function |
+| die Score-Gleichung | 得分方程 | score equation |
+| die Fisher-Information | Fisher 信息 | Fisher information |
+| die Fisher-Informationsmatrix | Fisher 信息矩阵 | Fisher information matrix |
+| die erste Bartlett-Identitat | 第一 Bartlett 恒等式 | first Bartlett identity |
+| die zweite Bartlett-Identitat | 第二 Bartlett 恒等式 | second Bartlett identity |
+| die Kruemmung | 曲率 | curvature |
+| die Fisher-Regularitat | Fisher 正则性 | Fisher regularity |
+
+## 渐近理论与效率
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die asymptotische Normalitat | 渐近正态性 | asymptotic normality |
+| die Konsistenz | 相合性 | consistency |
+| die Cramer-Rao-Schranke | Cramer-Rao 下界 | Cramer-Rao bound |
+| die Effizienz | 有效性/效率 | efficiency |
+| die Cauchy-Schwarz-Ungleichung | Cauchy-Schwarz 不等式 | Cauchy-Schwarz inequality |
+| der Maximum-Likelihood-Schatzer (MLE) | 最大似然估计 | maximum likelihood estimator |
+| die Pivotverteilung | 枢轴分布 | pivotal distribution |
+
+## 似然比与检验
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| der Log-Likelihood-Quotient | 对数似然比 | log-likelihood ratio |
+| die Chi-Quadrat-Verteilung | 卡方分布 | chi-squared distribution |
+| der Freiheitsgrad | 自由度 | degree of freedom |
+| die Taylor-Entwicklung | Taylor 展开 | Taylor expansion |
+
+## 参数变换与模型误指定
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Parametertransformation | 参数变换 | parameter transformation |
+| die Invarianz | 不变性 | invariance |
+| die Logit-Transformation | logit 变换 | logit transformation |
+| die Fehlspezifikation | 模型误指定 | model misspecification |
+| die Sandwich-Varianz | 三明治方差 | sandwich variance |
+| der robuste Standardfehler | 稳健标准误 | robust standard error |
+| die Heteroskedastizitat | 异方差性 | heteroskedasticity |
+
+## 数值方法与似然原理
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| das Newton-Raphson-Verfahren | Newton-Raphson 方法 | Newton-Raphson method |
+| das Fisher-Scoring | Fisher 计分 | Fisher scoring |
+| die Schrittweite | 步长 | step size |
+| die Konvergenz | 收敛 | convergence |
+| das Likelihood-Prinzip | 似然原理 | likelihood principle |
+| die Zensierung | 删失 | censoring |
+| die zensierte Beobachtung | 删失观测 | censored observation |
+| die Prazisionsschwelle | 精度阈值 | precision threshold |
+:::

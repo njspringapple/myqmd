@@ -1,0 +1,2309 @@
+---
+title: "第八章：随机变量模拟与基于模拟的推断"
+subtitle: "从伪随机数到自举法的完整旅程 | Von Pseudozufallszahlen bis zum Bootstrap"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+在前面的章节中，我们所介绍的统计推理概念和方法大多依赖于已知分布或渐近分布，再结合数学推导结果 -- 这些工具是在计算机尚未普及的年代发展起来的。如今，强大的计算能力已经唾手可得，统计推断的视角也随之发生了根本性的转变：基于模拟的策略走到了前台。试想，如果孟德尔在进行豌豆遗传实验时拥有一台计算机，他完全可以通过模拟来检验在遗传规律成立的条件下，豌豆性状能产生多大的随机波动。同样，Fisher 和 Pearson 关于卡方检验自由度的争论，也可以通过大规模模拟轻松解决。事实上，当今的科学进步已经深深依赖于模拟技术。
+
+*Die in den vorherigen Kapiteln vorgestellten Konzepte basieren auf bekannten oder asymptotischen Verteilungen. Heute, mit leistungsfahigen Computern, rucken simulationsbasierte Methoden in den Vordergrund.*
+
+本章聚焦于随机变量的模拟 -- 无论是一元还是多元的。我们从最基本的思想出发，逐步推进到相当复杂的模拟策略；其中一些方法将在我们进入贝叶斯推断时再次发挥关键作用。
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图 | Lernroadmap dieses Kapitels"
+#| fig-height: 5.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 18), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# 第一行：核心模拟方法
+row1_x <- c(2.5, 6.5, 10.5, 14.5)
+row1_y <- rep(6.0, 4)
+labels_cn1 <- c("均匀分布模拟\n伪随机数 / 积分", 
+                "逆变换 / 拒绝采样\n已知分布函数或密度",
+                "MCMC\nMetropolis-Hastings",
+                "多元正态模拟\nSVD / 条件分解")
+colors1 <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#E0E7FF")
+borders1 <- c("#2563EB", "#D97706", "#DB2777", "#6366F1")
+
+for (i in 1:4) {
+  rect(row1_x[i] - 1.6, row1_y[i] - 0.9, row1_x[i] + 1.6, row1_y[i] + 0.9,
+       col = colors1[i], border = borders1[i], lwd = 2)
+  text(row1_x[i], row1_y[i] + 0.15, labels_cn1[i], cex = 0.50, font = 2, col = "#1E293B")
+  text(row1_x[i] - 1.3, row1_y[i] + 0.75, paste0("\u00a78.", i), 
+       cex = 0.45, col = borders1[i], font = 2)
+}
+
+arrows(row1_x[-4] + 1.7, row1_y[-4], row1_x[-1] - 1.7, row1_y[-1],
+       col = "#94A3B8", lwd = 2, length = 0.10)
+
+# 第二行：应用方法
+row2_x <- c(3.5, 7.5, 11.5, 15.5)
+row2_y <- rep(3.0, 4)
+labels_cn2 <- c("Gibbs 采样\n马尔可夫场", 
+                "不确定输入参数\n参数模拟",
+                "自举法\n经验分布 / 插入原理",
+                "置换检验\n非参数检验")
+colors2 <- c("#D1FAE5", "#FEE2E2", "#F3E8FF", "#FEF9C3")
+borders2 <- c("#16A34A", "#DC2626", "#9333EA", "#CA8A04")
+
+for (i in 1:4) {
+  rect(row2_x[i] - 1.6, row2_y[i] - 0.9, row2_x[i] + 1.6, row2_y[i] + 0.9,
+       col = colors2[i], border = borders2[i], lwd = 2)
+  text(row2_x[i], row2_y[i] + 0.15, labels_cn2[i], cex = 0.50, font = 2, col = "#1E293B")
+  text(row2_x[i] - 1.3, row2_y[i] + 0.75, paste0("\u00a78.", i + 4), 
+       cex = 0.45, col = borders2[i], font = 2)
+}
+
+arrows(row2_x[-4] + 1.7, row2_y[-4], row2_x[-1] - 1.7, row2_y[-1],
+       col = "#94A3B8", lwd = 2, length = 0.10)
+
+# 连接两行
+arrows(6.5, 5.0, 3.5, 3.95, col = "#94A3B8", lwd = 1.5, length = 0.08)
+arrows(10.5, 5.0, 7.5, 3.95, col = "#94A3B8", lwd = 1.5, length = 0.08)
+
+# 底部总结
+arrows(1, 1.2, 17, 1.2, col = "#DC2626", lwd = 2, length = 0.15)
+text(9, 1.6, "从生成均匀随机数到基于模拟的统计推断，层层递进  >>>", 
+     cex = 0.85, col = "#DC2626")
+```
+
+**最终目标**：理解下面这条链路中每一个概念的含义 --
+
+$$
+\text{均匀分布} \;\xrightarrow{\text{逆变换}}\; \text{任意分布} \;\xrightarrow{\text{MCMC}}\; \text{未归一化密度} \;\xrightarrow{\text{Bootstrap}}\; \text{基于模拟的推断}
+$$
+
+现在看不懂？**完全没关系** -- 读完本章，这条链将变得水到渠成。
+
+{{< pagebreak >}}
+
+# 均匀分布随机变量的模拟 {#sec-uniform}
+
+> **Simulation gleichverteilter Zufallsvariablen**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 计算机生成"随机数"的本质：**伪随机数**
+- **乘法同余法**的原理与公式
+- 如何利用均匀随机数计算**积分** -- 蒙特卡洛方法
+- 利用**大数定律**和**中心极限定理**评估模拟精度
+:::
+
+## 伪随机数：计算机能"掷骰子"吗？
+
+> **Pseudozufallszahlen: Kann ein Computer wurfeln?**
+
+今天，用软件生成随机数是如此自然的操作，以至于我们常常忘记一个根本事实：计算机产生的数字是由算法确定的，因此本质上是**确定性的**，而非真正随机的。严格来说，这些数字应当被称为"伪随机数"（Pseudozufallszahlen）。不过在后续讨论中，我们将省略"伪"这个前缀，直接称之为随机数。
+
+::: {.callout-tip icon="false"}
+## 音乐盒的比喻 | Die Spieluhr-Metapher
+
+伪随机数生成器就像一个极其精密的音乐盒。音乐盒演奏的旋律看似丰富多变、难以预测，但实际上每个音符都由内部的齿轮（算法）严格确定。如果你知道齿轮的初始位置（种子值），你就能完美预测整首曲子。然而对于不知道内部结构的听众来说，旋律听起来就像是即兴演奏。伪随机数正是如此：看似随机，实则确定。
+
+*Ein Pseudozufallszahlengenerator ist wie eine extrem feine Spieluhr: Die Melodie klingt unvorhersagbar, ist aber durch die Zahnrader (den Algorithmus) vollstandig bestimmt.*
+:::
+
+## 乘法同余法
+
+> **Die multiplikative Kongruenzmethode**
+
+第一项任务是生成 $[0,1]$ 上均匀分布的随机数。这是一个在 20 世纪中叶就被研究的数学与算法问题，由 Lehmer (1951) 和 Thomson (1958) 提出的生成器为基础。该方法称为**乘法同余法**（multiplikative Kongruenzmethode），其工作原理如下：给定一个起始值 $x_0$ 以及参数 $a$ 和 $m$，按下式递推生成序列：
+
+$$
+x_n := (a \cdot x_{n-1}) \bmod m
+$$
+
+其中 "$\bmod$" 是模运算符 -- 将 $a \cdot x_{n-1}$ 除以 $m$ 并取余数。参数 $a$ 和 $m$ 需要根据计算环境精心选择，经典选择为 $m = 2^{31} - 1$ 和 $a = 7^5$。由此，我们计算 $U_n = x_n / m$，其值介于 0 和 1 之间。
+
+需要特别强调的是：这些数字是**确定性的**，给定相同的起始值 $x_0$，将始终产生完全相同的序列。同时，该生成器产生的随机数近似**独立** -- 即 $x_n$ 和 $x_{n+1}$ 可以被当作（准）独立的抽样，尽管它们在函数关系上是依赖的。
+
+```{r}
+#| label: fig-pseudo-random
+#| fig-cap: "伪随机数生成演示（仿教材 Fig. 8.1）| Pseudozufallszahlen-Demonstration"
+#| fig-height: 9
+
+# 乘法同余法实现
+lcg <- function(n, x0, a = 7^5, m = 2^31 - 1) {
+  x <- numeric(n)
+  x[1] <- (a * x0) %% m
+  for (i in 2:n) {
+    x[i] <- (a * x[i-1]) %% m
+  }
+  return(x)
+}
+
+N_sim <- 5000
+x_seq1 <- lcg(N_sim, x0 = 1)
+u_seq1 <- x_seq1 / (2^31 - 1)
+
+x_seq2 <- lcg(N_sim, x0 = 5)
+u_seq2 <- x_seq2 / (2^31 - 1)
+
+par(mfrow = c(3, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+# 顶部：生成的伪随机数序列
+plot(1:N_sim, u_seq1, type = "p", pch = ".", col = "#2563EB", cex = 1.5,
+     xlab = "Index", ylab = expression(x[n] / m),
+     main = expression(paste("伪随机数序列 (", x[0], " = 1) | Pseudozufallszahlenfolge")),
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 中间：经验分布函数
+plot(ecdf(u_seq1), col = "#2563EB", lwd = 2,
+     xlab = "x", ylab = expression(F[n](x)),
+     main = "经验分布函数 vs 均匀分布 | Empirische Verteilungsfunktion vs. Gleichverteilung",
+     cex.main = 0.95, col.main = "#1E293B")
+abline(0, 1, col = "#DC2626", lwd = 2, lty = 2)
+legend("topleft", legend = c(expression(F[n](x)), "Uniform[0,1]"),
+       col = c("#2563EB", "#DC2626"), lwd = 2, lty = c(1, 2), bty = "n", cex = 0.85)
+grid(col = "#E2E8F0")
+
+# 底部：两个序列的对比 -- 确定性本质
+plot(u_seq1, u_seq2, pch = ".", col = "#9333EA", cex = 2,
+     xlab = expression(x["n,1"] / m), ylab = expression(x["n,2"] / m),
+     main = expression(paste("两个起始值的序列对比 -- 确定性模式 | Zwei Startpunkte: ", 
+                             x["0,1"], " = 1, ", x["0,2"], " = 5")),
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+从图中可以看到：顶部图显示了 $U_n = x_n/m$ 的值看起来像是随机的；中间图表明其经验分布函数与均匀分布有很好的吻合；而底部图将两个不同起始值产生的序列对照绘制，清楚地展示了整个过程的确定性本质。
+
+## 利用均匀随机数计算积分
+
+> **Integration mittels gleichverteilter Zufallszahlen**
+
+从现在开始，我们不再强调"伪"这个词，直接将生成的 $U_n$ 称为 $[0,1]$ 上的均匀分布随机变量。我们可以用这些随机数来计算函数的积分。考虑一个函数 $g(y)$（其中 $g: \mathbb{R} \to \mathbb{R}^+$），我们想要计算：
+
+$$
+\int_{-\infty}^{\infty} g(y) \, dy
+$$
+
+假设该函数可积。关键技巧是：先将 $y$ 变换到 $[0,1]$ 区间。令 $h(\cdot): \mathbb{R} \to [0,1]$ 为某个可逆变换，设 $u = h(y)$，对应地 $y = h^{-1}(u)$，其中 $u \in [0,1]$。一个方便的选择是 Logistic 函数（也称 sigmoid 函数）：
+
+$$
+u = h(y) = \frac{\exp(y)}{1 + \exp(y)} \quad \Leftrightarrow \quad y = h^{-1}(u) = \log \frac{u}{1-u}
+$$
+
+利用标准换元法，积分可以改写为：
+
+$$
+\int_{-\infty}^{\infty} g(y) \, dy = \int_0^1 g(y(u)) \cdot \frac{dy(u)}{du} \, du = \int_0^1 g(y(u)) \cdot \frac{1}{u(1-u)} \, du =: \int_0^1 \tilde{g}(u) \, du
+$$
+
+通过这个技巧，我们将积分的计算**转化为了期望值的计算**。如果 $U \sim \text{Uniform}[0,1]$，那么：
+
+$$
+E[\tilde{g}(U)] = \int_0^1 \tilde{g}(u) \, du
+$$
+
+::: {.callout-tip icon="false"}
+## 雨滴测面积的比喻 | Die Regentropfen-Metapher
+
+想象你要测量一个不规则形状池塘的面积。一种方法是在池塘所在的矩形区域内均匀地撒雨滴（生成均匀随机数），然后数落入池塘内的雨滴占总数的比例。这个比例乘以矩形面积就是池塘面积的估计。雨滴越多，估计越准确。蒙特卡洛积分的原理与此完全相同 -- 用随机抽样来估计确定性的积分值。
+
+*Stellen Sie sich vor, Sie messen die Flache eines Teichs, indem Sie Regentropfen gleichmassig auf ein Rechteck fallen lassen. Der Anteil der Tropfen im Teich schatzt die Flache. Monte-Carlo-Integration funktioniert genauso.*
+:::
+
+抽取独立均匀分布随机变量 $U_i$（$i = 1, \ldots, N$），根据大数定律：
+
+$$
+\bar{\tilde{g}} := \frac{1}{N} \sum_{i=1}^{N} \tilde{g}(U_i) \longrightarrow E[\tilde{g}(U)] \quad \text{当 } N \to \infty
+$$
+
+如果随机数相互独立（我们假设如此），我们甚至可以利用中心极限定理评估近似的精度。以 95% 的置信度，我们有：
+
+$$
+E[\tilde{g}(U)] \in \left[ \bar{\tilde{g}} - 1.96 \frac{\hat{\sigma}}{\sqrt{N}}, \quad \bar{\tilde{g}} + 1.96 \frac{\hat{\sigma}}{\sqrt{N}} \right]
+$$
+
+其中
+
+$$
+\hat{\sigma}^2 = \frac{1}{N-1} \sum_{i=1}^{N} \left( \tilde{g}(u_i) - \bar{\tilde{g}} \right)^2
+$$
+
+统计学的概念竟然可以用于数值计算，而且我们还能利用已有的统计结果来量化不确定性 -- 这一点非常有趣。
+
+## 例 8.1：计算正态分布的归一化常数
+
+> **Beispiel 8.1: Normierungskonstante der Normalverteilung**
+
+```{r}
+#| label: fig-example-8-1
+#| fig-cap: "例 8.1：蒙特卡洛积分演示 -- mu = 0（上）与 mu = 4（下）（仿教材 Fig. 8.2）| Monte-Carlo-Integration"
+#| fig-height: 8
+
+set.seed(42)
+N_mc <- 1000
+
+# g(y) = exp(-0.5*(y - mu)^2)
+# h^{-1}(u) = log(u/(1-u))  => dy/du = 1/(u*(1-u))
+# g_tilde(u) = g(h^{-1}(u)) * 1/(u*(1-u))
+
+mc_integral <- function(mu, N) {
+  U <- runif(N)
+  y <- log(U / (1 - U))          # 逆 logistic 变换
+  jacobian <- 1 / (U * (1 - U))  # dy/du
+  g_vals <- exp(-0.5 * (y - mu)^2)
+  g_tilde <- g_vals * jacobian
+  list(g_tilde = g_tilde, 
+       mean = mean(g_tilde), 
+       ci = mean(g_tilde) + c(-1, 1) * 1.96 * sd(g_tilde) / sqrt(N))
+}
+
+res_mu0 <- mc_integral(mu = 0, N = N_mc)
+res_mu4 <- mc_integral(mu = 4, N = N_mc)
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# mu = 0
+plot(1:N_mc, res_mu0$g_tilde, pch = ".", col = "#2563EB", cex = 2,
+     xlab = "Index", ylab = expression(tilde(g)(U[i])),
+     main = expression(paste("mu = 0: ", tilde(g)(U[i]), 
+                             " 值（方差较小）| Werte mit kleiner Varianz")),
+     cex.main = 0.95, col.main = "#1E293B",
+     ylim = c(0, max(res_mu0$g_tilde) * 1.1))
+grid(col = "#E2E8F0")
+abline(h = sqrt(2 * pi), col = "#DC2626", lwd = 2, lty = 2)
+text(800, sqrt(2 * pi) + 0.15, 
+     bquote(sqrt(2*pi) == .(round(sqrt(2*pi), 3))),
+     col = "#DC2626", font = 2, cex = 0.9)
+
+# mu = 4
+plot(1:N_mc, res_mu4$g_tilde, pch = ".", col = "#EA580C", cex = 2,
+     xlab = "Index", ylab = expression(tilde(g)(U[i])),
+     main = expression(paste("mu = 4: ", tilde(g)(U[i]), 
+                             " 值（方差很大）| Werte mit grosser Varianz")),
+     cex.main = 0.95, col.main = "#1E293B",
+     ylim = c(0, max(res_mu4$g_tilde) * 1.1))
+grid(col = "#E2E8F0")
+abline(h = sqrt(2 * pi), col = "#DC2626", lwd = 2, lty = 2)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: example-8-1-code
+#| code-fold: false
+
+cat("例 8.1：蒙特卡洛积分 | Beispiel 8.1: Monte-Carlo-Integration\n\n")
+cat("  积分: integral exp(-0.5*(y - mu)^2) dy = sqrt(2*pi) =", 
+    round(sqrt(2*pi), 6), "\n\n")
+
+cat("  mu = 0:\n")
+cat(sprintf("    估计值: %.6f\n", res_mu0$mean))
+cat(sprintf("    95%% 置信区间: [%.6f, %.6f]\n\n", res_mu0$ci[1], res_mu0$ci[2]))
+
+cat("  mu = 4:\n")
+cat(sprintf("    估计值: %.6f\n", res_mu4$mean))
+cat(sprintf("    95%% 置信区间: [%.6f, %.6f]\n\n", res_mu4$ci[1], res_mu4$ci[2]))
+
+cat("  结论: 积分值不依赖于 mu, 但近似的质量取决于 mu。\n")
+cat("  mu = 4 时方差大得多, 置信区间也宽得多。\n")
+cat("  在模拟中, 必须考虑方差以获得可靠结果。\n")
+```
+
+这个例子想要计算 $\int_{-\infty}^{\infty} \exp\left(-\frac{1}{2}(y - \mu)^2\right) dy$。由正态分布的归一化常数可知，积分值恰好等于 $\sqrt{2\pi} = 2.506628$，与 $\mu$ 无关。但从模拟来看，$\mu = 0$ 时的近似质量远好于 $\mu = 4$ 时，后者的方差大得多，置信区间也宽得多。结论是：虽然数学上积分值不依赖于 $\mu$，但在模拟中我们必须关注方差，才能获得可靠的结果。
+
+{{< pagebreak >}}
+
+# 从分布函数和密度进行模拟 {#sec-inverse-rejection}
+
+> **Simulation aus einer Verteilungsfunktion und einer Dichte**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **逆变换法**（Property 8.1）：已知分布函数时如何模拟
+- **拒绝采样**（Rejection Sampling）：只知道密度时如何模拟
+- **重要性采样**（Importance Sampling）：计算期望值的替代策略
+- 提议分布（Proposal Distribution）与目标分布的关系
+:::
+
+上一节讨论了如何模拟均匀分布随机变量。现在我们转向更一般的问题：如何从**任意连续分布**模拟随机变量 $Y \sim F(\cdot)$。根据对分布信息的了解程度，我们区分三种情形：第一种，分布函数 $F(\cdot)$ 已知；第二种，分布函数未知但密度 $f(\cdot)$ 已知；第三种，密度也只知道一个未知的比例因子，即 $\tilde{f}(y) \propto f(y)$。本节处理前两种情形，第三种将在下一节讨论。
+
+## 逆变换法
+
+> **Die Inversionsmethode**
+
+我们从最简单的情形开始：分布函数 $F(y)$ 已知且可逆。
+
+::: {.callout-tip icon="false"}
+## 温度计的比喻 | Die Thermometer-Metapher
+
+想象一根温度计，刻度从 0 到 1（对应均匀随机数 $U$）。分布函数 $F$ 就像一张"翻译表"，把温度计上的读数 $U$ 翻译成你实际想要的随机变量 $Y$。如果分布函数的形状比较"陡"（密度高的区域），那么温度计上很小的一段就对应了 $Y$ 轴上很大的概率质量 -- 这就是为什么密度高的值更容易被抽到。逆变换法就是把温度计反着读：给定 $U$，查表得到 $Y = F^{-1}(U)$。
+
+*$F$ ist wie eine Ubersetzungstabelle: Sie wandelt gleichverteilte Zahlen $U$ in Zufallsvariablen $Y$ mit der gewunschten Verteilung um. Die Inverse $F^{-1}$ liest die Tabelle ruckwarts.*
+:::
+
+**性质 8.1**（逆变换法）设 $U$ 在 $[0,1]$ 上均匀分布，定义 $Y = F^{-1}(U)$，则 $Y$ 的分布函数为 $F(\cdot)$。
+
+证明非常简洁。注意到对于均匀分布 $P(U \le u) = u$（当 $u \in [0,1]$），因此：
+
+$$
+P(Y \le y) = P(F^{-1}(U) \le y) = P(U \le F(y)) = F(y)
+$$
+
+这就完成了证明。该方法同样可以推广到离散随机变量，此时逆函数定义为 $F^{-1}(u) = \inf\{y : F(y) \ge u\}$。
+
+```{r}
+#| label: fig-inverse-transform
+#| fig-cap: "逆变换法示意图（仿教材 Fig. 8.3）| Inversionsmethode: kontinuierlich und diskret"
+#| fig-height: 8
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 连续分布：标准正态
+set.seed(42)
+n_inv <- 6
+u_vals <- sort(runif(n_inv))
+y_vals <- qnorm(u_vals)
+
+curve(pnorm(x), from = -3, to = 3, lwd = 3, col = "#2563EB",
+      xlab = "y", ylab = "F(y)",
+      main = "连续分布的逆变换法 | Inversionsmethode (stetig)",
+      cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (i in 1:n_inv) {
+  segments(-3.5, u_vals[i], y_vals[i], u_vals[i], 
+           col = "#DC2626", lty = 2, lwd = 1.2)
+  segments(y_vals[i], u_vals[i], y_vals[i], -0.05, 
+           col = "#DC2626", lty = 2, lwd = 1.2)
+  points(y_vals[i], u_vals[i], pch = 16, col = "#DC2626", cex = 1.5)
+}
+
+text(-2.8, 0.85, "U", col = "#EA580C", font = 2, cex = 1.2)
+arrows(-3.3, 0.6, -3.3, 0.8, col = "#EA580C", lwd = 2, length = 0.08)
+
+# 离散分布：Poisson(2)
+y_pois <- 0:10
+f_pois <- ppois(y_pois, lambda = 2)
+
+plot(y_pois, f_pois, type = "s", lwd = 3, col = "#2563EB",
+     xlab = "y", ylab = "F(y)",
+     main = expression(paste("离散分布 Poisson(", lambda, " = 2) | Inversionsmethode (diskret)")),
+     cex.main = 0.95, col.main = "#1E293B",
+     xlim = c(-0.5, 10), ylim = c(0, 1.05))
+points(y_pois, f_pois, pch = 16, col = "#2563EB", cex = 1.5)
+grid(col = "#E2E8F0")
+
+set.seed(123)
+u_pois <- sort(runif(4))
+for (i in 1:4) {
+  y_gen <- qpois(u_pois[i], lambda = 2)
+  segments(-1, u_pois[i], y_gen, u_pois[i], col = "#DC2626", lty = 2, lwd = 1.2)
+  segments(y_gen, u_pois[i], y_gen, -0.05, col = "#DC2626", lty = 2, lwd = 1.2)
+  points(y_gen, u_pois[i], pch = 16, col = "#DC2626", cex = 1.5)
+}
+
+text(-0.3, 0.9, "U", col = "#EA580C", font = 2, cex = 1.2)
+
+par(mfrow = c(1, 1))
+```
+
+结论：如果分布函数 $F(\cdot)$ 已知且有解析形式，我们可以利用性质 8.1 轻松地从中模拟。
+
+## 拒绝采样
+
+> **Rejection Sampling (Verwerfungsmethode)**
+
+现在假设分布函数不可用，但密度 $f(y)$ 已知。即我们知道 $f(y)$，但积分 $F(y) = \int_{-\infty}^{y} f(\tilde{y}) \, d\tilde{y}$ 没有解析（因而也不可逆）的形式。在这种情况下，我们无法直接使用性质 8.1。
+
+解决方案是**拒绝采样**。假设我们能从一个"提议分布" $F^*(\cdot)$ 高效地模拟（即可以用性质 8.1 得到 $Y^* \sim F^*$），且对应的密度 $f^*(\cdot)$ 已知可求值。提议分布需要满足：存在标量 $a > 1$ 使得对所有 $y \in \mathbb{R}$：
+
+$$
+f(y) < a \cdot f^*(y)
+$$
+
+这意味着将提议密度 $f^*(y)$ 乘以某个 $a > 1$ 后，得到的函数在所有 $y$ 处都大于目标密度 $f(y)$。因此 $a \cdot f^*(\cdot)$ 像一把"雨伞"覆盖在 $f(\cdot)$ 上方，所以 $f^*(\cdot)$ 也被称为"伞密度"（Umbrella-Dichte）。
+
+::: {.callout-tip icon="false"}
+## 筛沙淘金的比喻 | Die Goldwascher-Metapher
+
+拒绝采样就像淘金：你先从河里大量铲沙（从提议分布 $f^*$ 中抽样），然后用筛子过滤（按照目标密度 $f$ 与伞密度 $af^*$ 的比值决定是否保留）。大部分沙子被筛掉（拒绝），留下来的就是金子（来自目标分布的样本）。筛子越精细（$a$ 越大，即提议分布与目标分布越不匹配），你要铲的沙子就越多，效率就越低。
+
+*Rejection Sampling ist wie Goldwaschen: Man schaufelt viel Sand ($f^*$) und siebt ihn ($f/(af^*)$). Was ubrig bleibt, sind Goldnuggets (Stichproben aus $f$).*
+:::
+
+拒绝采样的步骤如下：
+
+**第一步**：从 $F^*(\cdot)$ 中抽取 $Y^*$（使用性质 8.1）。
+
+**第二步**：生成均匀分布随机变量 $U \sim \text{Uniform}[0,1]$。
+
+**第三步**：如果 $U \le \frac{f(Y^*)}{a \cdot f^*(Y^*)}$，接受 $Y^*$；否则，回到第一步。
+
+```{r}
+#| label: fig-rejection-sampling
+#| fig-cap: "拒绝采样示意图（仿教材 Fig. 8.4）| Rejection Sampling Demonstration"
+#| fig-height: 9
+
+# 目标密度：双峰分布
+f_target <- function(y) {
+  0.4 * dnorm(y, -2, 0.8) + 0.6 * dnorm(y, 2, 1.2)
+}
+
+# 提议密度：N(0, 3^2)
+f_proposal <- function(y) dnorm(y, 0, 3)
+a_val <- 2.0  # 伞系数
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4.5, 4.5, 3.5, 1))
+
+# 上图：伞密度与目标密度
+y_range <- seq(-8, 8, length.out = 500)
+plot(y_range, a_val * f_proposal(y_range), type = "l", 
+     col = "#EA580C", lwd = 3, lty = 2,
+     xlab = "y", ylab = "密度 | Dichte",
+     main = expression(paste("伞密度 ", a %.% f^"*", "(y) 覆盖目标密度 f(y) | Umbrella-Dichte")),
+     cex.main = 0.95, col.main = "#1E293B",
+     ylim = c(0, max(a_val * f_proposal(y_range)) * 1.1))
+lines(y_range, f_target(y_range), col = "#2563EB", lwd = 3)
+grid(col = "#E2E8F0")
+
+polygon(c(y_range, rev(y_range)), 
+        c(f_target(y_range), rep(0, length(y_range))),
+        col = adjustcolor("#2563EB", 0.15), border = NA)
+
+legend("topright",
+       legend = c(expression(paste(a %.% f^"*", "(y), a = 2")), "f(y) (双峰目标)"),
+       col = c("#EA580C", "#2563EB"), lwd = 3, lty = c(2, 1), bty = "n", cex = 0.85)
+
+# 下图：直方图 -- 接受与拒绝
+set.seed(42)
+n_rs <- 10000
+y_star <- rnorm(n_rs, 0, 3)
+u_rs <- runif(n_rs)
+accept_prob <- f_target(y_star) / (a_val * f_proposal(y_star))
+accepted <- u_rs <= accept_prob
+
+hist(y_star[!accepted], breaks = 60, col = adjustcolor("#6B7280", 0.3), 
+     border = "#6B7280",
+     xlab = "y", ylab = "频率 | Haufigkeit",
+     main = paste0("拒绝采样结果：", sum(accepted), " / ", n_rs, " 被接受 | Akzeptiert"),
+     cex.main = 0.95, col.main = "#1E293B",
+     xlim = c(-8, 8), ylim = c(0, 600))
+hist(y_star[accepted], breaks = 60, col = adjustcolor("#2563EB", 0.6), 
+     border = "#2563EB", add = TRUE)
+grid(col = "#E2E8F0")
+
+legend("topright",
+       legend = c("被接受 | akzeptiert", "被拒绝 | verworfen"),
+       fill = c(adjustcolor("#2563EB", 0.6), adjustcolor("#6B7280", 0.3)),
+       border = c("#2563EB", "#6B7280"), bty = "n", cex = 0.85)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: rejection-proof-demo
+#| code-fold: false
+
+cat("拒绝采样证明要点 | Beweisskizze:\n\n")
+cat("  通过第三步的值的分布为:\n")
+cat("    P(Y* <= y | U <= f(Y*)/(a*f*(Y*)))\n\n")
+cat("  分子: P(Y* <= y, U <= f(Y*)/(a*f*(Y*)))\n")
+cat("       = integral_{-inf}^{y} [f(y*)/(a*f*(y*))] * f*(y*) dy*\n")
+cat("       = (1/a) * F(y)\n\n")
+cat("  分母: 令 y -> infinity, 得 1/a\n\n")
+cat("  因此: P(Y* <= y | 接受) = F(y) / 1 = F(y)\n\n")
+cat("  总接受概率 = 1/a =", round(1/a_val, 3), "\n")
+cat("  实际接受率  =", round(mean(accepted), 3), "\n")
+cat("  a 越大, 接受率越低, 效率越差。\n")
+```
+
+证明的关键在于：通过第三步的值的条件分布恰好是 $F(y)$。分子为 $\frac{1}{a} F(y)$，分母为 $\frac{1}{a}$，相除得 $F(y)$。总接受概率为 $1/a$，因此 $a$ 越大，接受率越低。$a$ 也可以解释为得到一个被接受值所需的平均循环次数，该次数服从参数为 $p = 1/a$ 的几何分布。
+
+## 重要性采样
+
+> **Importance Sampling (Gewichtete Stichprobenziehung)**
+
+拒绝采样的替代方案是**重要性采样**。在这种情况下，我们感兴趣的是计算某个已知函数 $h(\cdot)$ 的期望值 $E_F[h(Y)]$，其中 $Y$ 服从分布 $F(\cdot)$。虽然我们可以求值密度 $f(\cdot)$，但无法直接从中模拟。
+
+像拒绝采样一样，我们选择一个可以高效模拟的提议分布 $F^*(\cdot)$。核心思想是将期望值改写为：
+
+$$
+E_F[h(Y)] = \int_{-\infty}^{\infty} h(y) f(y) \, dy = \int_{-\infty}^{\infty} h(y) \frac{f(y)}{f^*(y)} f^*(y) \, dy = E_{F^*}\left[ h(Y) \cdot \frac{f(Y)}{f^*(Y)} \right]
+$$
+
+利用从 $F^*(\cdot)$ 抽取的独立同分布样本 $Y_i^*$（$i = 1, \ldots, N$），我们可以近似：
+
+$$
+\frac{1}{N} \sum_{i=1}^{N} h(y_i^*) \cdot \frac{f(y_i^*)}{f^*(y_i^*)} \longrightarrow E_F[h(Y)]
+$$
+
+近似的精度再次依赖于方差，而且容易看出 $F(\cdot)$ 和 $F^*(\cdot)$ 越接近，方差越小。因此，无论是拒绝采样还是重要性采样，如果提议分布 $F^*(\cdot)$ 不是目标分布 $F(\cdot)$ 的好代理，精度都会很差。
+
+{{< pagebreak >}}
+
+# 按比例于密度进行模拟 (MCMC) {#sec-mcmc}
+
+> **Simulation proportional zu einer Dichte (MCMC)**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 密度仅知道**未知比例因子**时的模拟方法
+- **马尔可夫链**的基本概念与平稳分布
+- **Metropolis-Hastings 算法**的完整步骤
+- 提议分布的方差选择与接受率之间的**权衡**
+- **自相关**与 thinning 策略
+:::
+
+## 从拒绝采样到 MCMC
+
+> **Von Rejection Sampling zu MCMC**
+
+前面的模拟方案要求我们知道分布函数 $F(\cdot)$ 或至少完整的密度 $f(\cdot)$。现在我们扩展到一种更具挑战性的场景：密度仅知道一个**未知的比例因子**。具体而言，我们只知道 $\tilde{f}(y)$，它与真实密度 $f(y)$ 成正比：
+
+$$
+f(y) = \frac{1}{a} \tilde{f}(y) \quad \Leftrightarrow \quad \tilde{f}(y) = a \cdot f(y)
+$$
+
+其中常数 $a$ 是**未知的**。这种情形在贝叶斯统计中极为常见（我们将在第 9 章中充分利用它），因此掌握这种模拟技术至关重要。
+
+::: {.callout-tip icon="false"}
+## 山谷探索的比喻 | Die Tal-Erkundung-Metapher
+
+想象你在一个浓雾弥漫的山谷中探索地形。你看不到全局的地图（不知道归一化常数 $a$），但你脚下可以感受到地面的坡度（可以在任意点求值 $\tilde{f}(y)$）。MCMC 算法就像一个聪明的探险者：他从某个起点出发，每一步先提议一个方向（提议分布），然后根据新位置与当前位置的"海拔差"（$\tilde{f}$ 的比值）决定是否移动过去。久而久之，他在高海拔（高密度）区域停留得更久，在低海拔区域停留得更少 -- 他的足迹分布最终就"画"出了地形图。
+
+*MCMC ist wie ein Entdecker im Nebel: Er spurt die lokale Steigung ($\tilde{f}$), kennt aber nicht die Gesamtkarte ($a$). Seine Fussspuren zeichnen schliesslich die Landkarte nach.*
+:::
+
+## 马尔可夫链的基本概念
+
+> **Grundkonzepte der Markov-Kette**
+
+核心思想是构建一条**马尔可夫链** $Y^{*(1)}, Y^{*(2)}, Y^{*(3)}, \ldots, Y^{*(T)}$。马尔可夫链是一个迭代的模拟过程：$Y^{*(t)}$ 的模拟可以依赖于前一个值 $Y^{*(t-1)}$，但与更早的值 $Y^{*(t-2)}, Y^{*(t-3)}, \ldots$ 无关。
+
+在第 $t$ 步，从所谓的**转移分布**（Ubergangsverteilung）$Q(y|Y^{*(t)})$ 中模拟新值 $Y^{*(t+1)}$。转移分布允许依赖于当前值 $Y^{*(t)}$，但与所有先前值无关。转移概率导致马尔可夫链的一个**平稳分布**（stationare Verteilung） -- 即当 $t \to \infty$ 时 $Y^{*(t)}$ 的分布（假设该分布存在）。我们的目标是选择转移概率 $Q(y|Y^{*(t)})$，使得 $Y^{*(t)} \sim F(\cdot)$（当 $t \to \infty$）。
+
+```{r}
+#| label: fig-markov-chain-sketch
+#| fig-cap: "马尔可夫链示意图：转移概率 Q(y*(t)|y*(t-1))（仿教材 Fig. 8.6）| Markov-Kette mit Ubergangswsk."
+#| fig-height: 3
+
+par(mar = c(1, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 3), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("马尔可夫链 | Markov-Kette")), cex.main = 1.1, col.main = "#1E293B")
+
+xs <- seq(1, 15, by = 2.5)
+labels <- c(expression(Y^{"*(0)"}), expression(Y^{"*(1)"}), 
+            expression(Y^{"*(2)"}), expression(Y^{"*(3)"}),
+            expression(Y^{"*(4)"}), expression(cdots))
+
+for (i in 1:6) {
+  col_fill <- ifelse(i <= 5, "#DBEAFE", "#F8FAFC")
+  col_bord <- ifelse(i <= 5, "#2563EB", "#94A3B8")
+  if (i <= 5) {
+    symbols(xs[i], 1.5, circles = 0.55, add = TRUE, inches = FALSE,
+            bg = col_fill, fg = col_bord, lwd = 2)
+  }
+  text(xs[i], 1.5, labels[i], cex = 0.75, col = "#1E293B")
+}
+
+for (i in 1:4) {
+  arrows(xs[i] + 0.65, 1.5, xs[i+1] - 0.65, 1.5,
+         col = "#EA580C", lwd = 2, length = 0.1)
+  text((xs[i] + xs[i+1]) / 2, 2.2, 
+       expression(Q(y^{"*"} ~ "|" ~ y^{"*(t)"})),
+       cex = 0.5, col = "#EA580C", font = 3)
+}
+```
+
+## Metropolis-Hastings 算法
+
+> **Der Metropolis-Hastings-Algorithmus**
+
+该算法最初由物理学家 Metropolis 等人 (1953) 提出，后由 Hastings (1970) 推广并引入统计领域，如今被称为 **Metropolis-Hastings 方法**。其步骤如下：
+
+**第一步**：选择起始值 $Y^{*(0)}$，并设 $Y^{*(t)} = Y^{*(0)}$。
+
+**第二步**：基于 $Y^{*(t)}$，从提议分布中提出新值：$Y^* \sim G(\cdot|Y^{*(t)})$，其中 $G(\cdot|Y^{*(t)})$ 是一个已知的、可以方便模拟的分布，且可以依赖于 $Y^{*(t)}$。记 $g(y|Y^{*(t)})$ 为其密度。
+
+**第三步**：计算**接受概率**：
+
+$$
+\alpha(Y^*, Y^{*(t)}) = \min\left(1, \; \frac{\tilde{f}(Y^*)}{\tilde{f}(Y^{*(t)})} \cdot \frac{g(Y^{*(t)}|Y^*)}{g(Y^*|Y^{*(t)})}\right)
+$$
+
+**第四步**：抽取 $U^* \sim \text{Uniform}[0,1]$。
+
+**第五步**：如果 $U^* > \alpha(Y^*, Y^{*(t)})$，拒绝提议值 $Y^*$ 并回到第二步。否则接受新值，令 $Y^{*(t+1)} = Y^*$，进入第六步。
+
+**第六步**：回到第二步，直到 $t$ 达到所需的迭代次数。
+
+有两个关键观察：首先，归一化常数 $a$ 在计算接受概率时**被消掉了**（因为出现在分子和分母的 $\tilde{f}$ 中），所以我们不需要知道它。其次，如果提议分布是**对称的**（即 $g(y^*|y^{(t)}) = g(y^{(t)}|y^*)$），那么接受概率中的第二个比值恒为 1，可以忽略。
+
+```{r}
+#| label: fig-mcmc-demo
+#| fig-cap: "MCMC 演示：两种提议方差的比较（仿教材 Fig. 8.8）| MCMC: Vergleich zweier Proposal-Varianzen"
+#| fig-height: 12
+
+# 目标密度（未归一化）-- 双峰
+f_tilde <- function(y) {
+  0.4 * dnorm(y, -2, 0.8) + 0.6 * dnorm(y, 2, 1.2)
+}
+
+# Metropolis-Hastings 算法
+mh_sampler <- function(n_iter, sigma_prop, y0 = -5) {
+  y <- numeric(n_iter)
+  alpha_vec <- numeric(n_iter)
+  y[1] <- y0
+  accepted <- 0
+  for (t in 2:n_iter) {
+    y_star <- rnorm(1, y[t-1], sigma_prop)
+    ratio <- f_tilde(y_star) / f_tilde(y[t-1])
+    alpha_t <- min(1, ratio)
+    alpha_vec[t] <- alpha_t
+    if (runif(1) <= alpha_t) {
+      y[t] <- y_star
+      accepted <- accepted + 1
+    } else {
+      y[t] <- y[t-1]
+    }
+  }
+  list(y = y, alpha = alpha_vec, accept_rate = accepted / (n_iter - 1))
+}
+
+set.seed(42)
+T_iter <- 10000
+res_s1 <- mh_sampler(T_iter, sigma_prop = 0.2, y0 = -5)
+res_s2 <- mh_sampler(T_iter, sigma_prop = 3.0, y0 = -5)
+
+par(mfrow = c(4, 2), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+# 第一行：目标函数与提议分布
+y_plot <- seq(-8, 8, length.out = 500)
+
+plot(y_plot, f_tilde(y_plot), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "y", ylab = expression(tilde(f)(y)),
+     main = expression(paste("设置 1: ", sigma, " = 0.2（步幅太小）")),
+     cex.main = 0.9, col.main = "#1E293B")
+# 在 y = -5 处画提议分布
+lines(y_plot, dnorm(y_plot, -5, 0.2) * 0.05, col = "#EA580C", lwd = 2, lty = 2)
+points(-5, f_tilde(-5), pch = 16, col = "#DC2626", cex = 2)
+text(-5, f_tilde(-5) + 0.02, expression(y^{"*(t)"}), col = "#DC2626", font = 2, cex = 0.8)
+grid(col = "#E2E8F0")
+
+plot(y_plot, f_tilde(y_plot), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "y", ylab = expression(tilde(f)(y)),
+     main = expression(paste("设置 2: ", sigma, " = 3（步幅合适）")),
+     cex.main = 0.9, col.main = "#1E293B")
+lines(y_plot, dnorm(y_plot, -5, 3) * 0.3, col = "#EA580C", lwd = 2, lty = 2)
+points(-5, f_tilde(-5), pch = 16, col = "#DC2626", cex = 2)
+text(-5, f_tilde(-5) + 0.02, expression(y^{"*(t)"}), col = "#DC2626", font = 2, cex = 0.8)
+grid(col = "#E2E8F0")
+
+# 第二行：模拟轨迹
+plot(1:T_iter, res_s1$y, type = "l", col = adjustcolor("#2563EB", 0.5), lwd = 0.5,
+     xlab = "t", ylab = expression(y^{"*(t)"}),
+     main = expression(paste(sigma, " = 0.2: 马尔可夫链轨迹")),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+plot(1:T_iter, res_s2$y, type = "l", col = adjustcolor("#2563EB", 0.5), lwd = 0.5,
+     xlab = "t", ylab = expression(y^{"*(t)"}),
+     main = expression(paste(sigma, " = 3: 马尔可夫链轨迹")),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 第三行：经验分布函数对比
+# 真实 CDF（数值积分归一化）
+y_cdf <- seq(-8, 8, length.out = 1000)
+f_vals <- f_tilde(y_cdf)
+cdf_true <- cumsum(f_vals) / sum(f_vals)
+
+plot(ecdf(res_s1$y), col = "#EA580C", lwd = 2,
+     xlab = "y", ylab = expression(F(y) ~ "and" ~ F[n](y)),
+     main = "经验分布函数对比 | Emp. Verteilungsfunktion",
+     cex.main = 0.9, col.main = "#1E293B",
+     xlim = c(-6, 6))
+lines(ecdf(res_s2$y), col = "#2563EB", lwd = 2)
+lines(y_cdf, cdf_true, col = "black", lwd = 2, lty = 2)
+legend("topleft", 
+       legend = c(expression(paste(sigma, " = 0.2")), 
+                  expression(paste(sigma, " = 3")), 
+                  "真实分布"),
+       col = c("#EA580C", "#2563EB", "black"), lwd = 2, 
+       lty = c(1, 1, 2), bty = "n", cex = 0.7)
+grid(col = "#E2E8F0")
+
+# 接受率箱线图
+boxplot(list("sigma=0.2" = res_s1$alpha[res_s1$alpha > 0], 
+             "sigma=3" = res_s2$alpha[res_s2$alpha > 0]),
+        col = c("#FEE2E2", "#DBEAFE"), border = c("#DC2626", "#2563EB"),
+        ylab = expression(alpha), 
+        main = "接受概率 | Akzeptanzwahrscheinlichkeit",
+        cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 第四行：自相关函数
+acf(res_s1$y, lag.max = 100, main = expression(paste("ACF: ", sigma, " = 0.2")),
+    col = "#EA580C", cex.main = 0.9, col.main = "#1E293B")
+acf(res_s2$y, lag.max = 100, main = expression(paste("ACF: ", sigma, " = 3")),
+    col = "#2563EB", cex.main = 0.9, col.main = "#1E293B")
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: mcmc-summary
+#| code-fold: false
+
+cat("MCMC 两种设置的比较 | Vergleich der zwei MCMC-Einstellungen:\n\n")
+cat(sprintf("  sigma = 0.2: 接受率 = %.2f%%\n", res_s1$accept_rate * 100))
+cat(sprintf("  sigma = 3.0: 接受率 = %.2f%%\n\n", res_s2$accept_rate * 100))
+cat("  sigma = 0.2 的问题: 步幅太小, 链停留在左侧模态,\n")
+cat("    未能探索到右侧模态。接受率虽高（近 100%）, 但并非好事!\n\n")
+cat("  sigma = 3.0 的优势: 步幅足够大, 能在两个模态间跳跃。\n")
+cat("    接受率约 20-30%, 这恰好是推荐的范围。\n\n")
+cat("  经验法则: 最佳接受率约为 20%-30%（参见 Neal & Roberts, 2006）。\n")
+cat("  太高的接受率意味着步幅太小, 探索效率低。\n")
+```
+
+需要注意的是，尽管我们模拟了 $T$ 个值，但这些值**并不独立**。由于马尔可夫链的构造，存在很强的**序列相关性**（自相关）。自相关定义为 $\text{Cor}(Y^{*(t)}, Y^{*(t-d)})$，其中 $d$ 称为滞后（Lag）。为了获得独立的样本 $Y_i^*$，可以使用 **thinning**（稀释）策略：只取每第 $d$ 个模拟值，即 $Y_i^* = Y^{*(d_0 + i \cdot d)}$，其中 $d$ 可以设为 100，而 $d_0$ 是一个较大的常数，确保马尔可夫链已达到平稳状态。
+
+{{< pagebreak >}}
+
+# 多元正态分布的模拟 {#sec-mvn}
+
+> **Simulation aus einer multivariaten Normalverteilung**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 如何利用**奇异值分解（SVD）** 模拟具有指定协方差结构的多元正态
+- 多元正态分布的**条件分解**方法
+- 任意多元分布的**因式分解**公式
+:::
+
+前面的模拟方法处理的都是一元随机变量。那么，如何模拟具有预先指定依赖结构的**多元**随机变量？最核心的当然是多元正态分布。
+
+## SVD 方法
+
+> **SVD-Methode**
+
+目标是从以下分布中生成模拟：
+
+$$
+\boldsymbol{Y} \sim N(\boldsymbol{\mu}, \Sigma)
+$$
+
+其中 $\boldsymbol{Y} = (Y_1, \ldots, Y_p)^\top$，$\Sigma$ 为预先指定的 $p \times p$ 方差矩阵。
+
+::: {.callout-tip icon="false"}
+## 颜料调色的比喻 | Die Farbmischung-Metapher
+
+模拟多元正态分布就像用基本颜料调配出任意颜色。我们先准备 $p$ 种"纯色"（独立标准正态变量 $Z_1^*, \ldots, Z_p^*$），然后通过一个"调色矩阵" $\Sigma^{1/2}$ 把它们混合在一起。这个矩阵决定了每种纯色的用量和混合方式，最终产生具有指定相关性和方差的多元分布。SVD 分解就是找到这个"调色配方"的数学工具。
+
+*Die SVD-Methode ist wie Farbmischung: Man nimmt $p$ reine Farben (unabhangige Standardnormalvariablen) und mischt sie mittels $\Sigma^{1/2}$ zu einer Farbe mit gewunschter Korrelationsstruktur.*
+:::
+
+首先，模拟 $p$ 个独立的 $N(0,1)$ 随机变量，堆叠为向量 $\boldsymbol{Z}^* = (Z_1^*, \ldots, Z_p^*)^\top$。然后，将 $\Sigma$ 通过奇异值分解分解为：
+
+$$
+\Sigma = L \Lambda L^\top
+$$
+
+其中 $L \in \mathbb{R}^{p \times p}$ 是 $\Sigma$ 的（正交归一化）特征向量矩阵，$\Lambda = \text{diag}(\lambda_1, \ldots, \lambda_p)$ 是特征值对角矩阵。正定性要求 $\lambda_j > 0$（$j = 1, \ldots, p$）。由此定义：
+
+$$
+\Sigma^{1/2} = L \Lambda^{1/2} L^\top, \qquad \text{其中 } \Lambda^{1/2} = \text{diag}(\sqrt{\lambda_1}, \ldots, \sqrt{\lambda_p})
+$$
+
+最终，令：
+
+$$
+\boldsymbol{Y}^* = \Sigma^{1/2} \boldsymbol{Z}^* + \boldsymbol{\mu}
+$$
+
+则 $\boldsymbol{Y}^* \sim N(\boldsymbol{\mu}, \Sigma)$。验证如下：因为 $\boldsymbol{Z}^* \sim N(\boldsymbol{0}, I_p)$，所以：
+
+$$
+\text{Var}(\boldsymbol{Y}^*) = \Sigma^{1/2} I_p (\Sigma^{1/2})^\top = L \Lambda^{1/2} \underbrace{L^\top L}_{= I_p} \Lambda^{1/2} L^\top = L \Lambda L^\top = \Sigma
+$$
+
+```{r}
+#| label: fig-mvn-simulation
+#| fig-cap: "多元正态分布模拟：SVD 方法演示 | Simulation der bivariaten Normalverteilung mittels SVD"
+#| fig-height: 5.5
+
+set.seed(42)
+mu_mv <- c(2, -1)
+Sigma_mv <- matrix(c(4, 2.4, 2.4, 3), nrow = 2)
+
+# SVD 分解
+eig <- eigen(Sigma_mv)
+L <- eig$vectors
+Lambda_sqrt <- diag(sqrt(eig$values))
+Sigma_sqrt <- L %*% Lambda_sqrt %*% t(L)
+
+# 生成模拟
+n_mv <- 2000
+Z_star <- matrix(rnorm(n_mv * 2), nrow = 2)
+Y_star <- Sigma_sqrt %*% Z_star + mu_mv
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 左图：独立标准正态
+plot(Z_star[1,], Z_star[2,], pch = ".", col = adjustcolor("#6B7280", 0.5), cex = 2,
+     xlab = expression(Z[1]^"*"), ylab = expression(Z[2]^"*"),
+     main = expression(paste("独立标准正态 ", Z^"*" %~% N(0, I[2]))),
+     cex.main = 0.85, col.main = "#1E293B",
+     xlim = c(-4, 4), ylim = c(-4, 4), asp = 1)
+grid(col = "#E2E8F0")
+
+# 右图：变换后
+plot(Y_star[1,], Y_star[2,], pch = ".", col = adjustcolor("#2563EB", 0.5), cex = 2,
+     xlab = expression(Y[1]^"*"), ylab = expression(Y[2]^"*"),
+     main = expression(paste("变换后 ", Y^"*" == Sigma^{1/2} * Z^"*" + mu)),
+     cex.main = 0.85, col.main = "#1E293B",
+     asp = 1)
+grid(col = "#E2E8F0")
+
+# 画椭圆
+theta_ell <- seq(0, 2*pi, length.out = 200)
+for (k in 1:3) {
+  ell <- Sigma_sqrt %*% rbind(k * cos(theta_ell), k * sin(theta_ell)) + mu_mv
+  lines(ell[1,], ell[2,], col = "#DC2626", lwd = 1.5, lty = ifelse(k == 2, 1, 2))
+}
+
+par(mfrow = c(1, 1))
+```
+
+## 条件分解方法
+
+> **Faktorisierung uber bedingte Verteilungen**
+
+另一种方法是利用多元正态分布的标准结果来分解分布。假设正态随机向量 $\boldsymbol{Y}$ 被分为两个子向量 $\boldsymbol{Y}_A$ 和 $\boldsymbol{Y}_B$，有：
+
+$$
+\boldsymbol{Y} = \begin{pmatrix} \boldsymbol{Y}_A \\ \boldsymbol{Y}_B \end{pmatrix} \sim N\left( \begin{pmatrix} \boldsymbol{\mu}_A \\ \boldsymbol{\mu}_B \end{pmatrix}, \begin{pmatrix} \Sigma_{AA} & \Sigma_{AB} \\ \Sigma_{BA} & \Sigma_{BB} \end{pmatrix} \right)
+$$
+
+则有以下两个性质：
+
+$$
+\boldsymbol{Y}_A \sim N(\boldsymbol{\mu}_A, \Sigma_{AA})
+$$
+
+$$
+\boldsymbol{Y}_B | (\boldsymbol{Y}_A = \boldsymbol{y}_A) \sim N\left(\boldsymbol{\mu}_B + \Sigma_{BA} \Sigma_{AA}^{-1}(\boldsymbol{y}_A - \boldsymbol{\mu}_A), \; \Sigma_{BB} - \Sigma_{BA} \Sigma_{AA}^{-1} \Sigma_{AB}\right)
+$$
+
+对于 $p = 2$ 的情形，先模拟 $Y_1^* \sim N(\mu_1, \Sigma_{11})$，然后利用条件分布模拟：
+
+$$
+Y_2^* | Y_1^* \sim N\left(\mu_2 + \frac{\Sigma_{21}}{\Sigma_{11}} (Y_1^* - \mu_1), \; \Sigma_{22} - \frac{\Sigma_{21}^2}{\Sigma_{11}}\right)
+$$
+
+更一般地，任意多元分布都可以通过以下因式分解来模拟：
+
+$$
+f_Y(y_1, \ldots, y_p) = f_{Y_1}(y_1) \cdot f_{Y_2|Y_1}(y_2|y_1) \cdot f_{Y_3|Y_1,Y_2}(y_3|y_1,y_2) \cdots f_{Y_p|Y_1,\ldots,Y_{p-1}}(y_p|y_1,\ldots,y_{p-1})
+$$
+
+因此，$p$ 维多元正态分布的模拟可以分解为 $p$ 个一维模拟。这种将多元模拟分解为一系列一元模拟的思想可以推广到其他分布，我们将在下一节中展示。
+
+{{< pagebreak >}}
+
+# Gibbs 采样与马尔可夫场 {#sec-gibbs}
+
+> **Gibbs-Sampling und Markov-Felder**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **Gibbs 采样**算法：逐分量从条件分布中采样
+- 从条件分布恢复联合分布的原理
+- **Gibbs 采样与 Metropolis-Hastings 的结合**
+- **马尔可夫场**与邻域结构
+- **高斯马尔可夫随机场（GMRF）** 在空间数据中的应用
+:::
+
+## 从多元正态到一般多元分布
+
+> **Von der multivariaten Normalverteilung zur allgemeinen multivariaten Verteilung**
+
+上一节局限于多元正态分布。现在我们扩展视野，讨论如何从**一般的多元分布**中模拟。假设多元随机向量 $\boldsymbol{Y} = (Y_1, \ldots, Y_p)^\top$，我们想从以下分布中模拟：
+
+$$
+\boldsymbol{Y}^* \sim F(\cdot) = F_{Y_1, \ldots, Y_p}(\cdot)
+$$
+
+这个多元分布函数可能未知或过于复杂，但我们假设已知每个分量给定其余变量的**一元条件分布**：
+
+$$
+F_{Y_j|Y_{-j}}(\cdot | Y_{-j})
+$$
+
+其中下标 "$-j$" 表示向量除第 $j$ 个分量外的所有分量，即 $Y_{-j} = (Y_1, \ldots, Y_{j-1}, Y_{j+1}, \ldots, Y_p)$。
+
+::: {.callout-tip icon="false"}
+## 传话游戏的比喻 | Die Stille-Post-Metapher
+
+Gibbs 采样就像一个精心设计的"传话游戏"。设想 $p$ 个人围坐成一圈，每人手中有一张数字卡片。在每一轮中，按顺序轮到每个人时，他们看看其他所有人的卡片（条件信息），然后根据一个规则（条件分布）重新抽取自己的数字。一轮又一轮地进行下去，所有人的数字组合最终会"收敛"到一个稳定的联合分布。每个人不需要知道全局规则（联合分布），只需要知道"在别人数字确定时自己该如何抽"（条件分布）。
+
+*Gibbs-Sampling ist wie ein Flusterspiel: Jede Person ($Y_j$) erneuert ihren Wert basierend auf den Werten aller anderen ($Y_{-j}$), ohne die gemeinsame Verteilung zu kennen.*
+:::
+
+## Gibbs 采样算法
+
+> **Der Gibbs-Sampling-Algorithmus**
+
+该算法由 Geman 和 Geman (1984) 提出，步骤如下：
+
+**第一步**：取任意起始值 $\boldsymbol{Y}^{*(0)}$，令 $\boldsymbol{Y}^{*(t)} = \boldsymbol{Y}^{*(0)}$。
+
+**第二步**：设 $\boldsymbol{Y}^* = \boldsymbol{Y}^{*(t)}$。
+
+**第三步**：对 $j = 1, \ldots, p$，模拟（从而覆写）$\boldsymbol{Y}^*$ 的第 $j$ 个分量：
+
+$$
+Y_j^* \sim F_{Y_j|Y_{-j}}(\cdot | Y_{-j}^*)
+$$
+
+**第四步**：设 $\boldsymbol{Y}^{*(t+1)} = \boldsymbol{Y}^*$，回到第二步，直到完成所需的迭代次数。
+
+## 例 8.2：二元正态分布的 Gibbs 采样
+
+> **Beispiel 8.2: Gibbs-Sampling fur bivariate Normalverteilung**
+
+```{r}
+#| label: fig-gibbs-example-8-2
+#| fig-cap: "例 8.2：Gibbs 采样的两种起始值（仿教材 Fig. 8.10）| Gibbs-Sampling mit zwei Startwerten"
+#| fig-height: 8
+
+gibbs_bivariate_normal <- function(n_iter, rho = 0.75, start = c(0, 0)) {
+  y1 <- numeric(n_iter)
+  y2 <- numeric(n_iter)
+  y1[1] <- start[1]
+  y2[1] <- start[2]
+  for (t in 2:n_iter) {
+    y1[t] <- rnorm(1, rho * y2[t-1], 1)
+    y2[t] <- rnorm(1, rho * y1[t], 1)
+  }
+  data.frame(y1 = y1, y2 = y2)
+}
+
+set.seed(42)
+gibbs_a <- gibbs_bivariate_normal(1000, start = c(0, 0))
+gibbs_b <- gibbs_bivariate_normal(1000, start = c(-50, -50))
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 起始 (0,0)
+plot(gibbs_a$y1, gibbs_a$y2, type = "l", col = adjustcolor("#2563EB", 0.3),
+     xlab = expression(Y[1]), ylab = expression(Y[2]),
+     main = "起始 (0, 0) -- 轨迹",
+     cex.main = 0.9, col.main = "#1E293B")
+points(gibbs_a$y1, gibbs_a$y2, pch = ".", col = "#2563EB", cex = 2)
+grid(col = "#E2E8F0")
+
+plot(gibbs_a$y1, gibbs_a$y2, pch = 16, col = adjustcolor("#2563EB", 0.3), cex = 0.8,
+     xlab = expression(Y[1]), ylab = expression(Y[2]),
+     main = "起始 (0, 0) -- 散点",
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 起始 (-50,-50)
+plot(gibbs_b$y1, gibbs_b$y2, type = "l", col = adjustcolor("#DC2626", 0.3),
+     xlab = expression(Y[1]), ylab = expression(Y[2]),
+     main = "起始 (-50, -50) -- 轨迹",
+     cex.main = 0.9, col.main = "#1E293B")
+points(gibbs_b$y1, gibbs_b$y2, pch = ".", col = "#DC2626", cex = 2)
+grid(col = "#E2E8F0")
+
+plot(gibbs_b$y1[10:1000], gibbs_b$y2[10:1000], pch = 16, 
+     col = adjustcolor("#DC2626", 0.3), cex = 0.8,
+     xlab = expression(Y[1]), ylab = expression(Y[2]),
+     main = "起始 (-50, -50) -- 散点（去除前 10 步）",
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: example-8-2-analysis
+#| code-fold: false
+
+cat("例 8.2：从条件分布反推联合分布参数\n\n")
+cat("  条件分布: Y1|Y2 ~ N(0.75*Y2, 1), Y2|Y1 ~ N(0.75*Y1, 1)\n\n")
+
+# 从对称性得 sigma_11 = sigma_22 = sigma^2
+# sigma_12/sigma_22 = 0.75 => sigma_12 = 0.75 * sigma^2
+# sigma_11 - sigma_12^2/sigma_22 = 1 => sigma^2 - 0.75^2 * sigma^2 = 1
+# sigma^2 * (1 - 0.5625) = 1 => sigma^2 = 1/0.4375 ~ 2.286
+sigma2_calc <- 1 / (1 - 0.75^2)
+sigma12_calc <- 0.75 * sigma2_calc
+
+cat(sprintf("  理论参数: sigma^2 = 1/(1-0.75^2) = %.4f\n", sigma2_calc))
+cat(sprintf("             sigma_12 = 0.75 * sigma^2 = %.4f\n\n", sigma12_calc))
+
+# 从模拟数据估计
+cat(sprintf("  模拟估计 (起始 (0,0), n=1000):\n"))
+cat(sprintf("    Var(Y1) = %.4f\n", var(gibbs_a$y1)))
+cat(sprintf("    Var(Y2) = %.4f\n", var(gibbs_a$y2)))
+cat(sprintf("    Cov(Y1,Y2) = %.4f\n", cov(gibbs_a$y1, gibbs_a$y2)))
+cat(sprintf("    Cor(Y1,Y2) = %.4f\n", cor(gibbs_a$y1, gibbs_a$y2)))
+```
+
+## 例 8.3：非标准条件分布
+
+> **Beispiel 8.3: Gibbs-Sampling mit nicht-standardisierten Bedingungen**
+
+```{r}
+#| label: fig-gibbs-example-8-3
+#| fig-cap: "例 8.3：Gibbs 采样处理异方差条件分布（仿教材 Fig. 8.11）| Gibbs-Sampling mit heteroskedastischen Bedingungen"
+#| fig-height: 5.5
+
+set.seed(42)
+n_gibbs3 <- 5000
+y1_g3 <- numeric(n_gibbs3)
+y2_g3 <- numeric(n_gibbs3)
+
+for (t in 2:n_gibbs3) {
+  y1_g3[t] <- rnorm(1, 0.75 * y2_g3[t-1], 1)
+  var_cond <- exp(y1_g3[t]) / (1 + exp(y1_g3[t]))
+  y2_g3[t] <- rnorm(1, 0.75 * y1_g3[t], sqrt(var_cond))
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(y1_g3[100:n_gibbs3], y2_g3[100:n_gibbs3], 
+     pch = 16, col = adjustcolor("#9333EA", 0.15), cex = 0.6,
+     xlab = expression(Y[1]), ylab = expression(Y[2]),
+     main = "例 8.3：异方差条件分布的 Gibbs 采样 | Heteroskedastisches Gibbs-Sampling",
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+```
+
+该例将模拟步骤修改为 $Y_1|Y_2 \sim N(0.75 Y_2, 1)$ 和 $Y_2|Y_1 \sim N(0.75 Y_1, \exp(Y_1)/(1+\exp(Y_1)))$，引入了**方差异质性**。联合分布不再具有简单的结构，但 Gibbs 采样仍然有效。
+
+## 例 8.4：Gibbs 采样结合 Metropolis-Hastings
+
+> **Beispiel 8.4: Gibbs-Sampling kombiniert mit Metropolis-Hastings**
+
+Gibbs 采样可以灵活地与其他采样策略结合。在步骤中，如果条件密度 $f_{Y_j|Y_{-j}}(\cdot|y_{-j})$ 只知道到一个未知的乘法常数，我们可以在 Gibbs 采样器的每一步中使用 Metropolis-Hastings。这种 Gibbs 与 MH 的组合在贝叶斯计算中极为常见。
+
+```{r}
+#| label: fig-gibbs-mh-example-8-4
+#| fig-cap: "例 8.4：Gibbs-MH 对香蕉形密度的采样（仿教材 Fig. 8.12）| Gibbs-MH fur bananenformige Dichte"
+#| fig-height: 8
+
+# 香蕉形密度（未归一化）- 使用 log 形式避免数值问题
+log_f_banana <- function(y1, y2) {
+  -0.5 * (y1^2 + y2^2 - 1.5 * y1 * y2 - 0.3 * y1^2 * y2)
+}
+
+# 用于绘图的原始密度
+f_banana <- function(y1, y2) {
+  exp(log_f_banana(y1, y2))
+}
+
+# Gibbs-MH 采样
+set.seed(42)
+n_gm <- 10000
+y1_gm <- numeric(n_gm)
+y2_gm <- numeric(n_gm)
+y1_gm[1] <- -1.1
+y2_gm[1] <- 2.0
+sigma_gm <- 0.3
+
+for (t in 2:n_gm) {
+  # MH 步骤更新 y1 | y2（使用 log 比率避免数值问题）
+  y1_prop <- rnorm(1, y1_gm[t-1], sigma_gm)
+  log_ratio1 <- log_f_banana(y1_prop, y2_gm[t-1]) - log_f_banana(y1_gm[t-1], y2_gm[t-1])
+  if (log(runif(1)) < min(0, log_ratio1)) {
+    y1_gm[t] <- y1_prop
+  } else {
+    y1_gm[t] <- y1_gm[t-1]
+  }
+  
+  # MH 步骤更新 y2 | y1（使用 log 比率避免数值问题）
+  y2_prop <- rnorm(1, y2_gm[t-1], sigma_gm)
+  log_ratio2 <- log_f_banana(y1_gm[t], y2_prop) - log_f_banana(y1_gm[t], y2_gm[t-1])
+  if (log(runif(1)) < min(0, log_ratio2)) {
+    y2_gm[t] <- y2_prop
+  } else {
+    y2_gm[t] <- y2_gm[t-1]
+  }
+}
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 密度等高线
+y1_grid <- seq(-3, 3, length.out = 100)
+y2_grid <- seq(-4, 5, length.out = 100)
+z_grid <- outer(y1_grid, y2_grid, f_banana)
+
+contour(y1_grid, y2_grid, z_grid, nlevels = 15,
+        xlab = expression(y[1]), ylab = expression(y[2]),
+        main = "目标密度等高线 | Konturlinien der Dichte",
+        cex.main = 0.9, col.main = "#1E293B", col = "#2563EB")
+abline(h = 2, v = -1.1, lty = 2, col = "#DC2626")
+points(-1.1, 2, pch = 16, col = "#DC2626", cex = 2)
+text(-1.1, 2.3, "起始点", col = "#DC2626", cex = 0.8, font = 2)
+grid(col = "#E2E8F0")
+
+# 条件密度切面 y1 | y2
+y1_slice <- y1_grid
+f_y1_given_y2 <- f_banana(y1_slice, 2)
+plot(y1_slice, f_y1_given_y2 / max(f_y1_given_y2) * 0.04, type = "l", 
+     col = "#2563EB", lwd = 3,
+     xlab = expression(y[1]), ylab = "密度",
+     main = "条件密度 f(y1 | y2 = 2)",
+     cex.main = 0.9, col.main = "#1E293B")
+lines(y1_slice, dnorm(y1_slice, -1.1, sigma_gm) * 0.04, 
+      col = "#EA580C", lwd = 2, lty = 2)
+legend("topright", legend = c("条件密度", "提议密度"),
+       col = c("#2563EB", "#EA580C"), lwd = c(3, 2), lty = c(1, 2), 
+       bty = "n", cex = 0.7)
+grid(col = "#E2E8F0")
+
+# 条件密度 y2 | y1
+y2_slice <- y2_grid
+f_y2_given_y1 <- f_banana(-1.1, y2_slice)
+plot(y2_slice, f_y2_given_y1 / max(f_y2_given_y1) * 0.08, type = "l", 
+     col = "#2563EB", lwd = 3,
+     xlab = expression(y[2]), ylab = "密度",
+     main = "条件密度 f(y2 | y1 = -1.1)",
+     cex.main = 0.9, col.main = "#1E293B")
+lines(y2_slice, dnorm(y2_slice, 2, sigma_gm) * 0.08, 
+      col = "#EA580C", lwd = 2, lty = 2)
+legend("topright", legend = c("条件密度", "提议密度"),
+       col = c("#2563EB", "#EA580C"), lwd = c(3, 2), lty = c(1, 2), 
+       bty = "n", cex = 0.7)
+grid(col = "#E2E8F0")
+
+# MCMC 结果热力图
+burnin <- 500
+smoothScatter(y1_gm[burnin:n_gm], y2_gm[burnin:n_gm],
+              xlab = expression(Y[1]^"*"), ylab = expression(Y[2]^"*"),
+              main = "Gibbs-MH 采样结果 (去除 burn-in)",
+              cex.main = 0.9, col.main = "#1E293B",
+              colramp = colorRampPalette(c("white", "#2563EB", "#1E3A8A")))
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+## 马尔可夫场与邻域结构
+
+> **Markov-Felder und Nachbarschaftsstruktur**
+
+当 $p$ 很大时，构建 $p$ 个条件分布会非常繁琐。在这种情况下，可以引入**条件独立性假设**来简化。例如，对于 $\boldsymbol{Y} = (Y_1, \ldots, Y_p)$，我们可以假设某种**邻域结构**：$Y_j$ 给定邻居 $Y_{\mathcal{N}_j}$ 后与其他所有变量条件独立。此时 Gibbs 采样的步骤简化为：
+
+$$
+Y_j^* | Y_{-j}^* \sim F_{Y_j|Y_{\mathcal{N}_j}}(\cdot | Y_{\mathcal{N}_j}^*)
+$$
+
+这个框架在具有**空间结构**的数据中特别有用。我们可以将 $\boldsymbol{Y}$ 写成矩阵形式 $Y = (Y_{ij}, \, i = 1, \ldots, N_1, \, j = 1, \ldots, N_2)$，并在其上施加邻域结构。对于一阶马尔可夫结构，$Y_{ij}$ 与所有 $|i-l|>1$ 或 $|k-j|>1$ 的 $Y_{lk}$ 条件独立（给定直接邻居）。
+
+当我们假设像素给定邻居服从正态分布时：
+
+$$
+Y_{ij}^* | Y_{\mathcal{N}_{ij}}^* \sim N(\bar{Y}_{\mathcal{N}_{ij}}, \sigma_t^2)
+$$
+
+其中 $\bar{Y}_{\mathcal{N}_{ij}}$ 是邻居值的算术平均，这就构成了**高斯马尔可夫随机场（GMRF）**。
+
+```{r}
+#| label: fig-gmrf
+#| fig-cap: "高斯马尔可夫随机场 (GMRF) 演示（仿教材 Fig. 8.15）| GMRF-Demonstration"
+#| fig-height: 8
+
+set.seed(42)
+
+# 目标函数
+h_func <- function(y1, y2) {
+  0.5 + 0.3 * sin(2 * pi * y1) * cos(2 * pi * y2) + 
+    0.15 * exp(-((y1 - 0.3)^2 + (y2 - 0.7)^2) / 0.05)
+}
+
+# 网格
+N_pix <- 50
+grid_1d <- seq(0, 1, length.out = N_pix)
+z_true <- outer(grid_1d, grid_1d, h_func)
+
+# 25 个评估点
+n_eval <- 25
+eval_idx <- expand.grid(
+  i = round(seq(5, N_pix - 4, length.out = 5)),
+  j = round(seq(5, N_pix - 4, length.out = 5))
+)
+eval_vals <- numeric(n_eval)
+for (k in 1:n_eval) {
+  eval_vals[k] <- z_true[eval_idx$i[k], eval_idx$j[k]]
+}
+
+# 初始化随机场
+z_field <- matrix(rnorm(N_pix^2, 0.5, 0.5), N_pix, N_pix)
+for (k in 1:n_eval) {
+  z_field[eval_idx$i[k], eval_idx$j[k]] <- eval_vals[k]
+}
+
+# Gibbs 采样
+n_gibbs_iter <- 300
+for (iter in 1:n_gibbs_iter) {
+  sigma_t <- 1 / log(iter + 2)
+  for (i in 2:(N_pix-1)) {
+    for (j in 2:(N_pix-1)) {
+      is_eval <- any(eval_idx$i == i & eval_idx$j == j)
+      if (!is_eval) {
+        nbrs <- c(z_field[i-1,j], z_field[i+1,j], 
+                  z_field[i,j-1], z_field[i,j+1])
+        z_field[i,j] <- rnorm(1, mean(nbrs), sigma_t)
+      }
+    }
+  }
+}
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(3, 3, 3, 1))
+
+# 原始函数
+image(grid_1d, grid_1d, z_true, col = hcl.colors(64, "YlOrRd", rev = TRUE),
+      xlab = "", ylab = "",
+      main = "真实函数 h(y1, y2) | Wahre Funktion",
+      cex.main = 0.9, col.main = "#1E293B")
+
+# 评估点
+contour(grid_1d, grid_1d, z_true, nlevels = 12,
+        xlab = "", ylab = "",
+        main = "等高线与 25 个评估点 | Konturlinien und 25 Punkte",
+        cex.main = 0.9, col.main = "#1E293B")
+points(grid_1d[eval_idx$i], grid_1d[eval_idx$j], pch = 16, col = "#DC2626", cex = 1.5)
+
+# GMRF 模拟结果
+image(grid_1d, grid_1d, z_field, col = hcl.colors(64, "YlOrRd", rev = TRUE),
+      xlab = "", ylab = "",
+      main = paste0("GMRF 模拟 (", n_gibbs_iter, " 次迭代) | GMRF-Simulation"),
+      cex.main = 0.9, col.main = "#1E293B")
+points(grid_1d[eval_idx$i], grid_1d[eval_idx$j], pch = 4, col = "black", cex = 1)
+
+# 差异
+image(grid_1d, grid_1d, abs(z_true - z_field), 
+      col = hcl.colors(64, "Blues", rev = TRUE),
+      xlab = "", ylab = "",
+      main = "绝对误差 | Absoluter Fehler",
+      cex.main = 0.9, col.main = "#1E293B")
+
+par(mfrow = c(1, 1))
+```
+
+即使只在 25 个像素处知道函数的精确值，通过适当的模拟，我们已经可以获得关于函数形状的合理信息。这也与**响应面方法**（Response Surface Methodology）相关。总的结论是：模拟提供了有用的洞察，可以应用于众多领域。
+
+## Gibbs 采样收敛的证明概要
+
+> **Beweisskizze: Konvergenz des Gibbs-Samplers**
+
+为简便起见，考虑二维情形 $(Y_1, Y_2)$。设 $F_1(\cdot)$ 为 $Y_1$ 的边际分布，$f_1(\cdot)$ 为对应密度。假设 $Y_1$ 来自 $F_1(\cdot)$，执行一步 Gibbs 算法（先模拟 $Y_2^*$ 给定 $Y_1$，再模拟 $Y_1^*$ 给定 $Y_2^*$），则：
+
+$$
+P(Y_1^* \le y_1^*) = \int P(Y_1^* \le y_1^* | y_1) f_1(y_1) \, dy_1
+$$
+$$
+= \int \int F_{1|2}(y_1^* | y_2^*) f_{2|1}(y_2^* | y_1) f_1(y_1) \, dy_1 \, dy_2^*
+$$
+$$
+= \int F_{1|2}(y_1^* | y_2^*) \underbrace{\int f_{2|1}(y_2^* | y_1) f_1(y_1) \, dy_1}_{= f_2(y_2^*)} \, dy_2^*
+$$
+$$
+= \int F_{1|2}(y_1^* | y_2^*) f_2(y_2^*) \, dy_2^* = F_1(y_1^*)
+$$
+
+这证明了边际分布是 Gibbs 算法的平稳分布。
+
+{{< pagebreak >}}
+
+# 不确定输入参数 {#sec-uncertain-input}
+
+> **Unsichere Eingabeparameter**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 模拟中**参数不确定性**的概念
+- 如何通过**两步模拟**（先模拟参数，再条件模拟）处理不确定性
+- 参数不确定性如何**改变联合分布**的形态
+:::
+
+通常，每个模拟都需要指定输入（或调优）参数 $\theta$。这些参数往往并非完全已知，可以用概率分布 $f_\theta(\theta)$（$\theta \in \Theta$）来量化其不确定性。给定 $\theta$，我们从以下条件分布中抽样：
+
+$$
+Y | \theta \sim F(\cdot; \theta)
+$$
+
+参数的不确定性导致 $Y$ 的（无条件）分布为：
+
+$$
+F(y) = P(Y \le y) = \int_{\theta \in \Theta} \int_{-\infty}^{y} f(y; \theta) f_\theta(\theta) \, d\theta \, dy
+$$
+
+::: {.callout-tip icon="false"}
+## 盲盒射击的比喻 | Die Blindschuss-Metapher
+
+想象你在练习射击，但每次射击前，教练会从一个盒子里随机抽出一把枪给你（参数 $\theta$ 的不确定性）。每把枪的精度不同（不同的 $\theta$ 导致不同的 $F(\cdot; \theta)$）。你的总体命中分布就不仅取决于你的射击技术（给定枪的分布），还取决于盒子里枪的种类分布（$f_\theta$）。两步模拟就是：先"抽枪"（模拟 $\theta^*$），再"射击"（模拟 $Y^* | \theta^*$）。
+
+*Stellen Sie sich vor, vor jedem Schuss wird die Waffe zufal ig gewahlt ($\theta^*$). Ihre Gesamttreffleistung hangt sowohl von Ihrem Konnen als auch von der Waffe ab.*
+:::
+
+模拟步骤非常直接：先从 $f_\theta(\cdot)$ 中抽取 $\theta^*$，然后从 $F(\cdot; \theta^*)$ 中抽取 $Y^*$。
+
+## 例 8.5：相关性不确定的二元正态分布
+
+> **Beispiel 8.5: Bivariate Normalverteilung mit unsicherer Korrelation**
+
+```{r}
+#| label: fig-uncertain-params
+#| fig-cap: "例 8.5：相关系数不确定时的二元模拟（仿教材 Fig. 8.16）| Bivariate Normalverteilung mit unsicherer Korrelation"
+#| fig-height: 5.5
+
+set.seed(42)
+n_unc <- 10000
+rho_star <- runif(n_unc, -1, 1)
+
+Y_unc <- numeric(n_unc)
+Z_unc <- numeric(n_unc)
+
+for (i in 1:n_unc) {
+  Z_unc[i] <- rnorm(1)
+  Y_unc[i] <- rnorm(1, rho_star[i] * Z_unc[i], sqrt(1 - rho_star[i]^2))
+}
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+plot(Z_unc, Y_unc, pch = ".", col = adjustcolor("#2563EB", 0.2), cex = 2,
+     xlab = "Z", ylab = "Y",
+     main = "不确定相关系数的散点图",
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 核密度等高线
+dens2d <- MASS::kde2d(Z_unc, Y_unc, n = 80)
+contour(dens2d, nlevels = 15, col = "#DC2626", lwd = 1.5,
+        xlab = "Z", ylab = "Y",
+        main = "结果密度等高线 | Konturdichte",
+        cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: uncertain-analysis
+#| code-fold: false
+
+cat("例 8.5 分析:\n\n")
+cat("  每一对 (Y*, Z*) 都来自一个正态分布,\n")
+cat("  但相关系数 rho 在 [-1, 1] 上均匀分布。\n\n")
+cat("  虽然给定 rho 时分布是正态的, 但参数不确定性\n")
+cat("  导致了非正态的联合分布 -- 从等高线图中\n")
+cat("  可以清楚看到形状不再是椭圆形。\n")
+```
+
+{{< pagebreak >}}
+
+# 自举法 {#sec-bootstrap}
+
+> **Bootstrapping**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **自举法（Bootstrap）** 的核心思想：从数据本身重新抽样
+- **Glivenko-Cantelli 定理**作为理论基础
+- **插入原理**（Plug-in-Prinzip）及其应用
+- 自举法构建**置信区间**的方法
+- **预测模型中的自举法**：量化模型不确定性
+:::
+
+## 插入原理
+
+> **Das Plug-in-Prinzip**
+
+我们现在转向一种根本不同的模拟技术 -- **自举法**（Bootstrapping）。其核心思想是从**已观测的数据本身**进行重新抽样。这乍听之下有些违反直觉 -- 数据不就那么多吗，能从中"创造"出新信息？但这种方法有着坚实的理论支撑。
+
+::: {.callout-tip icon="false"}
+## 考古学家的比喻 | Die Archaologen-Metapher
+
+想象你是一位考古学家，发掘出了一个古代城市遗址中的 100 块陶片。你想了解这座城市使用的所有陶器的特征（真实分布 $F$），但你只有这 100 块陶片（样本）。自举法的思想是：既然这 100 块陶片是你对真实陶器世界最好的了解，那就把它们当成"整个世界" -- 从中有放回地反复抽取，来研究你的统计量（比如陶片的平均厚度）会有多大的波动。你不是在创造新数据，而是在利用已有数据来**探索统计量的不确定性**。
+
+*Der Bootstrap ist wie ein Archaologe, der aus seinen 100 Scherben (Stichprobe) mit Zurucklegen neu schopft, um die Unsicherheit seiner Statistiken zu verstehen.*
+:::
+
+自举法由 Efron (1979) 最初提出。其理论基础是 **Glivenko-Cantelli 定理**：当 $n$ 增大时，经验分布函数 $F_n(y)$ 在所有 $y \in \mathbb{R}$ 上一致收敛于真实分布 $F(y)$。
+
+假设我们有来自数据生成过程的独立同分布样本：
+
+$$
+Y_i \sim F(\cdot), \quad \text{i.i.d.}, \quad i = 1, \ldots, n
+$$
+
+其中 $F(\cdot)$ 未知。经验分布函数定义为：
+
+$$
+F_n(y) = \frac{1}{n} \sum_{i=1}^{n} \mathbf{1}_{\{y_i \le y\}}
+$$
+
+自举法的核心思想是用 $F_n(\cdot)$ 替代未知的 $F(\cdot)$，从经验分布中抽样：
+
+$$
+Y_i^* \sim F_n(\cdot), \quad \text{i.i.d.}, \quad i = 1, \ldots, n
+$$
+
+这等价于从原始数据 $(y_1, \ldots, y_n)$ 中**有放回地抽取** $n$ 个值。
+
+```{r}
+#| label: fig-bootstrap-ecdf
+#| fig-cap: "从经验分布函数进行自举采样（仿教材 Fig. 8.17）| Bootstrap-Stichprobenziehung aus der ECDF"
+#| fig-height: 5.5
+
+set.seed(42)
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+for (n_b in c(15, 100)) {
+  y_exp <- rexp(n_b, rate = 0.3)
+  ecdf_y <- ecdf(y_exp)
+  
+  plot(ecdf_y, col = "#2563EB", lwd = 2.5,
+       xlab = "y", ylab = expression(F[n](y)),
+       main = bquote(paste("n = ", .(n_b), " | ", 
+                           "经验分布函数")),
+       cex.main = 0.9, col.main = "#1E293B")
+  grid(col = "#E2E8F0")
+  
+  # 画几个 U -> Y 的对应
+  set.seed(123)
+  u_demo <- sort(runif(5))
+  for (k in 1:5) {
+    y_gen <- quantile(y_exp, u_demo[k], type = 1)
+    segments(-1, u_demo[k], y_gen, u_demo[k], col = "#DC2626", lty = 2, lwd = 1)
+    segments(y_gen, u_demo[k], y_gen, -0.05, col = "#DC2626", lty = 2, lwd = 1)
+    points(y_gen, u_demo[k], pch = 16, col = "#DC2626", cex = 1.2)
+  }
+  text(max(y_exp) * 0.6, 0.2, "U", col = "#EA580C", font = 2, cex = 1.2)
+}
+
+par(mfrow = c(1, 1))
+```
+
+## 例 8.7：自举法估计方差的不确定性
+
+> **Beispiel 8.7: Bootstrap zur Unsicherheitsquantifizierung der Varianz**
+
+```{r}
+#| label: fig-bootstrap-demo
+#| fig-cap: "例 8.7：自举法演示（仿教材 Fig. 8.18 & 8.19）| Bootstrap-Demonstration"
+#| fig-height: 10
+
+set.seed(42)
+n_boot_demo <- 100
+y_orig <- rnorm(n_boot_demo, 0, 1)
+var_orig <- var(y_orig)
+
+# Bootstrap
+B <- 400
+var_boot <- numeric(B)
+for (b in 1:B) {
+  y_star <- sample(y_orig, n_boot_demo, replace = TRUE)
+  var_boot[b] <- var(y_star)
+}
+
+par(mfrow = c(3, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 原始数据
+plot(1:n_boot_demo, y_orig, pch = 16, col = "#2563EB", cex = 1,
+     xlab = "Index", ylab = "y",
+     main = "原始数据 (n = 100) | Originaldaten",
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 经验分布函数
+plot(ecdf(y_orig), col = "#2563EB", lwd = 2,
+     xlab = "y", ylab = "F(y)",
+     main = "经验分布函数 vs 真实 N(0,1)",
+     cex.main = 0.9, col.main = "#1E293B")
+curve(pnorm(x), add = TRUE, col = "black", lwd = 2, lty = 2)
+legend("topleft", legend = c(expression(F[n](y)), expression(Phi(y))),
+       col = c("#2563EB", "black"), lwd = 2, lty = c(1, 2), bty = "n", cex = 0.8)
+grid(col = "#E2E8F0")
+
+# 三个自举样本
+set.seed(100)
+colors_bs <- c("#DC2626", "#16A34A", "#EA580C")
+plot(1:n_boot_demo, y_orig, pch = 16, col = adjustcolor("#6B7280", 0.3), cex = 0.8,
+     xlab = "Index", ylab = "y",
+     main = "原始数据（灰）与 3 个自举样本（彩色）",
+     cex.main = 0.9, col.main = "#1E293B")
+for (k in 1:3) {
+  ys <- sample(y_orig, n_boot_demo, replace = TRUE)
+  points(1:n_boot_demo, ys, pch = k + 14, col = adjustcolor(colors_bs[k], 0.5), cex = 0.8)
+}
+grid(col = "#E2E8F0")
+
+# 自举样本的经验分布
+plot(ecdf(y_orig), col = "black", lwd = 2,
+     xlab = "y", ylab = "F(y)",
+     main = "自举样本的经验分布函数",
+     cex.main = 0.9, col.main = "#1E293B")
+set.seed(100)
+for (k in 1:3) {
+  ys <- sample(y_orig, n_boot_demo, replace = TRUE)
+  lines(ecdf(ys), col = colors_bs[k], lwd = 1.5)
+}
+legend("topleft", legend = c("原始", "自举 1", "自举 2", "自举 3"),
+       col = c("black", colors_bs), lwd = c(2, rep(1.5, 3)), bty = "n", cex = 0.7)
+grid(col = "#E2E8F0")
+
+# 自举方差分布
+plot(1:B, var_boot, pch = 16, col = adjustcolor("#9333EA", 0.4), cex = 0.8,
+     xlab = "Bootstrap 编号 b", ylab = expression(hat(sigma)^2 * "(b)"),
+     main = "自举方差估计 | Bootstrap-Varianzschatzungen",
+     cex.main = 0.9, col.main = "#1E293B")
+abline(h = var_orig, col = "#DC2626", lwd = 2, lty = 2)
+text(B * 0.8, var_orig + 0.05, 
+     bquote(hat(sigma)^2 == .(round(var_orig, 3))),
+     col = "#DC2626", font = 2, cex = 0.9)
+grid(col = "#E2E8F0")
+
+# 自举方差的分布函数与置信区间
+plot(ecdf(var_boot), col = "#9333EA", lwd = 2,
+     xlab = expression(hat(sigma)^2), ylab = expression(F[n]),
+     main = "自举分布与 90% 置信区间",
+     cex.main = 0.9, col.main = "#1E293B")
+ci_boot <- quantile(var_boot, c(0.05, 0.95))
+abline(v = ci_boot, col = "#DC2626", lwd = 2, lty = 2)
+text(ci_boot[1], 0.5, round(ci_boot[1], 3), col = "#DC2626", cex = 0.8, pos = 2)
+text(ci_boot[2], 0.5, round(ci_boot[2], 3), col = "#DC2626", cex = 0.8, pos = 4)
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: bootstrap-plugin
+#| code-fold: false
+
+cat("插入原理（Plug-in-Prinzip）的数学推导:\n\n")
+cat("  目标: 估计 Var(Y_bar) = T(F)\n\n")
+cat("  已知 F 时:\n")
+cat("    T(F) = Var(Y_bar) = sigma^2 / n\n\n")
+cat("  用 F_n 替代 F（插入原理）:\n")
+cat("    T(F_n) = hat{sigma}^2 / n\n")
+cat("    其中 hat{sigma}^2 = (1/n) * sum(y_i - y_bar)^2\n\n")
+cat("  当插入原理无法给出显式公式时,\n")
+cat("  我们用重复自举模拟来近似。\n\n")
+cat(sprintf("  本例: 原始方差 = %.4f\n", var_orig))
+cat(sprintf("         自举 90%% CI = [%.4f, %.4f]\n", ci_boot[1], ci_boot[2]))
+```
+
+## 预测模型中的自举法
+
+> **Bootstrapping in Vorhersagemodellen**
+
+自举法在预测模型中的应用尤为强大。假设我们有 i.i.d. 数据 $(x_i, y_i)$（$i = 1, \ldots, n$），已训练了预测模型 $\hat{y}(x) = h(x, \hat{\theta})$。为了量化模型在有限数据上训练的不确定性，我们可以抽取 $B$ 个自举样本：
+
+$$
+(x_i^{*(b)}, y_i^{*(b)}) \sim \{(x_i, y_i), \, i = 1, \ldots, n\} \text{ 有放回抽样}
+$$
+
+并在每个自举样本上重新训练模型，得到 $B$ 个模型 $h(x, \hat{\theta}^{(b)})$。
+
+## 例 8.8：比较两个分类器
+
+> **Beispiel 8.8: Vergleich zweier Klassifikatoren**
+
+```{r}
+#| label: fig-classifier-bootstrap
+#| fig-cap: "例 8.8：自举检验两个分类器差异（仿教材 Fig. 8.20）| Bootstrap-Test fur Klassifikatorvergleich"
+#| fig-height: 5.5
+
+set.seed(42)
+n_clf <- 1000
+
+# 真实类别
+true_class <- c(rep("cat", 292), rep("dog", 708))
+
+# 分类器 1 的预测
+pred1 <- character(n_clf)
+pred1[true_class == "cat"] <- ifelse(runif(292) < 235/292, "cat", "dog")
+pred1[true_class == "dog"] <- ifelse(runif(708) < 626/708, "dog", "cat")
+
+# 分类器 2 的预测
+pred2 <- character(n_clf)
+pred2[true_class == "cat"] <- ifelse(runif(292) < 250/292, "cat", "dog")
+pred2[true_class == "dog"] <- ifelse(runif(708) < 630/708, "dog", "cat")
+
+acc1 <- mean(pred1 == true_class)
+acc2 <- mean(pred2 == true_class)
+D_obs <- abs(acc1 - acc2)
+
+# 自举检验（H0: 两个分类器同样好）
+B_clf <- 2000
+D_boot <- numeric(B_clf)
+
+for (b in 1:B_clf) {
+  # 有放回抽样
+  idx <- sample(1:n_clf, n_clf, replace = TRUE)
+  z_b <- true_class[idx]
+  c1_b <- pred1[idx]
+  c2_b <- pred2[idx]
+  
+  # 随机交换分类器（H0 下可交换）
+  swap <- rbinom(n_clf, 1, 0.5)
+  c1_final <- ifelse(swap == 0, c1_b, c2_b)
+  c2_final <- ifelse(swap == 0, c2_b, c1_b)
+  
+  acc1_b <- mean(c1_final == z_b)
+  acc2_b <- mean(c2_final == z_b)
+  D_boot[b] <- abs(acc1_b - acc2_b)
+}
+
+p_val <- mean(D_boot >= D_obs)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(ecdf(D_boot), col = "#2563EB", lwd = 2.5,
+     xlab = expression(D^"*"), ylab = expression(F[n]),
+     main = "例 8.8：自举检验分类器差异 | Bootstrap-Test",
+     cex.main = 0.95, col.main = "#1E293B")
+abline(v = D_obs, col = "#DC2626", lwd = 2.5, lty = 2)
+text(D_obs + 0.002, 0.5, 
+     bquote(paste("D = |", .(round(acc1, 3)), " - ", .(round(acc2, 3)), 
+                  "| = ", .(round(D_obs, 3)))),
+     col = "#DC2626", font = 2, cex = 0.85, pos = 4)
+text(max(D_boot) * 0.6, 0.2, bquote(paste("p-value = ", .(round(p_val, 3)))),
+     col = "#9333EA", font = 2, cex = 1.1)
+grid(col = "#E2E8F0")
+```
+
+```{r}
+#| label: classifier-tables
+#| code-fold: false
+
+cat("例 8.8：分类器比较 | Beispiel 8.8: Klassifikatorvergleich\n\n")
+
+cat("  分类器 1 的混淆矩阵:\n")
+print(table(预测 = pred1, 真实 = true_class))
+cat(sprintf("\n  准确率: %.3f\n\n", acc1))
+
+cat("  分类器 2 的混淆矩阵:\n")
+print(table(预测 = pred2, 真实 = true_class))
+cat(sprintf("\n  准确率: %.3f\n\n", acc2))
+
+cat(sprintf("  准确率差异: |%.3f - %.3f| = %.3f\n", acc1, acc2, D_obs))
+cat(sprintf("  自举 p 值: %.3f\n\n", p_val))
+cat("  结论: 差异可以用随机波动来解释, 没有显著差异。\n")
+```
+
+{{< pagebreak >}}
+
+# 置换检验 {#sec-permutation}
+
+> **Permutationstest**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **置换检验**的基本思想：在零假设下数据可交换
+- 与自举法的区别：**无放回抽样** vs 有放回抽样
+- **Kolmogorov-Smirnov 统计量**的置换检验实现
+:::
+
+## 基本原理
+
+> **Grundprinzip**
+
+置换检验主要用于统计检验中，通过模拟生成零假设下的分布。假设我们有来自两个总体的数据：
+
+$$
+Y_i \sim F_Y(\cdot), \; \text{i.i.d.}, \; i = 1, \ldots, n \quad \text{和} \quad Z_j \sim F_Z(\cdot), \; \text{i.i.d.}, \; j = 1, \ldots, m
+$$
+
+我们想检验假设 $H_0: F_Y(\cdot) = F_Z(\cdot)$。
+
+::: {.callout-tip icon="false"}
+## 抽签分组的比喻 | Die Losziehung-Metapher
+
+置换检验就像在运动会中抽签分组。如果零假设成立（两组来自同一分布），那么把所有运动员（数据）放到一起，然后随机重新分成两组，应该不会系统性地改变两组之间的差异。我们反复这样"抽签分组"（置换），计算每次分组后的差异指标，从而得到零假设下差异的分布。与自举法不同，置换是**不放回**的 -- 每个运动员恰好分到一组中。
+
+*Wenn $H_0$ gilt, kann man alle Daten mischen und zufallig in zwei Gruppen aufteilen (ohne Zurucklegen). Die Verteilung der Teststatistik unter $H_0$ wird so simuliert.*
+:::
+
+具体操作：将数据合并为 $\boldsymbol{x} = (y_1, \ldots, y_n, z_1, \ldots, z_m)^\top$。如果 $H_0$ 成立，则所有元素来自同一分布，顺序不重要。对 $\boldsymbol{x}$ 进行随机**无放回**排列得到 $\boldsymbol{x}^*$，前 $n$ 个元素定义为 $\boldsymbol{y}^*$，后 $m$ 个元素定义为 $\boldsymbol{z}^*$。计算检验统计量，例如 Kolmogorov-Smirnov 统计量：
+
+$$
+D^* = \sup_y |F_{n,Y^*}(y) - F_{m,Z^*}(y)|
+$$
+
+重复 $B$ 次提供 $B$ 个 $D^{*(b)}$ 值，从中计算 $p$ 值。
+
+## 例 8.9：慕尼黑公寓租金比较
+
+> **Beispiel 8.9: Mietpreisvergleich in Munchen**
+
+```{r}
+#| label: fig-permutation-test
+#| fig-cap: "例 8.9：置换检验慕尼黑租金分布（仿教材 Fig. 8.21）| Permutationstest fur Mietpreise"
+#| fig-height: 9
+
+set.seed(42)
+
+# 模拟两年租金数据
+n_year1 <- 500
+n_year2 <- 500
+rent_y1 <- rgamma(n_year1, shape = 5, rate = 0.4)
+rent_y2 <- rgamma(n_year2, shape = 5, rate = 0.4) * 1.05  # 通胀因子 1.05
+inflation_factor <- 1.05
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 原始分布
+plot(ecdf(rent_y1), col = "#2563EB", lwd = 2,
+     xlab = "每平米租金 (EUR/sqm) | Miete pro qm",
+     ylab = "F(y)",
+     main = "原始租金分布（两年）| Originale Mietverteilung",
+     cex.main = 0.9, col.main = "#1E293B",
+     xlim = c(0, 35))
+lines(ecdf(rent_y2), col = "#DC2626", lwd = 2)
+legend("bottomright", legend = c("第一年 | Jahr 1", "第二年 | Jahr 2"),
+       col = c("#2563EB", "#DC2626"), lwd = 2, bty = "n", cex = 0.8)
+grid(col = "#E2E8F0")
+
+# 通胀校正后
+rent_y1_adj <- rent_y1 * inflation_factor
+plot(ecdf(rent_y1_adj), col = "#2563EB", lwd = 2,
+     xlab = "每平米租金 (EUR/sqm) | Miete pro qm",
+     ylab = "F(y)",
+     main = "通胀校正后 | Nach Inflationsbereinigung",
+     cex.main = 0.9, col.main = "#1E293B",
+     xlim = c(0, 35))
+lines(ecdf(rent_y2), col = "#DC2626", lwd = 2)
+legend("bottomright", legend = c("第一年 (校正)", "第二年"),
+       col = c("#2563EB", "#DC2626"), lwd = 2, bty = "n", cex = 0.8)
+grid(col = "#E2E8F0")
+
+# 计算 KS 统计量
+D_ks <- ks.test(rent_y1_adj, rent_y2)$statistic
+
+# 置换检验
+B_perm <- 2000
+D_perm <- numeric(B_perm)
+x_all <- c(rent_y1_adj, rent_y2)
+n_total <- length(x_all)
+
+for (b in 1:B_perm) {
+  x_shuffled <- sample(x_all)
+  y_perm <- x_shuffled[1:n_year1]
+  z_perm <- x_shuffled[(n_year1 + 1):n_total]
+  D_perm[b] <- ks.test(y_perm, z_perm)$statistic
+}
+
+p_perm <- mean(D_perm >= D_ks)
+
+# 置换分布
+hist(D_perm, breaks = 40, col = adjustcolor("#9333EA", 0.4), border = "#9333EA",
+     xlab = expression(D^"*"), ylab = "频率 | Haufigkeit",
+     main = "置换分布 | Permutationsverteilung von D*",
+     cex.main = 0.9, col.main = "#1E293B")
+abline(v = D_ks, col = "#DC2626", lwd = 2.5, lty = 2)
+text(D_ks + 0.003, max(hist(D_perm, breaks = 40, plot = FALSE)$counts) * 0.8,
+     bquote(D == .(round(D_ks, 4))), col = "#DC2626", font = 2, cex = 0.9, pos = 4)
+grid(col = "#E2E8F0")
+
+# 经验分布
+plot(ecdf(D_perm), col = "#9333EA", lwd = 2.5,
+     xlab = expression(D^"*"), ylab = expression(F[n]),
+     main = bquote(paste("p-value = ", .(round(p_perm, 3)))),
+     cex.main = 0.9, col.main = "#1E293B")
+abline(v = D_ks, col = "#DC2626", lwd = 2.5, lty = 2)
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: permutation-analysis
+#| code-fold: false
+
+cat("例 8.9 分析:\n\n")
+cat(sprintf("  KS 统计量 D = %.4f\n", D_ks))
+cat(sprintf("  置换 p 值 = %.3f\n\n", p_perm))
+cat("  结论: 通胀校正后, 没有证据表明两年的\n")
+cat("  租金分布有结构性差异。\n")
+```
+
+{{< pagebreak >}}
+
+# 练习题 {#sec-exercises}
+
+> **Ubungsaufgaben**
+
+## 练习 1：天气马尔可夫链
+
+> **Ubung 1: Wetter-Markov-Kette**
+
+假设天气有三种状态："晴天"(S)、"多云"(C)、"雨天"(R)。给定今天的天气，明天天气的转移概率如下表所示。
+
+| 今天/明天 | S | C | R |
+|:---------:|:---:|:---:|:---:|
+| S | 0.50 | 0.25 | 0.25 |
+| C | 0.20 | 0.40 | 0.40 |
+| R | 0.20 | 0.50 | 0.30 |
+
+```{r}
+#| label: exercise-1
+#| code-fold: false
+
+cat("练习 1：天气马尔可夫链 | Ubung 1: Wetter-Markov-Kette\n\n")
+
+# 转移矩阵
+P <- matrix(c(0.50, 0.25, 0.25,
+              0.20, 0.40, 0.40,
+              0.20, 0.50, 0.30), byrow = TRUE, nrow = 3)
+rownames(P) <- colnames(P) <- c("S", "C", "R")
+
+cat("a) 今天晴天, 两天后也晴天的概率:\n\n")
+cat("   P(X_2 = S | X_0 = S) = sum_k P(X_1 = k | X_0 = S) * P(X_2 = S | X_1 = k)\n")
+P2 <- P %*% P
+cat(sprintf("   = P^2[S,S] = %.4f\n\n", P2["S", "S"]))
+
+cat("b) 模拟 n = 1000 天的马尔可夫链:\n\n")
+
+set.seed(42)
+n_weather <- 1000
+states <- c("S", "C", "R")
+weather <- character(n_weather)
+weather[1] <- "S"
+
+for (t in 2:n_weather) {
+  current <- which(states == weather[t-1])
+  weather[t] <- sample(states, 1, prob = P[current, ])
+}
+
+freq <- table(weather) / n_weather
+cat("   边际分布（模拟）:\n")
+cat(sprintf("     P(S) = %.3f, P(C) = %.3f, P(R) = %.3f\n\n", 
+            freq["S"], freq["C"], freq["R"]))
+
+# 理论平稳分布: pi * P = pi, sum(pi) = 1
+# 解线性方程组
+A <- t(P) - diag(3)
+A[3, ] <- 1
+b <- c(0, 0, 1)
+pi_stat <- solve(A, b)
+cat("   边际分布（理论平稳分布）:\n")
+cat(sprintf("     P(S) = %.4f, P(C) = %.4f, P(R) = %.4f\n\n", 
+            pi_stat[1], pi_stat[2], pi_stat[3]))
+```
+
+```{r}
+#| label: fig-exercise-1c
+#| fig-cap: "练习 1c: 天气马尔可夫链的转移可视化 | Ubung 1c: Visualisierung der Wetter-Markov-Kette"
+#| fig-height: 5
+
+cat("c) 马尔可夫链可视化:\n\n")
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+weather_num <- ifelse(weather == "S", 1, ifelse(weather == "C", 2, 3))
+plot(1:200, weather_num[1:200], type = "s", col = "#2563EB", lwd = 1.5,
+     xlab = "天数 | Tag", ylab = "",
+     main = "天气马尔可夫链（前 200 天）| Wetter-Markov-Kette",
+     cex.main = 0.95, col.main = "#1E293B",
+     yaxt = "n", ylim = c(0.5, 3.5))
+axis(2, at = 1:3, labels = c("晴 S", "云 C", "雨 R"), las = 2)
+grid(col = "#E2E8F0")
+
+# 标注颜色
+cols_w <- c("#FBBF24", "#94A3B8", "#3B82F6")
+for (i in 1:200) {
+  points(i, weather_num[i], pch = 16, 
+         col = cols_w[weather_num[i]], cex = 0.6)
+}
+
+cat("  由于马尔可夫链从平稳分布的一个典型状态（S）开始,\n")
+cat("  且混合速度较快, 因此几乎没有明显的 burn-in 期。\n")
+```
+
+## 练习 2：自举法估计中位数
+
+> **Ubung 2: Bootstrap fur den Median**
+
+```{r}
+#| label: exercise-2
+#| code-fold: false
+
+cat("练习 2：自举法估计中位数 | Ubung 2: Bootstrap fur den Median\n\n")
+
+x_data <- c(2.49, 1.35, 2.48, 1.54, 3.84)
+theta_hat <- median(x_data)
+cat(sprintf("  样本中位数: theta_hat = %.2f\n\n", theta_hat))
+
+# a) 非参数自举
+set.seed(42)
+B2 <- 5000
+theta_boot_np <- numeric(B2)
+for (b in 1:B2) {
+  x_star <- sample(x_data, length(x_data), replace = TRUE)
+  theta_boot_np[b] <- median(x_star)
+}
+se_np <- sd(theta_boot_np)
+cat(sprintf("a) 非参数自举标准误: se(theta_hat) = %.4f\n\n", se_np))
+
+# b) 参数自举（假设正态分布）
+mu_hat <- mean(x_data)
+sigma_hat <- sd(x_data)
+theta_boot_p <- numeric(B2)
+for (b in 1:B2) {
+  x_star_p <- rnorm(length(x_data), mu_hat, sigma_hat)
+  theta_boot_p[b] <- median(x_star_p)
+}
+se_p <- sd(theta_boot_p)
+cat(sprintf("b) 参数自举标准误: se(theta_hat) = %.4f\n", se_p))
+cat("   参数自举的优势: 利用了分布假设, 在假设正确时可以\n")
+cat("   产生更多样化的自举样本, 减少离散化问题。\n\n")
+
+# c) 偏差估计
+bias_boot <- mean(theta_boot_np) - theta_hat
+theta_corrected <- theta_hat - bias_boot
+cat(sprintf("c) 自举偏差估计: bias = %.4f\n", bias_boot))
+cat(sprintf("   偏差校正估计: theta_corrected = %.4f\n\n", theta_corrected))
+
+# d) 对无偏估计量的讨论
+cat("d) 对于无偏估计量（如样本均值估计总体均值）:\n")
+cat("   E[theta_hat] = theta, 因此 bias = 0。\n")
+cat("   自举偏差估计应接近 0, 不提供额外信息。\n")
+cat("   自举法对于已知无偏的估计量来说, 偏差估计意义不大,\n")
+cat("   但标准误估计仍然有用。\n")
+```
+
+## 练习 3：自举检验与置换检验
+
+> **Ubung 3: Bootstrap-Test und Permutationstest**
+
+```{r}
+#| label: exercise-3
+#| fig-cap: "练习 3b: TSV 1860 Munich 球迷数量比较 | Ubung 3b: Zuschauerzahlen-Vergleich"
+#| fig-height: 5.5
+
+cat("练习 3：自举检验与置换检验\n\n")
+
+cat("a) 自举法用于假设检验:\n")
+cat("   在 H0 下, 通过重新抽样构造检验统计量的零分布。\n")
+cat("   与置换检验的关系: 两者都通过模拟生成零分布,\n")
+cat("   但自举是有放回抽样, 置换是无放回重新排列。\n")
+cat("   自举更灵活, 置换在 H0 下保持精确的可交换性。\n\n")
+
+# b) TSV 1860 Munich
+tsv <- c(1450, 1700, 5850)
+others <- c(1780, 2420, 2580, 2650, 2770, 3030, 3070, 3240, 3380, 3450,
+            3490, 3600, 3610, 3610, 3750, 3780, 3790, 4080, 4230, 4450)
+
+cat("b) H0: TSV 1860 球迷分布 = 其他俱乐部分布\n")
+cat("   H1: TSV 1860 球迷分布 != 其他俱乐部分布\n\n")
+
+# KS 统计量
+D_tsv <- ks.test(tsv, others)$statistic
+
+# 置换检验
+set.seed(42)
+B3 <- 5000
+all_fans <- c(tsv, others)
+n_tsv <- length(tsv)
+n_all <- length(all_fans)
+D_boot3 <- numeric(B3)
+
+for (b in 1:B3) {
+  perm <- sample(all_fans)
+  group1 <- perm[1:n_tsv]
+  group2 <- perm[(n_tsv+1):n_all]
+  D_boot3[b] <- ks.test(group1, group2)$statistic
+}
+
+p_tsv <- mean(D_boot3 >= D_tsv)
+cat(sprintf("   KS 统计量: D = %.4f\n", D_tsv))
+cat(sprintf("   自举/置换 p 值: %.4f\n\n", p_tsv))
+
+if (p_tsv < 0.1) {
+  cat("   结论: 在 alpha = 0.1 的水平上, 拒绝 H0。\n")
+  cat("   TSV 1860 的球迷分布与其他俱乐部显著不同。\n\n")
+} else {
+  cat("   结论: 在 alpha = 0.1 的水平上, 不拒绝 H0。\n\n")
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+hist(D_boot3, breaks = 40, col = adjustcolor("#9333EA", 0.4), border = "#9333EA",
+     xlab = expression(D^"*"), ylab = "频率",
+     main = "置换检验：TSV 1860 vs 其他俱乐部",
+     cex.main = 0.95, col.main = "#1E293B")
+abline(v = D_tsv, col = "#DC2626", lwd = 2.5, lty = 2)
+text(D_tsv + 0.02, max(hist(D_boot3, breaks = 40, plot = FALSE)$counts) * 0.7,
+     bquote(paste("D = ", .(round(D_tsv, 3)), ", p = ", .(round(p_tsv, 3)))),
+     col = "#DC2626", font = 2, cex = 0.9, pos = 4)
+grid(col = "#E2E8F0")
+```
+
+```{r}
+#| label: exercise-3c
+#| code-fold: false
+
+cat("c) 两样本 t 检验比较:\n\n")
+t_result <- t.test(tsv, others)
+cat(sprintf("   t 统计量: %.4f\n", t_result$statistic))
+cat(sprintf("   p 值: %.4f\n\n", t_result$p.value))
+
+cat("   比较:\n")
+cat("     - t 检验假设: 正态分布, 检验均值差异\n")
+cat("     - 置换检验假设: 无特定分布假设, 检验整个分布差异\n\n")
+cat("     - TSV 1860 只有 3 个观测, 且分布可能非正态\n")
+cat("       (一个值远大于其他两个)\n")
+cat("     - 在小样本和非正态情况下, 置换检验更可靠\n")
+cat("     - t 检验只检验均值, 而置换检验（KS）可以\n")
+cat("       检测分布的任何差异（形状、位置、离散度等）\n")
+```
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心概念链
+
+```{r}
+#| label: fig-summary-chain
+#| fig-cap: "本章知识逻辑链 | Logikkette der Konzepte dieses Kapitels"
+#| fig-height: 7
+#| fig-width: 12
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 18), ylim = c(0, 9), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("第八章知识逻辑链 | Logikkette Kapitel 8")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# 节点
+nx <- c(3, 9, 15, 3, 9, 15, 6, 12)
+ny <- c(7.5, 7.5, 7.5, 4.5, 4.5, 4.5, 1.5, 1.5)
+labels <- c(
+  "伪随机数\n均匀分布\nGleichverteilung",
+  "逆变换 / 拒绝采样\n已知 F 或 f\nInversion / Rejection",
+  "MCMC\nMetropolis-Hastings\nProportional zu f",
+  "多元正态\nSVD / 条件分解\nMultivariate Normal",
+  "Gibbs 采样\n马尔可夫场\nGibbs / Markov-Felder",
+  "不确定参数\n两步模拟\nUnsichere Parameter",
+  "自举法\n插入原理\nBootstrap",
+  "置换检验\n无放回排列\nPermutation"
+)
+fills <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#E0E7FF", "#D1FAE5", "#FEE2E2", "#F3E8FF", "#FEF9C3")
+bords <- c("#2563EB", "#D97706", "#DB2777", "#6366F1", "#16A34A", "#DC2626", "#9333EA", "#CA8A04")
+
+for (i in 1:8) {
+  rect(nx[i]-2, ny[i]-0.9, nx[i]+2, ny[i]+0.9,
+       col = fills[i], border = bords[i], lwd = 2)
+  text(nx[i], ny[i], labels[i], cex = 0.5, font = 2, col = "#1E293B")
+}
+
+# 箭头连接
+draw_arrow <- function(x1, y1, x2, y2, label = "") {
+  arrows(x1, y1, x2, y2, col = "#64748B", lwd = 1.8, length = 0.10)
+  if (nchar(label) > 0) {
+    mx <- (x1 + x2) / 2; my <- (y1 + y2) / 2
+    text(mx, my + 0.3, label, cex = 0.4, col = "#EA580C", font = 3)
+  }
+}
+
+draw_arrow(5, 7.5, 7, 7.5, "F 已知")
+draw_arrow(11, 7.5, 13, 7.5, "f 未归一化")
+draw_arrow(3, 6.5, 3, 5.5, "多元扩展")
+draw_arrow(9, 6.5, 9, 5.5, "逐分量采样")
+draw_arrow(15, 6.5, 15, 5.5, "参数模拟")
+draw_arrow(6, 4.5, 7, 4.5, "")
+draw_arrow(5, 3.5, 6, 2.5, "数据驱动")
+draw_arrow(11, 3.5, 12, 2.5, "假设检验")
+draw_arrow(8, 1.5, 10, 1.5, "")
+```
+
+## 公式速查表
+
+| 公式 | 名称 | 编号 |
+|:-----|:-----|:----:|
+| $x_n := (a \cdot x_{n-1}) \bmod m$ | 乘法同余法 | 8.1 |
+| $\frac{1}{N} \sum_{i=1}^{N} \tilde{g}(U_i) \to E[\tilde{g}(U)]$ | 蒙特卡洛积分 | 8.5 |
+| $Y = F^{-1}(U), \; U \sim \text{Uniform}[0,1]$ | 逆变换法 | Prop. 8.1 |
+| $U \le f(Y^*) / (a \cdot f^*(Y^*))$ | 拒绝采样接受条件 | -- |
+| $E_F[h(Y)] = E_{F^*}\left[h(Y) \cdot f(Y)/f^*(Y)\right]$ | 重要性采样 | -- |
+| $\alpha = \min\left(1, \frac{\tilde{f}(Y^*)}{\tilde{f}(Y^{*(t)})} \cdot \frac{g(Y^{*(t)}|Y^*)}{g(Y^*|Y^{*(t)})}\right)$ | MH 接受概率 | 8.13 |
+| $\boldsymbol{Y}^* = \Sigma^{1/2} \boldsymbol{Z}^* + \boldsymbol{\mu}$ | 多元正态模拟 | 8.16 |
+| $Y_j^* \sim F_{Y_j|Y_{-j}}(\cdot | Y_{-j}^*)$ | Gibbs 采样步骤 | 8.24 |
+| $Y_i^* \sim F_n(\cdot)$ 有放回 | 自举法 | 8.33 |
+| $D^* = \sup_y |F_{n,Y^*}(y) - F_{m,Z^*}(y)|$ | 置换 KS 统计量 | -- |
+
+## 本章的八个核心洞察
+
+| 编号 | 洞察 | 关键词 |
+|:----:|:------|:------|
+| 1 | 计算机生成的"随机数"是确定性的伪随机数，但统计性质与真随机数无异 | 伪随机数 |
+| 2 | 均匀随机数可以通过蒙特卡洛方法计算积分，统计工具能量化近似精度 | 蒙特卡洛 |
+| 3 | 已知分布函数时用逆变换法，已知密度时用拒绝采样或重要性采样 | 逆变换/拒绝 |
+| 4 | MCMC 能从仅知比例因子的密度中采样，归一化常数在接受概率中消去 | Metropolis-Hastings |
+| 5 | 提议分布的方差选择至关重要：最佳接受率约 20%--30% | 调优 |
+| 6 | Gibbs 采样将多元问题分解为一系列条件一元问题，可与 MH 结合使用 | Gibbs 采样 |
+| 7 | 自举法通过从经验分布有放回抽样，量化统计量的不确定性，理论基础是 Glivenko-Cantelli 定理 | Bootstrap |
+| 8 | 置换检验通过无放回重排数据生成零假设下的分布，无需分布假设 | 置换检验 |
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 均匀分布与基础模拟
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Pseudozufallszahl | 伪随机数 | pseudo-random number |
+| die multiplikative Kongruenzmethode | 乘法同余法 | multiplicative congruential method |
+| der Startwert (Seed) | 种子值 / 起始值 | seed / starting value |
+| die Gleichverteilung | 均匀分布 | uniform distribution |
+| die Monte-Carlo-Integration | 蒙特卡洛积分 | Monte Carlo integration |
+| das Gesetz der grossen Zahlen | 大数定律 | law of large numbers |
+| der zentrale Grenzwertsatz | 中心极限定理 | central limit theorem |
+| das Konfidenzintervall | 置信区间 | confidence interval |
+| die Normierungskonstante | 归一化常数 | normalization constant |
+
+## 分布模拟方法
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Inversionsmethode | 逆变换法 | inverse transform method |
+| die Verteilungsfunktion | 分布函数 | distribution function |
+| die Dichte(funktion) | 密度（函数）| density (function) |
+| die Verwerfungsmethode (Rejection Sampling) | 拒绝采样 | rejection sampling |
+| die Vorschlagsverteilung (Proposal) | 提议分布 | proposal distribution |
+| die Umbrella-Dichte | 伞密度 | umbrella density |
+| die Akzeptanzwahrscheinlichkeit | 接受概率 | acceptance probability |
+| das Importance Sampling | 重要性采样 | importance sampling |
+| die Gewichtung | 加权 | weighting |
+
+## MCMC 与马尔可夫链
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Markov-Kette | 马尔可夫链 | Markov chain |
+| die Ubergangsverteilung | 转移分布 | transition distribution |
+| die stationare Verteilung | 平稳分布 | stationary distribution |
+| der Metropolis-Hastings-Algorithmus | Metropolis-Hastings 算法 | Metropolis-Hastings algorithm |
+| die Markov-Ketten-Monte-Carlo-Methode (MCMC) | 马尔可夫链蒙特卡洛方法 | Markov chain Monte Carlo |
+| die Autokorrelation | 自相关 | autocorrelation |
+| das Thinning (Verdunnung) | 稀释 | thinning |
+| die Burn-in-Phase | 预热期 | burn-in period |
+| die Konvergenz | 收敛 | convergence |
+
+## Gibbs 采样与马尔可夫场
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| das Gibbs-Sampling | Gibbs 采样 | Gibbs sampling |
+| die bedingte Verteilung | 条件分布 | conditional distribution |
+| die Randverteilung | 边际分布 | marginal distribution |
+| das Markov-Feld | 马尔可夫场 | Markov field |
+| die Nachbarschaftsstruktur | 邻域结构 | neighbourhood structure |
+| das Gauss'sche Markov-Zufallsfeld (GMRF) | 高斯马尔可夫随机场 | Gaussian Markov random field |
+| die bedingte Unabhangigkeit | 条件独立性 | conditional independence |
+| die Faktorisierung | 因式分解 | factorization |
+
+## 多元正态分布
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die multivariate Normalverteilung | 多元正态分布 | multivariate normal distribution |
+| die Singularwertzerlegung (SVD) | 奇异值分解 | singular value decomposition |
+| die Eigenwerte / Eigenvektoren | 特征值 / 特征向量 | eigenvalues / eigenvectors |
+| die Kovarianzmatrix | 协方差矩阵 | covariance matrix |
+| die positiv definite Matrix | 正定矩阵 | positive definite matrix |
+
+## 自举法与置换检验
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| der Bootstrap / das Bootstrapping | 自举法 | bootstrap / bootstrapping |
+| der nichtparametrische Bootstrap | 非参数自举 | nonparametric bootstrap |
+| der parametrische Bootstrap | 参数自举 | parametric bootstrap |
+| die empirische Verteilungsfunktion | 经验分布函数 | empirical distribution function |
+| das Plug-in-Prinzip | 插入原理 | plug-in principle |
+| das Ziehen mit Zurucklegen | 有放回抽样 | sampling with replacement |
+| das Ziehen ohne Zurucklegen | 无放回抽样 | sampling without replacement |
+| die Verzerrung (Bias) | 偏差 | bias |
+| der Standardfehler | 标准误 | standard error |
+| der Permutationstest | 置换检验 | permutation test |
+| die Kolmogorov-Smirnov-Statistik | Kolmogorov-Smirnov 统计量 | Kolmogorov-Smirnov statistic |
+| der p-Wert | p 值 | p-value |
+| die Verwechslungsmatrix | 混淆矩阵 | confusion matrix |
+| die Genauigkeit (Accuracy) | 准确率 | accuracy |
+:::

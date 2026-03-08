@@ -1,0 +1,1985 @@
+---
+title: "第三章：学习与估计"
+subtitle: "从信息论到统计推断的完整旅程 | Von der Informationstheorie zur statistischen Inferenz"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+想象你是一位制图师，受命为一片从未被精确测量过的土地绘制地图。真实的地形你无法完全了解（数据生成过程 $G(\cdot)$），你手上只有若干勘测点（数据），而你的地图集是一种固定画法的参数化系统（统计模型 $\mathcal{F}$）。本章回答的核心问题是：
+
+*Stellen Sie sich vor, Sie sind ein Kartograf. Das wahre Gelande ($G(\cdot)$) ist unbekannt; Sie besitzen nur Vermessungspunkte (Daten) und ein parametrisches Kartensystem ($\mathcal{F}$). Die Kernfragen dieses Kapitels sind:*
+
+1. **如何度量地图的"失真"？** —— KL 散度
+2. **如何从勘测点找到最不失真的地图？** —— 似然与最大似然估计
+3. **如果你对地形有先验经验呢？** —— 贝叶斯方法
+4. **你画出的地图有哪些质量保证？** —— 相合性、充分性、有效性
+5. **如何量化地图上的不确定性？** —— 置信区间与可信区间
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图 | Lernroadmap dieses Kapitels"
+#| fig-height: 4.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 12), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+steps_x <- c(1.2, 3.4, 5.6, 7.8, 10.2)
+steps_y <- rep(4.2, 5)
+arrows(steps_x[-5] + 0.85, steps_y[-5], steps_x[-1] - 0.85, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("KL散度\n度量失真", "似然函数\n从KL到MLE", 
+               "贝叶斯\n加入先验", "估计性质\n质量保证", 
+               "置信区间\n量化不确定")
+labels_de <- c("KL-Divergenz", "Likelihood\nMLE", 
+               "Bayes\nPrior + Posterior", "Konsistenz\nSuffizienz", 
+               "Konfidenz-\nintervall")
+colors <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#E0E7FF", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DB2777", "#6366F1", "#16A34A")
+
+for (i in 1:5) {
+  rect(steps_x[i] - 0.85, steps_y[i] - 0.9, steps_x[i] + 0.85, steps_y[i] + 0.9,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.25, labels_cn[i], cex = 0.68, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.5, col = "#64748B", font = 3)
+  text(steps_x[i] - 0.6, steps_y[i] + 0.75, paste0("\u00a7", i), 
+       cex = 0.6, col = borders[i], font = 2)
+}
+
+arrows(0.5, 1.2, 11.5, 1.2, col = "#DC2626", lwd = 2, length = 0.15)
+text(6, 1.6, "从理论到实践，层层递进  >>>", cex = 0.85, col = "#DC2626")
+```
+
+**最终目标**：理解下面这条链路中每一个符号的含义——
+
+$$
+G(\cdot) \;\xrightarrow{\text{KL散度}}\; \theta_0 \;\xrightarrow{\text{似然估计}}\; \hat{\theta} \;\xrightarrow{\text{不确定性}}\; \text{置信区间}
+$$
+
+现在看不懂？**完全没关系**——读完本章，这条链将变得水到渠成。
+
+{{< pagebreak >}}
+
+# KL 散度：衡量分布之间的"距离" {#sec-kl}
+
+> **KL-Divergenz: Den "Abstand" zwischen Verteilungen messen**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 数据生成过程 $G(\cdot)$ 与统计模型 $\mathcal{F}$ 的区别
+- KL 散度的定义、直觉与计算
+- KL 散度为什么**总是非负**
+- KL 散度的**不对称性**
+- 如何通过最小化 KL 散度找到**最优参数** $\theta_0$
+:::
+
+## 数据生成过程与统计模型
+
+> **Datengenerierungsprozess und statistisches Modell**
+
+现实中，数据是由某个未知的**数据生成过程（Datengenerierungsprozess）** $G(\cdot)$ 产生的：
+
+$$
+Y_i \sim G(y), \quad \text{i.i.d.}, \quad i = 1, \ldots, n \tag{3.1}
+$$
+
+作为制图师，你无法直接看到真实地形 $G(\cdot)$，但你手上有一套制图工具——**统计模型**：
+
+$$
+\mathcal{F} = \{F(\cdot\,; \theta), \; \theta \in \Theta\}
+$$
+
+这是一族由参数 $\theta$ 索引的分布。调节 $\theta$ 就像调节绘图笔的粗细和角度——不同的 $\theta$ 画出不同的地图。
+
+**核心问题**：$\mathcal{F}$ 中哪张"地图"最接近真实的"地形" $G(\cdot)$？
+
+```{r}
+#| label: fig-model-space
+#| fig-cap: "数据生成过程 G(.) 与统计模型族 F 的关系 | Beziehung zwischen G(.) und der Modellfamilie F"
+#| fig-height: 5
+
+par(mar = c(1, 1, 2.5, 1), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("从真实分布到统计模型 | Von der wahren Verteilung zum statistischen Modell",
+      cex.main = 1.2, col.main = "#1E293B")
+
+# 外圈：所有可能的数据生成过程
+symbols(5, 4.5, circles = 3.5, inches = FALSE, add = TRUE,
+        fg = "#94A3B8", bg = adjustcolor("#F1F5F9", 0.5), lwd = 2)
+text(2.2, 7.3, "所有可能的数据生成过程", cex = 0.8, col = "#64748B", font = 3)
+text(2.2, 6.9, "Alle moglichen DGP", cex = 0.65, col = "#94A3B8", font = 3)
+
+# 内圈：统计模型族 F
+symbols(5.5, 3.8, circles = 1.8, inches = FALSE, add = TRUE,
+        fg = "#2563EB", bg = adjustcolor("#DBEAFE", 0.5), lwd = 2.5)
+text(5.5, 2.3, expression(paste(F, " = { F(.; ", theta, "), ", theta, " ", 
+                                 scriptscriptstyle("\u2208"), " ", Theta, " }")),
+     cex = 0.85, col = "#2563EB", font = 2)
+
+# G(.) 在外圈但不在内圈
+points(3.5, 6.2, pch = 8, cex = 2, col = "#DC2626", lwd = 2.5)
+text(3.5, 6.6, expression(G(cdot)), cex = 1.2, col = "#DC2626", font = 2)
+
+# theta_0：F 中离 G 最近的
+points(4.5, 4.8, pch = 16, cex = 1.8, col = "#16A34A")
+text(4.2, 5.2, expression(F(cdot ~ ";" ~ theta[0])), cex = 0.9, col = "#16A34A", font = 2)
+
+# theta_hat：估计值
+points(5.8, 4.2, pch = 17, cex = 1.5, col = "#9333EA")
+text(6.5, 4.5, expression(F(cdot ~ ";" ~ hat(theta))), cex = 0.9, col = "#9333EA", font = 2)
+
+# 连线
+arrows(3.5, 6.0, 4.4, 5.0, col = "#EA580C", lwd = 2, lty = 2, length = 0.12)
+text(3.3, 5.4, "最小距离", cex = 0.75, col = "#EA580C", font = 2)
+
+arrows(4.7, 4.7, 5.6, 4.3, col = "#9333EA", lwd = 1.5, lty = 3, length = 0.1)
+text(5.8, 4.9, expression(hat(theta) %->% theta[0]), cex = 0.8, col = "#9333EA")
+
+# 图例
+legend("bottomright", 
+       legend = c(expression("真实分布 " * G(cdot)),
+                  expression("最优近似 " * F(cdot ~ ";" ~ theta[0])),
+                  expression("估计值 " * F(cdot ~ ";" ~ hat(theta)))),
+       pch = c(8, 16, 17), col = c("#DC2626", "#16A34A", "#9333EA"),
+       pt.cex = c(1.5, 1.3, 1.2), bty = "n", cex = 0.85)
+```
+
+::: {.callout-tip icon="false"}
+## 制图师的比喻 | Die Kartografen-Metapher
+
+- **$G(\cdot)$**：真实地形——复杂、未知，可能不在你的画法能力范围内
+- **$\mathcal{F}$**：你的制图系统——比如"只能画等高线图"。$\theta$ 控制线的间距和走向
+- **$\theta_0$**：在你的画法限制下，**理论上最好**的那张地图
+- **$\hat{\theta}$**：根据有限勘测点**实际画出**的地图（有误差）
+
+*$G(\cdot)$: Wahres Gelande. $\mathcal{F}$: Ihr Kartensystem. $\theta_0$: Theoretisch beste Karte. $\hat{\theta}$: Tatsachlich gezeichnete Karte.*
+:::
+
+## KL 散度的定义
+
+> **Definition der KL-Divergenz**
+
+我们需要一把"尺子"来衡量两个分布 $G(\cdot)$ 和 $F(\cdot)$ 之间的差异。这把尺子就是 **Kullback-Leibler 散度**（KL-Divergenz）。
+
+::: {.callout-important icon="false"}
+## 定义 3.1：KL 散度 | Definition 3.1: KL-Divergenz
+
+对于两个分布函数 $G(\cdot)$ 和 $F(\cdot)$，其密度或概率质量函数分别为 $g(y)$ 和 $f(y)$，KL 散度定义为：
+
+$$
+KL(G, F) = \int \log \frac{g(y)}{f(y)} \, dG(y)
+$$
+
+若分布是连续的：
+
+$$
+KL(G, F) = \int \log \frac{g(y)}{f(y)} \, g(y) \, dy = \underbrace{\int \log g(y) \cdot g(y) \, dy}_{\text{负熵 | negative Entropie}} - \underbrace{\int \log f(y) \cdot g(y) \, dy}_{\text{交叉熵 | Kreuzentropie}}
+$$
+
+若分布是离散的，积分替换为求和。
+:::
+
+**直觉**：KL 散度衡量的是"用 $F$ 去近似 $G$ 时，你会有多'意外'"。如果 $F$ 和 $G$ 完全一致，你永远不会意外，KL 为 0。如果 $F$ 在某些地方与 $G$ 差距很大，你就会很"意外"，KL 就大。
+
+其中 $\int \log g(y) \cdot g(y) \, dy$ 称为**熵（Entropie）**，对于离散随机变量 $Y$，熵是正的，除非分布退化为在某个点 $y_0$ 处的单点质量。
+
+```{r}
+#| label: fig-kl-visualization
+#| fig-cap: "KL 散度的可视化：从两个密度到最终的散度值（仿教材 Fig. 3.2）| Visualisierung der KL-Divergenz"
+#| fig-height: 10
+
+par(mfrow = c(4, 1), bg = "#F8FAFC", mar = c(3.5, 4.5, 2.5, 1))
+
+y_seq <- seq(-5, 5, length.out = 500)
+
+# 两个分布：g ~ N(0, 1), f ~ N(0.8, 1.3)
+g_y <- dnorm(y_seq, mean = 0, sd = 1)
+f_y <- dnorm(y_seq, mean = 0.8, sd = 1.3)
+
+# 图 1：两个密度
+plot(y_seq, g_y, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "", ylab = "密度 | Dichte",
+     main = "(1) 两个分布 g(y) 和 f(y) | Zwei Verteilungen",
+     cex.main = 1.1, col.main = "#1E293B")
+lines(y_seq, f_y, col = "#DC2626", lwd = 3, lty = 2)
+legend("topright", legend = c("g(y) = N(0, 1)", "f(y) = N(0.8, 1.3)"),
+       col = c("#2563EB", "#DC2626"), lwd = 3, lty = c(1, 2), bty = "n", cex = 0.9)
+grid(col = "#E2E8F0")
+
+# 图 2：对数比
+log_ratio <- log(g_y / f_y)
+log_ratio[!is.finite(log_ratio)] <- NA
+plot(y_seq, log_ratio, type = "l", col = "#EA580C", lwd = 2.5,
+     xlab = "", ylab = "log(g/f)",
+     main = "(2) 对数密度比 log(g(y)/f(y)) | Log-Dichteverhaltnis",
+     cex.main = 1.1, col.main = "#1E293B")
+abline(h = 0, col = "#94A3B8", lty = 3)
+grid(col = "#E2E8F0")
+
+# 图 3：加权对数比（被积函数）
+integrand <- log_ratio * g_y
+plot(y_seq, integrand, type = "l", col = "#9333EA", lwd = 2.5,
+     xlab = "", ylab = "log(g/f) * g(y)",
+     main = "(3) 被积函数 log(g(y)/f(y)) * g(y) | Integrand",
+     cex.main = 1.1, col.main = "#1E293B")
+polygon(c(y_seq, rev(y_seq)), 
+        c(pmax(integrand, 0, na.rm = TRUE), rep(0, length(y_seq))),
+        col = adjustcolor("#16A34A", 0.3), border = NA)
+polygon(c(y_seq, rev(y_seq)), 
+        c(pmin(integrand, 0, na.rm = TRUE), rep(0, length(y_seq))),
+        col = adjustcolor("#DC2626", 0.3), border = NA)
+abline(h = 0, col = "#94A3B8", lty = 3)
+grid(col = "#E2E8F0")
+
+# 图 4：累积积分 → KL 散度
+dx <- diff(y_seq[1:2])
+cumul_kl <- cumsum(integrand * dx)
+cumul_kl[!is.finite(cumul_kl)] <- NA
+plot(y_seq, cumul_kl, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "y", ylab = "累积 KL | Kumuliert",
+     main = "(4) 累积积分 -> KL 散度 | Kumulative Integration -> KL-Divergenz",
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+kl_val <- tail(cumul_kl[is.finite(cumul_kl)], 1)
+abline(h = kl_val, col = "#DC2626", lwd = 2, lty = 2)
+text(2, kl_val + 0.02, paste0("KL(G, F) = ", round(kl_val, 4)), 
+     col = "#DC2626", font = 2, cex = 1.1)
+
+par(mfrow = c(1, 1))
+```
+
+## KL 散度的性质
+
+> **Eigenschaften der KL-Divergenz**
+
+### 性质 1：KL 散度始终非负 | KL-Divergenz ist immer nicht-negativ
+
+$$
+KL(G, F) \geq 0, \quad \text{等号成立当且仅当 } G(\cdot) \equiv F(\cdot)
+$$
+
+::: {.callout-tip collapse="true"}
+## 点击展开证明 | Klicken zum Aufklappen des Beweises
+
+利用不等式 $\log(y) \leq y - 1$（等号在 $y = 1$ 时成立）：
+
+$$
+\begin{aligned}
+KL(G, F) &= \int \log \frac{g(y)}{f(y)} g(y) \, dy \\
+&= -\int \log \frac{f(y)}{g(y)} g(y) \, dy \\
+&\geq \int \left(1 - \frac{f(y)}{g(y)}\right) g(y) \, dy \\
+&= \int g(y) \, dy - \int f(y) \, dy \\
+&= 1 - 1 = 0.
+\end{aligned}
+$$
+:::
+
+```{r}
+#| label: fig-log-inequality
+#| fig-cap: "log(y) <= y - 1：KL 非负性证明的关键不等式 | Schlusselungleichung fur den Beweis"
+#| fig-height: 4
+
+par(bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+y_seq2 <- seq(0.01, 4, length.out = 300)
+plot(y_seq2, log(y_seq2), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "y", ylab = "", ylim = c(-3, 3),
+     main = expression("log(y) " <= " y - 1"),
+     cex.main = 1.1, col.main = "#1E293B")
+lines(y_seq2, y_seq2 - 1, col = "#DC2626", lwd = 3, lty = 2)
+points(1, 0, pch = 16, col = "#16A34A", cex = 2.5)
+text(1.3, 0.3, "y = 1: 等号成立", col = "#16A34A", font = 2, cex = 0.9)
+grid(col = "#E2E8F0")
+legend("topleft", legend = c("log(y)", "y - 1"),
+       col = c("#2563EB", "#DC2626"), lwd = 3, lty = c(1, 2), bty = "n", cex = 1)
+polygon(c(y_seq2, rev(y_seq2)),
+        c(y_seq2 - 1, rev(log(y_seq2))),
+        col = adjustcolor("#EA580C", 0.15), border = NA)
+```
+
+### 性质 2：KL 散度不对称 | KL-Divergenz ist nicht symmetrisch
+
+$$
+KL(G, F) \neq KL(F, G) \quad \text{(通常情况下 | im Allgemeinen)}
+$$
+
+因此 KL 散度**不是**度量（Metrik），因为度量要求对称性。但我们可以固定 $G(\cdot)$ 作为"锚点"来使用它。
+
+```{r}
+#| label: kl-asymmetry-demo
+#| code-fold: false
+
+# 两个正态分布的 KL 散度解析公式
+# Analytische Formel der KL-Divergenz fur zwei Normalverteilungen
+kl_normal <- function(mu1, sigma1, mu2, sigma2) {
+  log(sigma2 / sigma1) + (sigma1^2 + (mu1 - mu2)^2) / (2 * sigma2^2) - 0.5
+}
+
+kl_gf <- kl_normal(0, 1, 0.8, 1.3)
+kl_fg <- kl_normal(0.8, 1.3, 0, 1)
+
+cat("G = N(0,1), F = N(0.8, 1.3)\n")
+cat("  KL(G, F) =", round(kl_gf, 4), "\n")
+cat("  KL(F, G) =", round(kl_fg, 4), "\n")
+cat("  差异:", round(abs(kl_gf - kl_fg), 4), " --> 不对称!\n")
+```
+
+## 从 KL 散度到最优参数 $\theta_0$
+
+> **Von der KL-Divergenz zum optimalen Parameter $\theta_0$**
+
+模型族 $\mathcal{F}$ 中离 $G(\cdot)$ 最近的分布，由最小化 KL 散度得到：
+
+$$
+KL(G(\cdot), \mathcal{F}) := \min_{F(\cdot;\theta) \in \mathcal{F}} KL(G(\cdot), F(\cdot;\theta)) \tag{3.2}
+$$
+
+假设 $\mathcal{F}$ 是 Fisher 正则的（可微、积分与微分可交换），令导数为零：
+
+$$
+0 = \frac{\partial}{\partial \theta} \int \log \frac{g(y)}{f(y;\theta)} \, dG(y) = -\int \frac{\partial}{\partial \theta} \log f(y;\theta) \, dG(y)
+$$
+
+定义最优参数 $\theta_0$：
+
+$$
+\boxed{0 = \int \frac{\partial \log f(y;\theta_0)}{\partial \theta} \, dG(y) = E\!\left(\frac{\partial \log f(Y;\theta_0)}{\partial \theta}\right)} \tag{3.3}
+$$
+
+$\theta_0$ 被称为"真参数"——它是在你的画法体系内，**理论上最接近真实地形**的参数。
+
+```{r}
+#| label: fig-kl-minimization
+#| fig-cap: "KL 散度随参数变化的曲线——碗底就是最优参数 theta_0 | KL-Divergenz als Funktion des Parameters"
+#| fig-height: 5
+
+set.seed(42)
+真实样本 <- c(rnorm(5000, 2, 1.5), rnorm(5000, 4, 0.8))
+
+mu_range <- seq(0, 6, by = 0.05)
+kl_values <- numeric(length(mu_range))
+
+for (k in seq_along(mu_range)) {
+  log_f <- dnorm(真实样本, mean = mu_range[k], sd = 1, log = TRUE)
+  kl_values[k] <- -mean(log_f)
+}
+
+kl_values <- kl_values - min(kl_values)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(mu_range, kl_values, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(paste("参数 ", mu, " | Parameter ", mu)),
+     ylab = expression(paste("KL(G, F(.; ", mu, ")) + const")),
+     main = expression(paste("最小化 KL 散度寻找 ", theta[0], 
+                             " | KL minimieren, um ", theta[0], " zu finden")),
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+mu_opt <- mu_range[which.min(kl_values)]
+points(mu_opt, min(kl_values), pch = 23, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+text(mu_opt + 0.3, min(kl_values) + 0.05, 
+     bquote(theta[0] == .(round(mu_opt, 2))),
+     col = "#DC2626", font = 2, cex = 1.1, pos = 4)
+
+abline(v = mean(真实样本), col = "#16A34A", lty = 3, lwd = 2)
+text(mean(真实样本), max(kl_values) * 0.9, 
+     paste0("E[Y] = ", round(mean(真实样本), 2)),
+     col = "#16A34A", cex = 0.85, pos = 4)
+```
+
+::: {.callout-important icon="false"}
+## 关键洞察 | Schlusselerkenntnis
+
+**$\theta_0$ 无法在实际中直接计算**，因为积分 $\int \cdot \, dG(y)$ 需要知道 $G(\cdot)$，而 $G(\cdot)$ 正是我们不知道的。但大数定律告诉我们，对于任何可测函数 $t(Y)$：
+
+$$
+\frac{1}{n}\sum_{i=1}^{n} t(y_i) \xrightarrow{n \to \infty} E\big(t(Y)\big) = \int t(y) \, dG(y)
+$$
+
+这就是从"理论最优"走向"实际可算"的桥梁。
+:::
+
+{{< pagebreak >}}
+
+# 从 KL 散度到似然函数 {#sec-likelihood}
+
+> **Von der KL-Divergenz zur Likelihood-Funktion**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- KL 散度的经验版本如何自然地引出**对数似然函数**
+- 对数似然函数的定义与含义
+- **最大化似然 = 最小化 KL 散度**
+- 平方损失与正态分布假设的等价关系
+:::
+
+## 从 KL 散度到似然：一步之遥
+
+> **Von der KL-Divergenz zur Likelihood: Nur ein Schritt**
+
+回顾 KL 散度的分解：
+
+$$
+KL(G, F(\cdot;\theta)) = \underbrace{\int \log g(y) \cdot g(y) \, dy}_{\text{G 的负熵（不依赖 } \theta \text{）}} - \underbrace{\int \log f(y;\theta) \cdot g(y) \, dy}_{\text{交叉熵（依赖 } \theta \text{）}}
+$$
+
+第一项是 $G$ 的负熵，不含 $\theta$，无法估计也不需要估计（因为我们不知道 $g(\cdot)$，无法计算 $\frac{1}{n}\sum \log g(y_i)$）。第二项可以用样本平均估计：
+
+$$
+\frac{1}{n} \sum_{i=1}^{n} \log f(y_i; \theta) \xrightarrow{n \to \infty} \int \log f(y;\theta) \cdot g(y) \, dy
+$$
+
+**最小化 KL 散度 = 最大化第二项 = 最大化对数似然！**
+
+*Minimierung der KL-Divergenz = Maximierung der Log-Likelihood!*
+
+## 对数似然函数
+
+> **Die Log-Likelihood-Funktion**
+
+::: {.callout-important icon="false"}
+## 定义 3.2：对数似然函数 | Definition 3.2: Log-Likelihood-Funktion
+
+$$
+l(\theta) = \sum_{i=1}^{n} \log f(y_i; \theta)
+$$
+
+其中 $y_1, \ldots, y_n$ 是观测数据，$f(\cdot;\theta)$ 是模型的密度函数。
+
+似然函数依赖于观测 $y_1,\ldots,y_n$，记号上常省略不写。严格地说 $l(\theta) = l(\theta; y_1, \ldots, y_n)$。
+:::
+
+似然函数的直觉：把它想象成一个**侦探的评分系统**。现场留下了证据 $(y_1, \ldots, y_n)$，每个嫌疑人对应一个参数值 $\theta$。似然函数问的是："如果嫌疑人就是 $\theta$，留下这些证据的可能性有多大？"评分最高的嫌疑人就是**最大似然估计（MLE）**。
+
+*Likelihood = Bewertungssystem eines Detektivs. Welcher Verdachtige ($\theta$) erklart die Beweise ($y_1,\ldots,y_n$) am besten?*
+
+注意 $\theta_0$ 由 $\int \frac{\partial \log f(y;\theta_0)}{\partial \theta} dG(y) = 0$ 定义。我们用其经验版本替换：
+
+$$
+\boxed{0 = \sum_{i=1}^{n} \frac{\partial \log f(y_i; \hat{\theta})}{\partial \theta}} \tag{3.4}
+$$
+
+其中 $\hat{\theta}$ 求解 (3.4)。我们定义 $\hat{\theta}$ 为**最大似然估计（Maximum-Likelihood-Schatzung, MLE）**。
+
+此时有个看似矛盾之处："最大"似然明明源自"最小"KL 散度。这是因为最小化 KL 等价于最大化其中的负交叉熵项，而省略常数 $\frac{1}{n}$ 后正好就是对数似然。
+
+```{r}
+#| label: fig-likelihood-demo
+#| fig-cap: "对数似然函数示例：正态数据下估计均值 | Log-Likelihood-Beispiel: Schatzung des Mittelwerts"
+#| fig-height: 5
+
+set.seed(123)
+y_data <- rnorm(30, mean = 5, sd = 2)
+
+对数似然 <- function(mu, y, sigma = 2) {
+  sum(dnorm(y, mean = mu, sd = sigma, log = TRUE))
+}
+
+mu_range <- seq(2, 8, by = 0.02)
+ll_vals <- sapply(mu_range, 对数似然, y = y_data)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(mu_range, ll_vals, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(paste("参数 ", mu, " | Parameter ", mu)),
+     ylab = expression(paste("l(", mu, ") = ", Sigma, " log f(", y[i], "; ", mu, ")")),
+     main = "对数似然函数 | Log-Likelihood-Funktion",
+     cex.lab = 1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+mu_mle <- mean(y_data)
+ll_mle <- 对数似然(mu_mle, y_data)
+points(mu_mle, ll_mle, pch = 23, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+text(mu_mle + 0.15, ll_mle - 1,
+     bquote(hat(mu)[MLE] == .(round(mu_mle, 3))),
+     col = "#DC2626", font = 2, cex = 1)
+
+abline(v = 5, col = "#16A34A", lty = 3, lwd = 2)
+text(5 + 0.1, min(ll_vals) + 3, expression(paste("真实值 ", mu, " = 5")),
+     col = "#16A34A", cex = 0.85, pos = 4)
+
+rug(y_data, col = adjustcolor("#EA580C", 0.5), lwd = 1.5)
+legend("topright",
+       legend = c("对数似然 | Log-Likelihood", 
+                  "MLE", "真实值 | Wahrer Wert", "数据点 | Daten"),
+       col = c("#2563EB", "#DC2626", "#16A34A", "#EA580C"),
+       lwd = c(3, NA, 2, 1.5), pch = c(NA, 23, NA, NA), pt.bg = c(NA, "#DC2626", NA, NA),
+       lty = c(1, NA, 3, 1), bty = "n", cex = 0.85)
+```
+
+随着样本量增大，$\hat{\theta} \to \theta_0$，即 $F(\cdot;\hat{\theta}) \to F(\cdot;\theta_0)$。这需要更精细的技术推导，留待后面的相合性部分展开。
+
+## 平方损失与正态分布 {#sec-squared-loss}
+
+> **Quadratischer Verlust und Normalverteilung**
+
+假设 $\mathcal{F}$ 是所有均值为 $\mu$、方差为 $\sigma^2$ 的正态分布的集合。对数似然为：
+
+$$
+l(\mu, \sigma^2) = \sum_{i=1}^{n} \left(-\log(\sigma) - \frac{1}{2}\frac{(y_i - \mu)^2}{\sigma^2}\right) \tag{3.6}
+$$
+
+如果我们只对 $\mu$ 感兴趣（暂时忽略 $\sigma^2$），那么：
+
+$$
+\text{最大化 } l(\mu) \iff \text{最小化 } \sum_{i=1}^{n}(y_i - \mu)^2 \tag{3.5}
+$$
+
+::: {.callout-important icon="false"}
+## 关键等价关系 | Schlusselaquivalenz
+
+**使用平方损失 $\Longleftrightarrow$ 假设数据服从正态分布**
+
+这不是巧合，而是 KL 散度理论的直接推论：
+
+$$
+\text{最小二乘} = \text{正态分布下的最大似然估计}
+$$
+
+*Kleinste Quadrate = Maximum-Likelihood-Schatzung unter Normalverteilung.*
+:::
+
+```{r}
+#| label: fig-squared-loss-gaussian
+#| fig-cap: "最小化平方损失 = 正态假设下的 MLE：两条路殊途同归 | Minimierung des quadratischen Verlusts = MLE unter Normalverteilung"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+mu_range2 <- seq(2, 8, by = 0.02)
+
+平方损失 <- sapply(mu_range2, function(mu) sum((y_data - mu)^2))
+似然值 <- sapply(mu_range2, 对数似然, y = y_data, sigma = 2)
+
+norm01 <- function(x) (x - min(x)) / (max(x) - min(x))
+
+plot(mu_range2, norm01(平方损失), type = "l", col = "#DC2626", lwd = 3,
+     xlab = expression(mu), ylab = "归一化值 | Normierter Wert",
+     main = "平方损失 vs 负对数似然：形状完全一致 | Gleiche Form!",
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+lines(mu_range2, norm01(-似然值), col = "#2563EB", lwd = 3, lty = 2)
+grid(col = "#E2E8F0")
+
+abline(v = mean(y_data), col = "#16A34A", lty = 3, lwd = 2)
+text(mean(y_data) + 0.1, 0.05, 
+     bquote(hat(mu) ~ "=" ~ bar(y) ~ "=" ~ .(round(mean(y_data), 3))),
+     col = "#16A34A", font = 2, cex = 0.95, pos = 4)
+
+legend("top",
+       legend = c(expression(paste("平方损失 ", Sigma, (y[i] - mu)^2)),
+                  expression(paste("-对数似然 -l(", mu, ")"))),
+       col = c("#DC2626", "#2563EB"), lwd = 3, lty = c(1, 2), bty = "n", cex = 0.9)
+```
+
+{{< pagebreak >}}
+
+# 似然与贝叶斯 {#sec-bayes}
+
+> **Likelihood und Bayes**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **先验分布**的含义：在看数据之前你知道什么？
+- **后验分布**的推导：贝叶斯公式如何"翻转"概率
+- **后验众数**与 MLE 的关系
+- 何时贝叶斯与频率学派给出相同答案
+:::
+
+## 概率的两种角色
+
+> **Zwei Rollen der Wahrscheinlichkeit**
+
+在经典统计中，给定参数 $\theta$，我们构建变量 $Y$ 的概率模型 $F(\cdot;\theta)$。贝叶斯方法则**反过来**：给定观测到的数据 $y$，我们问"$\theta$ 的概率分布是什么？"
+
+这就像侦探收集了证据后，评估每个嫌疑人的"嫌疑概率"。这种反转在历史上称为"逆概率（inverse Wahrscheinlichkeit）"。
+
+## 先验分布
+
+> **Die Prior-Verteilung**
+
+**先验分布（Prior-Verteilung）** $p(\theta)$ 编码了我们在看到数据之前对 $\theta$ 的信念。其结构可能包含额外的参数，暂时忽略。
+
+- 如果你对某片土地一无所知，先验是"平坦的"（均匀分布）
+- 如果你是老制图师，对地形有经验，先验就有"偏好"
+
+## 后验分布
+
+> **Die Posterior-Verteilung**
+
+通过贝叶斯公式，我们将先验信念与数据结合，得到**后验分布（Posterior-Verteilung）**：
+
+$$
+p(\theta | y) = \frac{f(y;\theta) \, p(\theta)}{f(y)} \overset{\text{i.i.d.}}{=} \frac{\prod_{i=1}^{n} f(y_i;\theta) \, p(\theta)}{f(y)} = \frac{\exp(l(\theta)) \, p(\theta)}{f(y)} \tag{3.7}
+$$
+
+其中：
+
+- 分子第一项 $\exp(l(\theta))$ 是似然（对数似然的指数）
+- $p(\theta)$ 是先验密度
+- 归一化常数 $f(y) = \int_{\theta \in \Theta} \prod_{i=1}^{n} f(y_i;\theta) \, p(\theta) \, d\theta$ 通常数值上难以计算（将在第 9 章详细讨论）
+
+```{r}
+#| label: fig-bayesian-update
+#| fig-cap: "贝叶斯更新：先验 x 似然 = 后验（归一化后）| Bayessche Aktualisierung: Prior x Likelihood = Posterior"
+#| fig-height: 7
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+sigma_known <- 2
+mu_prior <- 4; sigma_prior <- 1.5
+n_obs <- length(y_data); ybar <- mean(y_data)
+
+sigma_post <- 1 / sqrt(n_obs / sigma_known^2 + 1 / sigma_prior^2)
+mu_post <- sigma_post^2 * (n_obs * ybar / sigma_known^2 + mu_prior / sigma_prior^2)
+
+theta_seq <- seq(1, 8, length.out = 500)
+
+# 先验
+prior_vals <- dnorm(theta_seq, mu_prior, sigma_prior)
+plot(theta_seq, prior_vals, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(theta), ylab = "密度 | Dichte",
+     main = expression(paste("(1) 先验分布 p(", theta, ") | Prior")),
+     cex.main = 1.1, col.main = "#1E293B")
+polygon(c(theta_seq, rev(theta_seq)), c(prior_vals, rep(0, length(theta_seq))),
+        col = adjustcolor("#2563EB", 0.15), border = NA)
+grid(col = "#E2E8F0")
+
+# 似然
+like_vals <- exp(sapply(theta_seq, function(th) sum(dnorm(y_data, th, sigma_known, log = TRUE))))
+like_vals <- like_vals / max(like_vals) * max(prior_vals)
+plot(theta_seq, like_vals, type = "l", col = "#EA580C", lwd = 3,
+     xlab = expression(theta), ylab = "（缩放后的）似然",
+     main = expression(paste("(2) 似然函数 L(", theta, ") | Likelihood")),
+     cex.main = 1.1, col.main = "#1E293B")
+polygon(c(theta_seq, rev(theta_seq)), c(like_vals, rep(0, length(theta_seq))),
+        col = adjustcolor("#EA580C", 0.15), border = NA)
+grid(col = "#E2E8F0")
+
+# 先验 x 似然
+unnorm_post <- prior_vals * like_vals
+plot(theta_seq, unnorm_post, type = "l", col = "#9333EA", lwd = 3, lty = 3,
+     xlab = expression(theta), ylab = "先验 x 似然",
+     main = "(3) 先验 x 似然 | Prior x Likelihood",
+     cex.main = 1.1, col.main = "#1E293B")
+polygon(c(theta_seq, rev(theta_seq)), c(unnorm_post, rep(0, length(theta_seq))),
+        col = adjustcolor("#9333EA", 0.15), border = NA)
+grid(col = "#E2E8F0")
+
+# 后验
+post_vals <- dnorm(theta_seq, mu_post, sigma_post)
+plot(theta_seq, post_vals, type = "l", col = "#16A34A", lwd = 3,
+     xlab = expression(theta), ylab = "密度 | Dichte",
+     main = expression(paste("(4) 后验分布 p(", theta, " | y) | Posterior")),
+     cex.main = 1.1, col.main = "#1E293B")
+polygon(c(theta_seq, rev(theta_seq)), c(post_vals, rep(0, length(theta_seq))),
+        col = adjustcolor("#16A34A", 0.15), border = NA)
+grid(col = "#E2E8F0")
+
+abline(v = mu_prior, col = "#2563EB", lty = 3, lwd = 1.5)
+abline(v = ybar, col = "#EA580C", lty = 3, lwd = 1.5)
+abline(v = mu_post, col = "#16A34A", lty = 2, lwd = 2)
+legend("topright",
+       legend = c(bquote("先验均值" == .(mu_prior)),
+                  bquote(bar(y) == .(round(ybar, 2))),
+                  bquote("后验均值" == .(round(mu_post, 2)))),
+       col = c("#2563EB", "#EA580C", "#16A34A"),
+       lty = c(3, 3, 2), lwd = c(1.5, 1.5, 2), bty = "n", cex = 0.8)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: bayesian-summary
+cat("贝叶斯更新总结 | Zusammenfassung der Bayesschen Aktualisierung:\n\n")
+cat("  先验均值 Prior-Mittelwert:         ", mu_prior, "\n")
+cat("  样本均值 Stichprobenmittelwert:    ", round(ybar, 3), "\n")
+cat("  后验均值 Posterior-Mittelwert:     ", round(mu_post, 3), "\n")
+cat("  MLE (= 样本均值):                 ", round(ybar, 3), "\n\n")
+cat("  先验标准差 Prior-Std:              ", sigma_prior, "\n")
+cat("  后验标准差 Posterior-Std:          ", round(sigma_post, 3), "\n")
+cat("  --> 后验比先验更'窄'：数据减少了不确定性!\n")
+cat("  --> Posterior schmaler als Prior: Daten reduzieren Unsicherheit!\n")
+```
+
+## 后验众数与 MLE 的关系
+
+> **Posteriorer Modus und MLE**
+
+::: {.callout-important icon="false"}
+## 定义 3.3：后验众数 | Definition 3.3: Posteriorer Modus
+
+$$
+\hat{\theta}_{\text{postmode}} = \arg\max_{\theta \in \Theta} \, p(\theta | y)
+$$
+:::
+
+**关键联系**：如果先验 $p(\theta)$ 是**常数**（所谓"平坦先验 / flat prior"），则：
+
+$$
+\arg\max_{\theta \in \Theta} \, p(\theta | y) = \arg\max_{\theta \in \Theta} \, l(\theta) \tag{3.8}
+$$
+
+即**后验众数 = MLE**。先验不平坦时，两者一般不同——先验会"拉"后验众数偏离 MLE。
+
+```{r}
+#| label: fig-prior-effect
+#| fig-cap: "先验越强，后验众数偏离 MLE 越多；平坦先验下二者重合 | Je starker der Prior, desto weiter weicht der posteriore Modus vom MLE ab"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+theta_seq2 <- seq(2, 8, length.out = 500)
+
+priors <- list(
+  list(name = "平坦先验 | Flacher Prior", mu = 5, sigma = 100, col = "#2563EB"),
+  list(name = "弱先验 N(3.5, 2) | Schwacher Prior", mu = 3.5, sigma = 2, col = "#EA580C"),
+  list(name = "强先验 N(3.5, 0.5) | Starker Prior", mu = 3.5, sigma = 0.5, col = "#DC2626")
+)
+
+log_like <- sapply(theta_seq2, function(th) sum(dnorm(y_data, th, 2, log = TRUE)))
+like_scaled <- exp(log_like - max(log_like))
+
+plot(theta_seq2, like_scaled, type = "l", col = "#94A3B8", lwd = 2, lty = 3,
+     xlab = expression(theta), ylab = "（缩放后的）密度",
+     main = "先验强度对后验众数的影响 | Einfluss der Prior-Starke",
+     ylim = c(0, 1.1), cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (pr in priors) {
+  log_post <- log_like + dnorm(theta_seq2, pr$mu, pr$sigma, log = TRUE)
+  post_scaled <- exp(log_post - max(log_post))
+  lines(theta_seq2, post_scaled, col = pr$col, lwd = 2.5)
+  
+  mode_idx <- which.max(post_scaled)
+  points(theta_seq2[mode_idx], post_scaled[mode_idx], 
+         pch = 16, col = pr$col, cex = 1.5)
+}
+
+abline(v = mean(y_data), col = "#16A34A", lty = 2, lwd = 2)
+text(mean(y_data), 1.05, expression(hat(theta)[MLE]), col = "#16A34A", font = 2, cex = 0.9)
+
+legend("topleft",
+       legend = c("似然 | Likelihood",
+                  priors[[1]]$name, priors[[2]]$name, priors[[3]]$name,
+                  "MLE"),
+       col = c("#94A3B8", "#2563EB", "#EA580C", "#DC2626", "#16A34A"),
+       lwd = c(2, 2.5, 2.5, 2.5, 2), lty = c(3, 1, 1, 1, 2), bty = "n", cex = 0.75)
+```
+
+除了众数，还可以直接研究后验分布 (3.7) 本身。但归一化常数 $f(y)$ 通常数值上难以处理。我们将在第 9 章探讨如何绕过这一困难，也会展示贝叶斯思想如何用于数值稳定化。
+
+{{< pagebreak >}}
+
+# 估计量的性质 {#sec-properties}
+
+> **Eigenschaften von Schatzern**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **相合性 (Konsistenz)**：样本越大，估计越准
+- 从 KL 收敛到 MSE 的完整推导，引出 **Fisher 信息矩阵**
+- **偏差-方差权衡 (Bias-Varianz-Tradeoff)**：打靶的两种偏离
+- **充分性 (Suffizienz)**：压缩数据而不丢失信息
+- **有效性 (Effizienz)**：在所有估计量中找最精确的
+:::
+
+## 相合性：更多数据，更好估计 {#sec-consistency}
+
+> **Konsistenz: Mehr Daten, bessere Schatzung**
+
+直觉：GPS 接收到的卫星信号越多，定位越精确。类似地，估计量 $\hat{\theta}$ 随样本量 $n$ 增大而趋近真参数 $\theta_0$。
+
+### 通过 KL 散度表述相合性
+
+> **Konsistenz durch KL-Divergenz formulieren**
+
+相合性意味着随着数据量增大：
+
+$$
+\int \log \frac{f(y;\hat{\theta})}{f(y;\theta_0)} \, dG(y) \xrightarrow{n \to \infty} 0 \tag{3.9}
+$$
+
+简单计算表明：
+
+$$
+\int \log \frac{f(y;\hat{\theta})}{f(y;\theta_0)} \, dG(y) = KL(G(\cdot), F(\cdot;\theta_0)) - KL(G(\cdot), F(\cdot;\hat{\theta}))
+$$
+
+因此要求两个 KL 散度随 $n$ 增大而趋于一致。
+
+### Taylor 展开与 Fisher 信息矩阵
+
+> **Taylor-Entwicklung und Fisher-Informationsmatrix**
+
+对 $\log f(y;\hat{\theta})$ 在 $\theta_0$ 处做二阶 Taylor 展开：
+
+$$
+\log f(y;\hat{\theta}) \approx \log f(y;\theta_0) + \frac{\partial \log f(y;\theta_0)}{\partial \theta}(\hat{\theta} - \theta_0) + \frac{1}{2}(\hat{\theta}-\theta_0)^\top \frac{\partial^2 \log f(y;\theta_0)}{\partial\theta\partial\theta^\top}(\hat{\theta}-\theta_0)
+$$
+
+代入 (3.9)，利用 (3.3) 中 $E\!\left[\frac{\partial \log f}{\partial\theta}\Big|_{\theta_0}\right]=0$（一阶项对 $G$ 积分后消失），得到：
+
+$$
+2\int \log\frac{f(y;\hat\theta)}{f(y;\theta_0)}\,dG(y) \approx (\hat\theta-\theta_0)^\top \underbrace{E\!\left(-\frac{\partial^2 \log f(y;\theta_0)}{\partial\theta\partial\theta^\top}\right)}_{:=\;I(\theta_0)}\;(\hat\theta-\theta_0) \tag{3.10}
+$$
+
+其中期望关于数据生成过程 $G(\cdot)$ 取。$I(\theta_0)$ 称为 **Fisher 信息矩阵（Fisher-Informationsmatrix）**，它度量了对数似然曲面在 $\theta_0$ 处的"曲率"——曲率越大，数据对参数越"敏感"，估计越精确。Fisher 信息在最大似然估计中起着核心作用。
+
+由于 $\hat{\theta} = t(y_1,\ldots,y_n)$ 是数据的函数，而数据是随机的，因此 $\hat{\theta}$ 也是随机的。对所有可能的样本取期望：
+
+$$
+E\!\left(\int \log \frac{f(y;\hat{\theta})}{f(y;\theta_0)} \, dG(y)\right) \xrightarrow{n\to\infty} 0
+$$
+
+其中期望关于数据 $Y_1,\ldots,Y_n$ 取。形式上，上式等于：
+
+$$
+\underbrace{\int \cdots \int}_{n \text{ 重积分}} \int \log \frac{f(y; t(y_1,\ldots,y_n))}{f(y;\theta_0)} \, dG(y)\,dG(y_1)\cdots G(y_n)
+$$
+
+利用 Taylor 近似 (3.10)，简化为：
+
+$$
+E\!\Big[(\hat\theta-\theta_0)^\top I(\theta_0)(\hat\theta-\theta_0)\Big] \xrightarrow{n\to\infty} 0
+$$
+
+对单参数情形（$I(\theta_0)>0$ 为常数），可提出为：
+
+$$
+E\!\Big[I(\theta_0)(\hat\theta-\theta_0)^2\Big] \propto E\!\Big[(\hat\theta-\theta_0)^2\Big]
+$$
+
+```{r}
+#| label: fisher-info-demo
+#| code-fold: false
+
+# Fisher 信息的数值演示：正态分布 N(mu, sigma^2=4)
+# I(mu) = n / sigma^2
+sigma_fi <- 2
+n_vals_fi <- c(10, 100, 1000, 10000)
+
+cat("正态分布 N(mu, 4) 的 Fisher 信息 | Fisher-Information fur N(mu, 4):\n\n")
+for (nn in n_vals_fi) {
+  fisher_info <- nn / sigma_fi^2
+  cat(sprintf("  n = %5d:  I(mu) = %7.1f,  理论 Var(mu_hat) = 1/I = %.6f\n",
+              nn, fisher_info, 1/fisher_info))
+}
+cat("\n结论: n 越大，Fisher 信息越大，估计方差越小 --> 相合!\n")
+```
+
+### 偏差-方差分解
+
+> **Bias-Varianz-Zerlegung**
+
+将上式展开（添加减 $E(\hat\theta)$）：
+
+$$
+E\!\big[(\hat\theta-\theta_0)^2\big] = E\!\big[(\hat\theta - E(\hat\theta) + E(\hat\theta) - \theta_0)^2\big] = \underbrace{E\!\big[(\hat\theta-E(\hat\theta))^2\big]}_{Var(\hat\theta)} + \underbrace{(E(\hat\theta)-\theta_0)^2}_{bias^2(\hat\theta,\theta_0)} \tag{3.11}
+$$
+
+::: {.callout-important icon="false"}
+## 定义 3.4：均方误差 | Definition 3.4: Mittlerer Quadratischer Fehler (MSE)
+
+$$
+MSE(\hat{\theta}, \theta_0) = E\!\left[(\hat{\theta} - \theta_0)^2\right] = Var(\hat{\theta}) + bias^2(\hat{\theta}, \theta_0)
+$$
+
+**偏差**定义为 $bias(\hat{\theta}, \theta_0) = E(\hat{\theta}) - \theta_0$。
+
+- 若 $bias = 0$，称估计量**无偏（unverzerrt）**
+- 若 $bias \xrightarrow{n\to\infty} 0$，称为**渐近无偏（asymptotisch unverzerrt）**
+:::
+
+```{r}
+#| label: fig-bias-variance
+#| fig-cap: "偏差-方差权衡的打靶比喻（仿教材 Fig. 3.3）| Bias-Varianz-Tradeoff als Zielscheibenmetapher"
+#| fig-height: 7
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(1, 1, 3, 1))
+
+draw_target <- function(hits_x, hits_y, title_text, subtitle_text) {
+  plot(NULL, xlim = c(-3, 3), ylim = c(-3, 3), axes = FALSE, 
+       xlab = "", ylab = "", asp = 1)
+  title(title_text, cex.main = 1.1, col.main = "#1E293B", line = 1.5)
+  mtext(subtitle_text, side = 3, line = 0.2, cex = 0.7, col = "#64748B", font = 3)
+  for (r in c(2.5, 2, 1.5, 1, 0.5)) {
+    symbols(0, 0, circles = r, inches = FALSE, add = TRUE,
+            fg = adjustcolor("#94A3B8", 0.5), bg = NA, lwd = 1)
+  }
+  points(0, 0, pch = 3, cex = 1.5, col = "#DC2626", lwd = 2)
+  points(hits_x, hits_y, pch = 4, col = "#2563EB", cex = 1.5, lwd = 2)
+}
+
+set.seed(42)
+draw_target(rnorm(8, 0, 1.2), rnorm(8, 0, 1.2),
+            "大方差，小偏差", "Grosse Varianz, kleiner Bias")
+draw_target(rnorm(8, 1.5, 0.25), rnorm(8, 1.2, 0.25),
+            "小方差，大偏差", "Kleine Varianz, grosser Bias")
+draw_target(rnorm(8, -1.2, 1), rnorm(8, -1, 1),
+            "大方差，大偏差", "Grosse Varianz, grosser Bias")
+draw_target(rnorm(8, 0, 0.3), rnorm(8, 0, 0.3),
+            "小方差，小偏差", "Kleine Varianz, kleiner Bias")
+
+par(mfrow = c(1, 1))
+```
+
+### MSE 相合性与概率相合性
+
+> **MSE-Konsistenz und Konsistenz in Wahrscheinlichkeit**
+
+::: {.callout-important icon="false"}
+## 定义 3.5：MSE 相合性 | Definition 3.5: MSE-Konsistenz
+
+估计量 $\hat{\theta}$ 对 $\theta_0$ 是 MSE 相合的，如果：
+
+$$
+MSE(\hat{\theta}, \theta_0) \xrightarrow{n \to \infty} 0
+$$
+:::
+
+另一种等价定义：对任意 $\delta > 0$，
+
+$$
+P(|\hat{\theta} - \theta_0| \geq \delta) \xrightarrow{n \to \infty} 0 \tag{3.12}
+$$
+
+利用切比雪夫（Chebyshev）不等式——对任何均值为 $\mu$、方差为 $\sigma^2 > 0$ 的随机变量 $X$：
+
+$$
+P(|X - \mu| \geq k\sigma) \leq \frac{1}{k^2}
+$$
+
+取 $\hat{\theta}$ 为随机变量，得到：
+
+$$
+P(|\hat{\theta}-\theta_0| \geq \delta) \leq \frac{E[(\hat{\theta}-\theta_0)^2]}{\delta^2} = \frac{MSE(\hat\theta,\theta_0)}{\delta^2} \xrightarrow{n\to\infty} 0
+$$
+
+因此 MSE 相合 $\Leftrightarrow$ 概率相合（在适当的正则条件下）。
+
+```{r}
+#| label: fig-consistency-demo
+#| fig-cap: "相合性演示：样本量增加时，MLE 的抽样分布越来越集中于真值 | Konsistenz: Die Stichprobenverteilung des MLE konzentriert sich bei steigendem n"
+#| fig-height: 5.5
+
+set.seed(2024)
+mu_true <- 5; sigma_true <- 3
+n_values <- c(5, 30, 200, 2000)
+n_sim <- 3000
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+colors_n <- c("#DC2626", "#EA580C", "#2563EB", "#16A34A")
+
+plot(NULL, xlim = c(2, 8), ylim = c(0, 5),
+     xlab = expression(hat(mu)[MLE] == bar(Y)),
+     ylab = "密度 | Dichte",
+     main = "MLE 的抽样分布随 n 变化 | Stichprobenverteilung des MLE",
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (i in seq_along(n_values)) {
+  nn <- n_values[i]
+  mle_samples <- replicate(n_sim, mean(rnorm(nn, mu_true, sigma_true)))
+  d <- density(mle_samples, adjust = 1.2)
+  lines(d$x, d$y, col = colors_n[i], lwd = 2.5)
+}
+
+abline(v = mu_true, col = "#1E293B", lwd = 2, lty = 2)
+text(mu_true + 0.1, 4.5, expression(theta[0] == 5), col = "#1E293B", font = 2)
+
+legend("topright",
+       legend = paste0("n = ", n_values),
+       col = colors_n, lwd = 2.5, bty = "n", cex = 0.95)
+```
+
+## 充分性：压缩数据，不丢信息 {#sec-sufficiency}
+
+> **Suffizienz: Daten komprimieren, ohne Information zu verlieren**
+
+想象你要把一本500页的勘测报告寄给远方的同事，但邮费按重量收。**充分统计量**就是那份完美的摘要——它把关于参数 $\theta$ 的所有信息浓缩在里面，原始报告可以扔掉。
+
+例如，考虑 $Y_i \sim \text{Binom}(1, \pi)$，算术平均 $\bar{Y} = \sum Y_i / n$ 是 $\pi$ 的 MLE。对于 $n=4$ 的以下四组样本：
+
+- $y = (1,0,0,0)$, $y = (0,1,0,0)$, $y = (0,0,1,0)$, $y = (0,0,0,1)$
+
+它们的 MLE 完全相同（$\bar{y} = 1/4$）。观测的具体顺序不提供关于 $\pi$ 的任何信息。
+
+::: {.callout-important icon="false"}
+## 定义 3.6：充分统计量 | Definition 3.6: Suffiziente Statistik
+
+统计量 $t(Y_1, \ldots, Y_n)$ 对参数 $\theta$ 是**充分的**，如果给定 $t$ 的值后，数据的条件分布不再依赖 $\theta$：
+
+$$
+P(Y_1 = y_1, \ldots, Y_n = y_n \mid t(Y_1, \ldots, Y_n) = t_0;\, \theta) \text{ 不依赖 } \theta
+$$
+:::
+
+如果 $t(y_1,\ldots,y_n)$ 给出了关于 $\theta$ 的充分信息，那么知道 $t$ 就足以估计参数——我们甚至可以**删掉原始数据**。在大数据时代，这意味着只需存储 $t$ 就够了。
+
+::: {.callout-tip collapse="true"}
+## 点击展开：伯努利充分性的完整证明 | Vollstandiger Beweis fur Bernoulli-Suffizienz
+
+**例 3.1** 设 $Y_i \sim \text{Bernoulli}(\pi)$，i.i.d.，统计量 $t(\cdot) = \sum_{i=1}^n Y_i / n$。对应 $n_0 = nt_0$：
+
+$$
+\begin{aligned}
+&P(Y_1=y_1,\ldots,Y_n=y_n \mid t = t_0;\,\pi)\\
+&= \frac{P\!\left(Y_1=y_1,\ldots,Y_n=y_n,\;\sum Y_i=n_0;\,\pi\right)}{P\!\left(\sum Y_i=n_0;\,\pi\right)}\\
+&= \frac{\prod_{i=1}^n \pi^{y_i}(1-\pi)^{1-y_i}}{\binom{n}{n_0}\pi^{n_0}(1-\pi)^{n-n_0}} \quad \text{当 } \sum y_i = n_0\\
+&= \frac{1}{\binom{n}{n_0}} \quad \text{不含 } \pi!
+\end{aligned}
+$$
+:::
+
+```{r}
+#| label: sufficiency-example
+#| code-fold: false
+
+samples <- list(
+  c(1, 0, 0, 0),
+  c(0, 1, 0, 0),
+  c(0, 0, 1, 0),
+  c(0, 0, 0, 1)
+)
+
+cat("伯努利数据 (n = 4) | Bernoulli-Daten:\n\n")
+for (i in seq_along(samples)) {
+  y <- samples[[i]]
+  cat("  样本", i, ": y = (", paste(y, collapse=", "), 
+      ")  -->  t(y) = sum =", sum(y), 
+      "  -->  MLE pi_hat =", mean(y), "\n")
+}
+cat("\n结论：四组数据虽然不同，但充分统计量 t = 1 和 MLE 都相同。\n")
+cat("具体哪个位置是 1 不重要——这就是充分性的含义!\n")
+```
+
+### Neyman 分解定理 | Neyman-Faktorisierungssatz
+
+直接用定义验证充分性有时很困难。Neyman 分解提供了一个简便的判据。
+
+::: {.callout-important icon="false"}
+## 性质 3.1：Neyman 分解 | Eigenschaft 3.1: Neyman-Faktorisierung
+
+统计量 $t(y_1, \ldots, y_n)$ 对 $\theta$ 充分，**当且仅当**密度函数可以分解为：
+
+$$
+f(y_1, \ldots, y_n; \theta) = h(y_1, \ldots, y_n) \cdot g\!\big(t(y_1, \ldots, y_n);\, \theta\big) \tag{3.13}
+$$
+
+其中 $h(\cdot)$ 不依赖 $\theta$，$g(\cdot)$ 只通过统计量 $t$ 依赖数据。
+:::
+
+::: {.callout-tip collapse="true"}
+## 点击展开：Neyman 分解的完整证明 | Vollstandiger Beweis der Neyman-Faktorisierung
+
+**($\Rightarrow$)** 设 $t(\cdot)$ 充分。由条件概率的定义：
+
+$$
+f(y_1,\ldots,y_n;\theta) = \underbrace{f(y_1,\ldots,y_n \mid t(y)=t;\,\theta)}_{\text{不含}\;\theta\;\text{（充分性）}=:\,h(y_1,\ldots,y_n)} \cdot \underbrace{f_t(t \mid y_1,\ldots,y_n;\,\theta)}_{\text{只通过}\;t\;\text{依赖数据}=:\,g(t;\theta)}
+$$
+
+**($\Leftarrow$)** 设密度按 (3.13) 分解。$t$ 的边际密度为：
+
+$$
+f_t(t;\theta) = \int_{t(y_1,\ldots,y_n)=t} f(y_1,\ldots,y_n;\theta)\,dy_1\cdots dy_n = g(t;\theta)\int_{t(y_1,\ldots,y_n)=t} h(y_1,\ldots,y_n)\,dy_1\cdots dy_n
+$$
+
+条件分布为：
+
+$$
+f(y_1,\ldots,y_n \mid t=t;\,\theta) = \frac{f(y_1,\ldots,y_n,\,t;\,\theta)}{f_t(t;\theta)} = \begin{cases} \frac{h(y_1,\ldots,y_n)\,g(t;\theta)}{g(t;\theta)\int h\,dy} & \text{当 } t(y_1,\ldots,y_n)=t\\ 0 & \text{否则} \end{cases}
+$$
+
+$g(t;\theta)$ 消去，不依赖 $\theta$。$\square$
+:::
+
+```{r}
+#| label: neyman-poisson
+#| code-fold: false
+
+cat("泊松分布 X_i ~ Poisson(lambda) | Poisson-Verteilung:\n\n")
+cat("联合概率质量函数 | Gemeinsame Wahrscheinlichkeitsfunktion:\n")
+cat("  f(x_1,...,x_n; lambda) = prod(lambda^x_i * exp(-lambda) / x_i!)\n")
+cat("                        = lambda^(sum x_i) * exp(-n*lambda) / prod(x_i!)\n\n")
+cat("Neyman 分解 | Neyman-Faktorisierung:\n")
+cat("  h(x_1,...,x_n) = 1 / prod(x_i!)     <-- 不含 lambda\n")
+cat("  g(t; lambda)   = lambda^t * exp(-n*lambda),  t = sum(x_i)\n")
+cat("                                       <-- 只通过 t 依赖数据\n\n")
+cat("结论: t(X) = sum(X_i) 对 lambda 充分\n")
+```
+
+### 最小充分统计量 | Minimale suffiziente Statistik
+
+注意充分性本身是一个较弱的条件——原始样本 $(y_1,\ldots,y_n)$ 本身当然也是充分的。我们需要一个"最小化"的概念：
+
+::: {.callout-important icon="false"}
+## 定义 3.7 | Definition 3.7
+
+统计量 $t$ 是**最小充分**的，如果 $t$ 本身充分，且可以从任何其他充分统计量 $\tilde{t}$ 计算得到：$t = m(\tilde{t})$。
+
+最小充分统计量是对数据的**最大压缩**——再压缩就会丢失信息。
+:::
+
+## 有效性：谁是最精确的估计量？ {#sec-efficiency}
+
+> **Effizienz: Welcher Schatzer ist der genaueste?**
+
+这里我们本质上在问：两个估计量，哪个"更好"？"更好"指的是更小的 MSE。
+
+::: {.callout-important icon="false"}
+## 定义 3.8：有效性 | Definition 3.8: Effizienz
+
+统计量 $t(y_1, \ldots, y_n)$ 对 $\theta$ 是**有效的**，如果它在所有估计量中具有最小的 MSE。
+:::
+
+注意：显式计算 MSE 在实际中通常不可行，因为它依赖于未知的数据生成过程。这个概念主要是理论性的。
+
+```{r}
+#| label: fig-efficiency-demo
+#| fig-cap: "有效性示例：带不同权重的线性估计量，哪个方差最小？| Effizienz: Welche Gewichte minimieren die Varianz?"
+#| fig-height: 5.5
+
+set.seed(42)
+n_eff <- 20; sigma_eff <- 3; mu_eff <- 10
+n_sim <- 5000
+
+估计量_均值 <- replicate(n_sim, mean(rnorm(n_eff, mu_eff, sigma_eff)))
+
+weights_custom <- rep(1/n_eff, n_eff)
+weights_custom[1:5] <- weights_custom[1:5] + 0.03
+weights_custom[16:20] <- weights_custom[16:20] - 0.03
+估计量_加权 <- replicate(n_sim, sum(weights_custom * rnorm(n_eff, mu_eff, sigma_eff)))
+
+估计量_部分 <- replicate(n_sim, mean(rnorm(n_eff, mu_eff, sigma_eff)[1:10]))
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+d1 <- density(估计量_均值, adjust = 1.2)
+d2 <- density(估计量_加权, adjust = 1.2)
+d3 <- density(估计量_部分, adjust = 1.2)
+
+plot(d1$x, d1$y, type = "l", col = "#16A34A", lwd = 3,
+     xlim = c(6, 14), ylim = c(0, max(d1$y) * 1.1),
+     xlab = expression(hat(mu)), ylab = "密度 | Dichte",
+     main = "三种估计量的抽样分布：等权均值最集中 | Drei Schatzer im Vergleich",
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+lines(d2$x, d2$y, col = "#EA580C", lwd = 2.5)
+lines(d3$x, d3$y, col = "#DC2626", lwd = 2.5, lty = 2)
+grid(col = "#E2E8F0")
+abline(v = mu_eff, col = "#1E293B", lwd = 2, lty = 3)
+
+legend("topright",
+       legend = c(
+         bquote("等权均值 " * bar(Y) * ": Var = " * .(round(var(估计量_均值), 3))),
+         bquote("不等权: Var = " * .(round(var(估计量_加权), 3))),
+         bquote("只用一半: Var = " * .(round(var(估计量_部分), 3)))
+       ),
+       col = c("#16A34A", "#EA580C", "#DC2626"),
+       lwd = c(3, 2.5, 2.5), lty = c(1, 1, 2), bty = "n", cex = 0.85)
+```
+
+**教材例 3.2 的推导**：对于 $Y_i \sim N(\mu, \sigma^2)$ i.i.d.，考虑线性估计量 $t(y) = \sum w_i y_i$，其中 $\sum w_i = 1$（无偏条件）。注意 $E(t(Y)) = \sum w_i \mu = \mu$，$Var(t(Y)) = \sum w_i^2 \sigma^2$。
+
+令 $w_i = \frac{1}{n} + d_i$，$\sum d_i = 0$：
+
+$$
+Var(t(Y)) = \sum_{i=1}^{n}\left(\frac{1}{n}+d_i\right)^2 \sigma^2 = \sum\left(\frac{1}{n^2}+d_i^2\right)\sigma^2 = \frac{\sigma^2}{n} + \sum_{i=1}^n d_i^2 \sigma^2 \geq \frac{\sigma^2}{n}
+$$
+
+等号在 $d_i = 0$（即 $w_i = 1/n$）时成立——**算术平均值方差最小，是有效的。**
+
+我们后面会证明，MLE 是（近似）有效的。这意味着基于似然函数的优化会得到渐近无偏且方差最小的估计。
+
+{{< pagebreak >}}
+
+# 估计与不确定性 {#sec-uncertainty}
+
+> **Schatzung und Unsicherheit**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **置信区间**的精确定义与构造方法
+- **枢轴量（Pivotgrosse）** 的概念
+- 用 $S_n^2$ 估计方差时引入的额外不确定性与 **$t$ 分布**
+- **可信区间（Credibility Interval）** 与最高密度区间（HDI）
+- 频率学派 vs 贝叶斯的**解读差异**
+:::
+
+## 估计的随机性
+
+> **Die Zufalligkeit der Schatzung**
+
+$\hat{\theta}$ 不是一个固定数字——它是数据的函数，而数据是从 (3.1) 中随机抽取的。不同的数据集会给出不同的 $\hat{\theta}$。这种变异性称为**估计方差（Schatz-Varianz）**，我们需要量化它。
+
+由中心极限定理，在很多情况下：
+
+$$
+\hat{\theta} = t(Y_1, \ldots, Y_n) \overset{a}{\sim} N\!\left(\theta,\, Var(\hat{\theta})\right) \tag{3.15}
+$$
+
+其中 $\overset{a}{\sim}$ 表示"当 $n$ 足够大时近似服从"。
+
+## 置信区间
+
+> **Konfidenzintervalle**
+
+与其给出一个点估计 $\hat{\theta}$，不如给出一个**区间**，使我们"有信心"认为真参数在其中。区间的上下界 $t_l, t_r$ 都是数据的函数，因此区间本身是随机的。
+
+::: {.callout-important icon="false"}
+## 定义 3.9：置信区间 | Definition 3.9: Konfidenzintervall
+
+区间 $CI = [t_l(Y_1,\ldots,Y_n),\; t_r(Y_1,\ldots,Y_n)]$ 是参数 $\theta$ 的**置信水平 $(1-\alpha)$ 的置信区间**，如果对所有 $\theta$：
+
+$$
+P_\theta\!\Big(t_l(Y_1,\ldots,Y_n) \leq \theta \leq t_r(Y_1,\ldots,Y_n)\Big) \geq 1 - \alpha \tag{3.14}
+$$
+:::
+
+注意 $t_l = -\infty$, $t_r = +\infty$ 总是满足定义（$P(-\infty \leq \theta \leq \infty) = 1$），但这样的区间毫无意义。目标是找到满足定义且**长度最短**的区间。实践中我们优先选择 (3.14) 中取等号。
+
+### 枢轴量与构造方法
+
+> **Pivotgrosse und Konstruktionsmethode**
+
+::: {.callout-important icon="false"}
+## 定义 3.10：枢轴量 | Definition 3.10: Pivotgrosse
+
+量 $g(t(Y_1,\ldots,Y_n);\, \theta)$ 称为**枢轴量**，如果它的分布不依赖 $\theta$。该分布称为**枢轴分布**。
+:::
+
+精确的枢轴量是稀少的。但由于中心极限定理，近似枢轴分布很常见。利用 (3.15)：
+
+$$
+g = \frac{\hat{\theta} - \theta}{\sqrt{Var(\hat{\theta})}} \overset{a}{\sim} N(0, 1) \tag{3.16}
+$$
+
+$N(0,1)$ 不依赖 $\theta$，所以是枢轴的。由此构造置信区间：
+
+$$
+1-\alpha \approx P\!\left(z_{\alpha/2} \leq \frac{\hat\theta-\theta}{\sqrt{Var(\hat\theta)}} \leq z_{1-\alpha/2}\right)
+$$
+
+因为 $z_{\alpha/2} = -z_{1-\alpha/2}$，得到：
+
+$$
+\boxed{CI = \left[\hat{\theta} - z_{1-\alpha/2}\sqrt{Var(\hat{\theta})},\;\; \hat{\theta} + z_{1-\alpha/2}\sqrt{Var(\hat{\theta})}\right]} \tag{3.17}
+$$
+
+当 $1-\alpha = 0.95$ 时，$z_{1-\alpha/2} = 1.96 \approx 2$，给出常用近似：
+
+$$
+CI \approx \left[\hat{\theta} \pm 2\sqrt{Var(\hat{\theta})}\right] \tag{3.18}
+$$
+
+```{r}
+#| label: fig-ci-construction
+#| fig-cap: "置信区间的构造过程（仿教材 Fig. 3.4）| Konstruktion des Konfidenzintervalls"
+#| fig-height: 7
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+theta_hat <- 5.1; se <- 0.67
+x_seq <- seq(theta_hat - 3*se, theta_hat + 3*se, length.out = 300)
+y_dens <- dnorm(x_seq, theta_hat, se)
+
+plot(x_seq, y_dens, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(hat(theta)), ylab = "密度",
+     main = expression(paste("(1) ", hat(theta), " 的分布")),
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(v = theta_hat, col = "#DC2626", lty = 2, lwd = 2)
+
+z_seq <- seq(-3.5, 3.5, length.out = 300)
+z_dens <- dnorm(z_seq)
+plot(z_seq, z_dens, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression((hat(theta) - theta) / sqrt(Var(hat(theta)))),
+     ylab = "密度",
+     main = "(2) 枢轴量 ~ N(0,1)",
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+z_crit <- qnorm(0.975)
+idx_ci <- z_seq >= -z_crit & z_seq <= z_crit
+polygon(c(z_seq[idx_ci], rev(z_seq[idx_ci])),
+        c(z_dens[idx_ci], rep(0, sum(idx_ci))),
+        col = adjustcolor("#16A34A", 0.3), border = NA)
+text(0, 0.15, "95%", col = "#16A34A", font = 2, cex = 1.3)
+
+plot(z_seq, z_dens, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression((hat(theta) - theta) / sqrt(Var(hat(theta)))),
+     ylab = "密度",
+     main = "(3) 在枢轴量上截取",
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(v = c(-z_crit, z_crit), col = "#DC2626", lwd = 2, lty = 2)
+text(-z_crit - 0.1, 0.3, round(-z_crit, 2), col = "#DC2626", font = 2, pos = 2)
+text(z_crit + 0.1, 0.3, round(z_crit, 2), col = "#DC2626", font = 2, pos = 4)
+
+ci_lower <- theta_hat - z_crit * se
+ci_upper <- theta_hat + z_crit * se
+plot(x_seq, y_dens, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(hat(theta)), ylab = "密度",
+     main = "(4) 置信区间 | Konfidenzintervall",
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+idx_ci2 <- x_seq >= ci_lower & x_seq <= ci_upper
+polygon(c(x_seq[idx_ci2], rev(x_seq[idx_ci2])),
+        c(y_dens[idx_ci2], rep(0, sum(idx_ci2))),
+        col = adjustcolor("#16A34A", 0.3), border = NA)
+abline(v = c(ci_lower, ci_upper), col = "#DC2626", lwd = 2, lty = 2)
+text(ci_lower, max(y_dens) * 0.8, round(ci_lower, 2), col = "#DC2626", cex = 0.9, pos = 2)
+text(ci_upper, max(y_dens) * 0.8, round(ci_upper, 2), col = "#DC2626", cex = 0.9, pos = 4)
+
+par(mfrow = c(1, 1))
+```
+
+注意 $Var(\hat\theta)$ 本身可能依赖于未知参数 $\theta$。此时可以用 $\hat\theta$ 替换 $\theta$（**插入估计 / plug-in estimate**）。如果它依赖于其他未知参数，也需要估计它们。在小样本下，这会导致不同的分布。
+
+## 正态均值的置信区间与 $t$ 分布
+
+> **Konfidenzintervall fur den Normalverteilungs-Mittelwert und die $t$-Verteilung**
+
+当数据 $Y_i \sim N(\mu, \sigma^2)$ i.i.d.（式 3.19）时，$\hat\mu = \bar{Y} \sim N(\mu, \sigma^2/n)$。
+
+若 $\sigma^2$ **已知**：
+
+$$
+\frac{\bar{Y} - \mu}{\sigma / \sqrt{n}} \sim N(0, 1) \quad \Rightarrow \quad CI = \left[\bar{y} - z_{1-\alpha/2}\frac{\sigma}{\sqrt{n}},\;\bar{y} + z_{1-\alpha/2}\frac{\sigma}{\sqrt{n}}\right] \tag{3.20}
+$$
+
+但实际中 $\sigma^2$ 未知，用 $\hat\sigma^2 := S_n^2 = \frac{1}{n-1}\sum(Y_i - \bar{Y})^2$ 估计（$n-1$ 使估计无偏，留作练习 1 验证）。此时：
+
+$$
+\frac{\bar{Y} - \mu}{\hat\sigma / \sqrt{n}} \not\sim N(0, 1) \tag{3.21}
+$$
+
+**William Sealy Gosset（1876-1937，笔名 "Student"）** 在吉尼斯啤酒厂工作时发现并解决了这个问题。他因担心泄露商业秘密而以笔名发表（Student, 1908）。他的工作引出了 **$t$ 分布**：
+
+$$
+\boxed{\frac{\bar{Y} - \mu}{S_n / \sqrt{n}} \sim t_{(n-1)}} \tag{3.22}
+$$
+
+其中 $t_{(n-1)}$ 是自由度为 $n-1$ 的 $t$ 分布。这同样是枢轴量，因为它既不依赖 $\mu$ 也不依赖 $\sigma^2$。
+
+```{r}
+#| label: fig-t-vs-normal
+#| fig-cap: "t 分布 vs 标准正态：自由度越小尾巴越厚，不确定性越大（仿教材 Fig. 3.5 底右）| t-Verteilung vs. N(0,1)"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x_seq3 <- seq(-4.5, 4.5, length.out = 500)
+
+plot(x_seq3, dnorm(x_seq3), type = "l", col = "#1E293B", lwd = 3,
+     xlab = "x", ylab = "密度 | Dichte",
+     main = "t 分布 vs 标准正态分布 | t-Verteilung vs. N(0,1)",
+     ylim = c(0, 0.42),
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+df_vals <- c(2, 5, 30)
+t_cols <- c("#DC2626", "#EA580C", "#2563EB")
+for (i in seq_along(df_vals)) {
+  lines(x_seq3, dt(x_seq3, df = df_vals[i]), col = t_cols[i], lwd = 2.5, lty = 2)
+}
+
+legend("topright",
+       legend = c("N(0,1)", paste0("t(", df_vals, ")")),
+       col = c("#1E293B", t_cols),
+       lwd = c(3, rep(2.5, 3)), lty = c(1, 2, 2, 2),
+       bty = "n", cex = 0.95)
+
+arrows(3, 0.02, 3.5, dt(3.5, 2) + 0.01, col = "#DC2626", lwd = 1.5, length = 0.1)
+text(2.5, 0.025, "厚尾!\nDicke Schwanze!", col = "#DC2626", cex = 0.8, font = 2)
+```
+
+用 $t$ 分布构造的置信区间：
+
+$$
+CI = \left[\bar{y} - t_{(n-1),\,1-\alpha/2} \frac{S_n}{\sqrt{n}},\;\; \bar{y} + t_{(n-1),\,1-\alpha/2} \frac{S_n}{\sqrt{n}}\right] \tag{3.23}
+$$
+
+因为 $t_{(n-1),\,1-\alpha/2} > z_{1-\alpha/2}$（当 $0 < \alpha < 0.5$），所以**方差未知时的置信区间更宽**——方差的不确定性导致了更宽的区间。
+
+```{r}
+#| label: ci-concrete-example
+#| code-fold: false
+
+# 教材实例 | Lehrbuchbeispiel
+y_bar <- 3.2; s2 <- 4.2; n_ci <- 20; alpha <- 0.05
+
+t_crit <- qt(1 - alpha/2, df = n_ci - 1)
+z_crit_ci <- qnorm(1 - alpha/2)
+
+se_ci <- sqrt(s2 / n_ci)
+ci_lower_t <- y_bar - t_crit * se_ci
+ci_upper_t <- y_bar + t_crit * se_ci
+
+cat("数据 | Daten: y_bar =", y_bar, ", S_n^2 =", s2, ", n =", n_ci, "\n\n")
+cat("95% 置信区间（使用 t 分布）| 95%-KI (t-Verteilung):\n")
+cat("  t_(19, 0.975) =", round(t_crit, 6), "\n")
+cat("  CI = [", round(ci_lower_t, 2), ",", round(ci_upper_t, 2), "]\n\n")
+cat("如果用正态分位数（假装 sigma 已知）| Falls z-Quantil:\n")
+cat("  z_0.975 =", round(z_crit_ci, 4), "\n")
+cat("  CI = [", round(y_bar - z_crit_ci * se_ci, 2), ",", 
+    round(y_bar + z_crit_ci * se_ci, 2), "]\n\n")
+cat("t 区间更宽! 额外宽度反映了方差估计的不确定性。\n")
+```
+
+::: {.callout-tip collapse="true"}
+## 点击展开：$t$ 分布的完整证明（教材式 3.22 / 3.27） | Vollstandiger Beweis der $t$-Verteilung
+
+构造辅助变量：
+
+$$
+\begin{aligned}
+Z_1 &= \tfrac{1}{\sqrt{n}}(Y_1+Y_2+\cdots+Y_n) = \sqrt{n}\,\bar{Y}\\
+Z_2 &= \tfrac{1}{\sqrt{2}}(Y_1-Y_2)\\
+Z_3 &= \tfrac{1}{\sqrt{3}\sqrt{2}}(Y_1+Y_2-2Y_3)\\
+&\;\;\vdots\\
+Z_n &= \tfrac{1}{\sqrt{n}}\tfrac{1}{\sqrt{n-1}}\big(Y_1+\cdots+Y_{n-1}-(n-1)Y_n\big)
+\end{aligned}
+$$
+
+**性质**（可逐一验证）：
+
+- 所有 $Z_i$ 都是正态的（独立正态之和）
+- $E(Z_1)=\sqrt{n}\mu$，$E(Z_i)=0$（$i\geq 2$）
+- $Var(Z_i)=\sigma^2$ 对所有 $i$
+- $Cov(Z_i, Z_j)=0$ 对 $i\neq j$（详细计算见教材 p.38-39）
+
+因此 $Z_1,\ldots,Z_n$ 独立，且
+
+$$
+\frac{Z_1-\sqrt{n}\mu}{\sqrt{\sum_{i=2}^n Z_i^2/(n-1)}} \sim t_{(n-1)} \tag{3.27}
+$$
+
+关键等式（用归纳法证明，见教材 p.39-40）：
+
+$$
+Z_2^2+\cdots+Z_n^2 = \sum_{i=1}^n(Y_i-\bar{Y})^2 = (n-1)S_n^2 \tag{3.28}
+$$
+
+将 $Z_1=\sqrt{n}\bar{Y}$ 和 (3.28) 代入 (3.27)，即得：
+
+$$
+T = \frac{\bar{Y}-\mu}{S_n/\sqrt{n}} = \frac{Z_1-\sqrt{n}\mu}{\sqrt{\sum_{i=2}^n Z_i^2/(n-1)}} \sim t_{(n-1)} \qquad \square
+$$
+:::
+
+```{r}
+#| label: t-proof-verify
+#| code-fold: false
+
+# 数值验证 Z 变换的关键等式 (3.28) | Numerische Verifikation
+set.seed(42)
+n_t <- 10; sigma_t <- 3; mu_t <- 7
+Y <- rnorm(n_t, mu_t, sigma_t)
+
+SS_Y <- sum((Y - mean(Y))^2)
+
+Z_sq_sum <- 0
+for (i in 2:n_t) {
+  coefs <- c(rep(1, i-1), -(i-1))
+  Z_i <- sum(coefs * Y[1:i]) / (sqrt(i) * sqrt(i-1))
+  Z_sq_sum <- Z_sq_sum + Z_i^2
+}
+
+cat("sum(Z_2^2,...,Z_n^2) =", round(Z_sq_sum, 6), "\n")
+cat("sum((Y_i - Ybar)^2)  =", round(SS_Y, 6), "\n")
+cat("差异:", format(abs(Z_sq_sum - SS_Y), scientific = TRUE), 
+    " --> 等式 (3.28) 验证通过!\n")
+```
+
+## 置信区间的正确解读
+
+> **Korrekte Interpretation des Konfidenzintervalls**
+
+::: {.callout-warning icon="false"}
+## 注意：不要这样说 | Nicht so formulieren
+
+"真参数有 95% 的概率落在 $[2.24, 4.16]$ 内。"
+
+这是**错误的**。数据已经给定，$[2.24, 4.16]$ 是固定数字，$\mu$ 也是固定数字——要么在里面，要么不在，没有概率可言。概率陈述 (3.24) 不是关于随机过程的。
+:::
+
+::: {.callout-important icon="false"}
+## 定义 3.11：置信原理 | Definition 3.11: Konfidenzprinzip
+
+如果我们用相同方法对相同大小的新数据重复计算，那么在 $\alpha \times 100\%$ 的情况下，真参数不在区间内；在 $(1-\alpha) \times 100\%$ 的情况下，真参数在区间内。
+
+这描述的是**方法的长期频率性质**，而不是某个特定区间的概率。
+:::
+
+不过从不确定性的视角（回忆第 2 章掷骰子杯未揭开的例子），数据已给定，我们可以利用概率来量化对 $\theta$ 的不确定性。我们可以说：以 $(1-\alpha)\times 100\%$ 的**置信度**相信参数在区间内——但这里的"概率"不是指真正的随机实验，而是对知识的量化。
+
+```{r}
+#| label: fig-ci-coverage
+#| fig-cap: "100 个 95% 置信区间：约 5 个未覆盖真值（红色）| 100 KI: Etwa 5 verfehlen den wahren Wert (rot)"
+#| fig-height: 6
+
+set.seed(2024)
+mu_ci <- 5; sigma_ci <- 3; n_ci_sim <- 25; n_reps <- 100
+
+par(bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+plot(NULL, xlim = c(2, 8), ylim = c(0, n_reps + 1),
+     xlab = expression(mu), ylab = "实验编号 | Experiment Nr.",
+     main = paste0(n_reps, " 个 95% 置信区间 | ", n_reps, " Konfidenzintervalle (95%)"),
+     cex.lab = 1.1, cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(v = mu_ci, col = "#16A34A", lwd = 2.5)
+
+miss_count <- 0
+for (j in 1:n_reps) {
+  y_sim <- rnorm(n_ci_sim, mu_ci, sigma_ci)
+  yb <- mean(y_sim); s <- sd(y_sim)
+  tc <- qt(0.975, n_ci_sim - 1)
+  lo <- yb - tc * s / sqrt(n_ci_sim)
+  hi <- yb + tc * s / sqrt(n_ci_sim)
+  
+  covers <- lo <= mu_ci & hi >= mu_ci
+  ci_col <- ifelse(covers, adjustcolor("#2563EB", 0.6), "#DC2626")
+  lwd_ci <- ifelse(covers, 1.2, 2)
+  
+  segments(lo, j, hi, j, col = ci_col, lwd = lwd_ci)
+  points(yb, j, pch = "|", col = ci_col, cex = 0.5)
+  
+  if (!covers) miss_count <- miss_count + 1
+}
+
+text(7.5, n_reps - 3, paste0("未覆盖 | Nicht abgedeckt:\n", 
+                              miss_count, " / ", n_reps),
+     col = "#DC2626", font = 2, cex = 1)
+```
+
+## 可信区间：贝叶斯视角
+
+> **Credibility Intervall: Die Bayessche Perspektive**
+
+通过贝叶斯推理，可以给出类似的区间解读。在贝叶斯统计中，$\theta$ 被视为随机的，我们可以直接查看后验分布。
+
+::: {.callout-important icon="false"}
+## 定义 3.12：可信区间 | Definition 3.12: Credibility Intervall
+
+在贝叶斯框架中，$\theta$ 是随机变量。可信区间 $[t_l(y), t_r(y)]$ 定义为：
+
+$$
+P_\theta\!\Big(\theta \in [t_l(y_1,\ldots,y_n),\, t_r(y_1,\ldots,y_n)] \;\Big|\; y_1,\ldots,y_n\Big) \geq 1 - \alpha
+$$
+
+一种自然选择是等尾可信区间（两侧各切掉 $\alpha/2$ 的概率）：
+
+$$
+\int_{-\infty}^{t_l} p_\theta(\theta | y) \, d\theta = \int_{t_r}^{\infty} p_\theta(\theta | y) \, d\theta = \frac{\alpha}{2} \tag{3.25}
+$$
+:::
+
+### 最高后验密度区间（HDI）
+
+等尾区间构造简单，但当后验分布不对称时，它会包含低密度区域而排除高密度区域。
+
+**HDI（Highest Density Interval）** 解决了这个问题：选择一个阈值 $c$，使得所有密度大于 $c$ 的点构成的区域恰好覆盖 $1-\alpha$ 的概率。
+
+$$
+HDI(y_1, \ldots, y_n) = \{\theta : p_\theta(\theta | y_1, \ldots, y_n) \geq c\}
+$$
+
+其中 $c$ 满足 $\int_{\theta \in HDI} p_\theta(\theta | y_1,\ldots,y_n) d\theta = 1-\alpha$。
+
+```{r}
+#| label: fig-credibility
+#| fig-cap: "等尾可信区间 vs 最高后验密度区间 HDI（仿教材 Fig. 3.6）| Gleich-Schwanz vs. HDI"
+#| fig-height: 5.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+a_post <- 3; b_post <- 8
+theta_beta <- seq(0, 1, length.out = 500)
+dens_beta <- dbeta(theta_beta, a_post, b_post)
+
+q_low <- qbeta(0.05, a_post, b_post)
+q_high <- qbeta(0.95, a_post, b_post)
+
+plot(theta_beta, dens_beta, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(theta), ylab = "后验密度",
+     main = "等尾可信区间 | Gleich-Schwanz",
+     cex.main = 1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+idx_ci_bay <- theta_beta >= q_low & theta_beta <= q_high
+polygon(c(theta_beta[idx_ci_bay], rev(theta_beta[idx_ci_bay])),
+        c(dens_beta[idx_ci_bay], rep(0, sum(idx_ci_bay))),
+        col = adjustcolor("#2563EB", 0.25), border = NA)
+abline(v = c(q_low, q_high), col = "#DC2626", lty = 2, lwd = 2)
+text(0.5, max(dens_beta) * 0.8, "90%", col = "#2563EB", font = 2, cex = 1.3)
+
+find_hdi <- function(a, b, prob = 0.9, n = 10000) {
+  grid <- seq(0, 1, length.out = n)
+  d <- dbeta(grid, a, b)
+  sorted <- sort(d, decreasing = TRUE)
+  cum <- cumsum(sorted) / sum(sorted)
+  c_thresh <- sorted[which(cum >= prob)[1]]
+  in_hdi <- d >= c_thresh
+  c(min(grid[in_hdi]), max(grid[in_hdi]))
+}
+
+hdi_bounds <- find_hdi(a_post, b_post, 0.9)
+
+plot(theta_beta, dens_beta, type = "l", col = "#16A34A", lwd = 3,
+     xlab = expression(theta), ylab = "后验密度",
+     main = "最高密度区间 HDI",
+     cex.main = 1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+idx_hdi <- theta_beta >= hdi_bounds[1] & theta_beta <= hdi_bounds[2]
+polygon(c(theta_beta[idx_hdi], rev(theta_beta[idx_hdi])),
+        c(dens_beta[idx_hdi], rep(0, sum(idx_hdi))),
+        col = adjustcolor("#16A34A", 0.25), border = NA)
+abline(v = hdi_bounds, col = "#DC2626", lty = 2, lwd = 2)
+
+c_val <- dbeta(hdi_bounds[1], a_post, b_post)
+abline(h = c_val, col = "#9333EA", lty = 3, lwd = 1.5)
+text(0.7, c_val + 0.15, paste("c =", round(c_val, 2)), col = "#9333EA", cex = 0.85)
+text(0.5, max(dens_beta) * 0.8, "90%", col = "#16A34A", font = 2, cex = 1.3)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: ci-vs-credibility
+cat("等尾 90% 可信区间: [", round(q_low, 4), ",", round(q_high, 4), 
+    "]  宽度:", round(q_high - q_low, 4), "\n")
+cat("HDI 90% 可信区间:  [", round(hdi_bounds[1], 4), ",", round(hdi_bounds[2], 4),
+    "]  宽度:", round(diff(hdi_bounds), 4), "\n\n")
+cat("HDI 更短! 因为它只包含高密度区域。\n")
+```
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心概念链
+
+```{r}
+#| label: fig-summary-chain
+#| fig-cap: "本章知识逻辑链 | Logikkette der Konzepte dieses Kapitels"
+#| fig-height: 6.5
+#| fig-width: 12
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 12), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("第三章知识逻辑链 | Logikkette Kapitel 3")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+nx <- c(2, 6, 10, 2, 6, 10)
+ny <- c(6.5, 6.5, 6.5, 3.5, 3.5, 3.5)
+labels <- c(
+  "KL 散度\nKL-Divergenz",
+  "对数似然\nLog-Likelihood",
+  "MLE / 贝叶斯\nMLE / Bayes",
+  "偏差-方差\nFisher 信息\nBias-Varianz",
+  "充分性/有效性\nSuffizienz/Effizienz",
+  "置信/可信区间\nt 分布\nKI / Credibility"
+)
+fills <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#FEE2E2", "#E0E7FF", "#D1FAE5")
+bords <- c("#2563EB", "#D97706", "#DB2777", "#DC2626", "#6366F1", "#16A34A")
+
+for (i in 1:6) {
+  rect(nx[i]-1.3, ny[i]-0.7, nx[i]+1.3, ny[i]+0.7,
+       col = fills[i], border = bords[i], lwd = 2)
+  text(nx[i], ny[i], labels[i], cex = 0.6, font = 2, col = "#1E293B")
+}
+
+draw_arrow <- function(x1, y1, x2, y2, label, ...) {
+  arrows(x1, y1, x2, y2, col = "#64748B", lwd = 2, length = 0.12, ...)
+  mx <- (x1 + x2) / 2; my <- (y1 + y2) / 2
+  text(mx, my + 0.35, label, cex = 0.6, col = "#EA580C", font = 3)
+}
+
+draw_arrow(3.3, 6.5, 4.7, 6.5, "拆分 + 大数定律")
+draw_arrow(7.3, 6.5, 8.7, 6.5, "加入先验 p(theta)")
+draw_arrow(2, 5.8, 2, 4.2, "Taylor + I(theta)")
+draw_arrow(6, 5.8, 6, 4.2, "数据压缩 + 最优性")
+draw_arrow(10, 5.8, 10, 4.2, "量化不确定性")
+```
+
+## 公式速查表
+
+| 公式 | 名称 | 编号 |
+|:-----|:-----|:----:|
+| $KL(G,F) = \int \log\frac{g(y)}{f(y)} g(y) \, dy$ | KL 散度定义 | Def 3.1 |
+| $\theta_0$: $\;E\!\left[\frac{\partial \log f(Y;\theta_0)}{\partial \theta}\right] = 0$ | 最优参数定义 | 3.3 |
+| $l(\theta) = \sum_{i=1}^n \log f(y_i; \theta)$ | 对数似然函数 | Def 3.2 |
+| $p(\theta|y) = \frac{\exp(l(\theta))\,p(\theta)}{f(y)}$ | 后验分布 | 3.7 |
+| $I(\theta_0) = E\!\left[-\frac{\partial^2 \log f}{\partial\theta\partial\theta^\top}\right]$ | Fisher 信息矩阵 | 3.10 |
+| $MSE = Var(\hat\theta) + bias^2(\hat\theta, \theta_0)$ | 偏差-方差分解 | 3.11 |
+| $f = h \cdot g(t; \theta)$ | Neyman 分解 | 3.13 |
+| $CI = [\hat\theta \pm z_{1-\alpha/2}\sqrt{Var(\hat\theta)}]$ | 置信区间 | 3.17 |
+| $\frac{\bar{Y}-\mu}{S_n/\sqrt{n}} \sim t_{(n-1)}$ | $t$ 分布 | 3.22 |
+
+## 频率学派 vs 贝叶斯：一张对比表
+
+| 方面 | 频率学派 (Frequentist) | 贝叶斯 (Bayesianisch) |
+|:-----|:----------------------|:---------------------|
+| $\theta$ 的性质 | 固定但未知 | 随机变量 |
+| 目标 | 估计 $\theta$（点/区间） | 推断 $p(\theta|y)$ |
+| 先验信息 | 不使用 | 通过 $p(\theta)$ 编码 |
+| 不确定性量化 | 置信区间 | 可信区间 |
+| 解读 | 长期频率性质 | 给定数据下的信念 |
+| 数据少时 | 可能不稳定 | 先验起稳定作用 |
+| 数据多时 | 两者趋近一致 | 两者趋近一致 |
+
+{{< pagebreak >}}
+
+# 练习题 {#sec-exercises}
+
+> **Ubungsaufgaben**
+
+**练习 1**（教材 Exercise 1）
+
+对于 i.i.d. 随机变量 $Y_i$，均值 $\mu$，方差 $\sigma^2$，证明
+
+$$
+S_n^2 = \frac{1}{n-1}\sum_{i=1}^n (Y_i - \bar{Y})^2
+$$
+
+是 $\sigma^2$ 的无偏估计。提示：将被加数改写为 $(Y_i - \mu) - (\bar{Y} - \mu)$。
+
+```{r}
+#| label: exercise1-verify
+#| code-fold: false
+
+# 数值验证 S_n^2 的无偏性
+set.seed(42)
+mu_ex <- 10; sigma_ex <- 3; n_ex <- 15
+
+s2_samples <- replicate(50000, {
+  y <- rnorm(n_ex, mu_ex, sigma_ex)
+  var(y)  # R 的 var() 默认用 n-1
+})
+
+cat("sigma^2 真实值:    ", sigma_ex^2, "\n")
+cat("E[S_n^2] 模拟值:  ", round(mean(s2_samples), 3), "\n")
+cat("确认: 无偏! | Bestatigt: Unbiased!\n")
+```
+
+**练习 2**（教材 Exercise 2）
+
+a) 给出 KL 散度的定义，说明为什么 $KL(g, f) \neq KL(f, g)$（除非 $f = g$）。
+
+b) 给定样本 $x = (2,2,3,2,3,0,2,1,4,3)^\top$，假设 $X_i \sim Bin(4, 0.5)$。计算经验分布 $g(\cdot)$ 与假设分布 $f(\cdot)$ 之间的 KL 散度。
+
+```{r}
+#| label: exercise2b
+#| code-fold: false
+
+# Exercise 2b
+x_sample <- c(2, 2, 3, 2, 3, 0, 2, 1, 4, 3)
+
+tab <- table(factor(x_sample, levels = 0:4)) / length(x_sample)
+g_emp <- as.numeric(tab)
+
+f_bin <- dbinom(0:4, size = 4, prob = 0.5)
+
+cat("k:     ", 0:4, "\n")
+cat("g(k):  ", g_emp, "\n")
+cat("f(k):  ", round(f_bin, 4), "\n\n")
+
+# KL(g, f) — 注意 g(k)=0 时该项贡献为 0
+kl_val_safe <- sum(ifelse(g_emp > 0, g_emp * log(g_emp / f_bin), 0))
+cat("KL(经验分布, Bin(4,0.5)) =", round(kl_val_safe, 4), "\n")
+```
+
+**练习 3**（教材 Exercise 3）
+
+设 $X = (X_1, \ldots, X_n)^\top$ 是泊松分布 $Poisson(\lambda)$ 的 i.i.d. 样本。
+
+a) 直接计算条件分布证明 $t(X) = \sum X_i$ 对 $\lambda$ 充分。
+
+b) 用 Neyman 分解证明充分性。
+
+c) $\bar{X}$ 和 $\bar{X}^{-1}$ 也对 $\lambda$ 充分吗？
+
+d) $\bar{X}$ 对 $\lambda$ 无偏且相合吗？
+
+```{r}
+#| label: exercise3d
+#| code-fold: false
+
+# Exercise 3d: 验证 X_bar 对 lambda 的无偏性和相合性
+lambda_true <- 3.5
+n_vals_ex3 <- c(5, 50, 500, 5000)
+
+set.seed(42)
+cat("lambda 真实值:", lambda_true, "\n\n")
+for (nn in n_vals_ex3) {
+  xbar_samples <- replicate(10000, mean(rpois(nn, lambda_true)))
+  cat(sprintf("n = %5d:  E[X_bar] = %.4f,  Var(X_bar) = %.6f,  MSE = %.6f\n",
+              nn, mean(xbar_samples), var(xbar_samples),
+              mean((xbar_samples - lambda_true)^2)))
+}
+cat("\n结论: E[X_bar] approx lambda (无偏), MSE -> 0 (相合)\n")
+```
+
+**练习 4**（教材 Exercise 4）
+
+一家公司用木箱发运茶叶，每箱装 10 包。单包重量 $\sim N(\mu = 6\text{ kg},\;\sigma = 0.06\text{ kg})$，空木箱重量 $\sim N(\mu = 5\text{ kg},\;\sigma = 0.05\text{ kg})$。
+
+a) 在独立性假设下，给出一个关于总重期望值对称的区间，使得 95% 的情况下毛重落入该区间。
+
+b) 客户抽取 $n=16$ 包，样本均值为 5.95 kg。计算单包平均重量的 95% 置信区间并解读结果。
+
+```{r}
+#| label: exercise4
+#| code-fold: false
+
+# Exercise 4a：总重的分布
+mu_pack <- 6; sigma_pack <- 0.06; n_pack <- 10
+mu_crate <- 5; sigma_crate <- 0.05
+
+# 总重 = 10 * 单包 + 空箱
+mu_total <- n_pack * mu_pack + mu_crate
+# Var(总重) = 10 * sigma_pack^2 + sigma_crate^2 (独立性)
+sigma_total <- sqrt(n_pack * sigma_pack^2 + sigma_crate^2)
+
+ci_4a <- mu_total + c(-1, 1) * qnorm(0.975) * sigma_total
+cat("4a) 毛重期望值:", mu_total, "kg\n")
+cat("    毛重标准差:", round(sigma_total, 4), "kg\n")
+cat("    95% 区间: [", round(ci_4a[1], 3), ",", round(ci_4a[2], 3), "] kg\n\n")
+
+# Exercise 4b：单包均值的置信区间
+n_4b <- 16; ybar_4b <- 5.95; sigma_4b <- 0.06
+# sigma 已知，用正态分位数
+ci_4b <- ybar_4b + c(-1, 1) * qnorm(0.975) * sigma_4b / sqrt(n_4b)
+cat("4b) 样本均值:", ybar_4b, "kg, n =", n_4b, ", sigma =", sigma_4b, "kg\n")
+cat("    95% CI (sigma 已知): [", round(ci_4b[1], 4), ",", round(ci_4b[2], 4), "]\n")
+cat("    区间是否包含 mu = 6 kg?", ci_4b[1] <= 6 & 6 <= ci_4b[2], "\n\n")
+cat("解读: 区间不包含 6 kg，说明在 95% 置信水平下，\n")
+cat("平均单包重量显著低于标称值 6 kg。\n")
+cat("Interpretation: Das Intervall enthalt nicht 6 kg. Auf dem 95%-Niveau\n")
+cat("ist das durchschnittliche Paketgewicht signifikant kleiner als 6 kg.\n")
+```
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 信息论与似然
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Kullback-Leibler-Divergenz | KL 散度 | Kullback-Leibler divergence |
+| die Entropie | 熵 | entropy |
+| die Kreuzentropie | 交叉熵 | cross-entropy |
+| die Likelihood-Funktion | 似然函数 | likelihood function |
+| die Log-Likelihood | 对数似然 | log-likelihood |
+| die Maximum-Likelihood-Schatzung (MLE) | 最大似然估计 | maximum likelihood estimation |
+| der Datengenerierungsprozess (DGP) | 数据生成过程 | data generating process |
+| das statistische Modell | 统计模型 | statistical model |
+| die Fisher-Informationsmatrix | Fisher 信息矩阵 | Fisher information matrix |
+
+## 贝叶斯统计
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Prior-Verteilung (a priori) | 先验分布 | prior distribution |
+| die Posterior-Verteilung (a posteriori) | 后验分布 | posterior distribution |
+| der posteriore Modus | 后验众数 | posterior mode |
+| die inverse Wahrscheinlichkeit | 逆概率 | inverse probability |
+| die Normalisierungskonstante | 归一化常数 | normalization constant |
+| das Credibility-Intervall | 可信区间 | credibility interval |
+| das HDI (hochstes Dichte-Intervall) | 最高密度区间 | highest density interval |
+| der flache Prior | 平坦先验 | flat prior |
+
+## 估计量性质
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Konsistenz | 相合性 | consistency |
+| die Verzerrung (Bias) | 偏差 | bias |
+| unverzerrt (unbiased) | 无偏的 | unbiased |
+| asymptotisch unverzerrt | 渐近无偏 | asymptotically unbiased |
+| die Varianz des Schatzers | 估计方差 | estimation variance |
+| der mittlere quadratische Fehler (MSE) | 均方误差 | mean squared error |
+| der Bias-Varianz-Tradeoff | 偏差-方差权衡 | bias-variance tradeoff |
+| die Suffizienz | 充分性 | sufficiency |
+| die suffiziente Statistik | 充分统计量 | sufficient statistic |
+| die Neyman-Faktorisierung | Neyman 分解 | Neyman factorization |
+| die minimale Suffizienz | 最小充分性 | minimal sufficiency |
+| die Effizienz | 有效性 | efficiency |
+
+## 置信区间与检验
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| das Konfidenzintervall (KI) | 置信区间 | confidence interval |
+| das Konfidenzniveau | 置信水平 | confidence level |
+| die Pivotgrosse | 枢轴量 | pivotal statistic |
+| die Pivotverteilung | 枢轴分布 | pivotal distribution |
+| die $t$-Verteilung | $t$ 分布 | $t$-distribution |
+| der Freiheitsgrad | 自由度 | degree of freedom |
+| das Quantil | 分位数 | quantile |
+| die Uberdeckungswahrscheinlichkeit | 覆盖概率 | coverage probability |
+| das Konfidenzprinzip | 置信原理 | confidence principle |
+| die Plug-in-Schatzung | 插入估计 | plug-in estimate |
+| die Tschebyscheff-Ungleichung | 切比雪夫不等式 | Chebyshev's inequality |
+:::

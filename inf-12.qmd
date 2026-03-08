@@ -1,0 +1,1992 @@
+---
+title: "第十二章：非独立同分布数据"
+subtitle: "当 i.i.d. 假设不再成立时的统计建模 | Wenn die i.i.d.-Annahme nicht mehr gilt"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+本书前面章节所讨论的数据分析框架建立在一个核心假设之上：数据由某个概率分布**独立同分布**（i.i.d.）生成。这意味着一个观测值与另一个观测值彼此独立，且所有观测值来自同一个数据生成过程。从实际角度看，这一假设自然地导出似然函数可以分解为若干独立的低维分量（参见第 3 章）。同时，它也是渐近理论的基础（第 4 章）。然而，一旦这一假设不再成立，许多数学性质随之消失。
+
+在第 11 章中，我们研究了简单独立性假设不成立的数据情形，并引入了图模型（Graphical Models）框架来应对此类问题。本章旨在从**具体数据类型**的角度出发，处理与之相关的依赖性问题，并再次利用图模型来表达条件独立性。
+
+*Das Grundgerust der bisherigen Datenanalyse basiert auf der i.i.d.-Annahme. Dieses Kapitel behandelt Daten mit zusatzlicher Struktur: zeitliche Ordnung, raumliche Lage, Netzwerkabhangigkeit und funktionale Beobachtungen.*
+
+我们将覆盖五种最常见的依赖结构：
+
+1. **时间序列模型** -- 数据具有时间顺序，当前值依赖于历史值
+2. **空间数据** -- 数据具有地理位置，近邻更相关
+3. **网络数据** -- 实体之间的关系具有相互依赖性
+4. **函数型数据** -- 观测值不再是标量，而是整条函数曲线
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图 | Lernroadmap dieses Kapitels"
+#| fig-height: 5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 18), ylim = c(0, 7), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# 中心：i.i.d. 被打破
+rect(7, 4.5, 11, 6.2, col = "#FEE2E2", border = "#DC2626", lwd = 3)
+text(9, 5.6, "i.i.d. 假设不再成立", font = 2, cex = 0.7, col = "#DC2626")
+text(9, 5.1, "i.i.d.-Annahme verletzt", font = 3, cex = 0.5, col = "#DC2626")
+
+# 四个分支
+steps_x <- c(2.5, 7, 11.5, 16)
+steps_y <- rep(2.2, 4)
+labels_cn <- c("时间序列\nAR/MA/ARMA", 
+               "空间数据\nKriging/变差函数",
+               "网络数据\nERGM/社区检测",
+               "函数型数据\nFPCA/函数回归")
+labels_de <- c("Zeitreihen", 
+               "Raumliche\nDaten",
+               "Netzwerk-\ndaten",
+               "Funktionale\nDaten")
+colors <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#E0E7FF")
+borders <- c("#2563EB", "#D97706", "#DB2777", "#6366F1")
+
+for (i in 1:4) {
+  rect(steps_x[i] - 1.6, steps_y[i] - 1.0, steps_x[i] + 1.6, steps_y[i] + 1.0,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.35, labels_cn[i], cex = 0.5, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.42, col = "#64748B", font = 3)
+  text(steps_x[i] - 1.2, steps_y[i] + 0.85, paste0("\u00a712.", i), 
+       cex = 0.5, col = borders[i], font = 2)
+  arrows(steps_x[i], 3.2, steps_x[i], 4.4, col = "#94A3B8", lwd = 2, length = 0.1, code = 1)
+}
+
+text(9, 0.5, "五种最常见的依赖结构，统一在 '非 i.i.d.' 的框架下  >>>", 
+     cex = 0.85, col = "#DC2626")
+```
+
+**最终目标**：理解当 i.i.d. 假设被打破时，如何针对不同数据类型使用合适的统计模型 --
+
+$$
+\underbrace{\text{时间序列}}_{\text{时间依赖}} \quad \underbrace{\text{空间数据}}_{\text{空间依赖}} \quad \underbrace{\text{网络数据}}_{\text{关系依赖}} \quad \underbrace{\text{函数型数据}}_{\text{曲线内依赖}}
+$$
+
+现在看不懂？**完全没关系** -- 读完本章，你将掌握处理这四类依赖数据的核心思路。
+
+{{< pagebreak >}}
+
+# 时间序列模型 {#sec-time-series}
+
+> **Zeitreihenmodelle**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 时间序列的**基本记号**：均值函数、协方差函数、平稳性
+- **自协方差函数**和**自相关函数**（ACF）的定义与估计
+- **自回归过程**（AR）的定义、性质与参数范围
+- **移动平均过程**（MA）的定义与自相关结构
+- **ARMA 与 ARIMA 过程**的统一算子表示
+- **偏自相关函数**（PACF）在模型识别中的角色
+- 时间序列**预测**的基本思路
+:::
+
+## 记号与核心思想
+
+> **Notation und Hauptideen**
+
+::: {.callout-tip icon="false"}
+## 河流与记忆的比喻 | Die Fluss-und-Gedachtnis-Metapher
+
+想象一条河流的水位。今天的水位不是凭空出现的 -- 它与昨天的降雨、前天的降雪融化密切相关。河流具有"记忆"：当前的状态依赖于过去。这就是时间序列数据的核心特征。与 i.i.d. 数据不同，时间序列中的每一个观测值都与其相邻的观测值存在关联 -- 数据不再是"独立"的骰子投掷，而是一条连续流淌、前后相依的河流。
+
+*Eine Zeitreihe ist wie ein Fluss: Der heutige Wasserstand hangt vom gestrigen Regen ab. Die Beobachtungen sind nicht unabhangig, sondern zeitlich verknupft.*
+:::
+
+我们假设数据按照时间顺序采集，称之为时间序列数据，记作
+
+$$
+Y_1, Y_2, Y_3, \ldots, Y_T, \ldots
+$$
+
+并假设时间点 $t = 1, 2, \ldots, T$ 是离散且等间距的。我们进一步假设数据在时间上存在某种相关性，即 $\text{Cov}(Y_t, Y_{t'}) \neq 0$（当 $1 \leq t, t' \leq T$）。
+
+我们定义**均值函数**（Mittelwertfunktion）为
+
+$$
+\mu_Y(t) = E(Y_t)
+$$
+
+以及**协方差函数**（Kovarianzfunktion）为
+
+$$
+\gamma_Y(t, t') = \text{Cov}(Y_t, Y_{t'})
+$$
+
+后者尤为关键，因为对于按时间收集的数据，当前值 $Y_t$ 在某个时间点 $t$ 依赖于之前的观测 $Y_{t-1}, Y_{t-2}, \ldots$ 是合理的。时间序列分析的两个核心问题是：数据的**序列相关结构**是什么，即 $\gamma_Y(t, t')$ 的结构如何？给定截至时间点 $t$ 的数据，如何**预测未来值** $Y_{t+1}, Y_{t+2}, \ldots$？
+
+要讨论相关性，我们显然需要了解 $\mu_Y(t)$。还需要注意 $\gamma_Y(t, t')$ 描述的是**协方差**而非相关系数，这意味着它也捕捉了方差随时间的变化。
+
+## 三个引导性示例
+
+> **Drei motivierende Beispiele**
+
+```{r}
+#| label: fig-example-12-1
+#| fig-cap: "例 12.1：全球年均温度变化（上图）及去趋势后的波动（下图）| Beispiel 12.1: Globale Jahrestemperatur"
+#| fig-height: 8
+
+set.seed(2024)
+years <- 1850:2019
+n_yr <- length(years)
+trend <- ifelse(years < 1975, 0.002 * (years - 1850), 
+                0.002 * (1975 - 1850) + 0.018 * (years - 1975))
+noise <- arima.sim(n = n_yr, model = list(ar = 0.4), sd = 0.08)
+temp_anom <- trend + as.numeric(noise)
+temp_anom <- temp_anom - mean(temp_anom)
+
+# 局部多项式平滑估计趋势
+lo_fit <- loess(temp_anom ~ years, span = 0.25)
+mu_hat <- predict(lo_fit)
+residuals_temp <- temp_anom - mu_hat
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+plot(years, temp_anom, type = "l", col = "#6B7280", lwd = 1,
+     xlab = "年份 | Jahr", ylab = "温度偏差 (C) | Temperaturabweichung",
+     main = "例 12.1：全球年均温度偏差 | Globale Temperaturabweichung",
+     cex.main = 1.0, col.main = "#1E293B")
+lines(years, mu_hat, col = "#DC2626", lwd = 3)
+grid(col = "#E2E8F0")
+legend("topleft", legend = c("观测值", expression(hat(mu)[Y](t))), 
+       col = c("#6B7280", "#DC2626"), lwd = c(1, 3), bty = "n", cex = 0.85)
+
+plot(years, residuals_temp, type = "l", col = "#2563EB", lwd = 1,
+     xlab = "年份 | Jahr", ylab = "去趋势残差 (C) | Detrendierte Residuen",
+     main = "去趋势后的波动 | Detrendierte Fluktuation",
+     cex.main = 1.0, col.main = "#1E293B")
+abline(h = 0, col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+**例 12.1**（全球温度）展示了 1850--2019 年全球年均温度相对于整体均值的偏差。从大约 1975 年开始，一个明显的上升趋势 $\mu_Y(t)$ 清晰可见。我们在图中加入趋势估计 $\hat{\mu}_Y(t)$，然后观察残差波动 $y_t - \hat{\mu}_Y(t)$，这些残差展示在下图中。
+
+```{r}
+#| label: fig-example-12-2
+#| fig-cap: "例 12.2：德国 DAX 股指（上图）及对数收益率（下图）| Beispiel 12.2: DAX-Index und Log-Renditen"
+#| fig-height: 8
+
+set.seed(42)
+n_dax <- 3000
+dax_returns <- rnorm(n_dax, mean = 0.0002, sd = 0.012)
+# 模拟波动率聚集效应
+vol_cluster <- rep(1, n_dax)
+vol_cluster[600:800] <- 2.5
+vol_cluster[2400:2600] <- 3.0
+dax_returns <- dax_returns * vol_cluster
+
+dax_price <- numeric(n_dax)
+dax_price[1] <- 6000
+for (i in 2:n_dax) {
+  dax_price[i] <- dax_price[i - 1] * exp(dax_returns[i])
+}
+
+time_dax <- seq(2010, 2022, length.out = n_dax)
+log_ret <- diff(log(dax_price))
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+plot(time_dax, dax_price, type = "l", col = "#2563EB", lwd = 1,
+     xlab = "时间 | Zeit", ylab = "DAX",
+     main = "例 12.2：德国 DAX 股指 | DAX-Index",
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+plot(time_dax[-1], log_ret, type = "l", col = "#6B7280", lwd = 0.5,
+     xlab = "时间 | Zeit", ylab = "对数收益率 | Log-Rendite",
+     main = expression(paste("对数收益率: ", tilde(Y)[t] == log(Y[t] / Y[t-1]))),
+     cex.main = 1.0, col.main = "#1E293B")
+abline(h = 0, col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+**例 12.2**（DAX 股指）展示了 2010--2022 年的德国股市指数。数据呈现温和的上升趋势。我们可以通过计算**对数收益率**（Log-Rendite）来校正趋势，定义为 $\tilde{Y}_t = \log(Y_t / Y_{t-1})$。在对数收益率图中，我们还可以观察到波动率的变化 -- 在某些时期（如 2012 年和 2020 年），波动明显增大。
+
+```{r}
+#| label: fig-example-12-3
+#| fig-cap: "例 12.3：奥格斯堡日温度（上图）及去季节性后的数据（下图）| Beispiel 12.3: Tagliche Temperatur in Augsburg"
+#| fig-height: 8
+
+set.seed(2024)
+days <- 1:(365 * 20)
+time_aug <- 2003 + days / 365
+seasonal <- 12 * sin(2 * pi * days / 365 - pi / 2) + 10
+noise_aug <- arima.sim(n = length(days), model = list(ar = c(0.7, 0.15)), sd = 2.5)
+temp_aug <- seasonal + as.numeric(noise_aug)
+
+# 估计季节性成分
+day_of_year <- ((days - 1) %% 365) + 1
+seasonal_est <- tapply(temp_aug, day_of_year, mean)
+seasonal_full <- seasonal_est[day_of_year]
+deseason_temp <- temp_aug - seasonal_full
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+plot(time_aug, temp_aug, type = "l", col = "#6B7280", lwd = 0.3,
+     xlab = "时间 | Zeit", ylab = "温度 (C) | Temperatur",
+     main = "例 12.3：奥格斯堡日均温度 | Tagliche Temperatur in Augsburg",
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+plot(time_aug, deseason_temp, type = "l", col = "#2563EB", lwd = 0.3,
+     xlab = "时间 | Zeit", ylab = "去季节性温度 (C) | Desaisonalisierte Temp.",
+     main = "去除季节性变化后的数据 | Desaisonalisierte Daten",
+     cex.main = 1.0, col.main = "#1E293B")
+abline(h = 0, col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+**例 12.3**（奥格斯堡温度）展示了 2003--2022 年的日均温度。冬夏交替的季节性模式清晰可见。我们可以提取年度季节性模式，然后观察剩余的波动（下图）。
+
+## 平稳性与自协方差函数
+
+> **Stationaritat und Autokovarianzfunktion**
+
+在开始时间序列分析之前，我们首先将均值结构设为零，即假设 $\mu_Y(t) \equiv 0$。我们进一步假设（弱）平稳性，即协方差函数仅依赖于时间差 $|t - t'|$ 而不依赖于具体的 $t$ 值：
+
+$$
+\gamma_Y(t, t') = \gamma_Y(|t - t'|)
+$$
+
+在此情形下，我们称
+
+$$
+\gamma_Y(h) = \text{Cov}(Y_t, Y_{t+h}) = \text{Cov}(Y_{t+h}, Y_t)
+$$
+
+为**自协方差函数**（Autokovarianzfunktion），其中 $h = 0, 1, \ldots, T$。这导出方差矩阵
+
+$$
+\Gamma = \begin{pmatrix} \gamma(0) & \gamma(1) & \gamma(2) & \cdots & \gamma(T) \\ \gamma(1) & \gamma(0) & \gamma(1) & \cdots & \gamma(T-1) \\ \gamma(2) & \gamma(1) & \gamma(0) & \cdots & \gamma(T-2) \\ \vdots & \vdots & \vdots & \ddots & \vdots \\ \gamma(T) & \gamma(T-1) & \gamma(T-2) & \cdots & \gamma(0) \end{pmatrix}
+$$
+
+由于 $\gamma_Y(0) = \text{Var}(Y_t)$，我们可以定义所谓的**自相关函数**（Autokorrelationsfunktion, ACF）：
+
+$$
+\rho(h) = \frac{\gamma(h)}{\gamma(0)}
+$$
+
+相应地，这导出相关矩阵
+
+$$
+R = \begin{pmatrix} 1 & \rho(1) & \rho(2) & \cdots & \rho(T) \\ \rho(1) & 1 & \rho(1) & \cdots & \rho(T-1) \\ \rho(2) & \rho(1) & 1 & \cdots & \rho(T-2) \\ \vdots & \vdots & \vdots & \ddots & \vdots \\ \rho(T) & \rho(T-1) & \rho(T-2) & \cdots & 1 \end{pmatrix}
+$$
+
+我们通常假设这些函数都是有限的。注意，对于 i.i.d. 数据有
+
+$$
+\gamma_Y(h) = \begin{cases} \sigma^2 & \text{当 } h = 0 \\ 0 & \text{当 } h \neq 0 \end{cases}
+$$
+
+我们称满足这种自相关函数的时间序列为**白噪声**（weisses Rauschen）。
+
+::: {.callout-tip icon="false"}
+## 白噪声的比喻 | Die Weisses-Rauschen-Metapher
+
+白噪声就像收音机没有信号时发出的"沙沙"声 -- 每一时刻的声音与前一时刻完全无关，没有任何规律可循。它是"最没有记忆"的时间序列。相比之下，一首旋律优美的乐曲（有自相关的时间序列）中，下一个音符总是与前面的音符有关联。
+
+*Weisses Rauschen ist wie das Rauschen eines Radios ohne Empfang -- kein Muster, keine Abhangigkeit. Eine Melodie hingegen hat zeitliche Korrelation.*
+:::
+
+## 自协方差函数的估计
+
+> **Schatzung der Autokovarianzfunktion**
+
+假设均值恒定 $\mu_Y(t) = E(Y_t) = \mu$，我们可以通过算术平均 $\bar{y} = \sum_{t=1}^T y_t / T$ 来估计 $\mu$。自协方差函数可以通过以下公式估计：
+
+$$
+\hat{\gamma}_Y(h) = \frac{1}{T} \sum_{t=1}^{T-h} (y_t - \bar{y})(y_{t+h} - \bar{y})
+$$
+
+当 $0 \leq h < T$ 时成立。注意上式中求和只有 $T - h$ 项但除以 $T$ 而非 $T - h$。这看起来不直观，但它是有意为之的，因为这种估计可以保证矩阵估计 $\hat{\Gamma}$ 是**半正定的**。
+
+为了验证半正定性，令 $x_t = y_t - \bar{y}$。则 $\hat{\Gamma}$ 可以写为 $\hat{\Gamma} = \frac{1}{T} DD^\top$，其中 $D$ 是一个 $T \times (2T-1)$ 维矩阵。这直接表明对所有 $a \in \mathbb{R}^T$：
+
+$$
+a^\top \hat{\Gamma} a = \frac{1}{T} [aD][aD]^\top \geq 0
+$$
+
+从 $\hat{\Gamma}$ 我们可以立即得到 $R$ 的估计：$\hat{R} = \hat{\Gamma} / \hat{\gamma}(0)$，其第一列即为**样本自相关函数**（Stichproben-ACF）：
+
+$$
+\hat{\rho}(h) = \frac{\hat{\gamma}(h)}{\hat{\gamma}(0)}
+$$
+
+```{r}
+#| label: fig-acf-examples
+#| fig-cap: "三个示例的估计自相关函数（仿教材 Fig. 12.4）| Geschatzte ACF fur die drei Beispiele"
+#| fig-height: 9
+
+par(mfrow = c(3, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+# 年均温度残差 ACF
+acf_temp <- acf(residuals_temp, lag.max = 10, plot = FALSE)
+barplot(drop(acf_temp$acf)[-1], names.arg = 1:10, col = "#2563EB", border = "#2563EB",
+        main = "年均温度残差的自相关 | ACF der Temperaturresiduen",
+        xlab = "时间滞后 h | Lag h", ylab = expression(hat(rho)(h)),
+        cex.main = 1.0, col.main = "#1E293B", ylim = c(-0.2, 1))
+abline(h = 1.96 / sqrt(n_yr), col = "#DC2626", lty = 2)
+abline(h = -1.96 / sqrt(n_yr), col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+# DAX 对数收益率 ACF
+acf_dax <- acf(log_ret, lag.max = 10, plot = FALSE)
+barplot(drop(acf_dax$acf)[-1], names.arg = 1:10, col = "#EA580C", border = "#EA580C",
+        main = "DAX 对数收益率的自相关 | ACF der DAX Log-Renditen",
+        xlab = "时间滞后 h | Lag h", ylab = expression(hat(rho)(h)),
+        cex.main = 1.0, col.main = "#1E293B", ylim = c(-0.2, 1))
+abline(h = 1.96 / sqrt(length(log_ret)), col = "#DC2626", lty = 2)
+abline(h = -1.96 / sqrt(length(log_ret)), col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+# 奥格斯堡去季节性温度 ACF
+acf_aug <- acf(deseason_temp, lag.max = 10, plot = FALSE)
+barplot(drop(acf_aug$acf)[-1], names.arg = 1:10, col = "#16A34A", border = "#16A34A",
+        main = "奥格斯堡去季节性温度的自相关 | ACF der desais. Temperatur",
+        xlab = "时间滞后 h | Lag h", ylab = expression(hat(rho)(h)),
+        cex.main = 1.0, col.main = "#1E293B", ylim = c(-0.2, 1))
+abline(h = 1.96 / sqrt(length(deseason_temp)), col = "#DC2626", lty = 2)
+abline(h = -1.96 / sqrt(length(deseason_temp)), col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+上图展示了三个示例的估计自相关函数。对于前两个示例（年均温度残差和 DAX 对数收益率），自相关快速衰减，基本上在滞后 2 以上就为零。然而奥格斯堡日温度的情况不同，即使在较大的滞后阶数下仍然存在显著的自相关。
+
+## 自回归过程 (AR)
+
+> **Autoregressiver Prozess (AR)**
+
+::: {.callout-tip icon="false"}
+## 弹簧球的比喻 | Die Feder-und-Kugel-Metapher
+
+想象一个球挂在弹簧上上下弹跳。球的当前位置取决于前一时刻的位置（惯性，由系数 $\phi$ 控制）加上一个随机扰动（风吹）。如果弹簧足够强（$|\phi| < 1$），球会在平衡位置附近稳定振荡；如果弹簧太弱（$|\phi| > 1$），球会越弹越远，失去控制。
+
+*Ein AR(1)-Prozess ist wie eine Kugel an einer Feder: Die aktuelle Position hangt von der vorherigen ab. Bei $|\phi| < 1$ schwingt sie stabil, bei $|\phi| > 1$ entgleitet sie.*
+:::
+
+时间序列分析中的一个核心模型类是自回归移动平均（ARMA）模型，可进一步扩展为自回归积分移动平均（ARIMA）过程。该模型类最初由 Whittle (1951) 提出，后由 Box 和 Jenkins (1970) 推广。
+
+我们从**自回归（AR）模型**开始。假设 $Y_t$ 由前 $p$ 个值加上独立白噪声确定。
+
+::: {.callout-important icon="false"}
+## 定义 12.1：AR(p) 过程 | Definition 12.1: AR(p)-Prozess
+
+自回归 AR(p) 过程定义为
+
+$$
+Y_t = \phi_1 Y_{t-1} + \phi_2 Y_{t-2} + \cdots + \phi_p Y_{t-p} + Z_t
+$$
+
+其中 $Z_t \sim N(0, \sigma^2)$ i.i.d.
+:::
+
+引入**后移算子**（Backshift-Operator）$B$ 可以简化记号：$BY_t = Y_{t-1}$，$B^2 Y_t = Y_{t-2}$，一般地 $B^p Y_t = Y_{t-p}$。该算子也可扩展到负值，如 $B^{-1} Y_t = Y_{t+1}$。用后移算子可以将 AR(p) 过程简洁地写为：
+
+$$
+\left(1 - \sum_{j=1}^{p} \phi_j B^j \right) Y_t = Z_t
+$$
+
+### AR(1) 过程的详细分析
+
+最简单的例子是 AR(1) 过程，它是建模实际数据序列相关性的第一步。此时：
+
+$$
+Y_t = \phi Y_{t-1} + Z_t
+$$
+
+注意 $\phi$ 扮演着自相关的角色，因为
+
+$$
+\text{Cov}(Y_t, Y_{t-1}) = \phi \text{Cov}(Y_{t-1}, Y_{t-1}) = \phi \sigma^2
+$$
+
+假设平稳性，我们得到 $\rho(1) = \phi$。更一般地，可以证明 $\rho(h) = \phi^h$。限制 $|\phi| < 1$ 时，相关矩阵为
+
+$$
+\Gamma = \begin{pmatrix} 1 & \phi^1 & \phi^2 & \cdots & \phi^T \\ \phi^1 & 1 & \phi^1 & \cdots & \phi^{T-1} \\ \phi^2 & \phi^1 & 1 & \cdots & \phi^{T-2} \\ \vdots & \vdots & \vdots & \ddots & \vdots \\ \phi^T & \phi^{T-1} & \phi^{T-2} & \cdots & 1 \end{pmatrix}
+$$
+
+我们现在详细分析参数 $\phi$ 的取值范围，分三种情形讨论。
+
+**情形一：$|\phi| < 1$（平稳行为）**。我们将时间 $t$ 推广到从 $-\infty$ 到 $\infty$ 的范围。通过反复代入可以将 AR(1) 过程展开为无穷级数：
+
+$$
+Y_t = \phi Y_{t-1} + Z_t = \phi^2 Y_{t-2} + \phi Z_{t-1} + Z_t = \cdots = \sum_{j=0}^{\infty} \phi^j Z_{t-j}
+$$
+
+这允许我们推导 $Y_t$ 的方差：
+
+$$
+\text{Var}(Y_t) = \sum_{j=0}^{\infty} \phi^{2j} \sigma^2 = \frac{\sigma^2}{1 - \phi^2}
+$$
+
+其中极限通过几何级数求得。换言之，当 $|\phi| < 1$ 时，时间序列在时间点 $t$ 处的方差是有限的。
+
+```{r}
+#| label: fig-ar1-three-cases
+#| fig-cap: "AR(1) 过程的三种自相关情形（仿教材 Fig. 12.5）| Drei Falle des AR(1)-Prozesses"
+#| fig-height: 9
+
+set.seed(2024)
+n_ar <- 200
+
+par(mfrow = c(3, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+# 正自相关
+y_pos <- arima.sim(n = n_ar, model = list(ar = 0.9), sd = 1)
+plot(1:n_ar, y_pos, type = "l", col = "#2563EB", lwd = 1.2,
+     xlab = "时间 | Zeit", ylab = "Y",
+     main = expression(paste("正自相关 | Positive Autokorrelation: ", phi == 0.9)),
+     cex.main = 1.0, col.main = "#1E293B")
+abline(h = 0, col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+# 零自相关
+y_zero <- rnorm(n_ar)
+plot(1:n_ar, y_zero, type = "l", col = "#16A34A", lwd = 1.2,
+     xlab = "时间 | Zeit", ylab = "Y",
+     main = expression(paste("零自相关 | Keine Autokorrelation: ", phi == 0)),
+     cex.main = 1.0, col.main = "#1E293B")
+abline(h = 0, col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+# 负自相关
+y_neg <- arima.sim(n = n_ar, model = list(ar = -0.9), sd = 1)
+plot(1:n_ar, y_neg, type = "l", col = "#9333EA", lwd = 1.2,
+     xlab = "时间 | Zeit", ylab = "Y",
+     main = expression(paste("负自相关 | Negative Autokorrelation: ", phi == -0.9)),
+     cex.main = 1.0, col.main = "#1E293B")
+abline(h = 0, col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+从图中我们看到：正自相关（$\phi = 0.9$）时数据出现"正相位"和"负相位"的交替，这在日常观测数据中非常常见，例如去季节性后的日温度数据就有这种特征。零相关时看不到相位模式。负相关（$\phi = -0.9$）时则出现强烈的交替振荡行为。
+
+**情形二：$|\phi| > 1$（非平稳行为）**。此时过程的方差会随时间爆炸性增长，使其对大多数数据分析应用都不切实际。
+
+```{r}
+#| label: fig-ar1-explosive
+#| fig-cap: "AR(1) 过程的爆炸性行为，phi > 1（仿教材 Fig. 12.6）| Explosives Verhalten bei phi > 1"
+#| fig-height: 4.5
+
+set.seed(42)
+n_exp <- 150
+phi_exp <- 1.02
+
+par(bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+plot(NULL, xlim = c(1, n_exp), ylim = c(-300, 300), 
+     xlab = "时间 | Zeit", ylab = "Y",
+     main = expression(paste("非平稳 AR(1): ", phi == 1.02, " (两条独立轨迹)")),
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (col_line in c("#2563EB", "#DC2626")) {
+  y_exp <- numeric(n_exp)
+  y_exp[1] <- 0
+  for (t in 2:n_exp) {
+    y_exp[t] <- phi_exp * y_exp[t - 1] + rnorm(1)
+  }
+  lines(1:n_exp, y_exp, col = col_line, lwd = 1.5)
+}
+abline(h = 0, col = "#6B7280", lty = 2)
+```
+
+我们可以更严格地推导这一点。对于 $|\phi| > 1$，我们写 $\Phi(B) = (1 - \phi B) = \{1 - \phi^{-1} B^{-1}\}^{-1}$ 并围绕 $\phi^{-1}$ 展开级数。逆算子为 $\Phi^{-1}(B) = -\sum_{j=1}^{\infty} \phi^{-j} B^{-j}$，它收敛是因为 $|\phi^{-1}| < 1$。最终结果为：
+
+$$
+Y_t = \Phi^{-1}(B) Z_t = \sum_{j=0}^{\infty} \phi^{-j} Z_{t+j}
+$$
+
+换言之，$|\phi| > 1$ 时的 AR(1) 过程由**未来事件**决定，因此它**不是因果的**（nicht kausal）。这再次证明了对任何合理的数据应用，我们需要 $|\phi| < 1$。
+
+**情形三：$|\phi| = 1$（随机游走）**。当 $\phi = 1$ 时，称为**随机游走**（Random Walk），定义为 $Y_t = Y_{t-1} + Z_t$。对于从 $t = 0$ 开始的过程：
+
+$$
+\text{Var}(Y_t) = \text{Var}\left(\sum_{l=1}^{t} Z_l\right) = t \sigma^2
+$$
+
+方差随 $t$ 线性增长。随机游走定义了 i.i.d. 变量之和。
+
+```{r}
+#| label: fig-random-walk
+#| fig-cap: "两条随机游走轨迹，phi = 1（仿教材 Fig. 12.7）| Zwei Random Walks"
+#| fig-height: 4.5
+
+set.seed(123)
+n_rw <- 200
+
+par(bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+plot(NULL, xlim = c(1, n_rw), ylim = c(-35, 35), 
+     xlab = "时间 | Zeit", ylab = "Y",
+     main = expression(paste("随机游走 | Random Walk: ", phi == 1)),
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (col_line in c("#2563EB", "#DC2626")) {
+  rw <- cumsum(rnorm(n_rw))
+  lines(1:n_rw, rw, col = col_line, lwd = 1.5)
+}
+abline(h = 0, col = "#6B7280", lty = 2)
+```
+
+## 移动平均过程 (MA)
+
+> **Moving-Average-Prozess (MA)**
+
+::: {.callout-important icon="false"}
+## 定义 12.2：MA(q) 过程 | Definition 12.2: MA(q)-Prozess
+
+阶数为 $q$ 的移动平均过程 MA(q) 定义为
+
+$$
+Y_t = Z_t + \theta_1 Z_{t-1} + \cdots + \theta_q Z_{t-q}
+$$
+
+其中 $Z_t \sim N(0, \sigma^2)$ i.i.d.
+:::
+
+利用后移算子可以写为
+
+$$
+Y_t = \sum_{i=0}^{q} \theta_i B^i Z_t
+$$
+
+其中 $\theta_0 = 1$。
+
+::: {.callout-tip icon="false"}
+## 滑动窗口的比喻 | Die Schiebefenster-Metapher
+
+MA 过程就像一个滑动窗口平均。想象你在观察一条嘈杂的新闻信号流。MA(q) 过程相当于用一个宽度为 $q+1$ 的窗口对白噪声进行加权平均。窗口之外的噪声与当前值毫无关系 -- 这就是为什么 MA(q) 的自相关在滞后超过 $q$ 后为零。
+
+*Ein MA-Prozess ist wie ein Schiebefenster uber weisses Rauschen. Ausserhalb des Fensters gibt es keine Korrelation mehr.*
+:::
+
+考虑 MA(1) 过程 $Y_t = Z_t + \theta Z_{t-1}$。对于自协方差有
+
+$$
+\gamma(0) = \text{Cov}(Z_t + \theta Z_{t-1}, Z_t + \theta Z_{t-1}) = \sigma^2(1 + \theta^2)
+$$
+
+$$
+\gamma(1) = \text{Cov}(Z_t + \theta Z_{t-1}, Z_{t-1} + \theta Z_{t-2}) = \theta \sigma^2
+$$
+
+$$
+\gamma(h) = 0 \quad \text{当 } h > 1
+$$
+
+相应地
+
+$$
+\rho(h) = \begin{cases} 1 & \text{当 } h = 0 \\ \dfrac{\theta}{1 + \theta^2} & \text{当 } h = 1 \\ 0 & \text{当 } h > 1 \end{cases}
+$$
+
+MA 过程直接建模自协方差，当 $h$ 超过 MA 过程的阶数时自协方差为零。
+
+```{r}
+#| label: fig-ma1
+#| fig-cap: "MA(1) 过程的两种情形（仿教材 Fig. 12.8）| Zwei MA(1)-Prozesse"
+#| fig-height: 7
+
+set.seed(2024)
+n_ma <- 200
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+y_ma_pos <- arima.sim(n = n_ma, model = list(ma = 0.9), sd = 1)
+plot(1:n_ma, y_ma_pos, type = "l", col = "#2563EB", lwd = 1.2,
+     xlab = "时间 | Zeit", ylab = "Y",
+     main = expression(paste("MA(1) 正自相关: ", theta == 0.9)),
+     cex.main = 1.0, col.main = "#1E293B")
+abline(h = 0, col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+y_ma_neg <- arima.sim(n = n_ma, model = list(ma = -0.9), sd = 1)
+plot(1:n_ma, y_ma_neg, type = "l", col = "#9333EA", lwd = 1.2,
+     xlab = "时间 | Zeit", ylab = "Y",
+     main = expression(paste("MA(1) 负自相关: ", theta == -0.9)),
+     cex.main = 1.0, col.main = "#1E293B")
+abline(h = 0, col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+将此与 AR(1) 过程（图 12.5）对比可以发现，两类过程具有完全不同的行为特征。
+
+## 自回归移动平均过程 (ARMA)
+
+> **Autoregressiver Moving-Average-Prozess (ARMA)**
+
+::: {.callout-important icon="false"}
+## 定义 12.3：ARMA(p, q) 过程 | Definition 12.3: ARMA(p,q)-Prozess
+
+自回归移动平均过程 ARMA(p, q) 定义为
+
+$$
+Y_t = \phi_1 Y_{t-1} + \phi_2 Y_{t-2} + \cdots + \phi_p Y_{t-p} + Z_t + \theta_1 Z_{t-1} + \cdots + \theta_q Z_{t-q}
+$$
+:::
+
+利用后移算子，我们定义算子
+
+$$
+\Phi(B) = 1 - \phi_1 B - \phi_2 B^2 - \cdots - \phi_p B^p
+$$
+
+$$
+\Theta(B) = 1 + \theta_1 B + \theta_2 B^2 + \cdots + \theta_q B^q
+$$
+
+这允许将 ARMA(p, q) 过程简洁地写为
+
+$$
+\Phi(B) Y_t = \Theta(B) Z_t
+$$
+
+需要注意的是，这种表示**不是唯一的**。例如白噪声过程 $Y_t = Z_t$ 可以写成 $Y_t - \phi Y_{t-1} = Z_t - \theta Z_{t-1}$（取 $\theta = -\phi$），表面上是 ARMA(1,1) 过程但实际上仍是白噪声。因此在估计时，AR 和 MA 部分的显著系数并不意味着 ARMA 过程一定成立。
+
+### 因果性
+
+我们寻找 $\Phi(B)$ 的"逆" $\Phi^{-1}(B)$，隐含定义为 $\Phi^{-1}(B)\Phi(B) = 1$。对于 AR(1) 过程，$\Phi(B) = 1 - \phi B$，其逆为
+
+$$
+\Phi^{-1}(B) = \sum_{j=0}^{\infty} \phi^j B^j = 1 + \phi B + \phi^2 B^2 + \cdots
+$$
+
+可以通过伸缩求和（telescope sum）验证 $\Phi^{-1}(B) \Phi(B) = 1$。假设逆存在，ARMA(p,q) 过程可以写为 $Y_t = \Phi^{-1}(B) \Theta(B) Z_t$。
+
+::: {.callout-important icon="false"}
+## 定义 12.4：因果性 | Definition 12.4: Kausalitat
+
+ARMA(p, q) 过程是**因果的**（kausal），如果它可以重写为
+
+$$
+Y_t = \sum_{j=0}^{\infty} \psi_j Z_{t-j} = \Psi(B) Z_t
+$$
+
+其中 $\Psi(B) = \sum_{j=0}^{\infty} \psi_j B^j$，$\sum_{j=0}^{\infty} |\psi_j| < \infty$，且 $\psi_0 = 1$。
+:::
+
+公式的含义是：时间点 $t$ 处的过程可以完全由**过去**的随机变量（时间指标低于 $t$ 的）来解释。对于 AR(1) 过程，当 $|\phi| < 1$ 时，$\psi_i = \phi^i$，几何级数收敛，过程是因果的。
+
+### ARIMA 过程
+
+::: {.callout-important icon="false"}
+## 定义 12.5：ARIMA(p, d, q) 过程 | Definition 12.5: ARIMA(p,d,q)-Prozess
+
+ARIMA(p, d, q) 模型定义为对 $\nabla^d Y_t = (1 - B)^d Y_t$ 建立 ARMA(p, q) 模型，其中 $\nabla Y_t = Y_t - Y_{t-1} = (1 - B) Y_t$ 是差分算子。
+:::
+
+取差分的思想在例 12.2 中已经使用过 -- 对股票价格取对数后再差分得到对数收益率。
+
+```{r}
+#| label: arma-demo
+#| code-fold: false
+
+# ARMA 过程模拟与拟合演示
+set.seed(2024)
+cat("ARMA 模型拟合演示 | ARMA-Modellanpassung\n\n")
+
+# 模拟 ARMA(1,1)
+y_arma <- arima.sim(n = 300, model = list(ar = 0.7, ma = 0.3), sd = 1)
+fit_arma <- arima(y_arma, order = c(1, 0, 1))
+
+cat("  真实参数: phi = 0.7, theta = 0.3, sigma^2 = 1\n")
+cat(sprintf("  估计参数: phi = %.3f, theta = %.3f, sigma^2 = %.3f\n",
+            fit_arma$coef["ar1"], fit_arma$coef["ma1"], fit_arma$sigma2))
+
+# 比较不同模型的 AIC
+cat("\n  不同 ARMA(p,q) 模型的 AIC 比较:\n")
+for (p in 0:2) {
+  for (q in 0:2) {
+    tryCatch({
+      fit_test <- arima(y_arma, order = c(p, 0, q))
+      cat(sprintf("    ARMA(%d,%d): AIC = %.1f\n", p, q, AIC(fit_test)))
+    }, error = function(e) {})
+  }
+}
+```
+
+## 自相关与偏自相关
+
+> **Autokorrelation und partielle Autokorrelation**
+
+我们已经介绍了自相关函数 $\rho(h)$ 及其估计。现在将其扩展到**偏自相关**（partielle Autokorrelation, PACF），它通常能提供关于依赖结构的有价值信息。
+
+```{r}
+#| label: fig-ar-dag
+#| fig-cap: "AR(1) 和 AR(2) 过程的依赖结构示意图（仿教材 Fig. 12.9）| Abhangigkeitsstruktur von AR(1) und AR(2)"
+#| fig-height: 4.5
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(2, 1, 2.5, 1))
+
+# AR(1)
+plot(NULL, xlim = c(0, 16), ylim = c(0, 3), axes = FALSE, xlab = "", ylab = "")
+title("AR(1) 过程: 每个节点只依赖于前一个 | AR(1): Jeder Knoten hangt nur vom Vorganger ab",
+      cex.main = 0.85, col.main = "#1E293B")
+for (i in 1:8) {
+  x_pos <- i * 1.8
+  points(x_pos, 1.5, pch = 16, col = "#2563EB", cex = 2.5)
+  text(x_pos, 1.5, bquote(Y[.(i)]), col = "white", cex = 0.6, font = 2)
+  if (i < 8) {
+    arrows(x_pos + 0.35, 1.5, x_pos + 1.45, 1.5, 
+           col = "#DC2626", lwd = 2, length = 0.1)
+  }
+}
+
+# AR(2)
+plot(NULL, xlim = c(0, 16), ylim = c(0, 3), axes = FALSE, xlab = "", ylab = "")
+title("AR(2) 过程: 每个节点依赖于前两个 | AR(2): Jeder Knoten hangt von zwei Vorgangern ab",
+      cex.main = 0.85, col.main = "#1E293B")
+for (i in 1:8) {
+  x_pos <- i * 1.8
+  points(x_pos, 1.5, pch = 16, col = "#16A34A", cex = 2.5)
+  text(x_pos, 1.5, bquote(Y[.(i)]), col = "white", cex = 0.6, font = 2)
+  if (i < 8) {
+    arrows(x_pos + 0.35, 1.5, x_pos + 1.45, 1.5, 
+           col = "#DC2626", lwd = 2, length = 0.1)
+  }
+  if (i < 7) {
+    arrows(x_pos + 0.35, 1.8, x_pos + 3.25, 1.8, 
+           col = "#EA580C", lwd = 1.5, length = 0.08)
+  }
+}
+
+par(mfrow = c(1, 1))
+```
+
+为了理解偏自相关的动机，注意 AR(1) 过程的自相关为 $\rho(h) = \phi^h$，使得 $\text{Corr}(Y_t, Y_{t-h}) = \phi^h$。然而，如果我们**已知** $Y_{t-1}$，即条件于 $Y_{t-1}$，则 $Y_t$ 和 $Y_{t-2}$ 的条件相关为零。这是一种**马尔可夫性质**（Markov-Eigenschaft）。AR 过程的阶数决定了所需的"记忆深度"。
+
+对于 AR(p) 过程，定义 $\hat{Y}_{t,h}$ 为给定 $Y_{t-1}, \ldots, Y_{t-h}$ 的最优线性近似：
+
+$$
+\hat{Y}_{t,h} = \tilde{\phi}_{1,h} Y_{t-1} + \cdots + \tilde{\phi}_{h,h} Y_{t-h}
+$$
+
+其中 $\tilde{\phi}_h = (\tilde{\phi}_{1,h}, \ldots, \tilde{\phi}_{h,h})$ 最小化平方预测误差。注意当 $h = p$ 时 $\tilde{\phi}_{p,j} = \phi_j$，当 $h > p$ 时 $\tilde{\phi}_{h,j} = 0$（对 $j > p$）。
+
+平稳过程的**偏自相关函数**定义为
+
+$$
+\rho^{(p)}(h) = \text{Corr}(Y_t - \hat{Y}_{t,h-1}, \; Y_{t-h} - \hat{Y}_{t-h,h-1})
+$$
+
+其中 $\hat{Y}_{t,0} \equiv 0$。这是条件于中间步骤 $Y_{t-1}, \ldots, Y_{t-h+1}$ 后 $Y_t$ 与 $Y_{t-h}$ 的相关。对于 $h > p$，
+
+$$
+\rho^{(p)}(h) = \text{Cov}(Z_t, Z_{t-h}) = 0
+$$
+
+因此偏自相关函数提供了关于过程阶数的直观信息：它在阶数 $p$ 之后**截断**。
+
+```{r}
+#| label: fig-ar3-acf-pacf
+#| fig-cap: "AR(3) 过程的模拟数据、ACF 和 PACF（仿教材 Fig. 12.10）| AR(3): Daten, ACF und PACF"
+#| fig-height: 9
+
+set.seed(42)
+y_ar3 <- arima.sim(n = 200, model = list(ar = c(0.5, 0.2, 0.15)), sd = 1)
+
+par(mfrow = c(3, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+plot(1:200, y_ar3, type = "l", col = "#2563EB", lwd = 1.2,
+     xlab = "时间 | Zeit", ylab = "Y",
+     main = expression(paste("AR(3) 过程: ", phi[1] == 0.5, ", ", phi[2] == 0.2, ", ", phi[3] == 0.15)),
+     cex.main = 1.0, col.main = "#1E293B")
+abline(h = 0, col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+acf_ar3 <- acf(y_ar3, lag.max = 15, plot = FALSE)
+barplot(drop(acf_ar3$acf)[-1], names.arg = 1:15, col = "#EA580C", border = "#EA580C",
+        main = expression(paste("自相关函数 ACF: ", rho(h), " 缓慢衰减")),
+        xlab = "时间滞后 h | Lag h", ylab = expression(hat(rho)(h)),
+        cex.main = 1.0, col.main = "#1E293B", ylim = c(-0.2, 0.8))
+abline(h = c(-1, 1) * 1.96 / sqrt(200), col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+
+pacf_ar3 <- pacf(y_ar3, lag.max = 15, plot = FALSE)
+barplot(drop(pacf_ar3$acf), names.arg = 1:15, col = "#16A34A", border = "#16A34A",
+        main = expression(paste("偏自相关函数 PACF: ", rho^{(p)}(h), " 在 h = 3 后截断")),
+        xlab = "时间滞后 h | Lag h", ylab = expression(hat(rho)^{(p)}(h)),
+        cex.main = 1.0, col.main = "#1E293B", ylim = c(-0.3, 0.8))
+abline(h = c(-1, 1) * 1.96 / sqrt(200), col = "#DC2626", lty = 2)
+grid(col = "#E2E8F0")
+text(12, 0.5, "h > 3 后为零!", col = "#DC2626", font = 2, cex = 1.0)
+
+par(mfrow = c(1, 1))
+```
+
+图中清晰地展示了 ACF 和 PACF 的区别：ACF 缓慢衰减，但 PACF 在前三个分量非零后，所有超过阶数 3 的分量都消失了。
+
+## 预测
+
+> **Vorhersage (Forecasting)**
+
+时间序列模型的一个核心意图是提供可靠且性能良好的预测工具。我们要问的是：给定已观测到的 $y_t, \ldots, y_{t-p}$，如何预测 $Y_{t+1}$？这可以表述为构造一个预测函数 $m(y_t, \ldots, y_{t-p})$，使得条件均方预测误差
+
+$$
+E\left[\left(Y_{t+1} - m(y_t, \ldots, y_{t-p})\right)^2 \mid y_t, \ldots, y_{t-p}\right]
+$$
+
+尽可能小。模型 $m(\cdot)$ 可以是线性结构，即 $m(y_t, \ldots, y_{t-p}) = \beta_1 y_t + \beta_2 y_{t-1} + \cdots + \beta_{p-1} y_{t-p}$，这就回到了上面讨论的自回归模型。但显然我们也可以使用非线性模型。如果时间序列是平稳的且观测窗口 $T$ 足够长，机器学习工具训练的更复杂模型也可以很好地适用。
+
+```{r}
+#| label: forecast-demo
+#| code-fold: false
+
+# 时间序列预测演示
+set.seed(2024)
+cat("时间序列预测演示 | Zeitreihenvorhersage\n\n")
+
+y_forecast <- arima.sim(n = 250, model = list(ar = c(0.6, 0.2)), sd = 1)
+y_train <- y_forecast[1:200]
+y_test <- y_forecast[201:250]
+
+fit_forecast <- arima(y_train, order = c(2, 0, 0))
+pred <- predict(fit_forecast, n.ahead = 50)
+
+cat("  训练集: t = 1, ..., 200\n")
+cat("  预测集: t = 201, ..., 250\n\n")
+cat(sprintf("  AR(2) 参数估计: phi_1 = %.3f, phi_2 = %.3f\n",
+            fit_forecast$coef["ar1"], fit_forecast$coef["ar2"]))
+cat(sprintf("  预测 RMSE: %.3f\n", sqrt(mean((y_test - pred$pred)^2))))
+```
+
+{{< pagebreak >}}
+
+# 空间数据 {#sec-spatial}
+
+> **Raumliche Daten**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- **Tobler 第一定律**：地理学中空间相关性的核心原理
+- **变差函数**（Variogramm）的定义、估计与解读
+- **各向同性协方差**的概念
+- **Kriging**空间插值的原理与公式
+- **格网数据**（Gitterdaten）与高斯马尔可夫随机场
+:::
+
+## 记号与核心思想
+
+> **Notation und Hauptideen**
+
+::: {.callout-tip icon="false"}
+## 涟漪效应的比喻 | Die Welleneffekt-Metapher
+
+想象你向平静的湖面投入一颗石子。石子入水处附近的波纹最大、最密集，随着距离增加，波纹逐渐消失。空间数据中的相关性就是这样：在空间中靠近的观测值之间的关联最强，随着距离增大，关联逐渐减弱。这种"近者更相关"的规律，正是地理学家 Tobler 所总结的第一定律。
+
+*Raumliche Korrelation ist wie Wellen im Wasser: In der Nahe des Steinwurfs am starksten, mit zunehmender Entfernung abklingend. Das ist Toblers Erstes Gesetz.*
+:::
+
+著名地理学家 Waldo Rudolph Tobler 曾说过："万物相关，但近处的事物比远处的更相关"（Tobler's First Law of Geography）。这一思想直接反映在空间数据的统计分析中：空间上接近的观测值往往表现出更强的相关性。
+
+空间数据可以有不同的结构和格式。以慕尼黑租赁公寓为例，每个被抽样公寓 $i$ 有地理坐标 $s_i = (s_{i1}, s_{i2})$，分别为经度 $s_{i1}$ 和纬度 $s_{i2}$，$i = 1, \ldots, n$。设 $Y_i$ 表示公寓 $i$ 的每平方米租金，$Y_j$ 表示公寓 $j$ 的每平方米租金。则 $Y_i$ 与 $Y_j$ 是相关的，且随着公寓之间距离 $\|s_i - s_j\|$ 的增大，依赖性递减。这通常用**各向同性协方差**（isotrope Kovarianz）建模：
+
+$$
+\text{Cov}(Y_i, Y_j) = c(\|s_i - s_j\|)
+$$
+
+其中 $c(\cdot)$ 是某个函数。
+
+在空间统计中，更常用**变差函数**（Variogramm）：
+
+$$
+\gamma(\|s_i - s_j\|) := \text{Var}(Y_i - Y_j) = \text{Var}(Y_i) + \text{Var}(Y_j) - 2\text{Cov}(Y_i, Y_j)
+$$
+
+假设方差不依赖于位置本身，即 $\sigma^2 = \text{Var}(Y_i) = \text{Var}(Y_j)$，则有
+
+$$
+c(\|s_i - s_j\|) = -\gamma(\|s_i - s_j\|) + \sigma^2
+$$
+
+```{r}
+#| label: fig-variogram
+#| fig-cap: "慕尼黑租金数据的变差函数（仿教材 Fig. 12.12）| Variogramm der Munchner Mietdaten"
+#| fig-height: 5
+
+set.seed(2024)
+# 模拟变差函数数据
+dist_km <- seq(0.1, 3.0, by = 0.2)
+sill <- 11.5
+range_param <- 1.8
+nugget <- 9.0
+gamma_theoretical <- nugget + (sill - nugget) * (1 - exp(-3 * dist_km / range_param))
+gamma_observed <- gamma_theoretical + rnorm(length(dist_km), 0, 0.3)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(dist_km, gamma_observed, pch = 16, col = "#2563EB", cex = 1.5,
+     xlab = "距离 (km) | Entfernung (km)",
+     ylab = expression(gamma(distance)),
+     main = "慕尼黑公寓租金的变差函数 | Variogramm der Mietpreise",
+     cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(8, 13))
+grid(col = "#E2E8F0")
+
+# 拟合曲线
+dist_smooth <- seq(0.05, 3.0, length.out = 200)
+gamma_smooth <- nugget + (sill - nugget) * (1 - exp(-3 * dist_smooth / range_param))
+lines(dist_smooth, gamma_smooth, col = "#DC2626", lwd = 3)
+
+# 标注
+abline(h = sill, col = "#16A34A", lty = 2, lwd = 1.5)
+text(2.8, sill + 0.25, expression(paste("基台 | Sill = 2", sigma^2)),
+     col = "#16A34A", cex = 0.8, font = 2)
+abline(v = range_param, col = "#EA580C", lty = 2, lwd = 1.5)
+text(range_param + 0.05, 9.0, "变程 | Range", col = "#EA580C", cex = 0.8, font = 2, pos = 4)
+
+legend("bottomright", 
+       legend = c("估计点", "拟合曲线"),
+       pch = c(16, NA), col = c("#2563EB", "#DC2626"),
+       lwd = c(NA, 3), bty = "n", cex = 0.85)
+```
+
+变差函数的点估计通过以下方式得到。首先离散化距离 $0 < d_1 < d_2 < d_3 \cdots$。对于给定距离 $d_k$，估计
+
+$$
+\hat{\gamma}(d_k) = \frac{1}{|N(d_k)|} \sum_{i,j \in N(d_k)} (Y_i - Y_j)^2
+$$
+
+其中 $N(d_k) = \{(i,j) : \big|\|s_i - s_j\| - d_k\big| < \Delta\}$，即位置距离约为 $d_k$ 的观测对的集合。
+
+距离本身的定义也很重要。最常见的是欧几里得距离，但变差函数的定义也适用于其他距离度量，例如数据"生存"在网格（如街道）上时，可以使用最短行驶距离。我们只需要距离是对称的。
+
+## Kriging 与空间平滑
+
+> **Kriging und raumliches Glatten**
+
+既然我们已经定义并估计了空间协方差结构，下一个问题是：能否建模或可视化空间效应？核心思想是将观测 $Y$ 分解为空间相关分量和独立噪声：
+
+$$
+Y_j = h(s_j) + \epsilon_j
+$$
+
+其中 $h(\cdot)$ 是从数据中估计的平滑分量。函数 $h(s)$ 可以通过 **Kriging** 方法获得，这追溯到 Krige (1951)。
+
+::: {.callout-tip icon="false"}
+## Kriging 的比喻 | Die Kriging-Metapher
+
+Kriging 就像在一张已经测量了若干点高度的地形图上，推测未知点的高度。如果你知道周围山峰和谷底的高度，你可以合理猜测中间某处的高度 -- 而且距离越近的已知点对你的猜测影响越大。Kriging 正是用协方差结构来量化这种"近处更有影响力"的权重。
+
+*Kriging ist wie die Rekonstruktion einer Landkarte aus Stutzpunkten: Nahe Messungen haben mehr Einfluss auf die Vorhersage.*
+:::
+
+我们将 $Y(s)$ 视为空间过程，在位置 $s_1, \ldots, s_n$ 处观测到数据 $Y(s_1), \ldots, Y(s_n)$，即 $Y_1, \ldots, Y_n$。假设 $Y(s)$ 的协方差矩阵 $V$ 由协方差结构 $c(\|s_i - s_j\|)$ 构建，即 $V_{ij} = c(\|s_i - s_j\|)$。
+
+我们的目标是在给定观测值 $y = (y_1, \ldots, y_n)$ 的条件下，估计位置 $s_0$ 处的过程值。利用多元正态分布的性质，预测子为
+
+$$
+\hat{Y}(s_0) = w V^{-1} y
+$$
+
+其中
+
+$$
+w = \text{Cov}(Y(s_0), (Y(s_1), \ldots, Y(s_n))) = (c(\|s_0 - s_1\|), c(\|s_0 - s_2\|), \ldots, c(\|s_0 - s_n\|))
+$$
+
+这一公式的理论基础在于：$(Y(s_0), Y(s_1), \ldots, Y(s_n))^\top$ 可视为联合正态分布
+
+$$
+\begin{pmatrix} Y(s_0) \\ Y(s_1) \\ \vdots \\ Y(s_n) \end{pmatrix} \sim N\left(0, \begin{pmatrix} \sigma^2 & w \\ w^\top & V \end{pmatrix}\right)
+$$
+
+其中 $\sigma^2 = c(0) = \text{Var}(Y(s_0))$。因此条件分布为
+
+$$
+Y(s_0) \mid y \sim N(w V^{-1} y, \; \sigma^2 - w V^{-1} w)
+$$
+
+```{r}
+#| label: fig-kriging-demo
+#| fig-cap: "Kriging 空间插值演示：已知点预测未知位置的值 | Kriging-Demonstration"
+#| fig-height: 5.5
+
+set.seed(2024)
+n_sp <- 80
+sx <- runif(n_sp, 0, 10)
+sy <- runif(n_sp, 0, 10)
+z_sp <- 2 * sin(sx / 2) + 1.5 * cos(sy / 3) + rnorm(n_sp, 0, 0.5)
+
+# 简单距离加权插值模拟 kriging
+grid_x <- seq(0, 10, length.out = 50)
+grid_y <- seq(0, 10, length.out = 50)
+grid_mat <- matrix(NA, 50, 50)
+for (gi in 1:50) {
+  for (gj in 1:50) {
+    d <- sqrt((sx - grid_x[gi])^2 + (sy - grid_y[gj])^2)
+    w <- exp(-d / 1.5)
+    w <- w / sum(w)
+    grid_mat[gi, gj] <- sum(w * z_sp)
+  }
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+image(grid_x, grid_y, grid_mat, col = hcl.colors(50, "YlOrRd", rev = TRUE),
+      xlab = "经度方向 | Langengrad", ylab = "纬度方向 | Breitengrad",
+      main = "Kriging 空间插值：预测每平方米租金 | Raumliche Interpolation",
+      cex.main = 1.0, col.main = "#1E293B")
+contour(grid_x, grid_y, grid_mat, add = TRUE, col = "#1E293B", lwd = 0.5)
+points(sx, sy, pch = 16, col = "#1E293B", cex = 0.8)
+```
+
+一种替代方法是**空间回归**：假设 $Y(s) = h(s) + \epsilon$，其中 $h(s)$ 被视为可以通过样条平滑等方法估计的平滑函数，残差 $\epsilon$ 视为独立白噪声。
+
+总结而言，建模空间数据时有两种主要策略：一种关注通过协方差结构捕捉空间依赖性，另一种将空间效应直接纳入均值函数。正如著名空间统计学家 Noel Cressie 所说：**"一个人的均值就是另一个人的协方差"**（One person's mean is another person's covariance）。两种方法都是有效的。
+
+## 格网与网格数据
+
+> **Gitter- und Rasterdaten**
+
+有时数据的地理位置不是精确给出的，而是被归类到行政区域（如城市分区或县）。此时可以利用由此产生的**格网**（Gitter）来纳入空间结构。
+
+设 $Y(s_i)$ 表示第 $i$ 个观测值，其中 $s_i \in \{1, \ldots, K\}$ 表示公寓 $i$ 所在的区域编号。我们可以通过包含空间相关的区域效应来建模：
+
+$$
+Y(s_i) = U(s_i) + \epsilon
+$$
+
+其中 $U(s_i)$ 是区域 $s_i$ 的效应。区域效应 $U_1, \ldots, U_K$ 的空间结构可以通过邻域结构诱导的图模型来表达：
+
+$$
+U_k \perp U_l \mid (U_1, \ldots, U_K) \setminus \{U_k, U_l\}
+$$
+
+当且仅当 $U_k$ 和 $U_l$ **不是邻居**。这与第 8.5 节讨论的**高斯马尔可夫随机场**（Gauss-Markov Random Field）密切相关。定义 $N_l = N(s_l)$ 为网格单元 $s_l$ 的邻居，我们假设
+
+$$
+U_l \perp \{U_j : s_j \notin \{s_l \cup N_l\}\} \mid N_l
+$$
+
+```{r}
+#| label: fig-lattice
+#| fig-cap: "慕尼黑行政分区的格网与邻域结构示意图（仿教材 Fig. 12.15）| Gitter- und Nachbarschaftsstruktur"
+#| fig-height: 5.5
+
+set.seed(42)
+n_districts <- 25
+grid_size <- 5
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 6), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title("格网数据的邻域结构 | Nachbarschaftsstruktur der Gitterdaten",
+      cex.main = 1.1, col.main = "#1E293B")
+
+set.seed(42)
+vals <- rnorm(n_districts, 14, 1.5)
+col_vals <- hcl.colors(50, "YlOrRd", rev = TRUE)
+val_idx <- pmin(pmax(round((vals - min(vals)) / (max(vals) - min(vals)) * 49) + 1, 1), 50)
+
+# 绘制网格单元
+k <- 0
+centers_x <- numeric(n_districts)
+centers_y <- numeric(n_districts)
+for (i in 1:grid_size) {
+  for (j in 1:grid_size) {
+    k <- k + 1
+    rect(i - 0.4, j - 0.4, i + 0.4, j + 0.4, 
+         col = col_vals[val_idx[k]], border = "#1E293B", lwd = 1.5)
+    centers_x[k] <- i
+    centers_y[k] <- j
+  }
+}
+
+# 绘制邻域连接
+for (k1 in 1:n_districts) {
+  for (k2 in (k1):n_districts) {
+    dx <- abs(centers_x[k1] - centers_x[k2])
+    dy <- abs(centers_y[k1] - centers_y[k2])
+    if ((dx == 1 & dy == 0) | (dx == 0 & dy == 1)) {
+      segments(centers_x[k1], centers_y[k1], 
+               centers_x[k2], centers_y[k2],
+               col = adjustcolor("#DC2626", 0.5), lwd = 2)
+    }
+  }
+}
+
+# 节点
+for (k in 1:n_districts) {
+  points(centers_x[k], centers_y[k], pch = 16, col = "#1E293B", cex = 1.2)
+}
+
+text(3, 0.1, "红色线段 = 邻域连接 | Rote Linien = Nachbarschaftsverbindungen", 
+     cex = 0.7, col = "#DC2626")
+```
+
+{{< pagebreak >}}
+
+# 网络数据 {#sec-network}
+
+> **Netzwerkdaten**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 网络数据的**数学表示**：邻接矩阵、有向/无向图
+- **度数**（Grad）、**密度**等描述性统计量
+- 网络中边的**非独立性**及其建模挑战
+- **指数随机图模型**（ERGM）的定义与应用
+- 充分统计量（边数、同质匹配、传递性）的选择与解读
+:::
+
+## 核心思想
+
+> **Hauptideen**
+
+::: {.callout-tip icon="false"}
+## 蜘蛛网的比喻 | Die Spinnennetz-Metapher
+
+网络数据就像一张蜘蛛网。每个节点（蜘蛛网的交叉点）代表一个个体，每条丝线代表两个个体之间的关系。蜘蛛网的特殊之处在于：一根丝线的存在会影响其他丝线的可能性 -- 如果 A 和 B 之间有一根丝，A 和 C 之间也有一根丝，那么 B 和 C 之间出现丝线的概率就更高（"朋友的朋友更可能是朋友"）。正是这种边与边之间的依赖性，使得传统的 i.i.d. 方法不再适用。
+
+*Ein Netzwerk ist wie ein Spinnennetz: Jeder Faden beeinflusst die Wahrscheinlichkeit anderer Faden. Diese Abhangigkeit zwischen Kanten macht i.i.d.-Methoden ungeeignet.*
+:::
+
+"网络无处不在"（networks are ubiquitous）这样的说法本身就"无处不在"，足以说明网络数据分析近年来获得的关注。在网络中，实体之间的关系通常**不是条件独立的**。例如，两个学生成为朋友的概率在大多数现实场景中取决于他们是否已经有共同的朋友。
+
+核心问题是：个人行为如何受到同一网络中其他参与者的行为以及网络本身的影响？在社会学中，这两种机制被称为"选择"（selection）和"影响"（influence）。在统计学中，这些现象被称为**同质性**（Homophilie）和**传染**（contagion），且通常无法从观测数据中识别区分。
+
+Moreno (1934) 是最早挑战网络连接条件独立性假设的研究者之一。他在一所女子学校中研究逃跑行为时引入了"社会图"（Soziogramm）的概念，揭示了女孩在社会空间中的嵌入导致了聚集性的行为爆发。
+
+## 表示与描述
+
+> **Darstellung und Beschreibung**
+
+网络包含一组**参与者**（Akteure）之间的**边**（Kanten），参与者集合记为 $\mathcal{N} = \{1, \ldots, N\}$。我们用**邻接矩阵**（Adjazenzmatrix）$y = (y_{ij})$ 表示网络，其中 $y_{ij} = 1$ 表示参与者 $i$ 和 $j$ 之间存在边，$y_{ij} = 0$ 表示不存在。对于**无向网络**（ungerichtetes Netzwerk），$y_{ij} = y_{ji}$；对于**有向网络**（gerichtetes Netzwerk），$y_{ij} \neq y_{ji}$ 是可能的。我们假设没有自环，即 $y_{ii} = 0$。
+
+在参与者层面，我们可以计算**度数**（Grad）来描述其在网络中的位置：
+
+$$
+\text{deg}_i(y) = \sum_{j \neq i} y_{ij}
+$$
+
+一个全局连通性度量是**密度**（Dichte），它将所有参与者的度数之和标准化到 0 到 1 之间：
+
+$$
+\text{dens}(y) = \frac{1}{N(N-1)/2} \sum_{i=1}^{N} \text{deg}_i(y)
+$$
+
+```{r}
+#| label: fig-network-demo
+#| fig-cap: "模拟大学友谊网络及度数分布（仿教材 Fig. 12.18, 12.19）| Simuliertes Netzwerk und Gradverteilung"
+#| fig-height: 5.5
+
+set.seed(2024)
+N_net <- 81
+groups <- sample(1:3, N_net, replace = TRUE, prob = c(0.35, 0.35, 0.30))
+
+# 生成邻接矩阵
+adj <- matrix(0, N_net, N_net)
+for (i in 1:(N_net-1)) {
+  for (j in (i+1):N_net) {
+    p_edge <- ifelse(groups[i] == groups[j], 0.25, 0.06)
+    if (runif(1) < p_edge) {
+      adj[i, j] <- 1
+      adj[j, i] <- 1
+    }
+  }
+}
+
+degrees <- rowSums(adj)
+density_net <- sum(adj) / (N_net * (N_net - 1))
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# Fruchterman-Reingold 布局简化版
+set.seed(42)
+pos_x <- rnorm(N_net)
+pos_y <- rnorm(N_net)
+for (iter in 1:50) {
+  for (i in 1:N_net) {
+    neighbors <- which(adj[i, ] == 1)
+    if (length(neighbors) > 0) {
+      pos_x[i] <- pos_x[i] + 0.05 * (mean(pos_x[neighbors]) - pos_x[i])
+      pos_y[i] <- pos_y[i] + 0.05 * (mean(pos_y[neighbors]) - pos_y[i])
+    }
+  }
+}
+
+group_cols <- c("#2563EB", "#DC2626", "#16A34A")
+plot(pos_x, pos_y, pch = 16, col = group_cols[groups], cex = 1.2 + degrees / max(degrees),
+     xlab = "", ylab = "", axes = FALSE,
+     main = sprintf("大学友谊网络 (密度 = %.3f)", density_net),
+     cex.main = 0.95, col.main = "#1E293B")
+for (i in 1:(N_net-1)) {
+  for (j in (i+1):N_net) {
+    if (adj[i, j] == 1) {
+      segments(pos_x[i], pos_y[i], pos_x[j], pos_y[j],
+               col = adjustcolor("#94A3B8", 0.3), lwd = 0.5)
+    }
+  }
+}
+points(pos_x, pos_y, pch = 16, col = group_cols[groups], cex = 1.2 + degrees / max(degrees))
+legend("topleft", legend = paste("群组", 1:3), pch = 16,
+       col = group_cols, bty = "n", cex = 0.8)
+
+# 度数分布
+hist(degrees, breaks = seq(-0.5, max(degrees) + 0.5, by = 1),
+     col = adjustcolor("#2563EB", 0.5), border = "#2563EB",
+     xlab = "度数 | Grad", ylab = "频数 | Haufigkeit",
+     main = "度数分布 | Gradverteilung",
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+## 网络的统计模型：ERGM
+
+> **Statistisches Modell: Exponential Random Graph Model (ERGM)**
+
+描述性方法虽然必不可少，但不提供不确定性的量化。为此我们需要概率模型 $P(Y = y; \theta)$，其中 $Y \in \mathcal{Y}$ 是矩阵值随机变量。
+
+核心障碍在于网络中的边通常**不能假设为彼此独立**。主要有两种建模策略：**指数随机图模型**（ERGM）通过指定统计量来捕获依赖性；**潜在变量模型**（如随机块模型）假设在某些潜在变量条件下边是独立的。
+
+::: {.callout-important icon="false"}
+## ERGM 模型定义 | ERGM-Modelldefinition
+
+基于指数族理论，ERGM 为 $y \in \mathcal{Y}$ 指定联合分布
+
+$$
+P(Y = y; \theta) = \frac{\exp(\theta^\top s(y))}{\kappa(\theta)}
+$$
+
+其中 $s : \mathcal{Y} \mapsto \mathbb{R}^p$ 是在任意网络 $y$ 上计算 $p$ 个充分统计量的函数；$\theta \in \mathbb{R}^p$ 是加权系数向量；$\kappa(\theta) = \sum_{y \in \mathcal{Y}} \exp(\theta^\top s(y))$ 是归一化常数。
+:::
+
+ERGM 的核心在于充分统计量 $s$ 的选择，它们概括了应在模型中表示的网络全局特征。常见的统计量包括：
+
+**边数统计量**：$s_{\text{edges}}(y) = \sum_{i < j} y_{ij}$
+
+**同质匹配统计量**（如同一院系的教师之间的友谊数）：$s_{\text{nodematch}}(y) = \sum_{i < j} y_{ij} \mathbf{1}(x_i = x_j)$
+
+**传递性统计量**（共享一个共同邻居的边数）：$s_{\text{transitive}}(y) = \sum_{i < j} y_{ij} \mathbf{1}\left(\sum_{h \neq (i,j)} y_{ih} y_{hj} > 0\right)$
+
+```{r}
+#| label: ergm-table
+#| code-fold: false
+
+cat("ERGM 拟合结果（仿教材 Table 12.1）| ERGM-Ergebnisse\n\n")
+
+cat("  ================================================================\n")
+cat("  统计量              含依赖项          不含依赖项\n")
+cat("                     系数 (标准误)      系数 (标准误)\n")
+cat("  ================================================================\n")
+cat("  Edges              -4.70  (0.44)     -2.84  (0.09)\n")
+cat("  Nodematch (系别)    2.58  (0.11)      2.57  (0.11)\n")
+cat("  Transitive Ties     1.75  (0.42)        --\n")
+cat("  ================================================================\n")
+cat("  AIC               2343.31           2378.43\n")
+cat("  BIC               2361.56           2390.60\n")
+cat("  Log Likelihood   -1168.66          -1187.22\n")
+cat("  ================================================================\n\n")
+
+cat("  解读:\n")
+cat("  - Edges 系数为负 -> 网络整体稀疏\n")
+cat("  - Nodematch 系数为正 -> 同系别教师更可能成为朋友 (同质性)\n")
+cat("  - Transitive Ties 系数为正 -> '朋友的朋友更可能是朋友' (传递性)\n")
+cat("  - 含依赖项的模型 AIC/BIC 更低 -> 模型拟合更好\n")
+```
+
+纳入依赖项（传递性统计量）的模型具有更低的 AIC 和 BIC，以及更高的对数似然。"同质匹配"统计量的正系数提供了同系别参与者之间更可能形成友谊的强有力证据。"传递性"统计量的正系数表明共享共同邻居的参与者对之间形成边的概率增加。
+
+{{< pagebreak >}}
+
+# 函数型数据 {#sec-functional}
+
+> **Funktionale Daten**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- **函数型数据分析（FDA）** 的概念：观测值是曲线而非标量
+- 函数型数据的**表示**与**预平滑**
+- **函数主成分分析（FPCA）** 的原理：Karhunen-Loeve 展开
+- **函数回归**模型的三种形式
+:::
+
+## 记号与核心思想
+
+> **Notation und Hauptideen**
+
+::: {.callout-tip icon="false"}
+## 指纹的比喻 | Die Fingerabdruck-Metapher
+
+在传统统计中，每个个体只有一个数据点（比如身高）。但在函数型数据分析中，每个个体拥有**一整条曲线** -- 就像每个人有一枚独特的指纹。虽然每条曲线内部的点是高度相关的（指纹的相邻纹路不可能突然中断），但不同个体之间的曲线可以视为独立的。FDA 的核心就是：如何分析这些"指纹"的共同模式和个体差异。
+
+*Bei FDA ist jede Beobachtung eine ganze Kurve -- wie ein Fingerabdruck. Innerhalb einer Kurve besteht Abhangigkeit, zwischen verschiedenen Personen Unabhangigkeit.*
+:::
+
+函数型数据分析（Funktionale Datenanalyse, FDA）使用**曲线**、图像或函数作为观测值。在 FDA 中，观测值通常写作函数 $Y(t)$（而非之前的索引记法 $Y_t$）。
+
+概念上，函数型数据通常涉及每个单位大量（理论上无穷多）的测量值。因此，对于每个观测单位 $i$，我们获得在连续定义域 $\mathcal{T}$ 上的数据 $Y_i(t), t \in \mathcal{T}$。通常假设单位之间独立，但**每个单位内的观测值是依赖的**。
+
+在实践中，函数 $Y_i(t)$ 在网格点 $t_{i,r} \in \mathcal{T}$ 上观测，得到观测值 $y_i(t_{i,r}), r = 1, \ldots, R_i, i = 1, \ldots, n$。常见的情形是 $t_{i,r} \equiv t_r$，即所有函数在相同的 $R$ 个网格点上观测。如果所有观测时间点等间距，数据可以存储为一个 $R \times n$ 矩阵。
+
+```{r}
+#| label: fig-functional-data
+#| fig-cap: "函数型数据示例：蒙特利尔温度曲线（原始与平滑，仿教材 Fig. 12.20）| Funktionale Daten: Temperatur in Montreal"
+#| fig-height: 5.5
+
+set.seed(2024)
+days_fd <- 1:365
+n_years <- 5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+cols_fd <- c("#2563EB", "#DC2626", "#16A34A", "#EA580C", "#9333EA")
+
+# 原始曲线
+plot(NULL, xlim = c(1, 365), ylim = c(-25, 30),
+     xlab = "日序号 | Tag des Jahres", ylab = "温度 (C) | Temperatur",
+     main = "原始曲线 | Originalkurven",
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+curves <- list()
+for (k in 1:n_years) {
+  amp <- rnorm(1, 22, 1.5)
+  shift <- rnorm(1, 2, 2)
+  y_fd <- -amp / 2 * cos(2 * pi * days_fd / 365) + shift + rnorm(365, 0, 3)
+  lines(days_fd, y_fd, col = cols_fd[k], lwd = 1)
+  curves[[k]] <- y_fd
+}
+
+# 平滑曲线
+plot(NULL, xlim = c(1, 365), ylim = c(-25, 30),
+     xlab = "日序号 | Tag des Jahres", ylab = "温度 (C) | Temperatur",
+     main = "平滑曲线 | Geglattete Kurven",
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (k in 1:n_years) {
+  lo_fd <- loess(curves[[k]] ~ days_fd, span = 0.15)
+  lines(days_fd, predict(lo_fd), col = cols_fd[k], lwd = 2.5)
+}
+
+par(mfrow = c(1, 1))
+```
+
+在进一步分析之前，一个可能的预处理步骤是使用非参数回归或平滑技术对曲线进行**预平滑**（Vorglatten），以去除观测噪声。虽然这可以获得真正的函数型观测，但在后续分析中考虑平滑估计的不确定性是有挑战的。较新的方法因此直接处理未平滑的原始数据，通过在方法本身中施加某种形式的光滑性要求。
+
+另一种策略是在分析前用**基函数展开**来表示函数（如样条基），然后继续使用基函数系数的多元向量进行分析。
+
+## 函数主成分分析 (FPCA)
+
+> **Funktionale Hauptkomponentenanalyse (FPCA)**
+
+FPCA 是 FDA 的核心统计技术。其原理来源于 **Karhunen-Loeve 展开**，该定理指出任何随机过程 $Y(t)$ 都可以表示为不相关随机过程的无穷级数：
+
+$$
+Y(t) = \mu(t) + \sum_{m=1}^{\infty} \xi_m \phi_m(t), \quad t \in \mathcal{T}
+$$
+
+其中 $\mu$ 是随机过程 $Y$ 的均值函数，$\phi_m$ 是**正交归一化特征函数**（orthonormale Eigenfunktionen），$\xi_m$ 是不相关的**随机得分**（Scores）。利用这种重新表述，随机过程 $Y$ 的协方差可以表示为
+
+$$
+\text{Cov}(Y(s), Y(t)) = \sum_{m=1}^{\infty} e_m \phi_m(s) \phi_m(t)
+$$
+
+特征值 $e_m$ 按惯例排序为 $e_1 \geq e_2 \geq \cdots \geq 0$。与经典主成分分析一样，特征值可用于评估仅使用 $m^*$ 个函数主成分所解释的方差比例，进而将求和截断以有限数量的基函数提供 $Y$ 的近似。
+
+::: {.callout-tip icon="false"}
+## 乐曲改编的比喻 | Die Musikarrangement-Metapher
+
+FPCA 就像将一首复杂的交响乐改编为少数几个"核心旋律"（特征函数）的叠加。每位演奏者（每条曲线）对这些核心旋律的强调程度不同（得分 $\xi_m$ 不同），但旋律本身是所有人共享的。只用前几个最重要的旋律，就能大致还原原始交响乐 -- 这就是降维。
+
+*FPCA ist wie die Reduktion einer Symphonie auf wenige Kernmelodien. Jede Beobachtung gewichtet diese Melodien unterschiedlich.*
+:::
+
+```{r}
+#| label: fig-fpca
+#| fig-cap: "均值函数与前三个函数主成分（仿教材 Fig. 12.21）| Mittlere Kurve und erste drei FPCs"
+#| fig-height: 7
+
+set.seed(2024)
+n_fpca <- 30
+days_fpca <- seq(1, 365, by = 2)
+n_pts <- length(days_fpca)
+
+# 生成函数型数据
+mu_func <- -12 * cos(2 * pi * days_fpca / 365) + 3
+phi1 <- sin(2 * pi * days_fpca / 365)
+phi1 <- phi1 / sqrt(sum(phi1^2))
+phi2 <- cos(4 * pi * days_fpca / 365)
+phi2 <- phi2 / sqrt(sum(phi2^2))
+phi3 <- sin(4 * pi * days_fpca / 365)
+phi3 <- phi3 / sqrt(sum(phi3^2))
+
+scores1 <- rnorm(n_fpca, 0, 8)
+scores2 <- rnorm(n_fpca, 0, 5)
+scores3 <- rnorm(n_fpca, 0, 3)
+
+Y_mat <- matrix(NA, n_fpca, n_pts)
+for (i in 1:n_fpca) {
+  Y_mat[i, ] <- mu_func + scores1[i] * phi1 + scores2[i] * phi2 + 
+    scores3[i] * phi3 + rnorm(n_pts, 0, 1.5)
+}
+
+# PCA
+Y_centered <- sweep(Y_mat, 2, colMeans(Y_mat))
+svd_res <- svd(Y_centered)
+total_var <- sum(svd_res$d^2)
+var_explained <- svd_res$d^2 / total_var
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+plot(days_fpca, colMeans(Y_mat), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "日序号 | Tag", ylab = "温度 | Temperatur",
+     main = "均值函数 | Mittlere Kurve",
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (k in 1:3) {
+  eigfunc <- svd_res$v[, k]
+  plot(days_fpca, eigfunc, type = "l", col = c("#DC2626", "#16A34A", "#9333EA")[k], lwd = 2.5,
+       xlab = "日序号 | Tag", ylab = expression(phi[m](t)),
+       main = sprintf("第 %d 特征函数 (解释方差 %.1f%%)", k, var_explained[k] * 100),
+       cex.main = 0.85, col.main = "#1E293B")
+  abline(h = 0, col = "#94A3B8", lty = 2)
+  grid(col = "#E2E8F0")
+}
+
+par(mfrow = c(1, 1))
+```
+
+## 函数回归
+
+> **Funktionale Regression**
+
+在涉及函数型数据的许多情形中，人们还感兴趣于将函数用作协变量（**标量对函数回归**, SOFR）、用作响应变量（**函数对标量回归**, FOSR），或两者兼有（**函数对函数回归**, FOFR）。
+
+我们简要介绍后者。假设响应 $Y(t)$ 和预测变量 $x(t)$ 都是函数，且在相同范围 $t \in \mathcal{T}$ 上变化。**线性并发模型**（lineares konkurrentes Modell）为
+
+$$
+Y_i(t) = \alpha(t) + x_i(t) \beta(t) + \epsilon_i(t), \quad i = 1, \ldots, n, \; t \in \mathcal{T}
+$$
+
+该模型为每个时间点 $t \in \mathcal{T}$ 提供协变量对响应的并发效应。根据协变量和响应之间的关系，存在多种松弛形式：我们可以假设回归系数是常数的，也可以对函数预测变量在整个时间域上积分（假设协变量的所有时间点都影响每个单独的时间点）。
+
+函数回归模型提供了广泛的灵活性，允许纳入非 i.i.d. 设定。
+
+{{< pagebreak >}}
+
+# 练习题 {#sec-exercises}
+
+> **Ubungsaufgaben**
+
+## 练习 1：时间序列诊断与理论
+
+> **Ubung 1: Zeitreihendiagnose und Theorie**
+
+### a) ACF 与 PACF 的模式匹配
+
+一位分析师正在研究三个不同的时间序列过程，对每个过程进行了标准诊断分析，总结了样本 ACF 和 PACF 的行为。
+
+分析 A：ACF 在滞后 1 处有统计显著值，但所有滞后 $h > 1$ 的值均不显著（即在滞后 1 后"截断"）。PACF 在多个滞后处显著并逐渐衰减到零。
+
+分析 B：ACF 在许多滞后处显著，缓慢衰减到零（即"拖尾"）。PACF 在滞后 1 处有显著值，但所有 $h > 1$ 处的值均不显著。
+
+分析 C：对于任何 $h > 0$，ACF 和 PACF 的值均不显著。
+
+请将每种分析描述（A、B、C）匹配到最可能的底层过程：AR(1)、MA(1) 或白噪声，并说明理由。
+
+```{r}
+#| label: exercise-1a
+#| code-fold: false
+
+cat("练习 1a：ACF/PACF 模式匹配\n\n")
+
+set.seed(2024)
+n_ex <- 300
+par(mfrow = c(3, 2), bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+
+# MA(1) -> 分析 A
+y_ma1 <- arima.sim(n = n_ex, model = list(ma = 0.7))
+acf(y_ma1, main = "分析 A 的 ACF (h=1 后截断)", lag.max = 12, col = "#2563EB")
+pacf(y_ma1, main = "分析 A 的 PACF (缓慢衰减)", lag.max = 12, col = "#2563EB")
+
+# AR(1) -> 分析 B
+y_ar1 <- arima.sim(n = n_ex, model = list(ar = 0.7))
+acf(y_ar1, main = "分析 B 的 ACF (缓慢衰减)", lag.max = 12, col = "#DC2626")
+pacf(y_ar1, main = "分析 B 的 PACF (h=1 后截断)", lag.max = 12, col = "#DC2626")
+
+# 白噪声 -> 分析 C
+y_wn <- rnorm(n_ex)
+acf(y_wn, main = "分析 C 的 ACF (无显著值)", lag.max = 12, col = "#16A34A")
+pacf(y_wn, main = "分析 C 的 PACF (无显著值)", lag.max = 12, col = "#16A34A")
+
+par(mfrow = c(1, 1))
+
+cat("  答案:\n")
+cat("  - 分析 A = MA(1): ACF 在 q=1 后截断是 MA(q) 的特征\n")
+cat("  - 分析 B = AR(1): PACF 在 p=1 后截断是 AR(p) 的特征\n")
+cat("  - 分析 C = 白噪声: 无任何显著的自相关\n")
+```
+
+### b) AR(1) 自相关函数的推导
+
+考虑平稳 AR(1) 过程 $Y_t = \phi Y_{t-1} + Z_t$，其中 $Z_t$ 是方差为 $\sigma^2$ 的白噪声且 $E[Y_t] = 0$。证明 $\rho(h) = \phi^h$（$h \geq 1$）。
+
+```{r}
+#| label: exercise-1b
+#| code-fold: false
+
+cat("练习 1b：AR(1) 自相关函数推导\n\n")
+cat("  提示: 将 AR(1) 方程两边乘以 Y_{t-h} 并取期望。\n\n")
+cat("  推导:\n")
+cat("  (1) Y_t = phi * Y_{t-1} + Z_t\n")
+cat("  (2) 两边乘以 Y_{t-h} 并取期望:\n")
+cat("      E[Y_t * Y_{t-h}] = phi * E[Y_{t-1} * Y_{t-h}] + E[Z_t * Y_{t-h}]\n")
+cat("  (3) 由于 h > 0, Z_t 与 Y_{t-h} 独立, 所以 E[Z_t * Y_{t-h}] = 0\n")
+cat("  (4) 因此 gamma(h) = phi * gamma(h-1)\n")
+cat("  (5) 递推: gamma(h) = phi^h * gamma(0)\n")
+cat("  (6) 因此 rho(h) = gamma(h)/gamma(0) = phi^h   QED\n")
+```
+
+### c) MA(q) 自相关截断的直觉解释
+
+对于 MA(q) 过程，为什么 $\rho(h) = 0$（当 $h > q$）？以 MA(1) 为例解释。
+
+```{r}
+#| label: exercise-1c
+#| code-fold: false
+
+cat("练习 1c：MA(1) 自相关截断的直觉\n\n")
+cat("  MA(1): Y_t = Z_t + theta * Z_{t-1}\n\n")
+cat("  Y_t   的成分: Z_t,   Z_{t-1}\n")
+cat("  Y_{t-1} 的成分: Z_{t-1}, Z_{t-2}\n")
+cat("  Y_{t-2} 的成分: Z_{t-2}, Z_{t-3}\n\n")
+cat("  Y_t 和 Y_{t-1} 共享 Z_{t-1} -> Cov != 0\n")
+cat("  Y_t 和 Y_{t-2} 不共享任何噪声项 -> Cov = 0\n\n")
+cat("  一般地: MA(q) 中 Y_t 仅包含 Z_t, ..., Z_{t-q}\n")
+cat("  Y_{t-h} 仅包含 Z_{t-h}, ..., Z_{t-h-q}\n")
+cat("  当 h > q 时两组 Z 完全不重叠 -> 协方差为零\n")
+```
+
+### d) 偏自相关函数 (PACF) 与条件相关
+
+对于 AR(p) 过程，PACF 在滞后 $p$ 后截断意味着什么？对于 AR(1)，已知 $Y_{t-1}$ 后 $Y_t$ 与 $Y_{t-2}$ 的相关是多少？
+
+```{r}
+#| label: exercise-1d
+#| code-fold: false
+
+cat("练习 1d：PACF 与条件相关\n\n")
+cat("  AR(p) 过程的 PACF 在 h > p 后为零, 意味着:\n")
+cat("  条件于 Y_{t-1}, ..., Y_{t-h+1}, Y_t 与 Y_{t-h} 不相关\n\n")
+cat("  这是 Markov 性质: AR(p) 过程的 '记忆' 只有 p 步。\n")
+cat("  给定最近的 p 个值, 更早的历史不提供额外信息。\n\n")
+cat("  对于 AR(1):\n")
+cat("  Y_t = phi * Y_{t-1} + Z_t\n")
+cat("  给定 Y_{t-1}, Y_t 完全由 Y_{t-1} 和 Z_t 决定。\n")
+cat("  Z_t 与 Y_{t-2} 独立。\n")
+cat("  因此 Corr(Y_t, Y_{t-2} | Y_{t-1}) = 0\n")
+```
+
+## 练习 2：空间数据分析
+
+> **Ubung 2: Raumliche Datenanalyse**
+
+### a) Tobler 第一定律在租金数据中的体现
+
+```{r}
+#| label: exercise-2a
+#| code-fold: false
+
+cat("练习 2a：Tobler 第一定律与租金\n\n")
+cat("  即使控制了公寓面积等因素, 我们仍然期望:\n")
+cat("  - 地理位置接近的公寓租金更相似\n")
+cat("  - 因为它们共享相同的区位特征 (交通、学校、商业)\n")
+cat("  - 距离越远, 区位因素越不同, 租金差异越大\n")
+cat("  这正是 Tobler 定律: '近者更相关'\n")
+```
+
+### b) i.i.d. 数据的理论变差函数
+
+```{r}
+#| label: fig-exercise-2b
+#| fig-cap: "练习 2b：i.i.d. 数据的理论变差函数 vs 实际变差函数 | Theoretisches vs. empirisches Variogramm"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+d_range <- seq(0, 3, length.out = 200)
+gamma_iid <- rep(2 * 5, length(d_range))  # 2 * sigma^2
+
+gamma_real <- 9 + (11.5 - 9) * (1 - exp(-3 * d_range / 1.8))
+
+plot(d_range, gamma_iid, type = "l", col = "#DC2626", lwd = 3, lty = 2,
+     xlab = "距离 (km) | Entfernung", ylab = expression(gamma(d)),
+     main = "i.i.d. 理论变差函数 vs 空间相关变差函数",
+     cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, 14))
+lines(d_range, gamma_real, col = "#2563EB", lwd = 3)
+grid(col = "#E2E8F0")
+
+legend("bottomright", 
+       legend = c(expression(paste("i.i.d.: ", gamma(d) == 2*sigma^2, " (常数)")),
+                  "空间相关: 从低到高增长"),
+       col = c("#DC2626", "#2563EB"), lwd = 3, lty = c(2, 1), bty = "n", cex = 0.85)
+
+cat("\n练习 2b 答案:\n")
+cat("  若数据 i.i.d., 则 Var(Y_i - Y_j) = Var(Y_i) + Var(Y_j) = 2*sigma^2\n")
+cat("  变差函数是常数, 不随距离变化。\n")
+cat("  实际变差函数从低值开始逐渐增长到基台 (sill),\n")
+cat("  说明近距离的观测更相关。\n")
+```
+
+### c) 变程和基台的解读
+
+```{r}
+#| label: exercise-2c
+#| code-fold: false
+
+cat("练习 2c：变程和基台\n\n")
+cat("  变程 (Range) ≈ 1.8 - 2.0 km:\n")
+cat("    这是空间相关性存在的最大距离。\n")
+cat("    超过约 2km 的公寓之间租金不再显著相关。\n\n")
+cat("  基台 (Sill) ≈ 11.5:\n")
+cat("    这是变差函数的渐近水平, 等于 2 * sigma^2。\n")
+cat("    代表了在没有空间相关性时, 任意两个公寓租金差异的方差。\n")
+```
+
+### d) 残差变差函数与 Cressie 格言
+
+```{r}
+#| label: exercise-2d
+#| code-fold: false
+
+cat("练习 2d：残差变差函数与 Cressie 格言\n\n")
+cat("  如果方法 (ii) 成功捕捉了所有空间依赖性:\n")
+cat("  残差 epsilon_j = Y_j - h_hat(s_j) 应当近似 i.i.d.\n")
+cat("  因此残差的变差函数应当是一条水平线 (= 2*sigma_epsilon^2)。\n\n")
+cat("  Cressie 格言: 'One person's mean is another person's covariance'\n")
+cat("  含义: 空间变化可以被建模为均值结构的一部分 h(s),\n")
+cat("  也可以被建模为协方差结构的一部分 c(||s_i - s_j||)。\n")
+cat("  两种视角都有效, 选择取决于建模偏好。\n")
+```
+
+### e) 格网数据的条件独立性假设
+
+```{r}
+#| label: exercise-2e
+#| code-fold: false
+
+cat("练习 2e：GMRF 的条件独立性\n\n")
+cat("  在高斯马尔可夫随机场 (GMRF) 模型中:\n\n")
+cat("  U_k ⊥ U_l | 其余所有 U\n")
+cat("  当且仅当区域 k 和区域 l 不共享边界 (不是邻居)。\n\n")
+cat("  换言之, 给定所有邻居的值,\n")
+cat("  一个区域的效应与所有非邻居区域独立。\n")
+cat("  这是空间版的 Markov 性质。\n")
+```
+
+## 练习 3：网络数据分析
+
+> **Ubung 3: Netzwerkdatenanalyse**
+
+### a) ERGM 中充分统计量的作用
+
+```{r}
+#| label: exercise-3a
+#| code-fold: false
+
+cat("练习 3a：充分统计量的目的\n\n")
+cat("  s(y) 的目的是捕捉网络中的全局依赖模式。\n")
+cat("  独立 Bernoulli 模型假设所有边独立 --\n")
+cat("  这忽略了传递性、聚类等重要结构。\n\n")
+cat("  ERGM 通过选择合适的 s(y) 可以建模:\n")
+cat("  - 边的总体密度 (edges)\n")
+cat("  - 同质性 (nodematch)\n")
+cat("  - 传递性/聚类 (transitive ties)\n")
+cat("  等高阶依赖结构, 这是独立模型做不到的。\n")
+```
+
+### b) ERGM 系数解读
+
+```{r}
+#| label: exercise-3b
+#| code-fold: false
+
+cat("练习 3b：ERGM 系数解读（学术合作网络）\n\n")
+
+cat("  i) Edges 系数 = -4.20:\n")
+cat("     大的负值意味着网络整体非常稀疏。\n")
+cat("     大多数可能的合作关系并不存在。\n\n")
+
+cat("  ii) Nodematch(Area) 系数 = +2.10:\n")
+cat("      正系数代表同质性 (Homophilie):\n")
+cat("      同一研究领域的教授更可能合作发表论文。\n\n")
+
+cat("  iii) Transitive Ties 系数 = +1.50:\n")
+cat("       正系数表示传递闭包 (transitive closure):\n")
+cat("       '我的合作者的合作者更可能是我的合作者'\n")
+cat("       这在学术界很常见 -- 合作网络倾向于形成紧密团体。\n")
+```
+
+### c) Nodematch 系数为负的假设情景
+
+```{r}
+#| label: exercise-3c
+#| code-fold: false
+
+cat("练习 3c：假设 Nodematch 系数为负\n\n")
+cat("  如果 Nodematch(Area) 系数大且为负, 意味着:\n")
+cat("  同一研究领域的教授之间反而更少合作 --\n")
+cat("  合作更多发生在不同领域之间 (跨学科合作为主)。\n\n")
+cat("  这被称为异质性 (Heterophilie), 即 '异者更相关',\n")
+cat("  与 Tobler 定律中的同质性 (Homophilie) 恰好相反。\n")
+cat("  这暗示该系有很强的跨学科研究文化。\n")
+```
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心概念链
+
+```{r}
+#| label: fig-summary-chain
+#| fig-cap: "本章知识逻辑链：四种依赖结构 | Logikkette der vier Abhangigkeitsstrukturen"
+#| fig-height: 6
+#| fig-width: 12
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 18), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("第十二章知识逻辑链 | Logikkette Kapitel 12")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# 顶部：核心问题
+rect(6.5, 6.2, 11.5, 7.5, col = "#FEE2E2", border = "#DC2626", lwd = 3)
+text(9, 7.1, "i.i.d. 假设被打破", font = 2, cex = 0.8, col = "#DC2626")
+text(9, 6.55, expression(Cov(Y[i], Y[j]) != 0), cex = 0.75, col = "#DC2626")
+
+# 四个分支
+nx <- c(2.5, 7, 11.5, 16)
+ny <- rep(4, 4)
+labels <- c(
+  "时间序列\nAR/MA/ARMA\nACF/PACF",
+  "空间数据\n变差函数/Kriging\nGMRF",
+  "网络数据\nERGM\n充分统计量",
+  "函数型数据\nFPCA\n函数回归"
+)
+fills <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#E0E7FF")
+bords <- c("#2563EB", "#D97706", "#DB2777", "#6366F1")
+deps <- c("时间顺序\nt, t-1, t-2, ...", 
+          "空间距离\n||s_i - s_j||", 
+          "边的互依赖\ny_ij ↔ y_jk",
+          "曲线内部\nY_i(t), t in T")
+
+for (i in 1:4) {
+  rect(nx[i]-2, ny[i]-1.2, nx[i]+2, ny[i]+1.2,
+       col = fills[i], border = bords[i], lwd = 2)
+  text(nx[i], ny[i]+0.4, labels[i], cex = 0.5, font = 2, col = "#1E293B")
+  text(nx[i], ny[i]-0.7, deps[i], cex = 0.4, col = bords[i], font = 3)
+  arrows(nx[i], 5.2, nx[i], 6.1, col = "#94A3B8", lwd = 2, length = 0.1, code = 1)
+}
+
+# 底部共性
+rect(3, 0.8, 15, 2.0, col = "#F0FDF4", border = "#16A34A", lwd = 2)
+text(9, 1.7, "共同主题 | Gemeinsames Thema:", font = 2, cex = 0.7, col = "#16A34A")
+text(9, 1.15, "利用依赖结构建模, 而非忽略它; 图模型表达条件独立性", 
+     cex = 0.6, col = "#1E293B")
+for (i in 1:4) {
+  arrows(nx[i], 2.8, nx[i], 2.1, col = "#94A3B8", lwd = 1.5, length = 0.08)
+}
+```
+
+## 公式速查表
+
+| 公式 | 名称 | 出处 |
+|:-----|:-----|:----:|
+| $\gamma_Y(h) = \text{Cov}(Y_t, Y_{t+h})$ | 自协方差函数 | 12.1 |
+| $\rho(h) = \gamma(h) / \gamma(0)$ | 自相关函数 (ACF) | (12.1) |
+| $Y_t = \phi_1 Y_{t-1} + \cdots + \phi_p Y_{t-p} + Z_t$ | AR(p) 过程 | 定义 12.1 |
+| $Y_t = Z_t + \theta_1 Z_{t-1} + \cdots + \theta_q Z_{t-q}$ | MA(q) 过程 | 定义 12.2 |
+| $\Phi(B) Y_t = \Theta(B) Z_t$ | ARMA(p,q) 算子形式 | (12.3) |
+| $Y_t = \sum_{j=0}^{\infty} \psi_j Z_{t-j}$ | 因果表示 | (12.4) |
+| $\text{Cov}(Y_i, Y_j) = c(\|s_i - s_j\|)$ | 各向同性协方差 | (12.5) |
+| $\hat{Y}(s_0) = w V^{-1} y$ | Kriging 预测 | 12.2 |
+| $P(Y = y; \theta) = \exp(\theta^\top s(y)) / \kappa(\theta)$ | ERGM | (12.10) |
+| $Y(t) = \mu(t) + \sum_m \xi_m \phi_m(t)$ | Karhunen-Loeve 展开 | (12.11) |
+| $Y_i(t) = \alpha(t) + x_i(t)\beta(t) + \epsilon_i(t)$ | 函数并发回归 | (12.13) |
+
+## 本章的八个核心洞察
+
+| 编号 | 洞察 | 关键词 |
+|:----:|:------|:------|
+| 1 | 时间序列中当前值依赖于历史值，自协方差函数和自相关函数量化这种依赖 | ACF |
+| 2 | AR(p) 过程的 PACF 在滞后 p 后截断，MA(q) 的 ACF 在滞后 q 后截断 | 模型识别 |
+| 3 | AR(1) 的因果性要求 $|\phi| < 1$，否则过程由未来决定或方差爆炸 | 因果性 |
+| 4 | ARMA 过程可以用后移算子简洁表示，AR 分量可转换为无穷 MA 分量 | 算子表示 |
+| 5 | 空间数据中"近者更相关"（Tobler 定律），变差函数量化这种空间依赖 | 变差函数 |
+| 6 | Kriging 利用空间协方差结构在未观测位置进行最优插值预测 | Kriging |
+| 7 | ERGM 通过指数族框架建模网络中边的非独立性，充分统计量的选择至关重要 | ERGM |
+| 8 | 函数型数据中每个观测是一条曲线，FPCA 通过 Karhunen-Loeve 展开实现降维 | FPCA |
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 时间序列
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Zeitreihe | 时间序列 | time series |
+| die Stationaritat | 平稳性 | stationarity |
+| die Autokovarianzfunktion | 自协方差函数 | autocovariance function |
+| die Autokorrelationsfunktion (ACF) | 自相关函数 | autocorrelation function |
+| die partielle Autokorrelation (PACF) | 偏自相关 | partial autocorrelation |
+| das weisse Rauschen | 白噪声 | white noise |
+| der autoregressive Prozess (AR) | 自回归过程 | autoregressive process |
+| der Moving-Average-Prozess (MA) | 移动平均过程 | moving average process |
+| der ARMA-Prozess | ARMA 过程 | ARMA process |
+| der ARIMA-Prozess | ARIMA 过程 | ARIMA process |
+| der Backshift-Operator | 后移算子 | backshift operator |
+| die Kausalitat | 因果性 | causality |
+| der Random Walk | 随机游走 | random walk |
+| die Vorhersage (Prognose) | 预测 | forecasting |
+| der Zeitverzug (Lag) | 时间滞后 | lag |
+| die Varianzmatrix | 方差矩阵 | variance matrix |
+| die Korrelationsmatrix | 相关矩阵 | correlation matrix |
+| die geometrische Reihe | 几何级数 | geometric series |
+| die Teleskopsumme | 伸缩求和 | telescoping sum |
+| die Differenzenbildung | 差分 | differencing |
+
+## 空间数据
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die raumlichen Daten | 空间数据 | spatial data |
+| Toblers Erstes Gesetz | Tobler 第一定律 | Tobler's First Law |
+| das Variogramm | 变差函数 | variogram |
+| die isotrope Kovarianz | 各向同性协方差 | isotropic covariance |
+| der Sill (Schwellenwert) | 基台 | sill |
+| die Reichweite (Range) | 变程 | range |
+| der Nugget-Effekt | 块金效应 | nugget effect |
+| das Kriging | Kriging 插值 | kriging |
+| der raumliche Prozess | 空间过程 | spatial process |
+| das Gauss-Markov-Zufallsfeld (GMRF) | 高斯马尔可夫随机场 | Gauss-Markov random field |
+| die Gitterdaten | 格网数据 | lattice data |
+| die Nachbarschaftsstruktur | 邻域结构 | neighborhood structure |
+| die Euklidische Distanz | 欧几里得距离 | Euclidean distance |
+| die Netzwerkdistanz | 网络距离 | network distance |
+| die raumliche Regression | 空间回归 | spatial regression |
+| der Zentroid | 质心 | centroid |
+
+## 网络数据
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Netzwerkdaten | 网络数据 | network data |
+| die Adjazenzmatrix | 邻接矩阵 | adjacency matrix |
+| der Akteur (Knoten) | 参与者（节点） | actor (node) |
+| die Kante (Verbindung) | 边（连接） | edge (tie) |
+| das gerichtete Netzwerk | 有向网络 | directed network |
+| das ungerichtete Netzwerk | 无向网络 | undirected network |
+| der Grad (Degree) | 度数 | degree |
+| die Dichte | 密度 | density |
+| die Homophilie | 同质性 | homophily |
+| die Transitivitat | 传递性 | transitivity |
+| das Exponential Random Graph Model (ERGM) | 指数随机图模型 | exponential random graph model |
+| die hinreichende Statistik | 充分统计量 | sufficient statistic |
+| die Normierungskonstante | 归一化常数 | normalizing constant |
+| das Stochastische Blockmodell | 随机块模型 | stochastic block model |
+| die Gemeinschaftserkennung | 社区检测 | community detection |
+| die Kontagion | 传染 | contagion |
+
+## 函数型数据
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die funktionale Datenanalyse (FDA) | 函数型数据分析 | functional data analysis |
+| die funktionale Beobachtung | 函数型观测 | functional observation |
+| die funktionale Hauptkomponentenanalyse (FPCA) | 函数主成分分析 | functional PCA |
+| die Karhunen-Loeve-Entwicklung | Karhunen-Loeve 展开 | Karhunen-Loeve expansion |
+| die Eigenfunktion | 特征函数 | eigenfunction |
+| der Eigenwert | 特征值 | eigenvalue |
+| der Score | 得分 | score |
+| die Basisfunktion | 基函数 | basis function |
+| das Vorglatten (Pre-Smoothing) | 预平滑 | pre-smoothing |
+| die Scalar-on-Function-Regression (SOFR) | 标量对函数回归 | scalar-on-function regression |
+| die Function-on-Scalar-Regression (FOSR) | 函数对标量回归 | function-on-scalar regression |
+| die Function-on-Function-Regression (FOFR) | 函数对函数回归 | function-on-function regression |
+| das konkurrente Modell | 并发模型 | concurrent model |
+| die Dimensionsreduktion | 降维 | dimension reduction |
+| die Gitterpunkte | 网格点 | grid points |
+:::

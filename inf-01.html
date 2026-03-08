@@ -1,0 +1,2110 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.27">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Inferenzstatistik 1 (Statistik 3)">
+<meta name="dcterms.date" content="2026-03-08">
+
+<title>第一章：统计学与不确定性</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="inf-01_files/libs/clipboard/clipboard.min.js"></script>
+<script src="inf-01_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="inf-01_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="inf-01_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="inf-01_files/libs/quarto-html/popper.min.js"></script>
+<script src="inf-01_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="inf-01_files/libs/quarto-html/anchor.min.js"></script>
+<link href="inf-01_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="inf-01_files/libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="inf-01_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="inf-01_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="inf-01_files/libs/bootstrap/bootstrap-4d7f0bce1131f3e5f9547cd857cfbfc8.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<style>html{ scroll-behavior: smooth; }</style>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">章节导航 | Kapitelnavigation</h2>
+   
+  <ul>
+  <li><a href="#引言本章旅程" id="toc-引言本章旅程" class="nav-link active" data-scroll-target="#引言本章旅程">引言：本章旅程</a></li>
+  <li><a href="#sec-uncertainty" id="toc-sec-uncertainty" class="nav-link" data-scroll-target="#sec-uncertainty"><span class="header-section-number">1</span> 什么是不确定性</a>
+  <ul class="collapse">
+  <li><a href="#骰子杯思想实验" id="toc-骰子杯思想实验" class="nav-link" data-scroll-target="#骰子杯思想实验"><span class="header-section-number">1.1</span> 骰子杯思想实验</a></li>
+  <li><a href="#掷骰子真的随机吗" id="toc-掷骰子真的随机吗" class="nav-link" data-scroll-target="#掷骰子真的随机吗"><span class="header-section-number">1.2</span> 掷骰子真的”随机”吗？</a></li>
+  </ul></li>
+  <li><a href="#sec-probability-reality" id="toc-sec-probability-reality" class="nav-link" data-scroll-target="#sec-probability-reality"><span class="header-section-number">2</span> 概率与现实中的不确定性</a>
+  <ul class="collapse">
+  <li><a href="#案例一sally-clark-案" id="toc-案例一sally-clark-案" class="nav-link" data-scroll-target="#案例一sally-clark-案"><span class="header-section-number">2.1</span> 案例一：Sally Clark 案</a></li>
+  <li><a href="#案例二covid-19-疫苗效力与相对风险" id="toc-案例二covid-19-疫苗效力与相对风险" class="nav-link" data-scroll-target="#案例二covid-19-疫苗效力与相对风险"><span class="header-section-number">2.2</span> 案例二：COVID-19 疫苗效力与相对风险</a></li>
+  </ul></li>
+  <li><a href="#sec-sources" id="toc-sec-sources" class="nav-link" data-scroll-target="#sec-sources"><span class="header-section-number">3</span> 不确定性的来源</a>
+  <ul class="collapse">
+  <li><a href="#偶然不确定性" id="toc-偶然不确定性" class="nav-link" data-scroll-target="#偶然不确定性"><span class="header-section-number">3.1</span> 偶然不确定性</a></li>
+  <li><a href="#认知不确定性" id="toc-认知不确定性" class="nav-link" data-scroll-target="#认知不确定性"><span class="header-section-number">3.2</span> 认知不确定性</a></li>
+  <li><a href="#用模拟理解两种不确定性" id="toc-用模拟理解两种不确定性" class="nav-link" data-scroll-target="#用模拟理解两种不确定性"><span class="header-section-number">3.3</span> 用模拟理解两种不确定性</a></li>
+  </ul></li>
+  <li><a href="#sec-paradigm" id="toc-sec-paradigm" class="nav-link" data-scroll-target="#sec-paradigm"><span class="header-section-number">4</span> 经典统计范式</a>
+  <ul class="collapse">
+  <li><a href="#从总体到样本" id="toc-从总体到样本" class="nav-link" data-scroll-target="#从总体到样本"><span class="header-section-number">4.1</span> 从总体到样本</a></li>
+  </ul></li>
+  <li><a href="#sec-dgp" id="toc-sec-dgp" class="nav-link" data-scroll-target="#sec-dgp"><span class="header-section-number">5</span> 数据生成过程</a>
+  <ul class="collapse">
+  <li><a href="#定义" id="toc-定义" class="nav-link" data-scroll-target="#定义"><span class="header-section-number">5.1</span> 定义</a></li>
+  <li><a href="#从数据中能学到什么" id="toc-从数据中能学到什么" class="nav-link" data-scroll-target="#从数据中能学到什么"><span class="header-section-number">5.2</span> 从数据中能学到什么？</a></li>
+  </ul></li>
+  <li><a href="#sec-modelling" id="toc-sec-modelling" class="nav-link" data-scroll-target="#sec-modelling"><span class="header-section-number">6</span> 统计建模初步</a>
+  <ul class="collapse">
+  <li><a href="#用参数模型近似现实" id="toc-用参数模型近似现实" class="nav-link" data-scroll-target="#用参数模型近似现实"><span class="header-section-number">6.1</span> 用参数模型近似现实</a></li>
+  <li><a href="#三个关键概念" id="toc-三个关键概念" class="nav-link" data-scroll-target="#三个关键概念"><span class="header-section-number">6.2</span> 三个关键概念</a></li>
+  <li><a href="#模型选择的例子" id="toc-模型选择的例子" class="nav-link" data-scroll-target="#模型选择的例子"><span class="header-section-number">6.3</span> 模型选择的例子</a></li>
+  <li><a href="#估计器" id="toc-估计器" class="nav-link" data-scroll-target="#估计器"><span class="header-section-number">6.4</span> 估计器</a></li>
+  </ul></li>
+  <li><a href="#sec-summary" id="toc-sec-summary" class="nav-link" data-scroll-target="#sec-summary"><span class="header-section-number">7</span> 总结与展望</a>
+  <ul class="collapse">
+  <li><a href="#本章核心框架" id="toc-本章核心框架" class="nav-link" data-scroll-target="#本章核心框架"><span class="header-section-number">7.1</span> 本章核心框架</a></li>
+  <li><a href="#概念逻辑链" id="toc-概念逻辑链" class="nav-link" data-scroll-target="#概念逻辑链"><span class="header-section-number">7.2</span> 概念逻辑链</a></li>
+  <li><a href="#重要性质回顾" id="toc-重要性质回顾" class="nav-link" data-scroll-target="#重要性质回顾"><span class="header-section-number">7.3</span> 重要性质回顾</a></li>
+  </ul></li>
+  
+  </ul>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="inf-01.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li></ul></div></nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">第一章：统计学与不确定性</h1>
+<p class="subtitle lead">从骰子到数据生成过程 | Von Würfeln zum datengenerierenden Prozess</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Inferenzstatistik 1 (Statistik 3) </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">March 8, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<div style="page-break-after: always;"></div>
+<section id="引言本章旅程" class="level1 unnumbered">
+<h1 class="unnumbered">引言：本章旅程</h1>
+<blockquote class="blockquote">
+<p><strong>Einleitung: Die Reise dieses Kapitels</strong></p>
+</blockquote>
+<p>统计学的核心使命是什么？这个问题由统计学巨匠 Sir David Cox (1924–2022) 给出了精辟的回答：</p>
+<blockquote class="blockquote">
+<p><em>“Statistics is the discipline concerned with the study of variability, with the study of <strong>uncertainty</strong> and with the study of decision-making <strong>in the face of uncertainty</strong>.”</em></p>
+</blockquote>
+<p>统计学是研究 <strong>变异性（Variabilitat）</strong>、<strong>不确定性（Unsicherheit / Uncertainty）</strong> 以及 <strong>在不确定性下进行决策</strong> 的学科。</p>
+<p>本章将围绕”不确定性”展开，带你理解以下核心问题：</p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mar =</span> <span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.5</span>, <span class="dv">2</span>, <span class="fl">0.5</span>), <span class="at">bg =</span> <span class="st">"#F8FAFC"</span>)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NULL</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">10</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">7</span>), <span class="at">axes =</span> <span class="cn">FALSE</span>, </span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">""</span>, <span class="at">ylab =</span> <span class="st">""</span>, <span class="at">main =</span> <span class="st">""</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">title</span>(<span class="fu">expression</span>(<span class="fu">bold</span>(<span class="st">"本章学习路线图 | Lernroadmap"</span>)), </span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>      <span class="at">cex.main =</span> <span class="fl">1.4</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>steps_x <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">5</span>, <span class="dv">7</span>, <span class="dv">9</span>)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>steps_y <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">5.5</span>, <span class="fl">5.5</span>, <span class="fl">5.5</span>, <span class="fl">5.5</span>, <span class="fl">5.5</span>)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="fu">arrows</span>(steps_x[<span class="sc">-</span><span class="dv">5</span>] <span class="sc">+</span> <span class="fl">0.7</span>, steps_y[<span class="sc">-</span><span class="dv">5</span>], steps_x[<span class="sc">-</span><span class="dv">1</span>] <span class="sc">-</span> <span class="fl">0.7</span>, steps_y[<span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> <span class="st">"#94A3B8"</span>, <span class="at">lwd =</span> <span class="fl">2.5</span>, <span class="at">length =</span> <span class="fl">0.12</span>)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>labels_cn <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"什么是</span><span class="sc">\n</span><span class="st">不确定性"</span>, <span class="st">"不确定性</span><span class="sc">\n</span><span class="st">的来源"</span>, </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>               <span class="st">"经典统计</span><span class="sc">\n</span><span class="st">范式"</span>, <span class="st">"数据生成</span><span class="sc">\n</span><span class="st">过程"</span>, </span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>               <span class="st">"统计建模</span><span class="sc">\n</span><span class="st">初步"</span>)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>labels_de <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"Was ist</span><span class="sc">\n</span><span class="st">Unsicherheit?"</span>, <span class="st">"Quellen der</span><span class="sc">\n</span><span class="st">Unsicherheit"</span>, </span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>               <span class="st">"Klassisches</span><span class="sc">\n</span><span class="st">Paradigma"</span>, <span class="st">"Datengenerie-</span><span class="sc">\n</span><span class="st">render Prozess"</span>, </span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>               <span class="st">"Statistische</span><span class="sc">\n</span><span class="st">Modellierung"</span>)</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>colors <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"#DBEAFE"</span>, <span class="st">"#FEF3C7"</span>, <span class="st">"#FEE2E2"</span>, <span class="st">"#E0E7FF"</span>, <span class="st">"#D1FAE5"</span>)</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>borders <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"#2563EB"</span>, <span class="st">"#D97706"</span>, <span class="st">"#DC2626"</span>, <span class="st">"#6366F1"</span>, <span class="st">"#16A34A"</span>)</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>) {</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rect</span>(steps_x[i] <span class="sc">-</span> <span class="fl">0.7</span>, steps_y[i] <span class="sc">-</span> <span class="fl">0.9</span>, steps_x[i] <span class="sc">+</span> <span class="fl">0.7</span>, steps_y[i] <span class="sc">+</span> <span class="fl">0.9</span>,</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> colors[i], <span class="at">border =</span> borders[i], <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">text</span>(steps_x[i], steps_y[i] <span class="sc">+</span> <span class="fl">0.2</span>, labels_cn[i], <span class="at">cex =</span> <span class="fl">0.72</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">text</span>(steps_x[i], steps_y[i] <span class="sc">-</span> <span class="fl">0.55</span>, labels_de[i], <span class="at">cex =</span> <span class="fl">0.52</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>) {</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">text</span>(steps_x[i] <span class="sc">-</span> <span class="fl">0.5</span>, steps_y[i] <span class="sc">+</span> <span class="fl">0.75</span>, <span class="fu">paste0</span>(<span class="st">"$"</span>, i), </span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a>       <span class="at">cex =</span> <span class="fl">0.6</span>, <span class="at">col =</span> borders[i], <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">1.5</span>, <span class="st">"核心目标：理解不确定性的量化，并引入数据生成过程的概念"</span>, </span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>, <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">0.8</span>, <span class="st">"Kernziel: Quantifizierung der Unsicherheit verstehen und den Begriff des DGP einführen"</span>, </span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.75</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-roadmap" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-roadmap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-roadmap-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-roadmap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: 本章学习路线图 | Lernroadmap dieses Kapitels
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>最终目标 | Endziel</strong>：理解以下核心框架——</p>
+<p><span class="math display">\[
+\underbrace{Y \sim G(\cdot)}_{\text{数据生成过程 (未知)}} \quad \longrightarrow \quad \underbrace{\mathcal{F} = \{F(\cdot;\theta), \theta \in \Theta\}}_{\text{统计模型 (我们的近似)}}
+\]</span></p>
+<p>现在看不懂？读完本章，你会清楚每个符号的含义以及为什么要这样做。</p>
+<div style="page-break-after: always;"></div>
+</section>
+<section id="sec-uncertainty" class="level1" data-number="1">
+<h1 data-number="1"><span class="header-section-number">1</span> 什么是不确定性</h1>
+<blockquote class="blockquote">
+<p><strong>Was ist Unsicherheit?</strong></p>
+</blockquote>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>本节你将学到 | Was Sie in diesem Abschnitt lernen
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ul>
+<li>不确定性可以通过概率来量化</li>
+<li>随机实验与知识状态的关系</li>
+<li>即使没有”真正的随机”，不确定性依然存在</li>
+</ul>
+</div>
+</div>
+<section id="骰子杯思想实验" class="level2" data-number="1.1">
+<h2 data-number="1.1" class="anchored" data-anchor-id="骰子杯思想实验"><span class="header-section-number">1.1</span> 骰子杯思想实验</h2>
+<blockquote class="blockquote">
+<p><strong>Das Würfelbecher-Gedankenexperiment</strong></p>
+</blockquote>
+<p>想象一个简单的场景：一个骰子杯里有一颗（公平的）骰子。</p>
+<p><strong>场景 A</strong>：你摇动骰子杯，掷出骰子。骰子显示 6 的概率是多少？</p>
+<p><span class="math display">\[
+P(\text{骰子} = 6) = \frac{1}{6}
+\]</span></p>
+<p>这是一个标准的 <strong>随机实验（Zufallsexperiment）</strong>。</p>
+<p><strong>场景 B</strong>：你摇动骰子杯，把它扣在桌上，但 <strong>没有掀开</strong>。骰子显示 6 的概率是多少？</p>
+<p>这已经不再是随机实验了——骰子已经掷出，它要么是 6，要么不是。但是，只要杯子没有被掀开，我们关于结果的 <strong>知识状态（Wissensstand）</strong> 没有改变。因此我们仍然说这个概率是 <span class="math inline">\(\frac{1}{6}\)</span>。</p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="fl">2.5</span>, <span class="dv">1</span>))</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NULL</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">10</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">6</span>), <span class="at">axes =</span> <span class="cn">FALSE</span>, <span class="at">xlab =</span> <span class="st">""</span>, <span class="at">ylab =</span> <span class="st">""</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="fu">title</span>(<span class="st">"骰子杯思想实验 | Würfelbecher-Gedankenexperiment"</span>,</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>      <span class="at">cex.main =</span> <span class="fl">1.3</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 场景 A</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="fl">0.5</span>, <span class="dv">2</span>, <span class="fl">4.5</span>, <span class="fl">5.5</span>, <span class="at">col =</span> <span class="st">"#DBEAFE"</span>, <span class="at">border =</span> <span class="st">"#2563EB"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">2.5</span>, <span class="dv">5</span>, <span class="st">"场景 A: 掷骰子"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">2.5</span>, <span class="fl">4.2</span>, <span class="st">"Szenario A: Wurf"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">2.5</span>, <span class="fl">3.2</span>, <span class="fu">expression</span>(<span class="fu">P</span>(<span class="dv">6</span>) <span class="sc">==</span> <span class="fu">frac</span>(<span class="dv">1</span>, <span class="dv">6</span>)), <span class="at">cex =</span> <span class="fl">1.1</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">2.5</span>, <span class="fl">2.4</span>, <span class="st">"随机实验"</span>, <span class="at">cex =</span> <span class="fl">0.8</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>)</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="co"># 场景 B</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="fl">5.5</span>, <span class="dv">2</span>, <span class="fl">9.5</span>, <span class="fl">5.5</span>, <span class="at">col =</span> <span class="st">"#FEF3C7"</span>, <span class="at">border =</span> <span class="st">"#D97706"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="dv">5</span>, <span class="st">"场景 B: 杯子未掀开"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#D97706"</span>)</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">4.2</span>, <span class="st">"Szenario B: Becher zu"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">3.2</span>, <span class="fu">expression</span>(<span class="fu">P</span>(<span class="dv">6</span>) <span class="sc">==</span> <span class="fu">frac</span>(<span class="dv">1</span>, <span class="dv">6</span>)), <span class="at">cex =</span> <span class="fl">1.1</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">2.4</span>, <span class="st">"非随机，但知识状态相同"</span>, <span class="at">cex =</span> <span class="fl">0.8</span>, <span class="at">col =</span> <span class="st">"#D97706"</span>)</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="co"># 等号连接</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">3.7</span>, <span class="st">"="</span>, <span class="at">cex =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a><span class="co"># 底部总结</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">0.8</span>, <span class="st">"不确定性 = 知识的缺失，可以用概率来量化"</span>, </span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.95</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">0.2</span>, <span class="st">"Unsicherheit = fehlendes Wissen, quantifizierbar durch Wahrscheinlichkeit"</span>,</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.75</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-dice-experiment" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-dice-experiment-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-dice-experiment-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-dice-experiment-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2: 骰子杯思想实验：掷骰前与掷骰后（未掀开），我们的知识状态相同 | Vor und nach dem Wurf (ohne Aufdecken) ist unser Wissensstand identisch
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-important no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Important</span>关键洞察 | Schlüsselerkenntnis
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>这个思想实验揭示了两个要点：</p>
+<ol type="1">
+<li><strong>不确定性可以用概率来表示</strong>——尽管不总是，但在很多情况下可以。</li>
+<li><strong>不需要一个正式的随机实验来量化不确定性</strong>——概率可以表达我们的 <strong>无知程度</strong>。</li>
+</ol>
+<p><em>Unsicherheit kann durch Wahrscheinlichkeiten dargestellt werden, auch ohne ein formales Zufallsexperiment.</em></p>
+</div>
+</div>
+</section>
+<section id="掷骰子真的随机吗" class="level2" data-number="1.2">
+<h2 data-number="1.2" class="anchored" data-anchor-id="掷骰子真的随机吗"><span class="header-section-number">1.2</span> 掷骰子真的”随机”吗？</h2>
+<blockquote class="blockquote">
+<p><strong>Ist Würfeln wirklich „zufällig”?</strong></p>
+</blockquote>
+<p>从物理学角度看，如果我们能精确测量骰子杯的角度、速度、加速度等所有物理量，结果将是 <strong>确定性的（deterministisch）</strong>。也就是说，如果我们在骰子杯上安装数百个传感器，记录所有运动信息，我们原则上可以预测骰子落在哪一面。</p>
+<p>这引出了一个更深层的哲学问题：世界是 <strong>随机的</strong> 还是 <strong>确定的（deterministic）</strong>？但无论答案如何，只要我们 <strong>无法获取</strong> 所有相关信息，不确定性就不可避免，我们就需要用概率来量化它。</p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>n_rolls <span class="ot">&lt;-</span> <span class="dv">1000</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>rolls <span class="ot">&lt;-</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">6</span>, n_rolls, <span class="at">replace =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>is_six <span class="ot">&lt;-</span> (rolls <span class="sc">==</span> <span class="dv">6</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>cum_freq <span class="ot">&lt;-</span> <span class="fu">cumsum</span>(is_six) <span class="sc">/</span> (<span class="dv">1</span><span class="sc">:</span>n_rolls)</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="fl">4.5</span>, <span class="fl">4.5</span>, <span class="dv">3</span>, <span class="dv">1</span>))</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span>n_rolls, cum_freq, <span class="at">type =</span> <span class="st">"l"</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>, <span class="at">lwd =</span> <span class="dv">2</span>,</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"掷骰次数 | Anzahl der Würfe"</span>,</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>     <span class="at">ylab =</span> <span class="st">"出现 6 的相对频率 | Relative Häufigkeit einer 6"</span>,</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"大数定律的体现 | Illustration des Gesetzes der großen Zahlen"</span>,</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>     <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.4</span>),</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex.lab =</span> <span class="fl">1.1</span>, <span class="at">cex.main =</span> <span class="fl">1.3</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="fu">grid</span>(<span class="at">col =</span> <span class="st">"#E2E8F0"</span>)</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">h =</span> <span class="dv">1</span><span class="sc">/</span><span class="dv">6</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">lwd =</span> <span class="fl">2.5</span>, <span class="at">lty =</span> <span class="dv">2</span>)</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(n_rolls <span class="sc">*</span> <span class="fl">0.7</span>, <span class="dv">1</span><span class="sc">/</span><span class="dv">6</span> <span class="sc">+</span> <span class="fl">0.02</span>, <span class="fu">expression</span>(<span class="fu">P</span>(<span class="dv">6</span>) <span class="sc">==</span> <span class="fu">frac</span>(<span class="dv">1</span>,<span class="dv">6</span>) <span class="sc">%~~%</span> <span class="fl">0.167</span>), </span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>     <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">cex =</span> <span class="dv">1</span>, <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topright"</span>,</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>       <span class="at">legend =</span> <span class="fu">c</span>(<span class="st">"观测相对频率 | Beobachtete rel. Häufigkeit"</span>,</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>                  <span class="st">"理论概率 1/6 | Theoretische Wahrscheinlichkeit"</span>),</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#2563EB"</span>, <span class="st">"#DC2626"</span>), <span class="at">lwd =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="fl">2.5</span>), <span class="at">lty =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>),</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>       <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-dice-simulation" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-dice-simulation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-dice-simulation-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-dice-simulation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3: 模拟掷骰子 1000 次：相对频率趋近理论概率 1/6 | Simulation von 1000 Würfen: Relative Häufigkeit nähert sich 1/6
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div style="page-break-after: always;"></div>
+</section>
+</section>
+<section id="sec-probability-reality" class="level1" data-number="2">
+<h1 data-number="2"><span class="header-section-number">2</span> 概率与现实中的不确定性</h1>
+<blockquote class="blockquote">
+<p><strong>Wahrscheinlichkeit und Unsicherheit in der Realität</strong></p>
+</blockquote>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>本节你将学到 | Was Sie lernen
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ul>
+<li>概率在法律领域中的（错误）应用</li>
+<li>独立性假设的陷阱</li>
+<li>绝对风险与相对风险的区别</li>
+<li>Simpson 悖论的直觉</li>
+</ul>
+</div>
+</div>
+<section id="案例一sally-clark-案" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="案例一sally-clark-案"><span class="header-section-number">2.1</span> 案例一：Sally Clark 案</h2>
+<blockquote class="blockquote">
+<p><strong>Beispiel 1: Der Fall Sally Clark</strong></p>
+</blockquote>
+<p>1996 年和 1998 年，Clark 家的两个婴儿相继死亡。Sally Clark 被指控谋杀并被判有罪。定罪的关键依据是统计专家 Sir Roy Meadow 的证词：</p>
+<p>他的论证逻辑如下：一个家庭发生婴儿猝死症（SIDS）的概率约为 <span class="math inline">\(\frac{1}{8500}\)</span>。两个孩子都发生的概率为</p>
+<p><span class="math display">\[
+\frac{1}{8500} \times \frac{1}{8500} = \frac{1}{72{,}250{,}000}
+\]</span></p>
+<p>即约 7200 万分之一，因此”这不可能是巧合，一定是谋杀”。</p>
+<p><strong>这个推理有什么问题？</strong></p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="fl">2.5</span>, <span class="dv">1</span>))</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NULL</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">10</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">7</span>), <span class="at">axes =</span> <span class="cn">FALSE</span>, <span class="at">xlab =</span> <span class="st">""</span>, <span class="at">ylab =</span> <span class="st">""</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">title</span>(<span class="st">"Sally Clark 案中的统计谬误 | Statistische Fehlschlüsse"</span>,</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>      <span class="at">cex.main =</span> <span class="fl">1.3</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 谬误 1</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="fl">0.5</span>, <span class="fl">4.5</span>, <span class="fl">4.5</span>, <span class="fl">6.5</span>, <span class="at">col =</span> <span class="st">"#FEE2E2"</span>, <span class="at">border =</span> <span class="st">"#DC2626"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">2.5</span>, <span class="dv">6</span>, <span class="st">"谬误 1: 独立性假设"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>)</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">2.5</span>, <span class="fl">5.5</span>, <span class="st">"Fehlschluss 1: Unabhängigkeit"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">2.5</span>, <span class="fl">4.9</span>, <span class="st">"遗传/环境因素使两次事件</span><span class="sc">\n</span><span class="st">并非独立"</span>, <span class="at">cex =</span> <span class="fl">0.75</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 谬误 2</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="fl">5.5</span>, <span class="fl">4.5</span>, <span class="fl">9.5</span>, <span class="fl">6.5</span>, <span class="at">col =</span> <span class="st">"#FEE2E2"</span>, <span class="at">border =</span> <span class="st">"#DC2626"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="dv">6</span>, <span class="st">"谬误 2: 小概率 =/= 不可能"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>)</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">5.5</span>, <span class="st">"Fehlschluss 2: Selten =/= unmöglich"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">4.9</span>, <span class="st">"彩票中奖概率 1/1.4亿</span><span class="sc">\n</span><span class="st">但中奖者不是骗子"</span>, <span class="at">cex =</span> <span class="fl">0.75</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="co"># 谬误 3</span></span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="dv">3</span>, <span class="fl">1.5</span>, <span class="dv">7</span>, <span class="fl">3.5</span>, <span class="at">col =</span> <span class="st">"#FEE2E2"</span>, <span class="at">border =</span> <span class="st">"#DC2626"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="dv">3</span>, <span class="st">"谬误 3: 忽略其他证据"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>)</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">2.5</span>, <span class="st">"Fehlschluss 3: Andere Evidenz ignoriert"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">1.9</span>, <span class="st">"第一个孩子的遗体后来发现了</span><span class="sc">\n</span><span class="st">细菌感染作为死因"</span>, <span class="at">cex =</span> <span class="fl">0.75</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a><span class="co"># 结果</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">0.7</span>, <span class="st">"2003 年 Sally 被无罪释放（已入狱 4 年）; 2007 年她因酒精中毒去世"</span>, </span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.8</span>, <span class="at">col =</span> <span class="st">"#475569"</span>)</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">0.2</span>, <span class="st">"Royal Statistical Society veröffentlichte ein Gegengutachten"</span>, </span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-sally-clark" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-sally-clark-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-sally-clark-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-sally-clark-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4: Sally Clark 案中的概率谬误 | Wahrscheinlichkeitsfehlschluss im Fall Sally Clark
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-warning no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Warning</span>教训 | Lektion
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>概率推断必须审慎。错误的独立性假设、忽视先验信息、混淆条件概率方向——这些在法律和医学领域可能造成严重后果。</p>
+<p><em>Probabilistisches Schließen muss mit Vorsicht erfolgen. Falsche Unabhängigkeitsannahmen und verwechselte bedingte Wahrscheinlichkeiten können schwerwiegende Folgen haben.</em></p>
+</div>
+</div>
+</section>
+<section id="案例二covid-19-疫苗效力与相对风险" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="案例二covid-19-疫苗效力与相对风险"><span class="header-section-number">2.2</span> 案例二：COVID-19 疫苗效力与相对风险</h2>
+<blockquote class="blockquote">
+<p><strong>Beispiel 2: COVID-19-Impfeffektivität und relatives Risiko</strong></p>
+</blockquote>
+<p>2021 年 11 月 RKI（德国罗伯特-科赫研究所）报告显示：60 岁以上人群中，住院的 COVID-19 病例共 6571 例，其中 3651 例（约 55.6%）为接种疫苗后的突破性感染。</p>
+<p>有人由此得出结论：<strong>“疫苗不能防止重症”</strong>。</p>
+<p><strong>这个推理正确吗？</strong></p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">5</span>, <span class="dv">5</span>, <span class="dv">3</span>, <span class="dv">2</span>))</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>categories <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"住院 | Hospitalisierung"</span>, <span class="st">"重症监护 | Intensivstation"</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>vaccinated_frac <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">3651</span><span class="sc">/</span><span class="dv">6571</span>, <span class="dv">496</span><span class="sc">/</span><span class="dv">1123</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>unvaccinated_frac <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">-</span> vaccinated_frac</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>barplot_data <span class="ot">&lt;-</span> <span class="fu">rbind</span>(vaccinated_frac <span class="sc">*</span> <span class="dv">100</span>, unvaccinated_frac <span class="sc">*</span> <span class="dv">100</span>)</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="fu">rownames</span>(barplot_data) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"疫苗突破感染 | Impfdurchbruch"</span>, </span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>                             <span class="st">"未接种 | Ungeimpft"</span>)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>bp <span class="ot">&lt;-</span> <span class="fu">barplot</span>(barplot_data, <span class="at">beside =</span> <span class="cn">TRUE</span>, </span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>              <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#2563EB"</span>, <span class="st">"#DC2626"</span>),</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>              <span class="at">names.arg =</span> categories,</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>              <span class="at">ylab =</span> <span class="st">"占比 (%) | Anteil (%)"</span>,</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>              <span class="at">main =</span> <span class="st">"60 岁以上 COVID-19 病例构成 | COVID-19-Fälle bei &gt;= 60 Jahren"</span>,</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>              <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">100</span>),</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>              <span class="at">cex.names =</span> <span class="fl">0.9</span>, <span class="at">cex.lab =</span> <span class="fl">1.1</span>, <span class="at">cex.main =</span> <span class="fl">1.2</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="fu">grid</span>(<span class="at">col =</span> <span class="st">"#E2E8F0"</span>, <span class="at">nx =</span> <span class="dv">0</span>, <span class="at">ny =</span> <span class="cn">NULL</span>)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topright"</span>,</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>       <span class="at">legend =</span> <span class="fu">c</span>(<span class="st">"疫苗突破感染 | Impfdurchbruch"</span>, <span class="st">"未接种 | Ungeimpft"</span>),</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>       <span class="at">fill =</span> <span class="fu">c</span>(<span class="st">"#2563EB"</span>, <span class="st">"#DC2626"</span>), <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>)</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fu">mean</span>(bp[, <span class="dv">1</span>]), <span class="dv">62</span>, <span class="st">"55.6%"</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">cex =</span> <span class="fl">0.9</span>)</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fu">mean</span>(bp[, <span class="dv">1</span>]) <span class="sc">+</span> <span class="dv">1</span>, <span class="dv">50</span>, <span class="st">"44.4%"</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">cex =</span> <span class="fl">0.9</span>)</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fu">mean</span>(bp[, <span class="dv">2</span>]), <span class="dv">50</span>, <span class="st">"44.2%"</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">cex =</span> <span class="fl">0.9</span>)</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fu">mean</span>(bp[, <span class="dv">2</span>]) <span class="sc">+</span> <span class="dv">1</span>, <span class="dv">62</span>, <span class="st">"55.8%"</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">cex =</span> <span class="fl">0.9</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-relative-risk" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-relative-risk-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-relative-risk-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-relative-risk-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;5: 绝对数字 vs 相对风险：为什么必须考虑基数 | Absolute Zahlen vs.&nbsp;relatives Risiko
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>问题所在</strong>：如果 100% 的人口都接种了疫苗，那么医院里 100% 的病例都将是突破性感染——但这不意味着疫苗无效。</p>
+<p>我们需要的是 <strong>相对风险（Relatives Risiko）</strong>：</p>
+<p><span class="math display">\[
+\text{Relatives Risiko} = \frac{P(\text{重症} \mid \text{未接种})}{P(\text{重症} \mid \text{已接种})}
+\]</span></p>
+<p>利用条件概率公式展开：</p>
+<p><span class="math display">\[
+= \frac{P(\text{重症且未接种})}{P(\text{重症且已接种})} \cdot \frac{P(\text{已接种})}{P(\text{未接种})}
+\]</span></p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 60 岁以上人群数据 | Daten für &gt;= 60 Jahre</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co"># 假设 60 岁以上接种率约 85% (RKI 2021 年 11 月数据)</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Annahme: Impfquote ca. 85% bei &gt;= 60 Jahren</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>hosp_total <span class="ot">&lt;-</span> <span class="dv">6571</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>hosp_breakthrough <span class="ot">&lt;-</span> <span class="dv">3651</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>hosp_unvaccinated <span class="ot">&lt;-</span> hosp_total <span class="sc">-</span> hosp_breakthrough</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>icu_total <span class="ot">&lt;-</span> <span class="dv">1123</span></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>icu_breakthrough <span class="ot">&lt;-</span> <span class="dv">496</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>icu_unvaccinated <span class="ot">&lt;-</span> icu_total <span class="sc">-</span> icu_breakthrough</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>vaccination_rate <span class="ot">&lt;-</span> <span class="fl">0.85</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="co"># 相对风险计算 | Berechnung des relativen Risikos</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>rr_hosp <span class="ot">&lt;-</span> (hosp_unvaccinated <span class="sc">/</span> hosp_total) <span class="sc">/</span> (hosp_breakthrough <span class="sc">/</span> hosp_total) <span class="sc">*</span> </span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>           (vaccination_rate <span class="sc">/</span> (<span class="dv">1</span> <span class="sc">-</span> vaccination_rate))</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>rr_icu  <span class="ot">&lt;-</span> (icu_unvaccinated <span class="sc">/</span> icu_total) <span class="sc">/</span> (icu_breakthrough <span class="sc">/</span> icu_total) <span class="sc">*</span> </span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>           (vaccination_rate <span class="sc">/</span> (<span class="dv">1</span> <span class="sc">-</span> vaccination_rate))</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"=== 相对风险 (Relatives Risiko) ===</span><span class="sc">\n\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>=== 相对风险 (Relatives Risiko) ===</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"住院 | Hospitalisierung:      "</span>, <span class="fu">round</span>(rr_hosp, <span class="dv">2</span>), </span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"</span><span class="sc">\n</span><span class="st">  --&gt; 未接种者风险约为接种者的"</span>, <span class="fu">round</span>(rr_hosp, <span class="dv">1</span>), <span class="st">"倍</span><span class="sc">\n\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>住院 | Hospitalisierung:       4.53 
+  --&gt; 未接种者风险约为接种者的 4.5 倍</code></pre>
+</div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"重症监护 | Intensivstation:    "</span>, <span class="fu">round</span>(rr_icu, <span class="dv">2</span>), </span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="st">"</span><span class="sc">\n</span><span class="st">  --&gt; 未接种者风险约为接种者的"</span>, <span class="fu">round</span>(rr_icu, <span class="dv">1</span>), <span class="st">"倍</span><span class="sc">\n</span><span class="st">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>重症监护 | Intensivstation:     7.16 
+  --&gt; 未接种者风险约为接种者的 7.2 倍</code></pre>
+</div>
+</div>
+<div class="callout callout-style-default callout-important no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Important</span>关键洞察 | Schlüsselerkenntnis
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>仅看绝对数字（55.6% 为突破感染）会产生严重误导。考虑接种率后，未接种者的住院风险约为接种者的 <strong>7 倍以上</strong>，进入重症监护的风险约为接种者的 <strong>10 倍</strong>。</p>
+<p>这正是统计学的价值所在：<strong>正确量化不确定性和风险，避免被表面数字误导。</strong></p>
+<p><em>Die bloßen Absolutzahlen sind irreführend. Erst das relative Risiko zeigt den tatsächlichen Impfschutz.</em></p>
+</div>
+</div>
+<div style="page-break-after: always;"></div>
+</section>
+</section>
+<section id="sec-sources" class="level1" data-number="3">
+<h1 data-number="3"><span class="header-section-number">3</span> 不确定性的来源</h1>
+<blockquote class="blockquote">
+<p><strong>Quellen der Unsicherheit</strong></p>
+</blockquote>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>本节你将学到 | Was Sie lernen
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ul>
+<li><strong>偶然不确定性（aleatorische Unsicherheit）</strong>：数据中的内在随机性</li>
+<li><strong>认知不确定性（epistemische Unsicherheit）</strong>：因知识不足导致的不确定性</li>
+<li>两者的关系以及在实践中的含义</li>
+</ul>
+</div>
+</div>
+<section id="偶然不确定性" class="level2" data-number="3.1">
+<h2 data-number="3.1" class="anchored" data-anchor-id="偶然不确定性"><span class="header-section-number">3.1</span> 偶然不确定性</h2>
+<blockquote class="blockquote">
+<p><strong>Aleatorische Unsicherheit</strong></p>
+</blockquote>
+<p>偶然不确定性（aleatorische Unsicherheit）源于事物的 <strong>固有随机性（inhärente Zufälligkeit）</strong>，即使拥有全部信息也无法完全消除。用数学语言表达：</p>
+<p><span class="math display">\[
+\text{Var}(Y) &gt; 0
+\]</span></p>
+<p>只要响应变量 <span class="math inline">\(Y\)</span> 的分布不是退化的（即不集中在单个值上），我们就面临偶然不确定性。</p>
+<p><strong>例子</strong>：即使我们知道一个人的年龄、性别、基因组，也无法精确预测他的血压——因为生理过程中存在不可消除的随机波动。</p>
+</section>
+<section id="认知不确定性" class="level2" data-number="3.2">
+<h2 data-number="3.2" class="anchored" data-anchor-id="认知不确定性"><span class="header-section-number">3.2</span> 认知不确定性</h2>
+<blockquote class="blockquote">
+<p><strong>Epistemische Unsicherheit</strong></p>
+</blockquote>
+<p>所有不属于偶然不确定性的部分，都是 <strong>认知不确定性（epistemische Unsicherheit）</strong>。认知不确定性原则上可以通过增加数据量或改进模型来减少。</p>
+<p>认知不确定性包括：<strong>模型不确定性（Modellunsicherheit）</strong>——我们选择的模型不一定正确；<strong>估计不确定性（Schätzunsicherheit）</strong>——数据量有限，参数估计有误差；<strong>数据不确定性（Datenunsicherheit）</strong>——数据本身可能有测量误差或偏差。</p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="fl">2.5</span>, <span class="dv">1</span>))</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NULL</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">10</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">7</span>), <span class="at">axes =</span> <span class="cn">FALSE</span>, <span class="at">xlab =</span> <span class="st">""</span>, <span class="at">ylab =</span> <span class="st">""</span>)</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="fu">title</span>(<span class="st">"不确定性的来源 | Quellen der Unsicherheit"</span>,</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>      <span class="at">cex.main =</span> <span class="fl">1.3</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 总不确定性</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="dv">2</span>, <span class="fl">5.5</span>, <span class="dv">8</span>, <span class="fl">6.8</span>, <span class="at">col =</span> <span class="st">"#F1F5F9"</span>, <span class="at">border =</span> <span class="st">"#475569"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">6.15</span>, <span class="st">"总不确定性 | Gesamtunsicherheit"</span>, <span class="at">cex =</span> <span class="dv">1</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 箭头</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="fu">arrows</span>(<span class="fl">3.5</span>, <span class="fl">5.5</span>, <span class="fl">2.5</span>, <span class="fl">4.5</span>, <span class="at">col =</span> <span class="st">"#475569"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">length =</span> <span class="fl">0.12</span>)</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a><span class="fu">arrows</span>(<span class="fl">6.5</span>, <span class="fl">5.5</span>, <span class="fl">7.5</span>, <span class="fl">4.5</span>, <span class="at">col =</span> <span class="st">"#475569"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">length =</span> <span class="fl">0.12</span>)</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a><span class="co"># 偶然不确定性</span></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="fl">0.5</span>, <span class="fl">2.5</span>, <span class="fl">4.5</span>, <span class="fl">4.5</span>, <span class="at">col =</span> <span class="st">"#DBEAFE"</span>, <span class="at">border =</span> <span class="st">"#2563EB"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">2.5</span>, <span class="dv">4</span>, <span class="st">"偶然不确定性"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>)</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">2.5</span>, <span class="fl">3.5</span>, <span class="st">"Aleatorische Unsicherheit"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">2.5</span>, <span class="fl">2.9</span>, <span class="st">"不可消除 (irreducible)"</span>, <span class="at">cex =</span> <span class="fl">0.75</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a><span class="co"># 认知不确定性</span></span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="fl">5.5</span>, <span class="fl">2.5</span>, <span class="fl">9.5</span>, <span class="fl">4.5</span>, <span class="at">col =</span> <span class="st">"#FEF3C7"</span>, <span class="at">border =</span> <span class="st">"#D97706"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="dv">4</span>, <span class="st">"认知不确定性"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#D97706"</span>)</span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">3.5</span>, <span class="st">"Epistemische Unsicherheit"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">2.9</span>, <span class="st">"可消除 (reducible)"</span>, <span class="at">cex =</span> <span class="fl">0.75</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a><span class="co"># 子类型</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">1.5</span>, <span class="st">"模型不确定性 | Modellunsicherheit"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#D97706"</span>)</span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">1.0</span>, <span class="st">"估计不确定性 | Schätzunsicherheit"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#D97706"</span>)</span>
+<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">0.5</span>, <span class="st">"数据不确定性 | Datenunsicherheit"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#D97706"</span>)</span>
+<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a><span class="fu">arrows</span>(<span class="fl">7.5</span>, <span class="fl">2.5</span>, <span class="fl">7.5</span>, <span class="fl">1.8</span>, <span class="at">col =</span> <span class="st">"#D97706"</span>, <span class="at">lwd =</span> <span class="fl">1.5</span>, <span class="at">length =</span> <span class="fl">0.08</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-uncertainty-types" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-uncertainty-types-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-uncertainty-types-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-uncertainty-types-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6: 两种不确定性的分解 | Zerlegung der zwei Unsicherheitsarten
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="用模拟理解两种不确定性" class="level2" data-number="3.3">
+<h2 data-number="3.3" class="anchored" data-anchor-id="用模拟理解两种不确定性"><span class="header-section-number">3.3</span> 用模拟理解两种不确定性</h2>
+<blockquote class="blockquote">
+<p><strong>Die zwei Unsicherheitsarten durch Simulation verstehen</strong></p>
+</blockquote>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">2024</span>)</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>), <span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="fl">4.5</span>, <span class="fl">4.5</span>, <span class="dv">3</span>, <span class="dv">1</span>))</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 左图：偶然不确定性</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>x_grid <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="at">length.out =</span> <span class="dv">200</span>)</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>y_true <span class="ot">&lt;-</span> <span class="dv">2</span> <span class="sc">*</span> x_grid <span class="sc">+</span> <span class="dv">1</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(x_grid, y_true, <span class="at">type =</span> <span class="st">"l"</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">lwd =</span> <span class="dv">3</span>,</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"x"</span>, <span class="at">ylab =</span> <span class="st">"y"</span>,</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"偶然不确定性</span><span class="sc">\n</span><span class="st">Aleatorische Unsicherheit"</span>,</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>     <span class="at">ylim =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">5</span>, <span class="dv">30</span>), <span class="at">cex.main =</span> <span class="fl">1.1</span>, <span class="at">col.main =</span> <span class="st">"#2563EB"</span>)</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a><span class="fu">grid</span>(<span class="at">col =</span> <span class="st">"#E2E8F0"</span>)</span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="co"># 加入不同水平的噪声</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (sigma_val <span class="cf">in</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>, <span class="dv">6</span>)) {</span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>  x_pts <span class="ot">&lt;-</span> <span class="fu">runif</span>(<span class="dv">50</span>, <span class="dv">0</span>, <span class="dv">10</span>)</span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>  y_pts <span class="ot">&lt;-</span> <span class="dv">2</span> <span class="sc">*</span> x_pts <span class="sc">+</span> <span class="dv">1</span> <span class="sc">+</span> <span class="fu">rnorm</span>(<span class="dv">50</span>, <span class="dv">0</span>, sigma_val)</span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>  alpha_val <span class="ot">&lt;-</span> <span class="fl">0.3</span> <span class="sc">+</span> <span class="fl">0.1</span> <span class="sc">*</span> (<span class="dv">7</span> <span class="sc">-</span> sigma_val)</span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">points</span>(x_pts, y_pts, <span class="at">pch =</span> <span class="dv">16</span>, </span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>         <span class="at">col =</span> <span class="fu">adjustcolor</span>(<span class="st">"#2563EB"</span>, alpha_val), <span class="at">cex =</span> <span class="fl">0.8</span>)</span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topleft"</span>, </span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>       <span class="at">legend =</span> <span class="fu">c</span>(<span class="st">"真实关系 | Wahre Beziehung"</span>, </span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a>                  <span class="fu">expression</span>(<span class="fu">paste</span>(sigma, <span class="st">" = 1, 3, 6"</span>))),</span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#DC2626"</span>, <span class="st">"#2563EB"</span>), </span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>       <span class="at">lwd =</span> <span class="fu">c</span>(<span class="dv">3</span>, <span class="cn">NA</span>), <span class="at">pch =</span> <span class="fu">c</span>(<span class="cn">NA</span>, <span class="dv">16</span>),</span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a>       <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">cex =</span> <span class="fl">0.8</span>)</span>
+<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="sc">-</span><span class="dv">3</span>, <span class="fu">expression</span>(<span class="fu">paste</span>(<span class="st">"Var(Y|x) &gt; 0 "</span>, <span class="st">" --&gt; 不可消除"</span>)), </span>
+<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.8</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>)</span>
+<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-31"><a href="#cb13-31" aria-hidden="true" tabindex="-1"></a><span class="co"># 右图：认知不确定性</span></span>
+<span id="cb13-32"><a href="#cb13-32" aria-hidden="true" tabindex="-1"></a>x_full <span class="ot">&lt;-</span> <span class="fu">runif</span>(<span class="dv">500</span>, <span class="dv">0</span>, <span class="dv">10</span>)</span>
+<span id="cb13-33"><a href="#cb13-33" aria-hidden="true" tabindex="-1"></a>y_full <span class="ot">&lt;-</span> <span class="dv">2</span> <span class="sc">*</span> x_full <span class="sc">+</span> <span class="dv">1</span> <span class="sc">+</span> <span class="fu">rnorm</span>(<span class="dv">500</span>, <span class="dv">0</span>, <span class="dv">2</span>)</span>
+<span id="cb13-34"><a href="#cb13-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-35"><a href="#cb13-35" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(x_full, y_full, <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="fu">adjustcolor</span>(<span class="st">"#94A3B8"</span>, <span class="fl">0.3</span>), <span class="at">cex =</span> <span class="fl">0.6</span>,</span>
+<span id="cb13-36"><a href="#cb13-36" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"x"</span>, <span class="at">ylab =</span> <span class="st">"y"</span>,</span>
+<span id="cb13-37"><a href="#cb13-37" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"认知不确定性</span><span class="sc">\n</span><span class="st">Epistemische Unsicherheit"</span>,</span>
+<span id="cb13-38"><a href="#cb13-38" aria-hidden="true" tabindex="-1"></a>     <span class="at">ylim =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">5</span>, <span class="dv">30</span>), <span class="at">cex.main =</span> <span class="fl">1.1</span>, <span class="at">col.main =</span> <span class="st">"#D97706"</span>)</span>
+<span id="cb13-39"><a href="#cb13-39" aria-hidden="true" tabindex="-1"></a><span class="fu">grid</span>(<span class="at">col =</span> <span class="st">"#E2E8F0"</span>)</span>
+<span id="cb13-40"><a href="#cb13-40" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">a =</span> <span class="dv">1</span>, <span class="at">b =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">lwd =</span> <span class="dv">3</span>)</span>
+<span id="cb13-41"><a href="#cb13-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-42"><a href="#cb13-42" aria-hidden="true" tabindex="-1"></a><span class="co"># 多个小样本的估计</span></span>
+<span id="cb13-43"><a href="#cb13-43" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">8</span>) {</span>
+<span id="cb13-44"><a href="#cb13-44" aria-hidden="true" tabindex="-1"></a>  idx <span class="ot">&lt;-</span> <span class="fu">sample</span>(<span class="dv">500</span>, <span class="dv">15</span>)</span>
+<span id="cb13-45"><a href="#cb13-45" aria-hidden="true" tabindex="-1"></a>  fit_k <span class="ot">&lt;-</span> <span class="fu">lm</span>(y_full[idx] <span class="sc">~</span> x_full[idx])</span>
+<span id="cb13-46"><a href="#cb13-46" aria-hidden="true" tabindex="-1"></a>  <span class="fu">abline</span>(fit_k, <span class="at">col =</span> <span class="fu">adjustcolor</span>(<span class="st">"#D97706"</span>, <span class="fl">0.5</span>), <span class="at">lwd =</span> <span class="fl">1.5</span>, <span class="at">lty =</span> <span class="dv">2</span>)</span>
+<span id="cb13-47"><a href="#cb13-47" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb13-48"><a href="#cb13-48" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-49"><a href="#cb13-49" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topleft"</span>, </span>
+<span id="cb13-50"><a href="#cb13-50" aria-hidden="true" tabindex="-1"></a>       <span class="at">legend =</span> <span class="fu">c</span>(<span class="st">"真实关系 | Wahr"</span>, <span class="st">"小样本估计 | Kleine Stichprobe"</span>),</span>
+<span id="cb13-51"><a href="#cb13-51" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#DC2626"</span>, <span class="st">"#D97706"</span>), <span class="at">lwd =</span> <span class="fu">c</span>(<span class="dv">3</span>, <span class="fl">1.5</span>), <span class="at">lty =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>),</span>
+<span id="cb13-52"><a href="#cb13-52" aria-hidden="true" tabindex="-1"></a>       <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">cex =</span> <span class="fl">0.8</span>)</span>
+<span id="cb13-53"><a href="#cb13-53" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="sc">-</span><span class="dv">3</span>, <span class="fu">expression</span>(<span class="fu">paste</span>(<span class="st">"n ↑  --&gt; 估计更准, 不确定性 ↓"</span>)), </span>
+<span id="cb13-54"><a href="#cb13-54" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.8</span>, <span class="at">col =</span> <span class="st">"#D97706"</span>)</span>
+<span id="cb13-55"><a href="#cb13-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-56"><a href="#cb13-56" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-two-uncertainties" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-two-uncertainties-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-two-uncertainties-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-two-uncertainties-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;7: 左：偶然不确定性（数据的内在散布）；右：认知不确定性（因样本量不足导致估计偏差）| Links: Aleatorische Unsicherheit; Rechts: Epistemische Unsicherheit
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>回到骰子杯 | Zurück zum Würfelbecher
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>在骰子杯实验中：如果没有额外的传感器数据，所有的不确定性都是 <strong>偶然的</strong>。但如果我们在骰子杯上安装了传感器、记录了所有物理量，掷骰子就变成了确定性过程——偶然不确定性消失了。偶然不确定性的界定取决于可用的数据和知识水平。</p>
+<p><em>Ob Unsicherheit als aleatorisch oder epistemisch eingestuft wird, hängt von den verfügbaren Daten und dem Wissensstand ab.</em></p>
+</div>
+</div>
+<div style="page-break-after: always;"></div>
+</section>
+</section>
+<section id="sec-paradigm" class="level1" data-number="4">
+<h1 data-number="4"><span class="header-section-number">4</span> 经典统计范式</h1>
+<blockquote class="blockquote">
+<p><strong>Das klassische statistische Paradigma</strong></p>
+</blockquote>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>本节你将学到 | Was Sie lernen
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ul>
+<li>从 <strong>总体（Population）</strong> 中抽取 <strong>样本（Stichprobe）</strong> 的经典框架</li>
+<li><strong>统计推断（Statistische Inferenz）</strong> 的基本思路</li>
+<li>统计量（Statistik）的概念</li>
+</ul>
+</div>
+</div>
+<section id="从总体到样本" class="level2" data-number="4.1">
+<h2 data-number="4.1" class="anchored" data-anchor-id="从总体到样本"><span class="header-section-number">4.1</span> 从总体到样本</h2>
+<blockquote class="blockquote">
+<p><strong>Von der Population zur Stichprobe</strong></p>
+</blockquote>
+<p>经典推断统计的核心思路如下图所示：</p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="fl">2.5</span>, <span class="dv">1</span>))</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NULL</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">10</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">8</span>), <span class="at">axes =</span> <span class="cn">FALSE</span>, <span class="at">xlab =</span> <span class="st">""</span>, <span class="at">ylab =</span> <span class="st">""</span>)</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="fu">title</span>(<span class="st">"经典统计范式 | Klassisches statistisches Paradigma"</span>,</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>      <span class="at">cex.main =</span> <span class="fl">1.3</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 总体</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a><span class="fu">symbols</span>(<span class="dv">3</span>, <span class="fl">5.5</span>, <span class="at">circles =</span> <span class="dv">2</span>, <span class="at">add =</span> <span class="cn">TRUE</span>, <span class="at">inches =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>        <span class="at">fg =</span> <span class="st">"#2563EB"</span>, <span class="at">bg =</span> <span class="fu">adjustcolor</span>(<span class="st">"#DBEAFE"</span>, <span class="fl">0.5</span>), <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">3</span>, <span class="fl">7.8</span>, <span class="st">"总体 (Population)"</span>, <span class="at">cex =</span> <span class="dv">1</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>)</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a><span class="co"># 总体中的"个体"</span></span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>pop_x <span class="ot">&lt;-</span> <span class="dv">3</span> <span class="sc">+</span> <span class="fu">runif</span>(<span class="dv">25</span>, <span class="sc">-</span><span class="fl">1.5</span>, <span class="fl">1.5</span>)</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>pop_y <span class="ot">&lt;-</span> <span class="fl">5.5</span> <span class="sc">+</span> <span class="fu">runif</span>(<span class="dv">25</span>, <span class="sc">-</span><span class="fl">1.5</span>, <span class="fl">1.5</span>)</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a><span class="co"># 只保留圆内的</span></span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>dist_from_center <span class="ot">&lt;-</span> <span class="fu">sqrt</span>((pop_x <span class="sc">-</span> <span class="dv">3</span>)<span class="sc">^</span><span class="dv">2</span> <span class="sc">+</span> (pop_y <span class="sc">-</span> <span class="fl">5.5</span>)<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>keep <span class="ot">&lt;-</span> dist_from_center <span class="sc">&lt;</span> <span class="fl">1.8</span></span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a><span class="fu">points</span>(pop_x[keep], pop_y[keep], <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="fu">adjustcolor</span>(<span class="st">"#2563EB"</span>, <span class="fl">0.6</span>), <span class="at">cex =</span> <span class="dv">1</span>)</span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a><span class="co"># 样本</span></span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a><span class="fu">symbols</span>(<span class="fl">7.5</span>, <span class="fl">5.5</span>, <span class="at">circles =</span> <span class="fl">1.2</span>, <span class="at">add =</span> <span class="cn">TRUE</span>, <span class="at">inches =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>        <span class="at">fg =</span> <span class="st">"#16A34A"</span>, <span class="at">bg =</span> <span class="fu">adjustcolor</span>(<span class="st">"#D1FAE5"</span>, <span class="fl">0.5</span>), <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="dv">7</span>, <span class="st">"样本 (Stichprobe)"</span>, <span class="at">cex =</span> <span class="dv">1</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#16A34A"</span>)</span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a><span class="co"># 样本中的"个体"</span></span>
+<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a>samp_x <span class="ot">&lt;-</span> <span class="fl">7.5</span> <span class="sc">+</span> <span class="fu">runif</span>(<span class="dv">8</span>, <span class="sc">-</span><span class="fl">0.8</span>, <span class="fl">0.8</span>)</span>
+<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>samp_y <span class="ot">&lt;-</span> <span class="fl">5.5</span> <span class="sc">+</span> <span class="fu">runif</span>(<span class="dv">8</span>, <span class="sc">-</span><span class="fl">0.8</span>, <span class="fl">0.8</span>)</span>
+<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>dist_s <span class="ot">&lt;-</span> <span class="fu">sqrt</span>((samp_x <span class="sc">-</span> <span class="fl">7.5</span>)<span class="sc">^</span><span class="dv">2</span> <span class="sc">+</span> (samp_y <span class="sc">-</span> <span class="fl">5.5</span>)<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>keep_s <span class="ot">&lt;-</span> dist_s <span class="sc">&lt;</span> <span class="dv">1</span></span>
+<span id="cb14-30"><a href="#cb14-30" aria-hidden="true" tabindex="-1"></a><span class="fu">points</span>(samp_x[keep_s], samp_y[keep_s], <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="st">"#16A34A"</span>, <span class="at">cex =</span> <span class="fl">1.2</span>)</span>
+<span id="cb14-31"><a href="#cb14-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-32"><a href="#cb14-32" aria-hidden="true" tabindex="-1"></a><span class="co"># 抽样箭头</span></span>
+<span id="cb14-33"><a href="#cb14-33" aria-hidden="true" tabindex="-1"></a><span class="fu">arrows</span>(<span class="fl">4.5</span>, <span class="fl">6.5</span>, <span class="dv">6</span>, <span class="fl">6.5</span>, <span class="at">col =</span> <span class="st">"#475569"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">length =</span> <span class="fl">0.12</span>)</span>
+<span id="cb14-34"><a href="#cb14-34" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">5.25</span>, <span class="fl">6.9</span>, <span class="st">"抽样 | Stichprobenziehung"</span>, <span class="at">cex =</span> <span class="fl">0.8</span>, <span class="at">col =</span> <span class="st">"#475569"</span>)</span>
+<span id="cb14-35"><a href="#cb14-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-36"><a href="#cb14-36" aria-hidden="true" tabindex="-1"></a><span class="co"># 统计量</span></span>
+<span id="cb14-37"><a href="#cb14-37" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="dv">6</span>, <span class="fl">2.5</span>, <span class="dv">9</span>, <span class="fl">3.5</span>, <span class="at">col =</span> <span class="st">"#FEF3C7"</span>, <span class="at">border =</span> <span class="st">"#D97706"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb14-38"><a href="#cb14-38" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="dv">3</span>, <span class="fu">expression</span>(<span class="fu">t</span>(y[<span class="dv">1</span>], ..., y[n])), <span class="at">cex =</span> <span class="dv">1</span>, <span class="at">col =</span> <span class="st">"#D97706"</span>)</span>
+<span id="cb14-39"><a href="#cb14-39" aria-hidden="true" tabindex="-1"></a><span class="fu">arrows</span>(<span class="fl">7.5</span>, <span class="fl">4.3</span>, <span class="fl">7.5</span>, <span class="fl">3.6</span>, <span class="at">col =</span> <span class="st">"#16A34A"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">length =</span> <span class="fl">0.1</span>)</span>
+<span id="cb14-40"><a href="#cb14-40" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">8.5</span>, <span class="fl">3.9</span>, <span class="st">"计算统计量"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#16A34A"</span>)</span>
+<span id="cb14-41"><a href="#cb14-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-42"><a href="#cb14-42" aria-hidden="true" tabindex="-1"></a><span class="co"># 推断箭头</span></span>
+<span id="cb14-43"><a href="#cb14-43" aria-hidden="true" tabindex="-1"></a><span class="fu">arrows</span>(<span class="dv">6</span>, <span class="dv">3</span>, <span class="fl">3.5</span>, <span class="dv">3</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">lwd =</span> <span class="fl">2.5</span>, <span class="at">length =</span> <span class="fl">0.15</span>)</span>
+<span id="cb14-44"><a href="#cb14-44" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">4.75</span>, <span class="fl">2.5</span>, <span class="st">"统计推断 (Statistische Inferenz)"</span>, <span class="at">cex =</span> <span class="fl">0.85</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>)</span>
+<span id="cb14-45"><a href="#cb14-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-46"><a href="#cb14-46" aria-hidden="true" tabindex="-1"></a><span class="co"># 参数</span></span>
+<span id="cb14-47"><a href="#cb14-47" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="fl">1.5</span>, <span class="fl">2.5</span>, <span class="fl">4.5</span>, <span class="fl">3.5</span>, <span class="at">col =</span> <span class="st">"#EDE9FE"</span>, <span class="at">border =</span> <span class="st">"#7C3AED"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb14-48"><a href="#cb14-48" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">3</span>, <span class="dv">3</span>, <span class="fu">expression</span>(theta), <span class="at">cex =</span> <span class="fl">1.5</span>, <span class="at">col =</span> <span class="st">"#7C3AED"</span>)</span>
+<span id="cb14-49"><a href="#cb14-49" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">3</span>, <span class="dv">2</span>, <span class="st">"总体参数 | Populationsparameter"</span>, <span class="at">cex =</span> <span class="fl">0.75</span>, <span class="at">col =</span> <span class="st">"#7C3AED"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-classical-paradigm" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-classical-paradigm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-classical-paradigm-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-classical-paradigm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;8: 经典统计范式：从总体中抽取样本，通过样本统计量推断总体参数 | Klassisches Paradigma: Stichprobe aus der Population, Inferenz über Populationsparameter
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>具体来说：我们有一个 <strong>总体（Population）</strong>，其中包含我们感兴趣的某个量（例如平均年龄）。我们从总体中 <strong>随机抽取（zufällig ziehen）</strong> 一个样本（通常是不放回抽样），然后基于样本数据计算 <strong>统计量（Statistik）</strong> <span class="math inline">\(t(y_1, \ldots, y_n)\)</span>——例如样本均值。最终目标是利用统计量对总体参数 <span class="math inline">\(\theta\)</span> 进行 <strong>推断（Inferenz）</strong>。</p>
+<p><strong>样本中的不确定性来源</strong>：样本均值通常不等于总体均值——除非总体完全同质，或者我们把整个总体都纳入样本（即普查 / Volkszählung）。样本中年龄的异质性可以通过 <strong>方差</strong> 来衡量。基于均值和方差，我们可以构建 <strong>置信区间（Konfidenzintervall）</strong>——后续章节会详细介绍。</p>
+<div style="page-break-after: always;"></div>
+</section>
+</section>
+<section id="sec-dgp" class="level1" data-number="5">
+<h1 data-number="5"><span class="header-section-number">5</span> 数据生成过程</h1>
+<blockquote class="blockquote">
+<p><strong>Der datengenerierende Prozess (DGP)</strong></p>
+</blockquote>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>本节你将学到 | Was Sie lernen
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ul>
+<li><strong>数据生成过程（DGP）</strong> 的正式定义</li>
+<li>独立同分布（i.i.d.）假设的含义</li>
+<li>从有限总体到一般设定的推广</li>
+<li>大数定律和经验分布函数的收敛</li>
+</ul>
+</div>
+</div>
+<section id="定义" class="level2" data-number="5.1">
+<h2 data-number="5.1" class="anchored" data-anchor-id="定义"><span class="header-section-number">5.1</span> 定义</h2>
+<blockquote class="blockquote">
+<p><strong>Definition</strong></p>
+</blockquote>
+<p>我们将经典的有限总体框架推广到更一般的设定。假设数据是由某个 <strong>未知</strong> 的随机过程产生的：</p>
+<p><span class="math display">\[
+Y \sim G(\cdot)
+\]</span></p>
+<p>其中 <span class="math inline">\(G(\cdot)\)</span> 是一个 <strong>未知的</strong> 分布函数。我们称此为 <strong>数据生成过程（datengenerierender Prozess / Data Generating Process, DGP）</strong>。</p>
+<p>进一步假设我们有 <span class="math inline">\(n\)</span> 个独立且同分布的观测值（独立同分布，简写 i.i.d.）：</p>
+<p><span class="math display">\[
+Y_i \sim G(\cdot), \quad \text{i.i.d.} \quad \text{für } i = 1, \ldots, n
+\]</span></p>
+<p>其中 <span class="math inline">\(y_i\)</span> 是 <span class="math inline">\(Y_i\)</span> 的实现值（观测值）。</p>
+<p>这个设定是全书的核心假设。需要强调的是，<span class="math inline">\(G(\cdot)\)</span> 是 <strong>完全未知</strong> 的——我们既不知道它的形式，也不假设它属于某个特定的分布族。</p>
+</section>
+<section id="从数据中能学到什么" class="level2" data-number="5.2">
+<h2 data-number="5.2" class="anchored" data-anchor-id="从数据中能学到什么"><span class="header-section-number">5.2</span> 从数据中能学到什么？</h2>
+<blockquote class="blockquote">
+<p><strong>Was können wir aus Daten lernen?</strong></p>
+</blockquote>
+<p>虽然 <span class="math inline">\(G(\cdot)\)</span> 未知，但大数定律（Gesetz der großen Zahlen）告诉我们：对于任何（充分正则的）函数 <span class="math inline">\(t(y)\)</span>，</p>
+<p><span class="math display">\[
+\frac{1}{n}\sum_{i=1}^{n} t(Y_i) \xrightarrow{n \to \infty} E\big(t(Y)\big) = \int t(y) \, dG(y)
+\]</span></p>
+<p>这意味着即使我们不知道 <span class="math inline">\(G(\cdot)\)</span>，只要有足够多的来自 <span class="math inline">\(G(\cdot)\)</span> 的数据，我们就可以通过 <strong>样本平均</strong> 来逼近 <strong>总体期望</strong>。</p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="co"># 模拟来自混合分布的数据 | Daten aus einer Mischverteilung simulieren</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>generate_from_G <span class="ot">&lt;-</span> <span class="cf">function</span>(n) {</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>  <span class="co"># 真实 DGP 是一个混合分布（未知！）</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Wahrer DGP: Mischverteilung (unbekannt!)</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>  component <span class="ot">&lt;-</span> <span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, n, <span class="at">replace =</span> <span class="cn">TRUE</span>, <span class="at">prob =</span> <span class="fu">c</span>(<span class="fl">0.6</span>, <span class="fl">0.4</span>))</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>  y <span class="ot">&lt;-</span> <span class="fu">ifelse</span>(component <span class="sc">==</span> <span class="dv">1</span>, <span class="fu">rnorm</span>(n, <span class="dv">3</span>, <span class="dv">1</span>), <span class="fu">rnorm</span>(n, <span class="dv">7</span>, <span class="fl">1.5</span>))</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">return</span>(y)</span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 理论均值</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>true_mean <span class="ot">&lt;-</span> <span class="fl">0.6</span> <span class="sc">*</span> <span class="dv">3</span> <span class="sc">+</span> <span class="fl">0.4</span> <span class="sc">*</span> <span class="dv">7</span>  <span class="co"># = 4.6</span></span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="co"># 不同样本量下的样本均值</span></span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a>n_values <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">5</span>, <span class="dv">10</span>, <span class="dv">20</span>, <span class="dv">50</span>, <span class="dv">100</span>, <span class="dv">200</span>, <span class="dv">500</span>, <span class="dv">1000</span>, <span class="dv">2000</span>, <span class="dv">5000</span>)</span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a>n_reps <span class="ot">&lt;-</span> <span class="dv">50</span></span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-19"><a href="#cb15-19" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="fl">4.5</span>, <span class="fl">4.5</span>, <span class="dv">3</span>, <span class="dv">1</span>))</span>
+<span id="cb15-20"><a href="#cb15-20" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NULL</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="fu">length</span>(n_values)), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="fl">2.5</span>, <span class="fl">6.5</span>),</span>
+<span id="cb15-21"><a href="#cb15-21" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"样本量 n (对数刻度) | Stichprobenumfang n"</span>,</span>
+<span id="cb15-22"><a href="#cb15-22" aria-hidden="true" tabindex="-1"></a>     <span class="at">ylab =</span> <span class="fu">expression</span>(<span class="fu">bar</span>(Y)[n]),</span>
+<span id="cb15-23"><a href="#cb15-23" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"大数定律 | Gesetz der großen Zahlen"</span>,</span>
+<span id="cb15-24"><a href="#cb15-24" aria-hidden="true" tabindex="-1"></a>     <span class="at">xaxt =</span> <span class="st">"n"</span>, <span class="at">cex.lab =</span> <span class="fl">1.1</span>, <span class="at">cex.main =</span> <span class="fl">1.3</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb15-25"><a href="#cb15-25" aria-hidden="true" tabindex="-1"></a><span class="fu">axis</span>(<span class="dv">1</span>, <span class="at">at =</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(n_values), <span class="at">labels =</span> n_values)</span>
+<span id="cb15-26"><a href="#cb15-26" aria-hidden="true" tabindex="-1"></a><span class="fu">grid</span>(<span class="at">col =</span> <span class="st">"#E2E8F0"</span>)</span>
+<span id="cb15-27"><a href="#cb15-27" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">h =</span> true_mean, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">lwd =</span> <span class="dv">3</span>, <span class="at">lty =</span> <span class="dv">2</span>)</span>
+<span id="cb15-28"><a href="#cb15-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-29"><a href="#cb15-29" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (r <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>n_reps) {</span>
+<span id="cb15-30"><a href="#cb15-30" aria-hidden="true" tabindex="-1"></a>  means <span class="ot">&lt;-</span> <span class="fu">sapply</span>(n_values, <span class="cf">function</span>(nn) <span class="fu">mean</span>(<span class="fu">generate_from_G</span>(nn)))</span>
+<span id="cb15-31"><a href="#cb15-31" aria-hidden="true" tabindex="-1"></a>  <span class="fu">lines</span>(<span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(n_values), means, </span>
+<span id="cb15-32"><a href="#cb15-32" aria-hidden="true" tabindex="-1"></a>        <span class="at">col =</span> <span class="fu">adjustcolor</span>(<span class="st">"#2563EB"</span>, <span class="fl">0.15</span>), <span class="at">lwd =</span> <span class="dv">1</span>)</span>
+<span id="cb15-33"><a href="#cb15-33" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb15-34"><a href="#cb15-34" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-35"><a href="#cb15-35" aria-hidden="true" tabindex="-1"></a><span class="co"># 画一条加粗的典型轨迹</span></span>
+<span id="cb15-36"><a href="#cb15-36" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">7</span>)</span>
+<span id="cb15-37"><a href="#cb15-37" aria-hidden="true" tabindex="-1"></a>means_bold <span class="ot">&lt;-</span> <span class="fu">sapply</span>(n_values, <span class="cf">function</span>(nn) <span class="fu">mean</span>(<span class="fu">generate_from_G</span>(nn)))</span>
+<span id="cb15-38"><a href="#cb15-38" aria-hidden="true" tabindex="-1"></a><span class="fu">lines</span>(<span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(n_values), means_bold, <span class="at">col =</span> <span class="st">"#2563EB"</span>, <span class="at">lwd =</span> <span class="fl">2.5</span>)</span>
+<span id="cb15-39"><a href="#cb15-39" aria-hidden="true" tabindex="-1"></a><span class="fu">points</span>(<span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(n_values), means_bold, <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>, <span class="at">cex =</span> <span class="dv">1</span>)</span>
+<span id="cb15-40"><a href="#cb15-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-41"><a href="#cb15-41" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topright"</span>,</span>
+<span id="cb15-42"><a href="#cb15-42" aria-hidden="true" tabindex="-1"></a>       <span class="at">legend =</span> <span class="fu">c</span>(<span class="fu">expression</span>(<span class="fu">paste</span>(<span class="st">"50 次模拟轨迹 | 50 Simulationen"</span>)),</span>
+<span id="cb15-43"><a href="#cb15-43" aria-hidden="true" tabindex="-1"></a>                  <span class="fu">expression</span>(<span class="fu">paste</span>(mu, <span class="st">" = E(Y) = 4.6 (真实值 | wahrer Wert)"</span>))),</span>
+<span id="cb15-44"><a href="#cb15-44" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#2563EB"</span>, <span class="st">"#DC2626"</span>), <span class="at">lwd =</span> <span class="fu">c</span>(<span class="fl">1.5</span>, <span class="dv">3</span>), <span class="at">lty =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>),</span>
+<span id="cb15-45"><a href="#cb15-45" aria-hidden="true" tabindex="-1"></a>       <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-lln-demo" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-lln-demo-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-lln-demo-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-lln-demo-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;9: 大数定律的体现：样本均值随样本量增大趋近总体均值 | Gesetz der großen Zahlen: Stichprobenmittel konvergiert gegen Populationsmittel
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p>类似地，<strong>Glivenko-Cantelli 定理</strong>告诉我们，经验分布函数 <span class="math inline">\(F_n(y) = \frac{1}{n}\sum_{i=1}^n \mathbf{1}\{Y_i \leq y\}\)</span> 一致收敛到真实分布函数 <span class="math inline">\(G(y)\)</span>。</p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="fl">4.5</span>, <span class="fl">4.5</span>, <span class="dv">3</span>, <span class="dv">1</span>))</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 真实分布函数（混合正态）</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>y_grid <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="dv">12</span>, <span class="at">length.out =</span> <span class="dv">500</span>)</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>true_cdf <span class="ot">&lt;-</span> <span class="fl">0.6</span> <span class="sc">*</span> <span class="fu">pnorm</span>(y_grid, <span class="dv">3</span>, <span class="dv">1</span>) <span class="sc">+</span> <span class="fl">0.4</span> <span class="sc">*</span> <span class="fu">pnorm</span>(y_grid, <span class="dv">7</span>, <span class="fl">1.5</span>)</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(y_grid, true_cdf, <span class="at">type =</span> <span class="st">"l"</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>, <span class="at">lwd =</span> <span class="dv">3</span>,</span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"y"</span>, <span class="at">ylab =</span> <span class="st">"F(y)"</span>,</span>
+<span id="cb16-11"><a href="#cb16-11" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"经验分布函数的收敛 | Konvergenz der empirischen Verteilungsfunktion"</span>,</span>
+<span id="cb16-12"><a href="#cb16-12" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex.lab =</span> <span class="fl">1.1</span>, <span class="at">cex.main =</span> <span class="fl">1.2</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb16-13"><a href="#cb16-13" aria-hidden="true" tabindex="-1"></a><span class="fu">grid</span>(<span class="at">col =</span> <span class="st">"#E2E8F0"</span>)</span>
+<span id="cb16-14"><a href="#cb16-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-15"><a href="#cb16-15" aria-hidden="true" tabindex="-1"></a>sample_sizes <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">20</span>, <span class="dv">100</span>, <span class="dv">1000</span>)</span>
+<span id="cb16-16"><a href="#cb16-16" aria-hidden="true" tabindex="-1"></a>colors_ecdf <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"#EA580C"</span>, <span class="st">"#2563EB"</span>, <span class="st">"#16A34A"</span>)</span>
+<span id="cb16-17"><a href="#cb16-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-18"><a href="#cb16-18" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="fu">seq_along</span>(sample_sizes)) {</span>
+<span id="cb16-19"><a href="#cb16-19" aria-hidden="true" tabindex="-1"></a>  data_k <span class="ot">&lt;-</span> <span class="fu">generate_from_G</span>(sample_sizes[k])</span>
+<span id="cb16-20"><a href="#cb16-20" aria-hidden="true" tabindex="-1"></a>  ecdf_k <span class="ot">&lt;-</span> <span class="fu">ecdf</span>(data_k)</span>
+<span id="cb16-21"><a href="#cb16-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">lines</span>(y_grid, <span class="fu">ecdf_k</span>(y_grid), <span class="at">col =</span> colors_ecdf[k], <span class="at">lwd =</span> <span class="fl">1.5</span>, <span class="at">lty =</span> k <span class="sc">+</span> <span class="dv">1</span>)</span>
+<span id="cb16-22"><a href="#cb16-22" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-23"><a href="#cb16-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-24"><a href="#cb16-24" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"bottomright"</span>,</span>
+<span id="cb16-25"><a href="#cb16-25" aria-hidden="true" tabindex="-1"></a>       <span class="at">legend =</span> <span class="fu">c</span>(<span class="st">"G(y) 真实分布 | Wahre Verteilung"</span>,</span>
+<span id="cb16-26"><a href="#cb16-26" aria-hidden="true" tabindex="-1"></a>                  <span class="fu">paste0</span>(<span class="st">"n = "</span>, sample_sizes, <span class="st">" | Fn(y)"</span>)),</span>
+<span id="cb16-27"><a href="#cb16-27" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#1E293B"</span>, colors_ecdf),</span>
+<span id="cb16-28"><a href="#cb16-28" aria-hidden="true" tabindex="-1"></a>       <span class="at">lwd =</span> <span class="fu">c</span>(<span class="dv">3</span>, <span class="fu">rep</span>(<span class="fl">1.5</span>, <span class="dv">3</span>)), <span class="at">lty =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">4</span>),</span>
+<span id="cb16-29"><a href="#cb16-29" aria-hidden="true" tabindex="-1"></a>       <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-glivenko-cantelli" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-glivenko-cantelli-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-glivenko-cantelli-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-glivenko-cantelli-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;10: Glivenko-Cantelli 定理：经验分布函数随样本量增大逼近真实分布 | Empirische Verteilungsfunktion konvergiert gegen die wahre Verteilung
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-important no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Important</span>关键总结 | Schlüsselerkenntnis
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>即使 <span class="math inline">\(G(\cdot)\)</span> 完全未知，只要数据是从 <span class="math inline">\(G(\cdot)\)</span> 中独立同分布地抽取的，我们就可以通过增大样本量 <span class="math inline">\(n\)</span> 来逐步逼近 <span class="math inline">\(G(\cdot)\)</span> 的各种性质。这是统计推断的基础。</p>
+<p>但在实践中，<span class="math inline">\(n\)</span> 总是有限的——这就是为什么我们需要 <strong>统计模型</strong> 来帮助我们。</p>
+<p><em>In der Praxis ist n immer endlich — deshalb brauchen wir statistische Modelle.</em></p>
+</div>
+</div>
+<div style="page-break-after: always;"></div>
+</section>
+</section>
+<section id="sec-modelling" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> 统计建模初步</h1>
+<blockquote class="blockquote">
+<p><strong>Einführung in die statistische Modellierung</strong></p>
+</blockquote>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>本节你将学到 | Was Sie lernen
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ul>
+<li><strong>统计模型（Statistisches Modell）</strong> 的正式定义</li>
+<li>DGP 与统计模型之间的关系</li>
+<li>模型永远只是近似——但有用的近似</li>
+<li>预告：如何度量模型与现实之间的”距离”</li>
+</ul>
+</div>
+</div>
+<section id="用参数模型近似现实" class="level2" data-number="6.1">
+<h2 data-number="6.1" class="anchored" data-anchor-id="用参数模型近似现实"><span class="header-section-number">6.1</span> 用参数模型近似现实</h2>
+<blockquote class="blockquote">
+<p><strong>Realität durch ein parametrisches Modell approximieren</strong></p>
+</blockquote>
+<p>我们已知数据生成过程为 <span class="math inline">\(Y \sim G(\cdot)\)</span>，但 <span class="math inline">\(G(\cdot)\)</span> 未知。我们的策略是：用一族参数化的分布来近似 <span class="math inline">\(G(\cdot)\)</span>。</p>
+<p><strong>统计模型（Statistisches Modell）</strong> 定义为一组分布函数的集合：</p>
+<p><span class="math display">\[
+\mathcal{F} = \{F(\cdot\,;\theta),\; \theta \in \Theta\}
+\]</span></p>
+<p>其中 <span class="math inline">\(\theta = (\theta_1, \ldots, \theta_p)^\top\)</span> 是参数向量，<span class="math inline">\(\Theta\)</span> 是参数空间。</p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="fl">2.5</span>, <span class="dv">1</span>))</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NULL</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">10</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">8</span>), <span class="at">axes =</span> <span class="cn">FALSE</span>, <span class="at">xlab =</span> <span class="st">""</span>, <span class="at">ylab =</span> <span class="st">""</span>)</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="fu">title</span>(<span class="st">"统计建模的几何直觉 | Geometrische Intuition der Modellierung"</span>,</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>      <span class="at">cex.main =</span> <span class="fl">1.3</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 所有可能的分布（大椭圆）</span></span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="fu">symbols</span>(<span class="dv">5</span>, <span class="fl">4.5</span>, <span class="at">circles =</span> <span class="fl">3.5</span>, <span class="at">add =</span> <span class="cn">TRUE</span>, <span class="at">inches =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>        <span class="at">fg =</span> <span class="st">"#94A3B8"</span>, <span class="at">bg =</span> <span class="fu">adjustcolor</span>(<span class="st">"#F1F5F9"</span>, <span class="fl">0.5</span>), <span class="at">lwd =</span> <span class="fl">1.5</span>, <span class="at">lty =</span> <span class="dv">2</span>)</span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">2</span>, <span class="fl">7.5</span>, <span class="st">"所有可能的分布</span><span class="sc">\n</span><span class="st">Alle möglichen Verteilungen"</span>, </span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.8</span>, <span class="at">col =</span> <span class="st">"#94A3B8"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb17-11"><a href="#cb17-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-12"><a href="#cb17-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 模型族 F（矩形）</span></span>
+<span id="cb17-13"><a href="#cb17-13" aria-hidden="true" tabindex="-1"></a><span class="fu">rect</span>(<span class="dv">3</span>, <span class="fl">1.5</span>, <span class="dv">7</span>, <span class="fl">3.5</span>, <span class="at">col =</span> <span class="fu">adjustcolor</span>(<span class="st">"#DBEAFE"</span>, <span class="fl">0.7</span>), <span class="at">border =</span> <span class="st">"#2563EB"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb17-14"><a href="#cb17-14" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">2.5</span>, <span class="fu">expression</span>(<span class="fu">paste</span>(<span class="fu">italic</span>(F), <span class="st">" = { F( . , "</span>, theta, <span class="st">" ), "</span>, theta, <span class="st">" %in% "</span>, Theta, <span class="st">" }"</span>)), </span>
+<span id="cb17-15"><a href="#cb17-15" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>)</span>
+<span id="cb17-16"><a href="#cb17-16" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">1.8</span>, <span class="st">"统计模型 | Statistisches Modell"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb17-17"><a href="#cb17-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-18"><a href="#cb17-18" aria-hidden="true" tabindex="-1"></a><span class="co"># G(.) 点</span></span>
+<span id="cb17-19"><a href="#cb17-19" aria-hidden="true" tabindex="-1"></a><span class="fu">points</span>(<span class="fl">6.5</span>, <span class="dv">6</span>, <span class="at">pch =</span> <span class="dv">4</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">cex =</span> <span class="fl">2.5</span>, <span class="at">lwd =</span> <span class="dv">3</span>)</span>
+<span id="cb17-20"><a href="#cb17-20" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">6.3</span>, <span class="st">"G(.)"</span>, <span class="at">cex =</span> <span class="fl">1.2</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>)</span>
+<span id="cb17-21"><a href="#cb17-21" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">7.5</span>, <span class="fl">5.7</span>, <span class="st">"DGP (未知 | unbekannt)"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb17-22"><a href="#cb17-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-23"><a href="#cb17-23" aria-hidden="true" tabindex="-1"></a><span class="co"># F(.; theta_0) 最近点</span></span>
+<span id="cb17-24"><a href="#cb17-24" aria-hidden="true" tabindex="-1"></a><span class="fu">points</span>(<span class="fl">5.8</span>, <span class="fl">3.5</span>, <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="st">"#16A34A"</span>, <span class="at">cex =</span> <span class="dv">2</span>)</span>
+<span id="cb17-25"><a href="#cb17-25" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="fl">5.8</span>, <span class="fl">3.9</span>, <span class="fu">expression</span>(<span class="fu">paste</span>(<span class="st">"F( . , "</span>, theta[<span class="dv">0</span>], <span class="st">" )"</span>)), <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#16A34A"</span>)</span>
+<span id="cb17-26"><a href="#cb17-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-27"><a href="#cb17-27" aria-hidden="true" tabindex="-1"></a><span class="co"># 距离箭头</span></span>
+<span id="cb17-28"><a href="#cb17-28" aria-hidden="true" tabindex="-1"></a><span class="fu">arrows</span>(<span class="fl">6.3</span>, <span class="fl">5.7</span>, <span class="fl">5.9</span>, <span class="fl">3.8</span>, <span class="at">col =</span> <span class="st">"#EA580C"</span>, <span class="at">lwd =</span> <span class="fl">2.5</span>, <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">length =</span> <span class="fl">0.12</span>)</span>
+<span id="cb17-29"><a href="#cb17-29" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">7</span>, <span class="fl">4.8</span>, <span class="st">"距离?</span><span class="sc">\n</span><span class="st">Distanz?"</span>, <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">col =</span> <span class="st">"#EA580C"</span>, <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb17-30"><a href="#cb17-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb17-31"><a href="#cb17-31" aria-hidden="true" tabindex="-1"></a><span class="co"># 注释</span></span>
+<span id="cb17-32"><a href="#cb17-32" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">0.5</span>, <span class="fu">expression</span>(<span class="fu">paste</span>(theta[<span class="dv">0</span>], <span class="st">" = 使 F 最接近 G(.) 的参数 | Parameter mit geringstem Abstand zu G(.)"</span>)), </span>
+<span id="cb17-33"><a href="#cb17-33" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.75</span>, <span class="at">col =</span> <span class="st">"#475569"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-model-approximation" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-model-approximation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-model-approximation-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-model-approximation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;11: 统计建模：用参数模型族 F 中最接近 G(.) 的分布来近似现实 | Statistische Modellierung: Approximation von G(.) durch das nächste Element in F
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="三个关键概念" class="level2" data-number="6.2">
+<h2 data-number="6.2" class="anchored" data-anchor-id="三个关键概念"><span class="header-section-number">6.2</span> 三个关键概念</h2>
+<blockquote class="blockquote">
+<p><strong>Drei Schlüsselbegriffe</strong></p>
+</blockquote>
+<p>在这个框架中，有三个需要区分的概念：</p>
+<p><strong>数据生成过程 <span class="math inline">\(G(\cdot)\)</span></strong> 是真实的、未知的分布。数据来自于此。我们永远无法完全得知它。</p>
+<p><strong>统计模型 <span class="math inline">\(\mathcal{F}\)</span></strong> 是我们假定的分布族。它是对现实的一种简化——但（希望是）有用的简化。例如我们可以选择正态分布族：<span class="math inline">\(\mathcal{F} = \{N(\mu, \sigma^2)\,;\; \mu \in \mathbb{R}, \sigma^2 &gt; 0\}\)</span>。</p>
+<p><strong>“真实参数” <span class="math inline">\(\theta_0\)</span></strong> 是在模型族 <span class="math inline">\(\mathcal{F}\)</span> 中，使 <span class="math inline">\(F(\cdot\,;\theta)\)</span> 最接近 <span class="math inline">\(G(\cdot)\)</span> 的那个参数值。严格来说，<span class="math inline">\(\theta_0\)</span> 是通过最小化某种距离度量来定义的——下一讲我们将引入 Kullback-Leibler 散度来精确定义这个”距离”。</p>
+<div class="callout callout-style-default callout-tip no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Tip</span>两种不同的出发点 | Zwei verschiedene Ausgangspunkte
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>大多数教科书的假设</strong>：直接假设 <span class="math inline">\(Y_i \sim F(\cdot\,;\theta)\)</span>，即假设模型正确。</p>
+<p><strong>本课程的假设</strong>：假设 <span class="math inline">\(Y_i \sim G(\cdot)\)</span>，其中 <span class="math inline">\(G(\cdot)\)</span> 未知，<span class="math inline">\(F(\cdot\,;\theta)\)</span> 只是近似。</p>
+<p>这个区别很重要。第二种观点更加诚实地面对现实——所有模型都只是模型，不是现实本身。但好的模型可以帮助我们做出更好的决策。</p>
+<p><em>Alle Modelle sind nur Modelle, nicht die Realität selbst. Aber gute Modelle helfen bei besseren Entscheidungen.</em></p>
+</div>
+</div>
+</section>
+<section id="模型选择的例子" class="level2" data-number="6.3">
+<h2 data-number="6.3" class="anchored" data-anchor-id="模型选择的例子"><span class="header-section-number">6.3</span> 模型选择的例子</h2>
+<blockquote class="blockquote">
+<p><strong>Beispiele für die Modellwahl</strong></p>
+</blockquote>
+<p>针对不同类型的数据，我们会选择不同的分布族：</p>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">3</span>), <span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">4</span>, <span class="dv">4</span>, <span class="dv">3</span>, <span class="dv">1</span>))</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a><span class="co"># 正态分布</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>x_norm <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="sc">-</span><span class="dv">4</span>, <span class="dv">4</span>, <span class="at">length.out =</span> <span class="dv">200</span>)</span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(x_norm, <span class="fu">dnorm</span>(x_norm, <span class="dv">0</span>, <span class="dv">1</span>), <span class="at">type =</span> <span class="st">"l"</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>, <span class="at">lwd =</span> <span class="dv">3</span>,</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"y"</span>, <span class="at">ylab =</span> <span class="st">"f(y)"</span>,</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"连续型数据</span><span class="sc">\n</span><span class="st">Kontinuierliche Daten"</span>,</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex.main =</span> <span class="dv">1</span>, <span class="at">col.main =</span> <span class="st">"#2563EB"</span>)</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a><span class="fu">grid</span>(<span class="at">col =</span> <span class="st">"#E2E8F0"</span>)</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="fu">lines</span>(x_norm, <span class="fu">dnorm</span>(x_norm, <span class="dv">1</span>, <span class="fl">1.5</span>), <span class="at">col =</span> <span class="st">"#2563EB"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">lty =</span> <span class="dv">2</span>)</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">0</span>, <span class="fl">0.35</span>, <span class="fu">expression</span>(<span class="fu">N</span>(mu, sigma<span class="sc">^</span><span class="dv">2</span>)), <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">col =</span> <span class="st">"#2563EB"</span>, <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">0</span>, <span class="fl">0.02</span>, <span class="st">"例: 身高, 测量误差</span><span class="sc">\n</span><span class="st">z.B. Körpergröße"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#475569"</span>)</span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a><span class="co"># Poisson 分布</span></span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>x_pois <span class="ot">&lt;-</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">15</span></span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(x_pois, <span class="fu">dpois</span>(x_pois, <span class="dv">3</span>), <span class="at">type =</span> <span class="st">"h"</span>, <span class="at">col =</span> <span class="st">"#16A34A"</span>, <span class="at">lwd =</span> <span class="dv">4</span>,</span>
+<span id="cb18-17"><a href="#cb18-17" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"y"</span>, <span class="at">ylab =</span> <span class="st">"P(Y = y)"</span>,</span>
+<span id="cb18-18"><a href="#cb18-18" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"计数数据</span><span class="sc">\n</span><span class="st">Zähldaten"</span>,</span>
+<span id="cb18-19"><a href="#cb18-19" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex.main =</span> <span class="dv">1</span>, <span class="at">col.main =</span> <span class="st">"#16A34A"</span>)</span>
+<span id="cb18-20"><a href="#cb18-20" aria-hidden="true" tabindex="-1"></a><span class="fu">grid</span>(<span class="at">col =</span> <span class="st">"#E2E8F0"</span>)</span>
+<span id="cb18-21"><a href="#cb18-21" aria-hidden="true" tabindex="-1"></a><span class="fu">points</span>(x_pois, <span class="fu">dpois</span>(x_pois, <span class="dv">3</span>), <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="st">"#16A34A"</span>, <span class="at">cex =</span> <span class="fl">1.5</span>)</span>
+<span id="cb18-22"><a href="#cb18-22" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">8</span>, <span class="fl">0.2</span>, <span class="fu">expression</span>(<span class="fu">Poisson</span>(lambda)), <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">col =</span> <span class="st">"#16A34A"</span>, <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb18-23"><a href="#cb18-23" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">8</span>, <span class="fl">0.02</span>, <span class="st">"例: 网页访问次数</span><span class="sc">\n</span><span class="st">z.B. Webseitenaufrufe"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#475569"</span>)</span>
+<span id="cb18-24"><a href="#cb18-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-25"><a href="#cb18-25" aria-hidden="true" tabindex="-1"></a><span class="co"># Bernoulli/Binomial 分布</span></span>
+<span id="cb18-26"><a href="#cb18-26" aria-hidden="true" tabindex="-1"></a>x_bern <span class="ot">&lt;-</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">10</span></span>
+<span id="cb18-27"><a href="#cb18-27" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(x_bern, <span class="fu">dbinom</span>(x_bern, <span class="dv">10</span>, <span class="fl">0.3</span>), <span class="at">type =</span> <span class="st">"h"</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">lwd =</span> <span class="dv">4</span>,</span>
+<span id="cb18-28"><a href="#cb18-28" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"y"</span>, <span class="at">ylab =</span> <span class="st">"P(Y = y)"</span>,</span>
+<span id="cb18-29"><a href="#cb18-29" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"0/1 数据</span><span class="sc">\n</span><span class="st">0/1 Daten"</span>,</span>
+<span id="cb18-30"><a href="#cb18-30" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex.main =</span> <span class="dv">1</span>, <span class="at">col.main =</span> <span class="st">"#DC2626"</span>)</span>
+<span id="cb18-31"><a href="#cb18-31" aria-hidden="true" tabindex="-1"></a><span class="fu">grid</span>(<span class="at">col =</span> <span class="st">"#E2E8F0"</span>)</span>
+<span id="cb18-32"><a href="#cb18-32" aria-hidden="true" tabindex="-1"></a><span class="fu">points</span>(x_bern, <span class="fu">dbinom</span>(x_bern, <span class="dv">10</span>, <span class="fl">0.3</span>), <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">cex =</span> <span class="fl">1.5</span>)</span>
+<span id="cb18-33"><a href="#cb18-33" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">7</span>, <span class="fl">0.2</span>, <span class="fu">expression</span>(<span class="fu">Bin</span>(n, p)), <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb18-34"><a href="#cb18-34" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">7</span>, <span class="fl">0.02</span>, <span class="st">"例: 成功/失败</span><span class="sc">\n</span><span class="st">z.B. Erfolg/Misserfolg"</span>, <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#475569"</span>)</span>
+<span id="cb18-35"><a href="#cb18-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-36"><a href="#cb18-36" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-model-examples" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-model-examples-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-model-examples-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-model-examples-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;12: 不同数据类型对应不同的分布模型 | Verschiedene Datentypen erfordern verschiedene Verteilungsmodelle
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="估计器" class="level2" data-number="6.4">
+<h2 data-number="6.4" class="anchored" data-anchor-id="估计器"><span class="header-section-number">6.4</span> 估计器</h2>
+<blockquote class="blockquote">
+<p><strong>Schätzer</strong></p>
+</blockquote>
+<p>模型中的参数 <span class="math inline">\(\theta\)</span> 需要从数据中确定。这个过程在统计学中称为 <strong>估计（Schätzen / Estimation）</strong>，在机器学习中称为 <strong>学习（Lernen / Learning）</strong>。</p>
+<p>我们将参数 <span class="math inline">\(\theta\)</span> 的估计器记为：</p>
+<p><span class="math display">\[
+\hat{\theta} = t(y_1, \ldots, y_n)
+\]</span></p>
+<p>这是一个关于数据的函数，称为 <strong>统计量（Statistik）</strong>。在后续章节中，我们将详细讨论如何构造好的估计器以及估计器应满足的性质。</p>
+<div style="page-break-after: always;"></div>
+</section>
+</section>
+<section id="sec-summary" class="level1" data-number="7">
+<h1 data-number="7"><span class="header-section-number">7</span> 总结与展望</h1>
+<blockquote class="blockquote">
+<p><strong>Zusammenfassung und Ausblick</strong></p>
+</blockquote>
+<section id="本章核心框架" class="level2" data-number="7.1">
+<h2 data-number="7.1" class="anchored" data-anchor-id="本章核心框架"><span class="header-section-number">7.1</span> 本章核心框架</h2>
+<p>让我们回顾本章建立的核心框架：</p>
+<p><span class="math display">\[
+\underbrace{Y_i \sim G(\cdot), \text{ i.i.d.}}_{\text{数据生成过程 (未知)}}
+\quad \xrightarrow{\text{近似 | Approximation}} \quad
+\underbrace{\mathcal{F} = \{F(\cdot;\theta), \theta \in \Theta\}}_{\text{统计模型}}
+\quad \xrightarrow{\text{数据}} \quad
+\underbrace{\hat{\theta} = t(y_1, \ldots, y_n)}_{\text{参数估计}}
+\]</span></p>
+</section>
+<section id="概念逻辑链" class="level2" data-number="7.2">
+<h2 data-number="7.2" class="anchored" data-anchor-id="概念逻辑链"><span class="header-section-number">7.2</span> 概念逻辑链</h2>
+<div class="cell">
+<details class="code-fold">
+<summary>查看代码 | Code anzeigen</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">bg =</span> <span class="st">"#F8FAFC"</span>, <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="fl">2.5</span>, <span class="dv">1</span>))</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NULL</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">10</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">6</span>), <span class="at">axes =</span> <span class="cn">FALSE</span>, <span class="at">xlab =</span> <span class="st">""</span>, <span class="at">ylab =</span> <span class="st">""</span>)</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="fu">title</span>(<span class="st">"本章概念逻辑链 | Logikkette"</span>, <span class="at">cex.main =</span> <span class="fl">1.3</span>, <span class="at">col.main =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-5"><a href="#cb19-5" aria-hidden="true" tabindex="-1"></a>nodes_x <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">1.5</span>, <span class="fl">3.5</span>, <span class="fl">5.5</span>, <span class="dv">8</span>)</span>
+<span id="cb19-6"><a href="#cb19-6" aria-hidden="true" tabindex="-1"></a>nodes_y <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">4</span>, <span class="dv">4</span>, <span class="dv">4</span>, <span class="dv">4</span>)</span>
+<span id="cb19-7"><a href="#cb19-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-8"><a href="#cb19-8" aria-hidden="true" tabindex="-1"></a>labels_cn <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"不确定性</span><span class="sc">\n</span><span class="st">的量化"</span>, <span class="st">"偶然 vs</span><span class="sc">\n</span><span class="st">认知"</span>, <span class="st">"DGP</span><span class="sc">\n</span><span class="st">Y ~ G(.)"</span>, </span>
+<span id="cb19-9"><a href="#cb19-9" aria-hidden="true" tabindex="-1"></a>               <span class="st">"统计模型</span><span class="sc">\n</span><span class="st">F = {F(.; theta)}"</span>)</span>
+<span id="cb19-10"><a href="#cb19-10" aria-hidden="true" tabindex="-1"></a>labels_de <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"Quantifizierung"</span>, <span class="st">"Aleatorisch</span><span class="sc">\n</span><span class="st">vs. Epistemisch"</span>, </span>
+<span id="cb19-11"><a href="#cb19-11" aria-hidden="true" tabindex="-1"></a>               <span class="st">"DGP"</span>, <span class="st">"Statistisches</span><span class="sc">\n</span><span class="st">Modell"</span>)</span>
+<span id="cb19-12"><a href="#cb19-12" aria-hidden="true" tabindex="-1"></a>colors_n <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"#DBEAFE"</span>, <span class="st">"#FEF3C7"</span>, <span class="st">"#E0E7FF"</span>, <span class="st">"#D1FAE5"</span>)</span>
+<span id="cb19-13"><a href="#cb19-13" aria-hidden="true" tabindex="-1"></a>borders_n <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"#2563EB"</span>, <span class="st">"#D97706"</span>, <span class="st">"#6366F1"</span>, <span class="st">"#16A34A"</span>)</span>
+<span id="cb19-14"><a href="#cb19-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-15"><a href="#cb19-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>) {</span>
+<span id="cb19-16"><a href="#cb19-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">rect</span>(nodes_x[i] <span class="sc">-</span> <span class="fl">0.8</span>, nodes_y[i] <span class="sc">-</span> <span class="fl">0.8</span>, nodes_x[i] <span class="sc">+</span> <span class="fl">0.8</span>, nodes_y[i] <span class="sc">+</span> <span class="fl">0.8</span>,</span>
+<span id="cb19-17"><a href="#cb19-17" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> colors_n[i], <span class="at">border =</span> borders_n[i], <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb19-18"><a href="#cb19-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">text</span>(nodes_x[i], nodes_y[i] <span class="sc">+</span> <span class="fl">0.2</span>, labels_cn[i], <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">font =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#1E293B"</span>)</span>
+<span id="cb19-19"><a href="#cb19-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">text</span>(nodes_x[i], nodes_y[i] <span class="sc">-</span> <span class="fl">0.5</span>, labels_de[i], <span class="at">cex =</span> <span class="fl">0.5</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span>
+<span id="cb19-20"><a href="#cb19-20" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb19-21"><a href="#cb19-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-22"><a href="#cb19-22" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>) {</span>
+<span id="cb19-23"><a href="#cb19-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrows</span>(nodes_x[i] <span class="sc">+</span> <span class="fl">0.85</span>, nodes_y[i], nodes_x[i<span class="sc">+</span><span class="dv">1</span>] <span class="sc">-</span> <span class="fl">0.85</span>, nodes_y[i<span class="sc">+</span><span class="dv">1</span>],</span>
+<span id="cb19-24"><a href="#cb19-24" aria-hidden="true" tabindex="-1"></a>         <span class="at">col =</span> <span class="st">"#94A3B8"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">length =</span> <span class="fl">0.1</span>)</span>
+<span id="cb19-25"><a href="#cb19-25" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb19-26"><a href="#cb19-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-27"><a href="#cb19-27" aria-hidden="true" tabindex="-1"></a><span class="co"># 触发标签</span></span>
+<span id="cb19-28"><a href="#cb19-28" aria-hidden="true" tabindex="-1"></a>triggers <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">""</span>, <span class="st">"如何分类?"</span>, <span class="st">"如何描述?"</span>, <span class="st">"如何近似?"</span>)</span>
+<span id="cb19-29"><a href="#cb19-29" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span><span class="dv">4</span>) {</span>
+<span id="cb19-30"><a href="#cb19-30" aria-hidden="true" tabindex="-1"></a>  <span class="fu">text</span>((nodes_x[i<span class="dv">-1</span>] <span class="sc">+</span> nodes_x[i]) <span class="sc">/</span> <span class="dv">2</span>, nodes_y[i] <span class="sc">+</span> <span class="fl">1.1</span>, triggers[i],</span>
+<span id="cb19-31"><a href="#cb19-31" aria-hidden="true" tabindex="-1"></a>       <span class="at">cex =</span> <span class="fl">0.65</span>, <span class="at">col =</span> <span class="st">"#EA580C"</span>, <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb19-32"><a href="#cb19-32" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb19-33"><a href="#cb19-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb19-34"><a href="#cb19-34" aria-hidden="true" tabindex="-1"></a><span class="co"># 下一讲预告</span></span>
+<span id="cb19-35"><a href="#cb19-35" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">1.2</span>, <span class="st">"下一讲预告: 如何度量 G(.) 与 F(.; theta) 之间的</span><span class="sc">\"</span><span class="st">距离</span><span class="sc">\"</span><span class="st">?"</span>, </span>
+<span id="cb19-36"><a href="#cb19-36" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.9</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>, <span class="at">font =</span> <span class="dv">2</span>)</span>
+<span id="cb19-37"><a href="#cb19-37" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">0.6</span>, <span class="st">"--&gt; Kullback-Leibler 散度 --&gt; 似然函数 --&gt; 最大似然估计"</span>,</span>
+<span id="cb19-38"><a href="#cb19-38" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.8</span>, <span class="at">col =</span> <span class="st">"#DC2626"</span>)</span>
+<span id="cb19-39"><a href="#cb19-39" aria-hidden="true" tabindex="-1"></a><span class="fu">text</span>(<span class="dv">5</span>, <span class="fl">0.1</span>, <span class="st">"Nächste VL: KL-Divergenz --&gt; Likelihoodfunktion --&gt; Maximum-Likelihood-Schätzer"</span>,</span>
+<span id="cb19-40"><a href="#cb19-40" aria-hidden="true" tabindex="-1"></a>     <span class="at">cex =</span> <span class="fl">0.7</span>, <span class="at">col =</span> <span class="st">"#64748B"</span>, <span class="at">font =</span> <span class="dv">3</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-summary-chain" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-summary-chain-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="inf-01_files/figure-html/fig-summary-chain-1.png" class="img-fluid figure-img" width="1350">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-summary-chain-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;13: 本章概念逻辑链 | Logikkette der Konzepte dieses Kapitels
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+<section id="重要性质回顾" class="level2" data-number="7.3">
+<h2 data-number="7.3" class="anchored" data-anchor-id="重要性质回顾"><span class="header-section-number">7.3</span> 重要性质回顾</h2>
+<p>本章涉及的核心渐近性质：</p>
+<p><strong>大数定律（Gesetz der großen Zahlen）</strong>：对于 i.i.d. 随机变量 <span class="math inline">\(Y_1, \ldots, Y_n\)</span>（均值为 <span class="math inline">\(\mu\)</span>），有 <span class="math inline">\(\bar{Y}_n = \frac{1}{n}\sum_{i=1}^n Y_i \xrightarrow{P} \mu\)</span>。</p>
+<p><strong>Glivenko-Cantelli 定理</strong>：经验分布函数 <span class="math inline">\(F_n(y) = \frac{1}{n}\sum_{i=1}^n \mathbf{1}\{Y_i \leq y\}\)</span> 一致收敛到真实分布函数 <span class="math inline">\(G(y)\)</span>。</p>
+<p><strong>中心极限定理（Zentraler Grenzwertsatz）</strong>：<span class="math inline">\(\frac{\sum_{i=1}^n Y_i}{\sqrt{n}} \xrightarrow{d} N(0, \sigma^2)\)</span>，其中 <span class="math inline">\(\sigma^2 = \text{Var}(Y)\)</span>。</p>
+<p>这三个定理是后续所有推断方法的数学基础。</p>
+<div style="page-break-after: always;"></div>
+</section>
+</section>
+
+
+<div id="quarto-appendix" class="default"><section id="附录德语专业术语表" class="level1 appendix" data-number="8"><h2 class="anchored quarto-appendix-heading"><span class="header-section-number">8</span> 附录：德语专业术语表</h2><div class="quarto-appendix-contents">
+
+<blockquote class="blockquote">
+<p><strong>Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar</strong></p>
+</blockquote>
+<div class="tabset-margin-container"></div><div class="panel-tabset">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true" href="">核心概念</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-2" role="tab" aria-controls="tabset-1-2" aria-selected="false" href="">不确定性分类</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-3-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-3" role="tab" aria-controls="tabset-1-3" aria-selected="false" href="">统计推断框架</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-4-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-4" role="tab" aria-controls="tabset-1-4" aria-selected="false" href="">概率论基础</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-5-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-5" role="tab" aria-controls="tabset-1-5" aria-selected="false" href="">分布模型</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-6-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-6" role="tab" aria-controls="tabset-1-6" aria-selected="false" href="">下一讲预告术语</a></li></ul>
+<div class="tab-content">
+<div id="tabset-1-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-1-1-tab">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Deutsch</th>
+<th style="text-align: left;">中文</th>
+<th style="text-align: left;">English</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">die Unsicherheit</td>
+<td style="text-align: left;">不确定性</td>
+<td style="text-align: left;">uncertainty</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Wahrscheinlichkeit</td>
+<td style="text-align: left;">概率</td>
+<td style="text-align: left;">probability</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">das Zufallsexperiment</td>
+<td style="text-align: left;">随机实验</td>
+<td style="text-align: left;">random experiment</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Zufallsvariable</td>
+<td style="text-align: left;">随机变量</td>
+<td style="text-align: left;">random variable</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">der Determinismus</td>
+<td style="text-align: left;">决定论</td>
+<td style="text-align: left;">determinism</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Variabilität</td>
+<td style="text-align: left;">变异性</td>
+<td style="text-align: left;">variability</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">der Wissensstand</td>
+<td style="text-align: left;">知识状态</td>
+<td style="text-align: left;">state of knowledge</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="tabset-1-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-2-tab">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Deutsch</th>
+<th style="text-align: left;">中文</th>
+<th style="text-align: left;">English</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">die aleatorische Unsicherheit</td>
+<td style="text-align: left;">偶然不确定性</td>
+<td style="text-align: left;">aleatoric uncertainty</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die epistemische Unsicherheit</td>
+<td style="text-align: left;">认知不确定性</td>
+<td style="text-align: left;">epistemic uncertainty</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">die Modellunsicherheit</td>
+<td style="text-align: left;">模型不确定性</td>
+<td style="text-align: left;">model uncertainty</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Schätzunsicherheit</td>
+<td style="text-align: left;">估计不确定性</td>
+<td style="text-align: left;">estimation uncertainty</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">die Datenunsicherheit</td>
+<td style="text-align: left;">数据不确定性</td>
+<td style="text-align: left;">data uncertainty</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">irreduzibel</td>
+<td style="text-align: left;">不可消除的</td>
+<td style="text-align: left;">irreducible</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">reduzibel</td>
+<td style="text-align: left;">可消除的</td>
+<td style="text-align: left;">reducible</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="tabset-1-3" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-3-tab">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Deutsch</th>
+<th style="text-align: left;">中文</th>
+<th style="text-align: left;">English</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">die Population / Grundgesamtheit</td>
+<td style="text-align: left;">总体</td>
+<td style="text-align: left;">population</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Stichprobe</td>
+<td style="text-align: left;">样本</td>
+<td style="text-align: left;">sample</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">der Stichprobenumfang</td>
+<td style="text-align: left;">样本量</td>
+<td style="text-align: left;">sample size</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Statistik</td>
+<td style="text-align: left;">统计量</td>
+<td style="text-align: left;">statistic</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">die statistische Inferenz</td>
+<td style="text-align: left;">统计推断</td>
+<td style="text-align: left;">statistical inference</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">das statistische Modell</td>
+<td style="text-align: left;">统计模型</td>
+<td style="text-align: left;">statistical model</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">der datengenerierende Prozess (DGP)</td>
+<td style="text-align: left;">数据生成过程</td>
+<td style="text-align: left;">data generating process</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">das Konfidenzintervall</td>
+<td style="text-align: left;">置信区间</td>
+<td style="text-align: left;">confidence interval</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="tabset-1-4" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-4-tab">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Deutsch</th>
+<th style="text-align: left;">中文</th>
+<th style="text-align: left;">English</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">die Verteilungsfunktion</td>
+<td style="text-align: left;">分布函数</td>
+<td style="text-align: left;">distribution function</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Dichtefunktion</td>
+<td style="text-align: left;">密度函数</td>
+<td style="text-align: left;">density function</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">der Erwartungswert</td>
+<td style="text-align: left;">期望值</td>
+<td style="text-align: left;">expected value</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Varianz</td>
+<td style="text-align: left;">方差</td>
+<td style="text-align: left;">variance</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">die Standardabweichung</td>
+<td style="text-align: left;">标准差</td>
+<td style="text-align: left;">standard deviation</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">unabhängig und identisch verteilt (i.i.d.)</td>
+<td style="text-align: left;">独立同分布</td>
+<td style="text-align: left;">independent and identically distributed</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">das Gesetz der großen Zahlen</td>
+<td style="text-align: left;">大数定律</td>
+<td style="text-align: left;">law of large numbers</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">der zentrale Grenzwertsatz</td>
+<td style="text-align: left;">中心极限定理</td>
+<td style="text-align: left;">central limit theorem</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">die empirische Verteilungsfunktion</td>
+<td style="text-align: left;">经验分布函数</td>
+<td style="text-align: left;">empirical distribution function</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="tabset-1-5" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-5-tab">
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Deutsch</th>
+<th style="text-align: left;">中文</th>
+<th style="text-align: left;">English</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">die Normalverteilung</td>
+<td style="text-align: left;">正态分布</td>
+<td style="text-align: left;">normal distribution</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Poisson-Verteilung</td>
+<td style="text-align: left;">泊松分布</td>
+<td style="text-align: left;">Poisson distribution</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">die Binomialverteilung</td>
+<td style="text-align: left;">二项分布</td>
+<td style="text-align: left;">binomial distribution</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Bernoulli-Verteilung</td>
+<td style="text-align: left;">伯努利分布</td>
+<td style="text-align: left;">Bernoulli distribution</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">die geometrische Verteilung</td>
+<td style="text-align: left;">几何分布</td>
+<td style="text-align: left;">geometric distribution</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Chi-Quadrat-Verteilung</td>
+<td style="text-align: left;">卡方分布</td>
+<td style="text-align: left;">chi-squared distribution</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">das Verteilungsmodell</td>
+<td style="text-align: left;">分布模型</td>
+<td style="text-align: left;">distribution model</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">der Parameter</td>
+<td style="text-align: left;">参数</td>
+<td style="text-align: left;">parameter</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">der Parameterraum</td>
+<td style="text-align: left;">参数空间</td>
+<td style="text-align: left;">parameter space</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">der Schätzer</td>
+<td style="text-align: left;">估计器</td>
+<td style="text-align: left;">estimator</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="tabset-1-6" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-6-tab">
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Deutsch</th>
+<th style="text-align: left;">中文</th>
+<th style="text-align: left;">English</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">die Kullback-Leibler-Divergenz</td>
+<td style="text-align: left;">KL 散度</td>
+<td style="text-align: left;">Kullback-Leibler divergence</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">die Likelihood-Funktion</td>
+<td style="text-align: left;">似然函数</td>
+<td style="text-align: left;">likelihood function</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">die Log-Likelihood-Funktion</td>
+<td style="text-align: left;">对数似然函数</td>
+<td style="text-align: left;">log-likelihood function</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">der Maximum-Likelihood-Schätzer (MLE)</td>
+<td style="text-align: left;">最大似然估计</td>
+<td style="text-align: left;">maximum likelihood estimator</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">die Entropie</td>
+<td style="text-align: left;">熵</td>
+<td style="text-align: left;">entropy</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">der a-priori-Verteilung (Prior)</td>
+<td style="text-align: left;">先验分布</td>
+<td style="text-align: left;">prior distribution</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">der a-posteriori-Verteilung (Posterior)</td>
+<td style="text-align: left;">后验分布</td>
+<td style="text-align: left;">posterior distribution</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div></section></div></main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+<script src="inf-01_files/libs/quarto-html/zenscroll-min.js"></script>
+</body></html>

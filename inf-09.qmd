@@ -1,0 +1,2180 @@
+---
+title: "第九章：贝叶斯推断"
+subtitle: "从先验信念到后验知识的完整旅程 | Von der Prior-Uberzeugung zum Posterior-Wissen"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+在经典统计学中，参数 $\theta$ 是一个未知但**固定**的量，我们用最大似然或矩估计去"猜测"它。贝叶斯统计学则迈出了一个概念性的跳跃：它用**分布**来描述参数的不确定性。这个想法并不激进 -- 回顾第二章，我们已经知道概率是量化不确定性的天然语言。参数从"未知常数"变成"随机变量"，这听起来只是一个小小的观念转换，但其数值计算却带来了巨大的挑战，因为后验分布往往难以直接计算。
+
+*In der klassischen Statistik ist $\theta$ eine feste, unbekannte Grosse. In der Bayes-Statistik beschreiben wir die Unsicherheit uber $\theta$ durch eine Verteilung -- ein konzeptionell einfacher, aber numerisch anspruchsvoller Schritt.*
+
+本章将从最基础的贝叶斯原理出发，逐步构建完整的贝叶斯推断工具链：
+
+1. **贝叶斯原理** -- 先验、后验、贝叶斯公式
+2. **先验与后验** -- 共轭先验、Bernstein-von Mises 定理
+3. **超参数与经验贝叶斯** -- 平坦先验、从数据中选择超参数
+4. **基于 MCMC 的推断** -- Metropolis-Hastings 算法、Gibbs 采样
+5. **近似贝叶斯计算 (ABC)** -- 无需似然的模拟推断
+6. **变分贝叶斯推理** -- KL 散度、下界优化
+7. **贝叶斯与正则化** -- 惩罚似然、高维稳定化
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图 | Lernroadmap dieses Kapitels"
+#| fig-height: 5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 21), ylim = c(0, 7), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# 上层：概念基础
+steps_x_top <- c(3, 8, 14)
+steps_y_top <- rep(5.5, 3)
+labels_cn_top <- c("贝叶斯原理\nBayes / 先验 / 后验",
+                   "先验与后验\n共轭先验 / 渐近理论",
+                   "超参数\n平坦先验 / 经验贝叶斯")
+colors_top <- c("#DBEAFE", "#FEF3C7", "#FCE7F3")
+borders_top <- c("#2563EB", "#D97706", "#DB2777")
+
+for (i in 1:3) {
+  rect(steps_x_top[i] - 1.8, steps_y_top[i] - 0.8, 
+       steps_x_top[i] + 1.8, steps_y_top[i] + 0.8,
+       col = colors_top[i], border = borders_top[i], lwd = 2)
+  text(steps_x_top[i], steps_y_top[i], labels_cn_top[i], 
+       cex = 0.5, font = 2, col = "#1E293B")
+  text(steps_x_top[i] - 1.5, steps_y_top[i] + 0.65, 
+       paste0("\u00a79.", i), cex = 0.45, col = borders_top[i], font = 2)
+}
+
+arrows(4.8, 5.5, 6.2, 5.5, col = "#94A3B8", lwd = 2, length = 0.1)
+arrows(9.8, 5.5, 12.2, 5.5, col = "#94A3B8", lwd = 2, length = 0.1)
+
+# 下层：计算方法
+steps_x_bot <- c(3, 8, 14, 19)
+steps_y_bot <- rep(2.5, 4)
+labels_cn_bot <- c("MCMC 推断\nMetropolis / Gibbs",
+                   "ABC\n近似贝叶斯计算",
+                   "变分贝叶斯\nKL散度 / ELBO",
+                   "贝叶斯正则化\n惩罚似然")
+colors_bot <- c("#E0E7FF", "#D1FAE5", "#FEF9C3", "#F3E8FF")
+borders_bot <- c("#6366F1", "#16A34A", "#CA8A04", "#9333EA")
+
+for (i in 1:4) {
+  rect(steps_x_bot[i] - 1.8, steps_y_bot[i] - 0.8, 
+       steps_x_bot[i] + 1.8, steps_y_bot[i] + 0.8,
+       col = colors_bot[i], border = borders_bot[i], lwd = 2)
+  text(steps_x_bot[i], steps_y_bot[i], labels_cn_bot[i], 
+       cex = 0.5, font = 2, col = "#1E293B")
+  text(steps_x_bot[i] - 1.5, steps_y_bot[i] + 0.65, 
+       paste0("\u00a79.", i + 3), cex = 0.45, col = borders_bot[i], font = 2)
+}
+
+arrows(4.8, 2.5, 6.2, 2.5, col = "#94A3B8", lwd = 2, length = 0.1)
+arrows(9.8, 2.5, 12.2, 2.5, col = "#94A3B8", lwd = 2, length = 0.1)
+arrows(15.8, 2.5, 17.2, 2.5, col = "#94A3B8", lwd = 2, length = 0.1)
+
+# 连接上下层
+arrows(3, 4.7, 3, 3.3, col = "#DC2626", lwd = 2, length = 0.1)
+text(4.2, 4.0, "计算实现", col = "#DC2626", cex = 0.55, font = 3)
+
+arrows(0.8, 1.0, 20.5, 1.0, col = "#DC2626", lwd = 2, length = 0.15)
+text(10.5, 1.4, "从概念原理到数值计算，层层递进  >>>", 
+     cex = 0.85, col = "#DC2626")
+```
+
+**最终目标**：理解下面这条推断链路中每一步的含义 --
+
+$$
+\text{先验} \; p(\theta) \;\xrightarrow{\text{+ 数据}}\; \text{后验} \; p(\theta|y) \;\xrightarrow{\text{MCMC / ABC / 变分}}\; \text{推断}
+$$
+
+现在看不懂？**完全没关系** -- 读完本章，这条链将变得水到渠成。
+
+{{< pagebreak >}}
+
+# 贝叶斯原理 {#sec-bayesian-principle}
+
+> **Das Bayessche Prinzip**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 贝叶斯统计的**历史起源**：Thomas Bayes、Richard Price 与 Laplace
+- 贝叶斯推断的**核心思想**：用分布描述参数的不确定性
+- **二项-Beta 模型**的完整推导：先验、似然、后验
+- **可信区间**（Credibility Interval）与频率学派置信区间的区别
+- 贝叶斯统计的**四大核心要素**
+:::
+
+## 历史渊源：逆概率的先驱
+
+> **Historischer Ursprung: Pioniere der inversen Wahrscheinlichkeit**
+
+今天所称的"贝叶斯统计"有着悠久的传统，实际上比经典统计学更为古老。它的核心不在于从数据中提取信息，而在于如何基于过往经验对未来事件做出概率陈述。这一理论以 18 世纪的牧师 Thomas Bayes 命名，他研究了逆概率（inverse probability）原理，即今天所说的贝叶斯规则。他的成果在其去世后由哲学家 Richard Price 推动发表，参见 Bayes (1763)。根据 Stigler (2018) 的考证，以 Bayes 名义发表的工作很大程度上由 Price 撰写，特别是附录部分。这些结果在当时未引起广泛关注，50 多年后 Laplace 在更一般的条件下独立推导出了相同的公式。究竟 Bayes 还是 Laplace 才是逆推理的"发明者"，至今仍是一个开放问题。
+
+*Was heute als Bayes-Statistik bekannt ist, hat eine lange Tradition. Thomas Bayes arbeitete im 18. Jahrhundert an den Prinzipien der inversen Wahrscheinlichkeit. Laplace leitete dieselbe Formel unabhangig ab.*
+
+## 核心思想：参数也是随机变量
+
+> **Kernidee: Parameter als Zufallsvariablen**
+
+让我们阐明贝叶斯统计的基本原理。沿用第七章的记号，我们考虑模型 $\mathcal{M} = \{f(\cdot;\theta), \theta \in \Theta\}$，但不再将参数视为需要被估计的未知常数，而是用概率论重新表述我们对 $\theta$ 的认知。换言之，我们将参数视为一个（可能是向量值的）**随机变量**。应当强调，这只是一个概念性的转变 -- 在第二章中我们已经知道，不确定性完全可以用概率论来量化。
+
+::: {.callout-tip icon="false"}
+## 天气预报员的比喻 | Die Wettervorhersage-Metapher
+
+想象两位天气预报员对明天的最高温度进行预测。经典统计学家就像一位只报"明天 25 度"的预报员 -- 给出一个固定的点估计。贝叶斯统计学家则像一位说"明天温度大概率在 22 到 28 度之间，最可能是 25 度左右"的预报员 -- 他用一整条分布来描述自己的不确定性。第二位预报员的预测显然信息更丰富：你不仅知道最可能的温度，还知道这个预测有多"靠谱"。
+
+*Der Frequentist sagt "25 Grad". Der Bayesianer sagt "wahrscheinlich zwischen 22 und 28, am ehesten 25". Die zweite Aussage ist informativer.*
+:::
+
+## 二项-Beta 模型：一个经典案例
+
+> **Das Binomial-Beta-Modell: Ein klassisches Beispiel**
+
+我们用一个简单的例子来展示贝叶斯推断的思路。假设有一个二项模型
+
+$$
+Y \sim B(n, \pi)
+$$
+
+其中 $\pi$ 是我们感兴趣的参数。这导致似然函数
+
+$$
+f(y;\pi) = \binom{n}{y} \pi^y (1-\pi)^{n-y}.
+$$
+
+我们用 Beta 分布来表达对 $\pi$ 的先验知识（或先验不确定性），即
+
+$$
+\pi \sim \mathrm{Beta}(\alpha, \beta).
+$$
+
+Beta 分布是定义在区间 $[0,1]$ 上的连续分布，其密度依赖于参数 $\alpha > 0$ 和 $\beta > 0$：
+
+$$
+p(\pi; \alpha, \beta) = \frac{\pi^{\alpha-1}(1-\pi)^{\beta-1}}{B(\alpha, \beta)}
+$$
+
+其中 $B(\alpha, \beta)$ 是 Beta 函数，起归一化常数的作用。它的显式形式为
+
+$$
+B(\alpha, \beta) = \frac{\Gamma(\alpha)\Gamma(\beta)}{\Gamma(\alpha+\beta)} = \int_0^1 u^{\alpha-1}(1-u)^{\beta-1} \, du,
+$$
+
+其中 $\Gamma(\cdot)$ 是 Gamma 函数，即阶乘函数的连续推广。Beta 函数的具体形式此刻并不重要，重要的是：对于形如上式的密度，归一化常数是**解析可得的**。
+
+我们感兴趣的是观测到 $y$ 之后 $\pi$ 的后验分布。根据贝叶斯公式：
+
+$$
+p(\pi|y) = \frac{f(y;\pi) \, p(\pi)}{\int_0^1 f(y;\tilde{\pi}) \, p(\tilde{\pi}) \, d\tilde{\pi}} \propto \pi^{\alpha+y-1}(1-\pi)^{\beta+n-y-1}
+$$
+
+其中 $\propto$ 表示正比关系，即省略了所有不依赖于 $\pi$ 的乘法常数。将上式与 Beta 分布的密度形式对比，立刻得到
+
+$$
+\pi | y \sim \mathrm{Beta}(\alpha + y, \; \beta + n - y).
+$$
+
+我们称先验的 $\mathrm{Beta}(\alpha, \beta)$ 为**先验分布**（Prior），而 $p(\pi|y)$ 为**后验分布**（Posterior）。先验分布表达了在看到任何数据**之前**的不确定性，后验分布描述了在观测到数据**之后**关于参数的信息。
+
+::: {.callout-tip icon="false"}
+## 调色板的比喻 | Die Farbpalette-Metapher
+
+先验分布就像画家开始作画前调色板上的底色 -- 它反映了你对世界的初始认知。数据就像画布上逐渐增加的笔触。后验分布是底色和笔触混合后的最终画面。底色越淡（先验越"弱"），最终画面就越由笔触（数据）决定；底色越浓（先验越"强"），它对最终画面的影响就越大。随着笔触越来越多（数据量增大），无论初始底色如何，最终画面都会趋向于真实的景象。
+
+*Die Prior-Verteilung ist die Grundfarbe auf der Palette. Die Daten sind die Pinselstriche. Mit mehr Daten dominiert das Bild uber die Grundfarbe.*
+:::
+
+```{r}
+#| label: fig-beta-posterior
+#| fig-cap: "Beta 先验与后验分布演示（仿教材 Fig. 9.1）：随数据增多，后验越来越集中 | Beta-Prior und Posterior-Verteilung"
+#| fig-height: 7
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 先验参数
+alpha_prior <- 1
+beta_prior <- 1
+
+# 场景列表
+scenarios <- list(
+  list(n = 0, y = 0, title = "均匀先验 Beta(1,1)\nUniformer Prior"),
+  list(n = 1, y = 1, title = "n=1, y=1 的后验\nPosterior fur n=1, y=1"),
+  list(n = 10, y = 10, title = "n=10, y=10 的后验\nPosterior fur n=10, y=10"),
+  list(n = 100, y = 90, title = "n=100, y=90 的后验\nPosterior fur n=100, y=90")
+)
+
+for (s in scenarios) {
+  a_post <- alpha_prior + s$y
+  b_post <- beta_prior + s$n - s$y
+  
+  pi_seq <- seq(0.001, 0.999, length.out = 500)
+  dens <- dbeta(pi_seq, a_post, b_post)
+  
+  plot(pi_seq, dens, type = "l", col = "#2563EB", lwd = 3,
+       xlab = expression(pi), ylab = "密度 | Dichte",
+       main = s$title,
+       cex.lab = 1.0, cex.main = 0.9, col.main = "#1E293B",
+       xlim = c(0, 1))
+  grid(col = "#E2E8F0")
+  
+  # 95% 可信区间
+  q_low <- qbeta(0.025, a_post, b_post)
+  q_high <- qbeta(0.975, a_post, b_post)
+  idx <- pi_seq >= q_low & pi_seq <= q_high
+  polygon(c(pi_seq[idx], rev(pi_seq[idx])),
+          c(dens[idx], rep(0, sum(idx))),
+          col = adjustcolor("#2563EB", 0.25), border = NA)
+  
+  if (s$n > 0) {
+    text(0.15, max(dens) * 0.85,
+         bquote(paste("Beta(", .(a_post), ",", .(b_post), ")")),
+         col = "#DC2626", font = 2, cex = 0.8)
+    text(0.15, max(dens) * 0.7,
+         sprintf("95%% CI: [%.2f, %.2f]", q_low, q_high),
+         col = "#6B7280", cex = 0.7)
+  }
+}
+
+par(mfrow = c(1, 1))
+```
+
+我们使用 Beta 先验 $\alpha = \beta = 1$，即 $[0,1]$ 上的均匀分布（左上图）。当观测到单个成功事件 $n=1, y=1$ 时，后验分布如右上图所示。蓝色阴影区域给出 95% 概率质量，即之前在定义 3.12 中定义的**可信区间**（Credibility Interval）。
+
+当 $n=10, y=10$（全部成功）时，后验密度和可信区间如左下图所示。请注意，在这两种情况中，最大似然推断都无法正常工作，因为 $\hat{\pi} = y/n = 1$，中心极限定理无法成立。这凸显了贝叶斯推断的一个核心优势：即使只有单个观测，我们也能立即得到可量化的推断。
+
+对于 $n=100, y=90$，后验密度如右下图所示。可以看到，随着数据增加，后验分布越来越集中，这意味着不确定性在减小。
+
+## 贝叶斯统计的四大核心要素
+
+> **Die vier Kernelemente der Bayes-Statistik**
+
+总结贝叶斯统计的核心组成：
+
+**第一，分布模型假设**。我们假定数据的分布模型 $\mathcal{M} = \{f(y;\theta), \theta \in \Theta\}$，这意味着贝叶斯统计同样需要指定一个概率模型。
+
+**第二，先验分布**。我们对参数施加一个先验分布 $\theta \sim p(\cdot, \omega)$，其中先验分布本身可能依赖于额外的参数 $\omega \in \Omega$，称为**超参数**（Hyperparameter）。
+
+**第三，后验分布**。我们关心的是给定数据后的后验分布 $p(\theta | y; \omega)$。
+
+**第四，后验推断**。后验分布允许我们进行推断，例如计算 95% 概率质量的区间。
+
+```{r}
+#| label: fig-bayes-ingredients
+#| fig-cap: "贝叶斯推断的四大核心要素 | Die vier Kernelemente der Bayes-Statistik"
+#| fig-height: 4
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 4.5), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("贝叶斯推断四大要素 | Vier Elemente der Bayes-Inferenz")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+cx <- c(2, 6, 10, 14)
+cy <- rep(2.2, 4)
+labels_cn <- c("1. 分布模型\nM = {f(y;theta)}",
+               "2. 先验分布\ntheta ~ p(theta; omega)",
+               "3. 后验分布\np(theta | y)",
+               "4. 后验推断\n可信区间 / 后验均值")
+fills <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DB2777", "#16A34A")
+
+for (i in 1:4) {
+  rect(cx[i] - 1.5, cy[i] - 0.8, cx[i] + 1.5, cy[i] + 0.8,
+       col = fills[i], border = borders[i], lwd = 2)
+  text(cx[i], cy[i], labels_cn[i], cex = 0.55, font = 2, col = "#1E293B")
+}
+
+for (i in 1:3) {
+  arrows(cx[i] + 1.5, cy[i], cx[i+1] - 1.5, cy[i],
+         col = "#94A3B8", lwd = 2.5, length = 0.12)
+}
+```
+
+{{< pagebreak >}}
+
+# 先验与后验 {#sec-prior-posterior}
+
+> **Prior und Posterior**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 后验分布的**形式化定义**与归一化常数
+- **共轭先验**（Conjugate Prior）的概念与重要性
+- 四组经典**共轭分布对**：二项-Beta、Poisson-Gamma、正态-正态、指数-Gamma
+- **Bernstein-von Mises 定理**：贝叶斯推断的渐近正态性
+- 大样本下贝叶斯推断与最大似然推断的**渐近等价性**
+:::
+
+## 形式化定义
+
+> **Formale Definition**
+
+设 $\mathcal{M} = \{f(\cdot;\theta); \theta \in \Theta\}$ 是数据 $y_1, \ldots, y_n$ 的概率模型，数据假定为独立同分布。对 $\theta$ 我们建立先验分布
+
+$$
+\theta \sim p(\cdot;\omega),
+$$
+
+其中参数 $\omega \in \Omega$ 称为**超参数**，$\Omega$ 是超参数空间。我们定义先验结构为模型类
+
+$$
+\mathcal{P} = \{p(\cdot;\omega), \omega \in \Omega\}.
+$$
+
+基于先验分布和模型 $\mathcal{M}$，我们得到后验分布
+
+$$
+p_{\theta|y}(\theta | y_1, \ldots, y_n; \omega) = \frac{\prod_{i=1}^{n} f(y_i;\theta) \; p(\theta;\omega)}{f(\mathbf{y};\omega)}
+$$
+
+其中
+
+$$
+f(\mathbf{y};\omega) = \int_{\theta \in \Theta} \prod_{i=1}^{n} f(y_i;\theta) \; p(\theta;\omega) \, d\theta.
+$$
+
+归一化常数 $f(\mathbf{y};\omega)$ 需要对参数 $\theta$ 进行积分，这在数值上可能非常困难，使我们无法直接利用后验分布进行推断。如果选择 $\mathcal{F}$ 和 $\mathcal{P}$ 使得后验仍属于 $\mathcal{P}$，则计算将大大简化。我们称这样的先验为**共轭先验**。
+
+## 共轭先验
+
+> **Konjugierte Prior-Verteilungen**
+
+::: {.callout-important icon="false"}
+## 定义 9.1 共轭先验 | Definition 9.1 Konjugierter Prior
+
+对于给定的概率模型 $\mathcal{F}$，如果先验分布集 $\mathcal{P}$ 存在且后验分布 $p_{\theta|y}(\cdot) \in \mathcal{P}$，即后验与先验属于**同一分布族**，则称 $\mathcal{P}$ 为 $\mathcal{F}$ 的共轭先验分布集。
+
+*Fur ein Wahrscheinlichkeitsmodell $\mathcal{F}$ heisst $\mathcal{P}$ die Menge der konjugierten Prior-Verteilungen, falls die Posterior-Verteilung $p_{\theta|y}(\cdot) \in \mathcal{P}$ gilt.*
+:::
+
+::: {.callout-tip icon="false"}
+## 同族繁衍的比喻 | Die Familiennachfolge-Metapher
+
+共轭先验就像一个"家族传承"规则：如果父母（先验）来自某个贵族家族（分布族 $\mathcal{P}$），那么经过"婚姻"（乘以似然）和"正式册封"（归一化），子女（后验）仍然属于同一个贵族家族。只不过"名字"（参数）变了。例如，Beta 家族的成员 $\mathrm{Beta}(\alpha, \beta)$ 经过二项似然的"婚姻"后，后代仍是 Beta 家族的成员 $\mathrm{Beta}(\alpha + y, \beta + n - y)$。
+
+*Konjugierte Priors sind wie eine Familiendynastie: Prior und Posterior gehoren zur selben Verteilungsfamilie, nur die Parameter andern sich.*
+:::
+
+我们在上一节的二项-Beta 模型中已经看到了共轭先验的一个例子。下表列出了常见的共轭先验分布对：
+
+```{r}
+#| label: fig-conjugate-table
+#| fig-cap: "常见共轭先验分布对（教材 Table 9.1）| Konjugierte Prior-Paare"
+#| fig-height: 3.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 15), ylim = c(0, 5.5), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("共轭先验分布对 | Konjugierte Verteilungspaare")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+# 表头
+rect(0.5, 4.5, 4.5, 5.3, col = "#1E293B", border = "#1E293B")
+rect(4.5, 4.5, 8.5, 5.3, col = "#1E293B", border = "#1E293B")
+rect(8.5, 4.5, 14.5, 5.3, col = "#1E293B", border = "#1E293B")
+text(2.5, 4.9, "参数 | Parameter", col = "white", font = 2, cex = 0.75)
+text(6.5, 4.9, "数据分布 F", col = "white", font = 2, cex = 0.75)
+text(11.5, 4.9, "先验分布 P (共轭)", col = "white", font = 2, cex = 0.75)
+
+params <- c(expression(pi), expression(lambda), expression(mu), expression(lambda))
+dists_f <- c("二项分布 | Binomial", "Poisson 分布 | Poisson", 
+             "正态分布 | Normal", "指数分布 | Exponential")
+dists_p <- c("Beta 分布 | Beta", "Gamma 分布 | Gamma",
+             "正态分布 | Normal", "Gamma 分布 | Gamma")
+row_cols <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#D1FAE5")
+
+for (i in 1:4) {
+  y_row <- 4.5 - i * 0.9
+  rect(0.5, y_row, 4.5, y_row + 0.9, col = row_cols[i], border = "#CBD5E1")
+  rect(4.5, y_row, 8.5, y_row + 0.9, col = row_cols[i], border = "#CBD5E1")
+  rect(8.5, y_row, 14.5, y_row + 0.9, col = row_cols[i], border = "#CBD5E1")
+  text(2.5, y_row + 0.45, params[i], cex = 0.85, col = "#1E293B")
+  text(6.5, y_row + 0.45, dists_f[i], cex = 0.65, col = "#1E293B")
+  text(11.5, y_row + 0.45, dists_p[i], cex = 0.65, col = "#1E293B")
+}
+```
+
+## 例 9.1：Poisson-Gamma 共轭
+
+> **Beispiel 9.1: Poisson-Gamma Konjugation**
+
+设 $Y \sim \mathrm{Poisson}(\lambda)$，假定 $\lambda$ 服从 Gamma 分布：
+
+$$
+\lambda \sim \mathrm{Gamma}(\alpha, \beta) \sim \frac{\lambda^{\alpha-1} \exp(-\lambda\beta) \, \beta^\alpha}{\Gamma(\alpha)},
+$$
+
+超参数为 $\omega = (\alpha, \beta)$。注意若 $p(\lambda;\alpha,\beta) \propto \lambda^{\alpha-1}\exp(-\lambda\beta)$，则 $\lambda \sim \mathrm{Gamma}(\alpha,\beta)$。后验分布为
+
+$$
+p_{\lambda|y}(\lambda|y) \propto \prod_{i=1}^{n} \lambda^{y_i} \exp(-\lambda) \cdot \lambda^{\alpha-1} \exp(-\lambda\beta),
+$$
+
+其中
+
+$$
+\prod_{i=1}^{n} \lambda^{y_i} \exp(-\lambda) \propto \lambda^{\sum_{i=1}^{n} y_i + \alpha - 1} \exp\bigl(-\lambda(n+\beta)\bigr),
+$$
+
+由此立即得到
+
+$$
+\lambda | y \sim \mathrm{Gamma}\!\left(\alpha + \sum_{i=1}^{n} y_i, \; \beta + n\right).
+$$
+
+先验和后验分布属于同一个分布族。
+
+```{r}
+#| label: fig-poisson-gamma
+#| fig-cap: "Poisson-Gamma 共轭：随数据增多，后验从先验逐渐向数据中心收缩 | Poisson-Gamma Konjugation"
+#| fig-height: 5.5
+
+set.seed(42)
+alpha_g <- 2
+beta_g <- 1
+lambda_true <- 4
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+lambda_seq <- seq(0.01, 12, length.out = 500)
+
+# 先验
+dens_prior <- dgamma(lambda_seq, shape = alpha_g, rate = beta_g)
+plot(lambda_seq, dens_prior, type = "l", col = "#6B7280", lwd = 2, lty = 2,
+     xlab = expression(lambda), ylab = "密度 | Dichte",
+     main = "Poisson-Gamma 共轭先验：后验随数据更新 | Konjugierte Aktualisierung",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, 1.2))
+grid(col = "#E2E8F0")
+
+ns <- c(5, 20, 100)
+cols <- c("#EA580C", "#2563EB", "#DC2626")
+lwds <- c(2, 2.5, 3)
+
+for (k in seq_along(ns)) {
+  y_sim <- rpois(ns[k], lambda_true)
+  a_post <- alpha_g + sum(y_sim)
+  b_post <- beta_g + ns[k]
+  dens_post <- dgamma(lambda_seq, shape = a_post, rate = b_post)
+  lines(lambda_seq, dens_post, col = cols[k], lwd = lwds[k])
+}
+
+abline(v = lambda_true, col = "#16A34A", lwd = 2, lty = 3)
+text(lambda_true + 0.3, 1.1, expression(paste("真实值 ", lambda == 4)),
+     col = "#16A34A", font = 2, cex = 0.85, pos = 4)
+
+legend("topright",
+       legend = c(expression(paste("先验 Gamma(2,1)")),
+                  "n=5 后验", "n=20 后验", "n=100 后验"),
+       col = c("#6B7280", cols),
+       lwd = c(2, lwds), lty = c(2, 1, 1, 1),
+       bty = "n", cex = 0.85)
+```
+
+## 例 9.2：正态-正态共轭
+
+> **Beispiel 9.2: Normal-Normal Konjugation**
+
+假设 $Y_i \sim N(\mu, \sigma^2)$，为简化起见设 $\sigma^2$ 已知。假定先验 $\mu \sim N(\delta, \tau^2)$。注意对于均值为 $\delta$、方差为 $\tau^2$ 的正态分布：
+
+$$
+p(\mu;\delta,\tau^2) \propto \exp\!\left(-\frac{1}{2\tau^2}\mu^2 + \frac{\delta}{\tau^2}\mu\right).
+$$
+
+后验分布为
+
+$$
+\mu | y \propto \prod_{i=1}^{n} \exp\!\left(-\frac{(y_i - \mu)^2}{2\sigma^2}\right) \cdot \exp\!\left(-\frac{1}{2\tau^2}\mu^2 + \frac{\delta}{\tau^2}\mu\right)
+$$
+
+$$
+\propto \exp\!\left(-\frac{1}{2}\left(\frac{n}{\sigma^2} + \frac{1}{\tau^2}\right)\mu^2 + \left(\frac{\sum_{i=1}^{n} y_i}{\sigma^2} + \frac{\delta}{\tau^2}\right)\mu\right).
+$$
+
+通过合并项和配方，我们得到
+
+$$
+\mu | y \sim N\!\left(\left(\frac{n}{\sigma^2} + \frac{1}{\tau^2}\right)^{-1}\left(\frac{\sum_{i=1}^n y_i}{\sigma^2} + \frac{\delta}{\tau^2}\right), \;\; \left(\frac{n}{\sigma^2} + \frac{1}{\tau^2}\right)^{-1}\right).
+$$
+
+注意一个特殊情况：若设 $\delta = 0$（先验均值为 0）并令 $\tau^2 \to \infty$（先验方差趋向无穷，即对 $\mu$ 几乎没有先验信息），则近似地
+
+$$
+\mu | y \sim N\!\left(\bar{y}, \;\frac{\sigma^2}{n}\right).
+$$
+
+这个结果看起来非常熟悉 -- 如果把 $\mu$ 和 $\bar{y}$ 的角色互换，回到非贝叶斯视角，这正是 $\bar{Y}$ 的采样分布。注意当 $\tau^2 \to \infty$ 时，先验分布变得退化，即 $\int p(\mu;\delta=0, \tau^2\to\infty)\,d\mu \to \infty$。我们称这种先验为**非正常先验**（Improper Prior）。即便如此，后验分布在此情况下仍然是良定义的。
+
+::: {.callout-tip icon="false"}
+## 精密天平的比喻 | Die Prazisionswaage-Metapher
+
+正态-正态共轭的后验均值可以理解为**精度加权平均**。先验给出的信息精度为 $1/\tau^2$，数据给出的信息精度为 $n/\sigma^2$。后验均值就是把先验均值 $\delta$ 和数据均值 $\bar{y}$ 按各自的精度进行加权平均。谁的精度高，谁就对最终结果影响更大。当数据量 $n$ 很大时，数据精度远超先验精度，先验的影响几乎消失。
+
+*Der Posterior-Mittelwert ist ein prazisionsgewichteter Durchschnitt aus Prior-Mittelwert und Daten-Mittelwert. Wer genauer ist, hat mehr Einfluss.*
+:::
+
+```{r}
+#| label: fig-normal-normal
+#| fig-cap: "正态-正态共轭：后验是先验信息与数据信息的精度加权折中 | Normal-Normal Konjugation"
+#| fig-height: 5.5
+
+set.seed(123)
+sigma2 <- 4       # 已知数据方差
+delta <- 0         # 先验均值
+tau2 <- 25         # 先验方差
+mu_true <- 3
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+mu_seq <- seq(-6, 8, length.out = 500)
+
+# 先验密度
+dens_prior_n <- dnorm(mu_seq, mean = delta, sd = sqrt(tau2))
+plot(mu_seq, dens_prior_n, type = "l", col = "#6B7280", lwd = 2, lty = 2,
+     xlab = expression(mu), ylab = "密度 | Dichte",
+     main = "正态-正态共轭：精度加权平均 | Normal-Normal Konjugation",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, 1.5))
+grid(col = "#E2E8F0")
+
+ns_nn <- c(1, 5, 50)
+cols_nn <- c("#EA580C", "#2563EB", "#DC2626")
+
+for (k in seq_along(ns_nn)) {
+  y_nn <- rnorm(ns_nn[k], mu_true, sqrt(sigma2))
+  ybar <- mean(y_nn)
+  prec_post <- ns_nn[k] / sigma2 + 1 / tau2
+  mu_post <- (ns_nn[k] / sigma2 * ybar + delta / tau2) / prec_post
+  var_post <- 1 / prec_post
+  dens_post_n <- dnorm(mu_seq, mean = mu_post, sd = sqrt(var_post))
+  lines(mu_seq, dens_post_n, col = cols_nn[k], lwd = 2.5)
+}
+
+abline(v = mu_true, col = "#16A34A", lwd = 2, lty = 3)
+text(mu_true + 0.2, 1.4, expression(paste("真实值 ", mu == 3)),
+     col = "#16A34A", font = 2, cex = 0.85, pos = 4)
+
+legend("topleft",
+       legend = c(expression(paste("先验 N(0, 25)")),
+                  "n=1 后验", "n=5 后验", "n=50 后验"),
+       col = c("#6B7280", cols_nn),
+       lwd = c(2, 2.5, 2.5, 2.5), lty = c(2, 1, 1, 1),
+       bty = "n", cex = 0.85)
+```
+
+## Bernstein-von Mises 定理
+
+> **Der Satz von Bernstein-von Mises**
+
+::: {.callout-important icon="false"}
+## 性质 9.1 Bernstein-von Mises 定理 | Eigenschaft 9.1
+
+对于增大的样本量 $n$ 和适当选择的先验，有
+
+$$
+\theta - \hat{\theta} \;\overset{a}{\sim}\; N\!\left(0, \; I^{-1}(\hat{\theta})\right)
+$$
+
+其中 $\hat{\theta}$ 是最大似然估计，$I(\hat{\theta})$ 是 Fisher 信息矩阵。
+:::
+
+Bernstein-von Mises 定理是一个极为有用的结果。它告诉我们，当数据量足够大时，贝叶斯推断（将参数视为随机的）与最大似然推断**等价**。然而，该定理对有限样本（实际应用中的常态）不给出任何保证。因此我们需要非渐近的推断工具，特别是基于模拟的技术。
+
+**证明概要**。观察后验分布
+
+$$
+p_{\theta|y}(\theta|y) \propto \exp\!\left(\sum_{i=1}^{n} \log f(y_i;\theta) + \log p(\theta;\omega)\right) = \exp\bigl(l_p(\theta)\bigr)
+$$
+
+其中
+
+$$
+l_p(\theta) = \sum_{i=1}^{n} \log f(y_i;\theta) + \log p(\theta;\omega) = l(\theta) + \log p(\theta;\omega).
+$$
+
+我们将 $l_p(\theta)$ 称为**惩罚似然**（penalisierte Likelihood），因为它在似然上增加了一个"惩罚"项。定义惩罚最大似然估计 $\hat{\theta}_p$ 满足 $0 = \partial l_p(\hat{\theta}_p) / \partial\theta$，可以对上式进行二阶 Taylor 近似：
+
+$$
+\exp\bigl(l_p(\theta)\bigr) \approx \exp\!\left(l_p(\hat{\theta}_p) + \frac{1}{2}(\theta - \hat{\theta}_p)^\top \frac{\partial^2 l_p(\hat{\theta}_p)}{\partial\theta\,\partial\theta^\top}(\theta - \hat{\theta}_p)\right).
+$$
+
+这具有正态分布的形式。用 Fisher 信息替换二阶导数，并注意 $l_p(\hat{\theta}_p)$ 是固定常数，得到渐近分布
+
+$$
+\theta|y \;\overset{a}{\sim}\; N\!\left(\hat{\theta}_p, \; I_p^{-1}(\hat{\theta}_p)\right).
+$$
+
+随着 $n$ 增大，先验的影响消退，使得惩罚项不再起作用。因此 $\hat{\theta}_p$ 趋向于最大似然估计 $\hat{\theta}$，结论成立。
+
+::: {.callout-tip icon="false"}
+## 河流汇聚的比喻 | Die Flusskonvergenz-Metapher
+
+Bernstein-von Mises 定理就像两条河流最终汇入同一片大海。贝叶斯方法（先验 + 数据 = 后验）和频率方法（纯粹依赖数据的最大似然）在数据量足够大时，得到的结果趋于一致。小河（有限样本）时，两条河可能流向不同的方向；但大河（大样本）终归入海。
+
+*Bei grossen Stichproben konvergieren Bayes- und Frequentisten-Methoden zum selben Ergebnis -- wie zwei Flusse, die ins gleiche Meer munden.*
+:::
+
+{{< pagebreak >}}
+
+# 超参数与经验贝叶斯 {#sec-hyperparameters}
+
+> **Hyperparameter und Empirischer Bayes**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 超参数 $\omega$ 的意义与选择策略
+- **平坦先验**（Flat Prior）与**非正常先验**（Improper Prior）
+- **经验贝叶斯**（Empirical Bayes）的原理与争议
+- 边际似然的概念
+:::
+
+## 超参数的选择
+
+> **Die Wahl der Hyperparameter**
+
+先验分布 $p(\theta;\omega)$ 依赖于超参数 $\omega$，其具体选择由贝叶斯方法的使用者决定，需要谨慎对待。一般建议是设定 $\omega$ 使得 $p(\theta;\omega)$ 能表达关于 $\theta$ 的先验知识，这些知识可能来自先前的分析、专家意见或任何形式的先验信念。然而，先验知识往往难以精确量化。
+
+一种合理的策略是选择所谓的**平坦先验**（Flat Prior），即
+
+$$
+p(\theta;\omega) \propto \text{const}.
+$$
+
+换言之，在看到任何数据之前，$\theta$ 的每个取值看起来同等可能。我们强调，这通常导致非正常先验 -- 密度 $p(\theta;\omega)$ 不可积分。当参数空间 $\Theta$ 无界时，这种情况立即发生。然而，即使先验不正常，后验通常仍然是正常的（至少对于足够大的样本量）。此时后验正比于似然：
+
+$$
+p_{\theta|y}(\theta|y) \propto \prod_{i=1}^{n} f(y_i;\theta) \cdot \text{const}.
+$$
+
+::: {.callout-tip icon="false"}
+## 白纸作画的比喻 | Die leere-Leinwand-Metapher
+
+使用平坦先验就像在一张纯白的画布上作画 -- 你不预设任何底色，完全让数据（画笔）来决定最终的画面。这看起来最"客观"，但白色画布也是一种选择 -- 在无界参数空间中，它意味着你给极端值和中等值赋予了同样的可能性，这本身就是一种（可能不太合理的）假设。
+
+*Ein flacher Prior ist wie eine weisse Leinwand -- scheinbar objektiv, aber er weist extremen Werten dieselbe Plausibilitat zu wie moderaten.*
+:::
+
+## 经验贝叶斯
+
+> **Empirischer Bayes**
+
+另一种选择超参数的策略称为**经验贝叶斯**。如果将参数 $\theta$ 视为随机而超参数 $\omega$ 视为固定，我们可以对 $\theta$ 积分，得到 $y$ 基于参数 $\omega$ 的分布：
+
+$$
+\tilde{f}(y;\omega) := \int_{\theta \in \Theta} f(y;\theta) \, p(\theta;\omega) \, d\theta.
+$$
+
+换言之，我们不使用 $f(y;\theta)$，而是使用概率模型 $\tilde{\mathcal{F}} = \{\tilde{f}(\cdot;\omega); \omega \in \Omega\}$。选择超参数 $\omega$ 的方法是利用第四章的结果，选择 $\omega$ 来最大化边际似然：
+
+$$
+\tilde{l}(\omega) = \prod_{i=1}^{n} \tilde{f}(y_i;\omega) = \int_{\theta \in \Theta} \prod_{i=1}^{n} f(y_i;\theta) \, p(\theta;\omega) \, d\theta.
+$$
+
+这种方法称为经验贝叶斯，尽管严格来说它**根本不是贝叶斯的** -- 没有任何参数被视为随机的。事实上，经验贝叶斯**完全违背**贝叶斯原则：先验应当表达在看到数据**之前**的知识，而基于数据来选择先验分布的超参数显然违反了这一范式。然而在实践中，这种方法被证明相当有用。
+
+```{r}
+#| label: fig-empirical-bayes
+#| fig-cap: "经验贝叶斯示意：通过边际似然选择超参数 | Empirischer Bayes: Hyperparameterauswahl via marginale Likelihood"
+#| fig-height: 5.5
+
+set.seed(42)
+# 模拟 Poisson 数据
+n_eb <- 50
+lambda_true_eb <- 3
+y_eb <- rpois(n_eb, lambda_true_eb)
+
+# 对于 Gamma(alpha, beta) 先验，固定 alpha = beta * mu_prior
+# 边际似然作为 beta 的函数
+alpha_vals <- seq(0.5, 10, length.out = 200)
+beta_val <- 1  # 固定 beta
+
+log_marginal <- sapply(alpha_vals, function(a) {
+  # 边际似然 = prod Negative Binomial
+  sum(dnbinom(y_eb, size = a, prob = beta_val / (beta_val + 1), log = TRUE))
+})
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(alpha_vals, log_marginal, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(paste("超参数 ", alpha, " (固定 ", beta, " = 1)")),
+     ylab = expression(paste("对数边际似然 ", log, " ", tilde(l)(omega))),
+     main = expression(paste("经验贝叶斯：最大化 ", tilde(l)(omega), " 选择超参数")),
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+opt_alpha <- alpha_vals[which.max(log_marginal)]
+abline(v = opt_alpha, col = "#DC2626", lwd = 2, lty = 2)
+points(opt_alpha, max(log_marginal), pch = 16, col = "#DC2626", cex = 2)
+text(opt_alpha + 0.3, max(log_marginal) - 2,
+     bquote(hat(alpha) == .(round(opt_alpha, 2))),
+     col = "#DC2626", font = 2, cex = 1.0, pos = 4)
+```
+
+{{< pagebreak >}}
+
+# 基于 MCMC 的推断 {#sec-mcmc}
+
+> **Inferenz basierend auf MCMC**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 后验分布"已知但差一个常数"的问题
+- **Metropolis-Hastings 算法**的详细步骤
+- **Gibbs 采样**与多维参数的分量更新策略
+- **Burn-in 期**与后验均值/方差的计算
+- **例 9.3**：零膨胀计数数据的完整 MCMC 实现
+- 参数变换技巧（logit、log）
+:::
+
+## MCMC 推断的核心思路
+
+> **Kernidee der MCMC-Inferenz**
+
+现在进入贝叶斯机器的核心。观察后验公式
+
+$$
+p_{\theta|y}(\theta | y_1, \ldots, y_n) \propto \underbrace{\prod_{i=1}^{n} f(y_i;\theta)}_{L(\theta)} \cdot p(\theta;\omega).
+$$
+
+右侧的两个成分在数值上都是可得的：第一个是似然，第二个是先验。数值障碍在于我们省略的正比常数。因此，我们只知道后验密度**差一个未知常数**。这正是第 8.3 章中引入 Monte Carlo Markov Chain (MCMC) 模拟所需要的设定 -- 它允许我们从仅知到常数倍的分布中进行采样。
+
+核心思路是模拟一条 Markov 链 $\theta^{*(t)}$，其平稳分布恰好是后验分布。经过足够长的 burn-in 期后，模拟值可以用来对给定数据的 $\theta$ 进行推断。我们可以计算后验均值
+
+$$
+\hat{\theta} = \frac{1}{T-d} \sum_{t=d+1}^{T} \theta^{*(t)}
+$$
+
+其中 $d$ 确定 burn-in 阶段的长度。
+
+::: {.callout-tip icon="false"}
+## 探索未知地形的比喻 | Die Erkundungs-Metapher
+
+想象你被蒙上眼罩放在一片未知的山地中，只能感受到脚下地面的高度（后验密度值），但看不到整个地形（完整的后验分布）。MCMC 就像你在山中随机游走的过程：每一步你向旁边迈一步（提议），如果新位置更高（密度更大），你一定走过去；如果更低，你有时走有时不走（按概率接受）。经过足够长时间的游走后，你待在各个位置的时间比例就恰好反映了该位置的高度 -- 即后验密度。
+
+*MCMC ist wie eine Wanderung mit verbundenen Augen: Man spurt nur die lokale Hohe, aber nach genugend Schritten hat man die gesamte Landschaft erkundet.*
+:::
+
+## Metropolis-Hastings 算法
+
+> **Der Metropolis-Hastings-Algorithmus**
+
+设 $\theta = (\theta_1, \ldots, \theta_p)$ 为 $p$ 维参数。算法步骤如下：
+
+**步骤 1**：选择初始值 $\theta^{*(0)} \in \Theta$，设 $\theta^{*(t)} = \theta^{*(0)}$。
+
+**步骤 2**：从某个提议分布模拟 $\theta^* \sim g(\cdot | \theta^{*(t)})$。
+
+**步骤 3**：计算接受概率
+
+$$
+\alpha(\theta^*, \theta^{*(t)}) = \min\!\left(1, \; \frac{L(\theta^*) \, p(\theta^*;\omega)}{L(\theta^{*(t)}) \, p(\theta^{*(t)};\omega)} \cdot \frac{g(\theta^{*(t)}|\theta^*)}{g(\theta^*|\theta^{*(t)})}\right).
+$$
+
+**步骤 4**：模拟 $U^* \sim \mathrm{Uniform}[0,1]$。
+
+**步骤 5**：若 $U \le \alpha(\theta^*, \theta^{*(t)})$，设 $\theta^{*(t+1)} = \theta^*$，转至步骤 6；否则回到步骤 2。
+
+**步骤 6**：回到步骤 2，直到 $t$ 达到所需的步数。
+
+除非 $\theta$ 的分量数很少，步骤 3 中计算的接受概率通常会非常低，因为多元密度值可能很小。当 $p > 2$ 时，建议将 MCMC 与 **Gibbs 采样**结合使用。
+
+## Metropolis-Hastings-Gibbs 算法
+
+> **Metropolis-Hastings-Gibbs-Algorithmus**
+
+Gibbs 采样的核心思想是用**逐分量**的模拟步骤替代全局模拟：每次只模拟 $\theta$ 的一个分量，固定所有其他分量。这是可行的，因为对于分量 $\theta_j$，固定其他分量 $\theta_{-j}$ 后的条件后验满足
+
+$$
+p_{\theta_j|y,\theta_{-j}}(\theta_j | y_1, \ldots, y_n, \theta_{-j}) \propto p_{\theta|y}(\theta | y_1, \ldots, y_n) \propto \underbrace{\prod_{i=1}^{n} f(y_i;\theta)}_{L(\theta)} \cdot p(\theta;\omega),
+$$
+
+其中 $\theta_{-j}$ 是 $\theta$ 去除第 $j$ 个分量后的 $p-1$ 维子向量。
+
+完整的 Metropolis-Hastings-Gibbs 算法如下：
+
+**步骤 1**：选择初始值 $\theta^{*(0)} \in \Theta$。
+
+**步骤 2**：定义 $\theta^* = \theta^{*(t)}$。
+
+**步骤 3**：对 $j = 1, \ldots, p$ 依次执行：
+(a) 定义 $\theta^{**} = \theta^*$。
+(b) 从提议分布模拟第 $j$ 个分量 $\theta_j^{**} \sim g(\cdot | \theta_j^*)$。
+(c) 计算接受概率：
+$$\alpha(\theta^{**}, \theta^*) = \min\!\left(1, \; \frac{L(\theta^{**}) \, p(\theta^{**};\omega)}{L(\theta^*) \, p(\theta^*;\omega)} \cdot \frac{g(\theta^*|\theta^{**})}{g(\theta^{**}|\theta^*)}\right).$$
+(d) 模拟 $U^* \sim \mathrm{Uniform}[0,1]$。
+(e) 若 $U \le \alpha(\theta^{**}, \theta^*)$，替换 $\theta^*$ 中的第 $j$ 个分量 $\theta_j^* = \theta_j^{**}$；否则回到 (a)。
+
+**步骤 4**：设 $\theta^{*(t+1)} = \theta^*$。
+
+**步骤 5**：回到步骤 2，直到达到所需步数。
+
+该算法有一个**外循环**（对所有 $\theta$ 分量进行一轮模拟）和一个**内循环**（对各个分量进行一维模拟）。
+
+## 例 9.3：零膨胀计数数据
+
+> **Beispiel 9.3: Nullinflationierte Zahldaten**
+
+零膨胀（Zero Inflation）出现在我们观测到的零值多于任何标准模型（如 Poisson 分布）所能解释的情况。例如保险公司客户在给定时间段内的索赔次数：大多数客户不会提交任何索赔（零），但少数客户可能提交一次甚至多次索赔。
+
+::: {.callout-tip icon="false"}
+## 双重抽签的比喻 | Die Doppellotterie-Metapher
+
+零膨胀模型就像一个两阶段的抽签过程。第一阶段：抽一张卡片，决定你是"永远不会中奖"的人（概率 $\pi$）还是"有机会中奖"的人（概率 $1-\pi$）。第二阶段：如果你是"有机会"的人，你的中奖次数服从 Poisson 分布。如果你是"永远不会"的人，结果一定是零。这就解释了为什么观测到的零值比纯 Poisson 模型预测的多。
+
+*Das Zero-Inflated-Modell ist eine Doppellotterie: Zuerst wird entschieden, ob man uberhaupt teilnimmt (Wahrscheinlichkeit $1-\pi$). Nur Teilnehmer folgen einer Poisson-Verteilung.*
+:::
+
+对于计数变量 $Y \in \{0, 1, \ldots\}$，零膨胀 Poisson 模型为
+
+$$
+P(Y = k; \pi, \lambda) = \begin{cases} \pi + (1-\pi)\frac{\lambda^0}{0!}e^{-\lambda}, & k = 0 \\ (1-\pi)\frac{\lambda^k}{k!}e^{-\lambda}, & k > 0 \end{cases}
+$$
+
+其中 $\lambda \ge 0$ 且 $\pi \in [0,1]$。当 $\pi = 0$ 时退化为 Poisson 分布，$\pi > 0$ 时零概率被膨胀。
+
+我们假设均匀先验和指数先验：
+
+$$
+\pi \sim \mathrm{Uniform}[0,1] = \mathrm{Beta}(1,1), \qquad \lambda \sim p(\lambda;\omega) = \omega e^{-\lambda\omega}
+$$
+
+固定 $\omega$ 后，后验为
+
+$$
+\lambda, \pi | y_1, \ldots, y_n \propto \prod_{i=1}^{n} P(Y = y_i;\lambda,\pi) \cdot \omega e^{-\lambda\omega}.
+$$
+
+**参数变换**。为了避免提议分布碰到约束边界（$\pi \in [0,1]$, $\lambda > 0$），我们使用无约束的变换参数：
+
+$$
+\eta = \mathrm{logit}(\pi) = \log\!\frac{\pi}{1-\pi}, \qquad \delta = \log(\lambda).
+$$
+
+logit 变换得到 $\eta$ 的先验：
+
+$$
+p_\eta(\eta) = \frac{\partial \pi}{\partial \eta} \cdot p_\pi(\pi(\eta)) = \pi(\eta)(1-\pi(\eta))
+$$
+
+其中 $\pi(\eta) = \mathrm{logit}^{-1}(\eta) = \frac{\exp(\eta)}{1+\exp(\eta)}$。
+
+类似地，对数变换得到 $\delta$ 的先验：
+
+$$
+p_\delta(\delta;\omega) = \frac{\partial \lambda}{\partial \delta} \cdot p_\lambda(\lambda(\delta);\omega) = \lambda \cdot \omega e^{-\lambda\omega}
+$$
+
+其中 $\lambda = \exp(\delta)$。
+
+提议分布选择以当前值为中心的正态分布：
+
+$$
+\eta^* | \eta^{*(t)} \sim N(\eta^{*(t)}, \sigma_\eta^2), \qquad \delta^* | \delta^{*(t)} \sim N(\delta^{*(t)}, \sigma_\delta^2)
+$$
+
+取 $\sigma_\eta = \sigma_\delta = 0.5$。由于提议分布对称，接受概率简化为
+
+$$
+\alpha\bigl((\delta^*,\eta^*),(\delta^{*(t)},\eta^{*(t)})\bigr) = \min\!\left(1, \; \frac{\prod_{i=1}^n P(y_i;\lambda^*,\pi^*)}{\prod_{i=1}^n P(y_i;\lambda^{*(t)},\pi^{*(t)})} \cdot \frac{p_\delta(\delta^*,\omega)}{p_\delta(\delta^{*(t)},\omega)} \cdot \frac{p_\eta(\eta^*)}{p_\eta(\eta^{*(t)})}\right)
+$$
+
+其中似然之比的计算可在对数尺度上进行以避免数值下溢：
+
+$$
+\frac{\prod_{i=1}^n P(y_i;\lambda^*,\pi^*)}{\prod_{i=1}^n P(y_i;\lambda^{*(t)},\pi^{*(t)})} = \exp\!\left(\sum_{i=1}^n \bigl[\log P(y_i;\lambda^*,\pi^*) - \log P(y_i;\lambda^{*(t)},\pi^{*(t)})\bigr]\right),
+$$
+
+其中 $\lambda^* = \exp(\delta^*)$，$\pi^* = \exp(\eta^*)/(1+\exp(\eta^*))$。
+
+```{r}
+#| label: fig-zip-mcmc
+#| fig-cap: "零膨胀 Poisson 模型的 MCMC 推断（仿教材 Fig. 9.2）| MCMC fur das Zero-Inflated Poisson-Modell"
+#| fig-height: 10
+
+set.seed(2024)
+
+# --- 数据模拟 ---
+n_zip <- 100
+pi_true <- 0.3
+lambda_true_zip <- 5
+
+# 零膨胀 Poisson 数据
+is_zero_inflated <- rbinom(n_zip, 1, pi_true)
+y_zip <- ifelse(is_zero_inflated == 1, 0, rpois(n_zip, lambda_true_zip))
+
+# --- ZIP 概率函数 ---
+dzip <- function(y, lambda, pi_val) {
+  p <- numeric(length(y))
+  idx0 <- y == 0
+  p[idx0] <- pi_val + (1 - pi_val) * dpois(0, lambda)
+  p[!idx0] <- (1 - pi_val) * dpois(y[!idx0], lambda)
+  return(p)
+}
+
+log_dzip <- function(y, lambda, pi_val) {
+  log(pmax(dzip(y, lambda, pi_val), 1e-300))
+}
+
+# --- 先验密度（变换参数）---
+log_prior_eta <- function(eta) {
+  pi_val <- exp(eta) / (1 + exp(eta))
+  log(pi_val * (1 - pi_val))
+}
+
+log_prior_delta <- function(delta, omega) {
+  lambda_val <- exp(delta)
+  log(lambda_val) + log(omega) - lambda_val * omega
+}
+
+# --- MCMC ---
+T_mcmc <- 5000
+omega_hyp <- 0.2
+sigma_prop <- 0.5
+
+eta_chain <- numeric(T_mcmc)
+delta_chain <- numeric(T_mcmc)
+eta_chain[1] <- 0   # pi = 0.5
+delta_chain[1] <- log(3)  # lambda = 3
+
+n_accept <- 0
+
+for (t in 2:T_mcmc) {
+  # 当前值
+  eta_curr <- eta_chain[t-1]
+  delta_curr <- delta_chain[t-1]
+  pi_curr <- exp(eta_curr) / (1 + exp(eta_curr))
+  lambda_curr <- exp(delta_curr)
+  
+  # 提议新值
+  eta_prop <- rnorm(1, eta_curr, sigma_prop)
+  delta_prop <- rnorm(1, delta_curr, sigma_prop)
+  pi_prop <- exp(eta_prop) / (1 + exp(eta_prop))
+  lambda_prop <- exp(delta_prop)
+  
+  # 对数接受率
+  log_lik_prop <- sum(log_dzip(y_zip, lambda_prop, pi_prop))
+  log_lik_curr <- sum(log_dzip(y_zip, lambda_curr, pi_curr))
+  
+  log_alpha <- (log_lik_prop - log_lik_curr) +
+    (log_prior_delta(delta_prop, omega_hyp) - log_prior_delta(delta_curr, omega_hyp)) +
+    (log_prior_eta(eta_prop) - log_prior_eta(eta_curr))
+  
+  if (log(runif(1)) < log_alpha) {
+    eta_chain[t] <- eta_prop
+    delta_chain[t] <- delta_prop
+    n_accept <- n_accept + 1
+  } else {
+    eta_chain[t] <- eta_curr
+    delta_chain[t] <- delta_curr
+  }
+}
+
+pi_chain <- exp(eta_chain) / (1 + exp(eta_chain))
+lambda_chain <- exp(delta_chain)
+
+burnin <- 500
+
+par(mfrow = c(3, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 1. 数据分布
+barplot(table(factor(y_zip, levels = 0:max(y_zip))),
+        col = adjustcolor("#2563EB", 0.5), border = "#2563EB",
+        xlab = "Y", ylab = "频次 | Haufigkeit",
+        main = "零膨胀计数数据 | Zero-inflated Daten")
+
+# 2. 前300步MCMC轨迹
+idx_trace <- 1:300
+plot(pi_chain[idx_trace], lambda_chain[idx_trace], type = "l",
+     col = adjustcolor("#2563EB", 0.6), lwd = 0.5,
+     xlab = expression(pi), ylab = expression(lambda),
+     main = "MCMC 前 300 步轨迹 | Erste 300 Schritte",
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+points(pi_chain[idx_trace], lambda_chain[idx_trace], pch = 16,
+       col = adjustcolor("#2563EB", 0.3), cex = 0.5)
+
+# 3. pi 链
+plot(pi_chain, type = "l", col = adjustcolor("#EA580C", 0.6), lwd = 0.3,
+     xlab = "迭代步 | Iteration", ylab = expression(pi),
+     main = expression(paste("MCMC 链: ", pi)),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = pi_true, col = "#16A34A", lwd = 2, lty = 2)
+abline(v = burnin, col = "#DC2626", lwd = 1.5, lty = 3)
+text(burnin + 100, max(pi_chain) * 0.9, "burn-in", 
+     col = "#DC2626", cex = 0.8, pos = 4)
+
+# 4. lambda 链
+plot(lambda_chain, type = "l", col = adjustcolor("#2563EB", 0.6), lwd = 0.3,
+     xlab = "迭代步 | Iteration", ylab = expression(lambda),
+     main = expression(paste("MCMC 链: ", lambda)),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = lambda_true_zip, col = "#16A34A", lwd = 2, lty = 2)
+abline(v = burnin, col = "#DC2626", lwd = 1.5, lty = 3)
+
+# 5-6. 联合后验 n=100
+pi_post <- pi_chain[(burnin+1):T_mcmc]
+lambda_post <- lambda_chain[(burnin+1):T_mcmc]
+
+# 使用 2D 核密度
+library(MASS)
+kde2d_res <- kde2d(pi_post, lambda_post, n = 100)
+contour(kde2d_res, col = "#2563EB", lwd = 1.5,
+        xlab = expression(pi), ylab = expression(lambda),
+        main = paste0("联合后验 n=", n_zip, " | Gemeinsame Posterior"),
+        cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(v = pi_true, col = "#DC2626", lwd = 2, lty = 2)
+abline(h = lambda_true_zip, col = "#DC2626", lwd = 2, lty = 2)
+abline(v = mean(pi_post), col = "#EA580C", lwd = 1.5, lty = 3)
+abline(h = mean(lambda_post), col = "#EA580C", lwd = 1.5, lty = 3)
+legend("topright",
+       legend = c("真实值 | Wahrer Wert", "后验均值 | Posterior-Mittel"),
+       col = c("#DC2626", "#EA580C"), lwd = c(2, 1.5), lty = c(2, 3),
+       bty = "n", cex = 0.7)
+
+# 增大数据到 n=2000
+set.seed(2024)
+n_zip2 <- 2000
+is_zero_inflated2 <- rbinom(n_zip2, 1, pi_true)
+y_zip2 <- ifelse(is_zero_inflated2 == 1, 0, rpois(n_zip2, lambda_true_zip))
+
+eta_chain2 <- numeric(T_mcmc)
+delta_chain2 <- numeric(T_mcmc)
+eta_chain2[1] <- 0; delta_chain2[1] <- log(3)
+for (t in 2:T_mcmc) {
+  eta_c <- eta_chain2[t-1]; delta_c <- delta_chain2[t-1]
+  pi_c <- exp(eta_c)/(1+exp(eta_c)); lam_c <- exp(delta_c)
+  eta_p <- rnorm(1, eta_c, 0.3); delta_p <- rnorm(1, delta_c, 0.3)
+  pi_p <- exp(eta_p)/(1+exp(eta_p)); lam_p <- exp(delta_p)
+  la <- sum(log_dzip(y_zip2, lam_p, pi_p)) - sum(log_dzip(y_zip2, lam_c, pi_c)) +
+    log_prior_delta(delta_p, omega_hyp) - log_prior_delta(delta_c, omega_hyp) +
+    log_prior_eta(eta_p) - log_prior_eta(eta_c)
+  if(log(runif(1)) < la) { eta_chain2[t] <- eta_p; delta_chain2[t] <- delta_p }
+  else { eta_chain2[t] <- eta_c; delta_chain2[t] <- delta_c }
+}
+pi_ch2 <- exp(eta_chain2)/(1+exp(eta_chain2))
+lam_ch2 <- exp(delta_chain2)
+pi_p2 <- pi_ch2[(burnin+1):T_mcmc]
+lam_p2 <- lam_ch2[(burnin+1):T_mcmc]
+kde2d_r2 <- kde2d(pi_p2, lam_p2, n = 100)
+contour(kde2d_r2, col = "#2563EB", lwd = 1.5,
+        xlab = expression(pi), ylab = expression(lambda),
+        main = paste0("联合后验 n=", n_zip2, " | Gemeinsame Posterior"),
+        cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(v = pi_true, col = "#DC2626", lwd = 2, lty = 2)
+abline(h = lambda_true_zip, col = "#DC2626", lwd = 2, lty = 2)
+abline(v = mean(pi_p2), col = "#EA580C", lwd = 1.5, lty = 3)
+abline(h = mean(lam_p2), col = "#EA580C", lwd = 1.5, lty = 3)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: mcmc-summary-stats
+#| code-fold: false
+
+# MCMC 推断结果总结
+cat("例 9.3：零膨胀 Poisson 模型 -- MCMC 推断结果\n")
+cat("Beispiel 9.3: Zero-Inflated Poisson -- MCMC-Ergebnisse\n\n")
+
+cat(sprintf("  真实值:  pi = %.2f,  lambda = %.2f\n", pi_true, lambda_true_zip))
+cat(sprintf("  后验均值 (n=%d):  E(pi|y) = %.4f,  E(lambda|y) = %.4f\n",
+            n_zip, mean(pi_post), mean(lambda_post)))
+cat(sprintf("  后验标准差:      sd(pi|y) = %.4f,  sd(lambda|y) = %.4f\n",
+            sd(pi_post), sd(lambda_post)))
+
+q_pi <- quantile(pi_post, c(0.025, 0.975))
+q_lam <- quantile(lambda_post, c(0.025, 0.975))
+cat(sprintf("  95%% 可信区间 pi:     [%.4f, %.4f]\n", q_pi[1], q_pi[2]))
+cat(sprintf("  95%% 可信区间 lambda: [%.4f, %.4f]\n", q_lam[1], q_lam[2]))
+cat(sprintf("\n  接受率: %.2f%%\n", n_accept / T_mcmc * 100))
+```
+
+## 后验推断的计算
+
+> **Berechnung der Posterior-Inferenz**
+
+基于 MCMC 样本，我们可以估计后验均值：
+
+$$
+\hat{E}(\theta|y) = \frac{1}{T-k} \sum_{t=k+1}^{T} \theta^{*(t)}
+$$
+
+其中 $k$ 定义 burn-in 阶段的长度。同样可以计算后验方差来评估不确定性：
+
+$$
+\widehat{\mathrm{Var}}(\theta|y) = \frac{1}{T-k} \sum_{t=k+1}^{T} \bigl(\theta^{*(t)} - \hat{E}(\theta|y)\bigr)^2.
+$$
+
+需要注意，MCMC 样本**不是独立的** -- 它们通过 Markov 链的结构强相关。这并不会使推断失效，但意味着 $T$ 次模拟携带的信息量少于 $T$ 次独立复制。
+
+除了计算后验矩，我们还可以直接观察后验密度（一维或二维），这能很好地展示不确定性的程度。对于超过二维的情况，密度图则不太实用。
+
+{{< pagebreak >}}
+
+# 近似贝叶斯计算 (ABC) {#sec-abc}
+
+> **Approximate Bayes Computation (ABC)**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- ABC 的适用场景：似然函数**不可得**或难以计算
+- ABC 的**基本算法**和其正确性的直觉证明
+- **距离度量**的引入和 $\epsilon$ 阈值的选择
+- **例 9.4**：零膨胀数据的 ABC 实现
+:::
+
+## ABC 的核心思想
+
+> **Kernidee von ABC**
+
+ABC（Approximate Bayes Computing）适用于似然函数难以计算或只知到某个常数的情况。给定数据 $\mathbf{y}$ 和似然 $L(\theta;\mathbf{y})$，后验为
+
+$$
+p(\theta|\mathbf{y}) \propto L(\theta;\mathbf{y}) \, p_\theta(\theta).
+$$
+
+在某些情况下，似然函数本身可能非常复杂、难以计算。ABC 的思路十分简洁：
+
+**步骤 1**：从先验分布 $p_\theta(\theta)$ 生成 $\theta^*$。
+
+**步骤 2**：从假定分布（即似然函数）$f_Y(\cdot;\theta^*)$ 生成 $Y^*$。
+
+**步骤 3**：如果 $Y^* = y$，接受 $\theta^*$；否则回到步骤 1。
+
+**步骤 4**：重复步骤 1-3 直到收集到足够数量的模拟值 $\theta^{*(1)}, \ldots, \theta^{*(N)}$。
+
+该算法的正确性容易看出：对于通过步骤 3 的模拟，记其采样概率为 $\tilde{p}_\theta$，则
+
+$$
+\theta^* \sim \tilde{p}_\theta(\theta^*) \propto p_\theta(\theta^*) \cdot f(y;\theta^*) \propto p_\theta(\theta^*|y).
+$$
+
+然而这个算法本身不太可行，因为步骤 3 中的精确相等条件几乎不可能满足。因此我们用**邻近性**代替精确相等：
+
+**步骤 3'**：如果 $d(Y^*, y) \le \epsilon$，则接受 $\theta^*$；否则回到步骤 1。
+
+其中 $d(\cdot, \cdot)$ 是某种距离度量，$\epsilon$ 需要适当选择。
+
+::: {.callout-tip icon="false"}
+## 盲人画像的比喻 | Die Blinden-Portrat-Metapher
+
+ABC 就像让一位画家在看不到模特（不知道似然函数）的情况下画肖像。画家只能做一件事：随机画一幅画（从先验采样参数，然后模拟数据），然后让旁人对比画作和真人的相似度（计算距离）。如果足够相似，这幅画被保留；否则扔掉重画。积累了足够多"合格"的画作后，它们的共性就揭示了模特的真实模样（后验分布）。
+
+*ABC ist wie Portratmalen ohne den Blick aufs Modell: Man zeichnet zufallig, vergleicht das Ergebnis mit dem Original, und behalt nur ahnliche Bilder.*
+:::
+
+## 例 9.4：零膨胀数据的 ABC
+
+> **Beispiel 9.4: ABC fur nullinflationierte Daten**
+
+继续使用例 9.3 中的零膨胀计数数据，我们定义观测数据 $\mathbf{y}$ 与模拟数据 $Y^*$ 之间的距离为
+
+$$
+d(Y^*, y) = \sum_{k=0}^{10} (x_k^* - x_k)^2
+$$
+
+其中
+
+$$
+x_k = \frac{1}{n} \sum_{i=1}^{n} \mathbf{1}\{y_i = k\}, \qquad x_k^* = \frac{1}{n} \sum_{i=1}^{n} \mathbf{1}\{Y_i^* = k\}.
+$$
+
+即比较观测和模拟数据从 0 到 10 的相对频率。
+
+```{r}
+#| label: fig-abc
+#| fig-cap: "近似贝叶斯计算（仿教材 Fig. 9.3）：点越大表示距离越小 | ABC: Grossere Punkte = kleinerer Abstand"
+#| fig-height: 6
+
+set.seed(42)
+
+# 使用之前生成的 y_zip 数据
+# 计算观测数据的频率
+obs_freq <- tabulate(y_zip + 1, nbins = 11) / n_zip  # 0到10
+
+N_abc <- 50000
+epsilon_abc <- 0.05
+
+pi_abc <- numeric(0)
+lambda_abc <- numeric(0)
+dist_abc <- numeric(0)
+
+for (s in 1:N_abc) {
+  # 从先验采样
+  eta_s <- rnorm(1, 0, 2)
+  pi_s <- exp(eta_s) / (1 + exp(eta_s))
+  lambda_s <- rexp(1, rate = omega_hyp)
+  
+  # 模拟数据
+  zi_s <- rbinom(n_zip, 1, pi_s)
+  y_s <- ifelse(zi_s == 1, 0, rpois(n_zip, lambda_s))
+  
+  # 计算距离
+  sim_freq <- tabulate(y_s + 1, nbins = 11) / n_zip
+  d_s <- sum((sim_freq - obs_freq)^2)
+  
+  if (d_s <= epsilon_abc) {
+    pi_abc <- c(pi_abc, pi_s)
+    lambda_abc <- c(lambda_abc, lambda_s)
+    dist_abc <- c(dist_abc, d_s)
+  }
+}
+
+cat(sprintf("ABC: %d / %d 模拟被接受 (接受率 %.2f%%)\n",
+            length(pi_abc), N_abc, length(pi_abc) / N_abc * 100))
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 点大小与距离成反比
+cex_vals <- 1 / (dist_abc + 0.001)
+cex_vals <- 0.3 + 3 * (cex_vals - min(cex_vals)) / (max(cex_vals) - min(cex_vals))
+
+plot(pi_abc, lambda_abc, pch = 16,
+     col = adjustcolor("#2563EB", 0.4),
+     cex = cex_vals,
+     xlab = expression(pi), ylab = expression(lambda),
+     main = expression(paste("ABC: 模拟参数 (", epsilon, " = 0.05)")),
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     xlim = c(0, 1), ylim = c(0, 12))
+grid(col = "#E2E8F0")
+
+# 加权均值（权重为距离的倒数）
+weights_abc <- 1 / (dist_abc + 1e-6)
+pi_wmean <- sum(pi_abc * weights_abc) / sum(weights_abc)
+lam_wmean <- sum(lambda_abc * weights_abc) / sum(weights_abc)
+
+abline(v = pi_wmean, col = "#EA580C", lwd = 2, lty = 2)
+abline(h = lam_wmean, col = "#EA580C", lwd = 2, lty = 2)
+abline(v = pi_true, col = "#DC2626", lwd = 2.5, lty = 1)
+abline(h = lambda_true_zip, col = "#DC2626", lwd = 2.5, lty = 1)
+
+legend("topright",
+       legend = c(sprintf("真实值: pi=%.1f, lambda=%d", pi_true, lambda_true_zip),
+                  sprintf("加权均值: pi=%.2f, lambda=%.2f", pi_wmean, lam_wmean)),
+       col = c("#DC2626", "#EA580C"),
+       lwd = c(2.5, 2), lty = c(1, 2),
+       bty = "n", cex = 0.85)
+```
+
+我们看到 ABC 模拟出的参数值围绕在真实值附近，点越大（距离越小）越集中。虚线表示加权算术均值（权重为距离的倒数），实线为真实值。两者之间有合理的一致性，说明 ABC 方法确实在做正确的事情。
+
+{{< pagebreak >}}
+
+# 变分贝叶斯推理 {#sec-variational-bayes}
+
+> **Variationelle Bayes-Inferenz**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **变分推断的动机**：用简单分布近似复杂后验
+- **Bernstein-von Mises 近似**作为最简单的变分近似
+- **Kullback-Leibler 散度**的反向使用
+- **证据下界 (ELBO)** 的推导与最大化
+- **梯度上升**迭代更新变分参数
+- **例 9.5**：零膨胀数据的变分近似实现
+:::
+
+## 从近似后验开始
+
+> **Approximation der Posterior-Verteilung**
+
+上一节关注的是似然不可得的情况（近似分布 $f(y;\theta)$）。现在我们关注另一个问题：后验分布 $p(\theta|y)$ 太复杂或数值上太昂贵，我们希望用一个更简单的分布来**近似**它。
+
+最简单的近似来自 Bernstein-von Mises 定理。对于大样本：
+
+$$
+\theta|y \;\overset{a}{\sim}\; N(\hat{\theta}_p, \; I_p^{-1}(\hat{\theta}_p)),
+$$
+
+其中 $\hat{\theta}_p$ 是惩罚对数似然的最大化点
+
+$$
+l_p(\theta) = \sum_{i=1}^{n} \log f(y_i;\theta) + \log p(\theta),
+$$
+
+惩罚 Fisher 信息为
+
+$$
+I_p(\theta) = I(\theta) + \frac{\partial^2 p(\theta)}{\partial\theta\,\partial\theta^\top}.
+$$
+
+除了正态近似之外，我们还可以更一般地用某个"简单"的分布 $q(\theta;\gamma)$ 来近似后验。例如，可以限制 $q(\theta;\gamma)$ 为正态分布，或假设独立性：对于 $\theta = (\theta_1, \ldots, \theta_p)$，假定 $q(\theta) = q_1(\theta_1)q_2(\theta_2)\cdots q_p(\theta_p)$。
+
+一般地，设
+
+$$
+q(\theta;\gamma) \in \mathcal{Q} = \{q(\cdot;\gamma); \gamma \in \Gamma\}
+$$
+
+是某类易于处理的分布，我们要找到 $q(\cdot;\hat{\gamma})$ 使其与真正的后验分布 $p(\theta|y)$ 之间的距离最小。
+
+::: {.callout-tip icon="false"}
+## 剪影与照片的比喻 | Die Silhouette-und-Foto-Metapher
+
+真实的后验分布 $p(\theta|y)$ 就像一张高分辨率的照片 -- 细节丰富但处理起来非常昂贵。变分近似就像把这张照片简化为一个剪影或素描：它捕捉了照片的主要轮廓（分布的位置和宽度），虽然丢失了一些细节（复杂的多模态结构、尾部行为），但处理起来快得多。我们的目标是找到"最像原照片的素描"。
+
+*Die wahre Posterior ist ein hochauflostes Foto. Die Variationsapproximation ist eine Skizze, die die Hauptkonturen einfangt.*
+:::
+
+## KL 散度与证据下界
+
+> **KL-Divergenz und Evidence Lower Bound (ELBO)**
+
+距离度量使用 **Kullback-Leibler 散度**（注意密度的顺序与第三章相反）：
+
+$$
+q(\cdot;\hat{\gamma}) = \arg\min_{q \in \mathcal{Q}} \mathrm{KL}\bigl(q(\cdot;\gamma), p(\cdot|y)\bigr)
+$$
+
+其中
+
+$$
+\mathrm{KL}\bigl(q(\cdot;\gamma), p(\cdot|y)\bigr) = \int \log\frac{q(\theta;\gamma)}{p(\theta|y)} \; q(\theta;\gamma) \, d\theta.
+$$
+
+注意积分是关于密度 $q(\theta;\gamma)$ 的。利用 $p(\theta|y) = f(y;\theta)p(\theta)/f(y)$，可以改写为
+
+$$
+\mathrm{KL}\bigl(q(\cdot;\gamma), p(\cdot|y)\bigr) = -\underbrace{\int \log\frac{f(y;\theta)p(\theta)}{q(\theta;\gamma)} \; q(\theta;\gamma) \, d\theta}_{\text{LB}(q(\cdot;\gamma))} + \underbrace{\log f(y)}_{\text{常数}}.
+$$
+
+第二项 $\log f(y)$ 是数据的边际分布的对数，通常因需要不可行的积分而未知。然而第一项（称为**下界** Lower Bound 或 **ELBO**）只包含解析可得的成分：似然 $f(y;\theta)$、先验 $p(\theta)$ 和选择为"简单"的 $q(\cdot;\gamma)$。
+
+变分贝叶斯的核心洞察来自上式：**最小化 KL 散度等价于最大化下界**
+
+$$
+\mathrm{LB}\bigl(q(\cdot;\gamma)\bigr) = \int \log\frac{f(y;\theta)p(\theta)}{q(\theta;\gamma)} \; q(\theta;\gamma) \, d\theta
+$$
+
+关于 $\gamma$ 求最大。
+
+## 梯度上升优化
+
+> **Gradientenaufstieg-Optimierung**
+
+对下界关于 $\gamma$ 求导：
+
+$$
+\frac{\partial\,\mathrm{LB}(q(\cdot;\gamma))}{\partial\gamma} = E_{q(\cdot;\gamma)}\!\left[\frac{\partial\log q(\theta;\gamma)}{\partial\gamma}\Bigl(\log f(y;\theta)p(\theta) - \log q(\theta;\gamma)\Bigr)\right]
+$$
+
+期望关于密度 $q(\cdot;\gamma)$ 取。可以用模拟值替代期望：对于给定超参数 $\gamma^{(t)}$，抽取
+
+$$
+\theta^{*(b)} \sim q(\cdot;\gamma^{(t)}), \quad b = 1, \ldots, B
+$$
+
+计算梯度估计
+
+$$
+\widehat{\frac{\partial\,\mathrm{LB}}{\partial\gamma}} = \frac{1}{B} \sum_{b=1}^{B} \frac{\partial\log q(\theta^{*(b)};\gamma^{(t)})}{\partial\gamma}\Bigl(\log f(y;\theta^{*(b)})p(\theta^{*(b)}) - \log q(\theta^{*(b)};\gamma^{(t)})\Bigr)
+$$
+
+然后通过梯度上升更新
+
+$$
+\gamma^{(t+1)} = \gamma^{(t)} + r^{(t)} \cdot \widehat{\frac{\partial\,\mathrm{LB}}{\partial\gamma}}
+$$
+
+其中 $r^{(t)}$ 是学习率。实际上，这种迭代可以使用随机梯度上升等标准优化方法，导致**随机变分推断**（Stochastic Variational Inference）。
+
+## 例 9.5：零膨胀数据的变分近似
+
+> **Beispiel 9.5: Variationsapproximation fur nullinflationierte Daten**
+
+我们用两个独立正态分布的乘积来近似后验：
+
+$$
+q(\eta, \delta; \gamma) = \underbrace{N(\eta; \mu_\eta, \sigma_\eta^2)}_{q_1(\eta;\mu_\eta,\sigma_\eta^2)} \cdot \underbrace{N(\delta; \mu_\delta, \sigma_\delta^2)}_{q_2(\delta;\mu_\delta,\sigma_\delta^2)}
+$$
+
+参数收集在 $\gamma = (\mu_\eta, \log(\sigma_\eta^2), \mu_\delta, \log(\sigma_\delta^2))$ 中。我们的目标是选择 $\gamma$ 使下界最大化。
+
+```{r}
+#| label: fig-variational
+#| fig-cap: "变分贝叶斯近似（仿教材 Fig. 9.4）：用两个独立正态近似后验 | Variationsapproximation der Posterior"
+#| fig-height: 6
+
+set.seed(42)
+
+# 变分贝叶斯参数优化
+# gamma = (mu_eta, log_sigma2_eta, mu_delta, log_sigma2_delta)
+gamma_vb <- c(0, 0, log(3), 0)  # 初始值
+B_vb <- 500
+learning_rate <- 0.001
+n_iter <- 3000
+
+# 对数联合密度（不含归一化常数）
+log_joint <- function(eta, delta, y_data, omega_val) {
+  pi_val <- exp(eta) / (1 + exp(eta))
+  lam_val <- exp(delta)
+  ll <- sum(log_dzip(y_data, lam_val, pi_val))
+  lp_eta <- log(pi_val * (1 - pi_val))
+  lp_delta <- log(lam_val) + log(omega_val) - lam_val * omega_val
+  return(ll + lp_eta + lp_delta)
+}
+
+elbo_trace <- numeric(n_iter)
+
+for (iter in 1:n_iter) {
+  mu_eta <- gamma_vb[1]
+  s2_eta <- exp(gamma_vb[2])
+  mu_delta <- gamma_vb[3]
+  s2_delta <- exp(gamma_vb[4])
+  
+  # 采样
+  eta_samples <- rnorm(B_vb, mu_eta, sqrt(s2_eta))
+  delta_samples <- rnorm(B_vb, mu_delta, sqrt(s2_delta))
+  
+  # 计算梯度
+  grad <- rep(0, 4)
+  elbo_val <- 0
+  
+  for (b in 1:B_vb) {
+    lj <- log_joint(eta_samples[b], delta_samples[b], y_zip, omega_hyp)
+    lq <- dnorm(eta_samples[b], mu_eta, sqrt(s2_eta), log = TRUE) +
+          dnorm(delta_samples[b], mu_delta, sqrt(s2_delta), log = TRUE)
+    
+    diff_val <- lj - lq
+    elbo_val <- elbo_val + diff_val
+    
+    # score 函数
+    score_mu_eta <- (eta_samples[b] - mu_eta) / s2_eta
+    score_logs2_eta <- s2_eta * (-1/(2*s2_eta) + (eta_samples[b]-mu_eta)^2/(2*s2_eta^2))
+    score_mu_delta <- (delta_samples[b] - mu_delta) / s2_delta
+    score_logs2_delta <- s2_delta * (-1/(2*s2_delta) + (delta_samples[b]-mu_delta)^2/(2*s2_delta^2))
+    
+    grad <- grad + c(score_mu_eta, score_logs2_eta, 
+                     score_mu_delta, score_logs2_delta) * diff_val
+  }
+  
+  grad <- grad / B_vb
+  elbo_trace[iter] <- elbo_val / B_vb
+  
+  # 只在最陡方向更新
+  gamma_vb <- gamma_vb + learning_rate * grad
+}
+
+# 最终参数
+mu_eta_final <- gamma_vb[1]
+s2_eta_final <- exp(gamma_vb[2])
+mu_delta_final <- gamma_vb[3]
+s2_delta_final <- exp(gamma_vb[4])
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 绘制 pi 的近似后验
+pi_grid <- seq(0.01, 0.99, length.out = 300)
+eta_grid_for_pi <- log(pi_grid / (1 - pi_grid))
+# 变换密度
+dens_vb_pi <- dnorm(eta_grid_for_pi, mu_eta_final, sqrt(s2_eta_final)) / 
+              (pi_grid * (1 - pi_grid))
+
+plot(pi_grid, dens_vb_pi, type = "l", col = "#9333EA", lwd = 3,
+     xlab = expression(pi), ylab = "密度 | Dichte",
+     main = expression(paste("变分近似: ", pi, " 的后验")),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(v = pi_true, col = "#DC2626", lwd = 2, lty = 2)
+
+# MCMC 参考密度
+lines(density(pi_post, from = 0.01, to = 0.99), col = "#2563EB", lwd = 2, lty = 3)
+legend("topright",
+       legend = c("变分近似 | VI", "MCMC 参考", "真实值"),
+       col = c("#9333EA", "#2563EB", "#DC2626"),
+       lwd = c(3, 2, 2), lty = c(1, 3, 2), bty = "n", cex = 0.8)
+
+# 绘制 lambda 的近似后验
+lam_grid <- seq(0.5, 12, length.out = 300)
+delta_grid_for_lam <- log(lam_grid)
+dens_vb_lam <- dnorm(delta_grid_for_lam, mu_delta_final, sqrt(s2_delta_final)) / lam_grid
+
+plot(lam_grid, dens_vb_lam, type = "l", col = "#9333EA", lwd = 3,
+     xlab = expression(lambda), ylab = "密度 | Dichte",
+     main = expression(paste("变分近似: ", lambda, " 的后验")),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(v = lambda_true_zip, col = "#DC2626", lwd = 2, lty = 2)
+
+lines(density(lambda_post, from = 0.5, to = 12), col = "#2563EB", lwd = 2, lty = 3)
+legend("topright",
+       legend = c("变分近似 | VI", "MCMC 参考", "真实值"),
+       col = c("#9333EA", "#2563EB", "#DC2626"),
+       lwd = c(3, 2, 2), lty = c(1, 3, 2), bty = "n", cex = 0.8)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: fig-elbo-trace
+#| fig-cap: "ELBO 收敛轨迹：下界随迭代逐渐增大 | ELBO-Konvergenz"
+#| fig-height: 4.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+# 平滑 ELBO
+elbo_smooth <- stats::filter(elbo_trace, rep(1/50, 50), sides = 1)
+plot(1:n_iter, elbo_smooth, type = "l", col = "#2563EB", lwd = 2,
+     xlab = "迭代步 | Iteration", ylab = "ELBO (平滑)",
+     main = "证据下界 (ELBO) 收敛轨迹 | ELBO-Konvergenz",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+```
+
+变分贝叶斯方法近年来越来越受关注，部分原因在于它对高维参数的可扩展性优于 MCMC。然而，一个问题依然存在：我们从 KL 散度公式可以看到，我们最大化的是下界（第一项），而第二项 $\log f(y)$ 仍然未知。换言之，我们没有一个度量来量化近似 $q(\cdot;\gamma)$ 与真实后验分布之间的距离有多近。
+
+{{< pagebreak >}}
+
+# 贝叶斯与正则化 {#sec-regularization}
+
+> **Bayes und Regularisierung**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 高维参数 ($p \ge n$) 下经典似然方法的**失败**
+- 贝叶斯先验作为**稳定化手段**的直觉
+- **惩罚似然**与贝叶斯后验模式的联系
+- **例 9.6**：$n=1$ 正态数据的似然 vs 后验对比
+:::
+
+## 高维困境
+
+> **Das Hochdimensionale Dilemma**
+
+当参数维度 $p$ 相对于样本量 $n$ 很大时（$p \approx n$ 甚至 $p > n$），经典似然方法可能变得不稳定甚至失效。贝叶斯原理此时可以提供数值稳定的替代方案。
+
+::: {.callout-tip icon="false"}
+## 焦距不足的比喻 | Die Unscharf-Metapher
+
+想象用一台相机拍摄一个场景。经典似然就像这台相机的对焦系统：当"光线充足"（数据充足，$n \gg p$）时，图像清晰锐利。但当"光线不足"（数据太少，$p \ge n$）时，自动对焦系统无法锁定，图像变得完全模糊。贝叶斯先验就像手动辅助对焦 -- 你预先给系统一个大致的焦距范围（先验信息），即使光线不足，也能得到一张虽不完美但可辨认的照片。先验越"弱"（范围越大），图像越接近纯数据驱动；先验越"强"，越依赖你的预设。
+
+*Die Prior-Verteilung ist wie eine manuelle Fokushilfe bei schlechten Lichtverhaltnissen -- sie stabilisiert das Bild, wenn die Daten allein nicht ausreichen.*
+:::
+
+## 例 9.6：极小样本的正态模型
+
+> **Beispiel 9.6: Normalmodell mit minimalem Stichprobenumfang**
+
+考虑 $Y_i \sim N(\mu, \sigma^2)$，取 $n = 1$。需要估计两个参数 $\mu$ 和 $\sigma^2$，但只有一个观测。对数似然为
+
+$$
+l(\mu, \sigma^2) = -\frac{1}{2}\log(\sigma^2) - \frac{1}{2}\frac{(y_1 - \mu)^2}{\sigma^2}.
+$$
+
+对于 $n=1$，似然的最大值在 $\hat{\mu} = y_1$、$\hat{\sigma}^2 = 0$ 处取得 -- 一个退化的、方差为零的分布，完全无用。
+
+```{r}
+#| label: fig-regularization
+#| fig-cap: "贝叶斯先验稳定化似然函数（仿教材 Fig. 9.5）| Stabilisierung der Likelihood durch Prior"
+#| fig-height: 9
+
+set.seed(42)
+y1 <- 1.5
+y2 <- 0.8
+
+# 似然函数
+lik_fn <- function(mu, s2, y_obs) {
+  n_obs <- length(y_obs)
+  val <- (s2)^(-n_obs/2) * exp(-sum((y_obs - mu)^2) / (2 * s2))
+  return(val)
+}
+
+# 先验
+sigma_mu_prior <- 10
+prior_mu <- function(mu) dnorm(mu, 0, sigma_mu_prior)
+# 逆 Gamma 先验 for sigma^2
+prior_s2 <- function(s2, a = 2, b = 1) {
+  if (s2 <= 0) return(0)
+  return((b^a / gamma(a)) * s2^(-a-1) * exp(-b/s2))
+}
+
+mu_grid <- seq(-4, 4, length.out = 100)
+s2_grid <- seq(0.05, 3.5, length.out = 100)
+
+par(mfrow = c(3, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# --- n=1 似然 ---
+lik_mat1 <- outer(mu_grid, s2_grid, function(m, s) {
+  sapply(seq_along(m), function(i) lik_fn(m[i], s[i], y1))
+})
+contour(mu_grid, s2_grid, lik_mat1, nlevels = 15,
+        col = "#2563EB", lwd = 1.5,
+        xlab = expression(mu), ylab = expression(sigma^2),
+        main = expression(paste("似然 n=1 | Likelihood")),
+        cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+text(y1, 0.2, expression(paste(hat(sigma)^2 %->% 0, " !")),
+     col = "#DC2626", font = 2, cex = 0.9)
+
+# --- n=2 似然 ---
+lik_mat2 <- outer(mu_grid, s2_grid, function(m, s) {
+  sapply(seq_along(m), function(i) lik_fn(m[i], s[i], c(y1, y2)))
+})
+contour(mu_grid, s2_grid, lik_mat2, nlevels = 15,
+        col = "#2563EB", lwd = 1.5,
+        xlab = expression(mu), ylab = expression(sigma^2),
+        main = expression(paste("似然 n=2 | Likelihood")),
+        cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# --- 先验 ---
+plot(mu_grid, prior_mu(mu_grid), type = "l", col = "#EA580C", lwd = 2.5,
+     xlab = expression(mu), ylab = "先验密度 | Prior-Dichte",
+     main = expression(paste("先验 ", mu, " ~ N(0, 100)")),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+s2_prior_grid <- seq(0.05, 4, length.out = 200)
+plot(s2_prior_grid, sapply(s2_prior_grid, prior_s2), type = "l", 
+     col = "#EA580C", lwd = 2.5,
+     xlab = expression(sigma^2), ylab = "先验密度 | Prior-Dichte",
+     main = expression(paste("先验 ", sigma^2, " ~ InvGamma(2,1)")),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# --- n=1 后验 ---
+post_mat1 <- outer(mu_grid, s2_grid, function(m, s) {
+  sapply(seq_along(m), function(i) {
+    lik_fn(m[i], s[i], y1) * prior_mu(m[i]) * prior_s2(s[i])
+  })
+})
+contour(mu_grid, s2_grid, post_mat1, nlevels = 15,
+        col = "#DC2626", lwd = 1.5,
+        xlab = expression(mu), ylab = expression(sigma^2),
+        main = expression(paste("后验 n=1 | Posterior")),
+        cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+text(-2, 3, "先验稳定化了函数!", col = "#DC2626", font = 2, cex = 0.8)
+
+# --- n=2 后验 ---
+post_mat2 <- outer(mu_grid, s2_grid, function(m, s) {
+  sapply(seq_along(m), function(i) {
+    lik_fn(m[i], s[i], c(y1, y2)) * prior_mu(m[i]) * prior_s2(s[i])
+  })
+})
+contour(mu_grid, s2_grid, post_mat2, nlevels = 15,
+        col = "#DC2626", lwd = 1.5,
+        xlab = expression(mu), ylab = expression(sigma^2),
+        main = expression(paste("后验 n=2 | Posterior")),
+        cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+par(mfrow = c(1, 1))
+```
+
+上图清晰地展示了先验的稳定化作用。纯似然（上行）在 $n=1$ 时沿着 $\sigma^2 \to 0$ 方向发散，没有有意义的最大值。加入即使是弱信息先验后（下行），后验函数变得稳定，最大值（对应后验模式）清晰可辨，即便在 $p > n$ 的情况下。$n=2$ 时（右列），纯似然与后验之间的差异减小。
+
+## 惩罚似然的形式化
+
+> **Formalisierung der penalisierten Likelihood**
+
+稳定化似然的思路可以形式化为**惩罚似然**：
+
+$$
+l_p(\theta, \omega) = l(\theta) + \log(p(\theta;\omega))
+$$
+
+其最大化点（对应后验模式）满足
+
+$$
+0 = \frac{\partial l_p(\theta, \omega)}{\partial\theta} = \frac{\partial l(\theta)}{\partial\theta} + \frac{\partial \log(p(\theta;\omega))}{\partial\theta}.
+$$
+
+这里第二项起到"惩罚"作用，防止参数取极端值。超参数 $\omega$ 的选择原则上应使先验具有弱信息性，有时也可以通过数据估计（但那就回到了经验贝叶斯的思路）。
+
+{{< pagebreak >}}
+
+# 方法比较与总结 {#sec-comparison}
+
+> **Methodenvergleich und Zusammenfassung**
+
+```{r}
+#| label: fig-method-comparison
+#| fig-cap: "四种贝叶斯推断方法的比较 | Vergleich der vier Bayes-Inferenzmethoden"
+#| fig-height: 5
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("贝叶斯推断方法总览 | Ubersicht der Bayes-Methoden")),
+      cex.main = 1.3, col.main = "#1E293B")
+
+methods <- c("共轭先验", "MCMC", "ABC", "变分贝叶斯")
+conditions <- c("先验与后验同族\n解析可得",
+                "后验已知到常数\n似然可计算",
+                "似然不可得\n但可模拟数据",
+                "后验太复杂\n需要简单近似")
+pros <- c("精确, 无需采样", "精确(渐近), 通用", "无需似然", "快速, 可扩展")
+cons <- c("仅限少数分布族", "收敛慢, 诊断难", "效率低, eps选择", "近似误差未知")
+
+cx_m <- c(2, 6, 10, 14)
+fills_m <- c("#DBEAFE", "#E0E7FF", "#D1FAE5", "#FEF9C3")
+borders_m <- c("#2563EB", "#6366F1", "#16A34A", "#CA8A04")
+
+for (i in 1:4) {
+  rect(cx_m[i]-1.8, 1.5, cx_m[i]+1.8, 5.2, 
+       col = fills_m[i], border = borders_m[i], lwd = 2)
+  text(cx_m[i], 4.8, methods[i], font = 2, cex = 0.7, col = "#1E293B")
+  text(cx_m[i], 4.0, conditions[i], cex = 0.48, col = "#64748B")
+  rect(cx_m[i]-1.6, 2.2, cx_m[i]+1.6, 3.2, col = "white", border = "#CBD5E1")
+  text(cx_m[i], 2.9, paste0("+  ", pros[i]), cex = 0.42, col = "#16A34A", font = 2)
+  text(cx_m[i], 2.5, paste0("-  ", cons[i]), cex = 0.42, col = "#DC2626")
+  text(cx_m[i], 1.8, paste0("\u00a79.", c(2,4,5,6)[i]), 
+       cex = 0.4, col = borders_m[i])
+}
+```
+
+## 公式速查表
+
+| 公式 | 名称 | 参考 |
+|:-----|:-----|:----:|
+| $p(\theta \mid y) \propto L(\theta) \cdot p(\theta)$ | 贝叶斯公式 | 9.3 |
+| $\pi \mid y \sim \mathrm{Beta}(\alpha+y, \beta+n-y)$ | 二项-Beta 共轭 | 9.4 |
+| $\lambda \mid y \sim \mathrm{Gamma}(\alpha+\sum y_i, \beta+n)$ | Poisson-Gamma 共轭 | 9.1 |
+| $\mu \mid y \sim N\!\left(\frac{n/\sigma^2 \cdot \bar{y} + \delta/\tau^2}{n/\sigma^2 + 1/\tau^2}, \frac{1}{n/\sigma^2 + 1/\tau^2}\right)$ | 正态-正态共轭 | 9.2 |
+| $\theta - \hat{\theta} \overset{a}{\sim} N(0, I^{-1}(\hat{\theta}))$ | Bernstein-von Mises | 9.1 |
+| $\alpha(\theta^*, \theta^{(t)}) = \min\!\left(1, \frac{L(\theta^*)p(\theta^*)}{L(\theta^{(t)})p(\theta^{(t)})} \cdot \frac{g(\theta^{(t)}|\theta^*)}{g(\theta^*|\theta^{(t)})}\right)$ | M-H 接受概率 | 9.4 |
+| $\mathrm{LB}(q) = \int \log\frac{f(y;\theta)p(\theta)}{q(\theta;\gamma)} q(\theta;\gamma)d\theta$ | 证据下界 (ELBO) | 9.24 |
+| $l_p(\theta,\omega) = l(\theta) + \log p(\theta;\omega)$ | 惩罚似然 | 9.27 |
+
+## 核心洞察
+
+| 编号 | 洞察 | 关键词 |
+|:----:|:------|:------|
+| 1 | 贝叶斯统计用分布描述参数不确定性，先验 + 数据 = 后验 | 贝叶斯原理 |
+| 2 | 共轭先验使后验与先验同族，无需数值积分 | 共轭先验 |
+| 3 | Bernstein-von Mises 定理保证大样本下贝叶斯与 MLE 等价 | 渐近理论 |
+| 4 | MCMC 从仅知到常数的后验中采样，是贝叶斯推断的核心计算工具 | MCMC |
+| 5 | ABC 在似然不可得时仍可进行贝叶斯推断，代价是计算效率 | ABC |
+| 6 | 变分贝叶斯用简单分布近似后验，最大化 ELBO 等价于最小化 KL 散度 | 变分推断 |
+| 7 | 贝叶斯先验在高维设定中起正则化作用，对应惩罚似然 | 正则化 |
+
+{{< pagebreak >}}
+
+# 练习题 {#sec-exercises}
+
+> **Ubungsaufgaben**
+
+## 练习 1：Toast-O-Matic 9000 市场调查
+
+> **Ubung 1: Marktforschung fur den Toast-O-Matic 9000**
+
+一家大型家电公司计划进行市场调研，了解人们对革命性烤面包机 Toast-O-Matic 9000 的兴趣。在预规划阶段，四个内部部门已各自给出了对该产品感兴趣人群比例的估计：
+
+财务部 ($D_1$): $P_{D_1} = 0.31$；产品开发部 ($D_2$): $P_{D_2} = 0.50$；研究部 ($D_3$): $P_{D_3} = 0.35$；市场部 ($D_4$): $P_{D_4} = 0.70$。
+
+各部门的以往准确率（先验概率）为：$P(D_1) = 0.4$, $P(D_2) = 0.1$, $P(D_3) = 0.3$, $P(D_4) = 0.2$。
+
+```{r}
+#| label: exercise-1
+#| code-fold: false
+
+cat("练习 1：Toast-O-Matic 9000 市场调查\n")
+cat("Ubung 1: Marktforschung Toast-O-Matic 9000\n\n")
+
+# 部门估计与先验
+p_interest <- c(0.31, 0.50, 0.35, 0.70)
+prior_dept <- c(0.40, 0.10, 0.30, 0.20)
+dept_names <- c("财务 D1", "产品开发 D2", "研究 D3", "市场 D4")
+
+cat("a) 初始调查 E1：20 人中 7 人感兴趣 (n=20, y=7)\n\n")
+
+n1 <- 20; y1_ex <- 7
+
+# 每个部门的似然：P(y|D_k) = dbinom(y, n, p_k)
+lik_e1 <- dbinom(y1_ex, n1, p_interest)
+cat("  各部门似然 P(y=7|D_k):\n")
+for (k in 1:4) {
+  cat(sprintf("    %s: P(y=7|p=%.2f) = %.6f\n", dept_names[k], p_interest[k], lik_e1[k]))
+}
+
+# 后验 P(D_k|y) ∝ P(y|D_k) * P(D_k)
+unnorm_post_e1 <- lik_e1 * prior_dept
+post_e1 <- unnorm_post_e1 / sum(unnorm_post_e1)
+
+cat("\n  后验概率 P(D_k|E1):\n")
+for (k in 1:4) {
+  cat(sprintf("    %s: P(D_%d|E1) = %.4f\n", dept_names[k], k, post_e1[k]))
+}
+cat(sprintf("\n  -> E1 后数据最支持：%s (后验概率 %.4f)\n\n",
+            dept_names[which.max(post_e1)], max(post_e1)))
+
+cat("b) 最终调查 E2：200 人中 71 人感兴趣 (n=200, y=71)\n\n")
+
+n2 <- 200; y2_ex <- 71
+lik_e2 <- dbinom(y2_ex, n2, p_interest)
+cat("  各部门似然 P(y=71|D_k):\n")
+for (k in 1:4) {
+  cat(sprintf("    %s: P(y=71|p=%.2f) = %.10f\n", dept_names[k], p_interest[k], lik_e2[k]))
+}
+
+# 以 E1 的后验作为 E2 的先验
+unnorm_post_e2 <- lik_e2 * post_e1
+post_e2 <- unnorm_post_e2 / sum(unnorm_post_e2)
+
+cat("\n  后验概率 P(D_k|E1,E2):\n")
+for (k in 1:4) {
+  cat(sprintf("    %s: P(D_%d|E1,E2) = %.4f\n", dept_names[k], k, post_e2[k]))
+}
+cat(sprintf("\n  -> E2 后数据最支持：%s (后验概率 %.4f)\n",
+            dept_names[which.max(post_e2)], max(post_e2)))
+cat("  最佳部门是否改变？\n")
+if (which.max(post_e1) == which.max(post_e2)) {
+  cat("  -> 没有改变。\n")
+} else {
+  cat(sprintf("  -> 改变了！从 %s 变为 %s。\n",
+              dept_names[which.max(post_e1)], dept_names[which.max(post_e2)]))
+}
+```
+
+## 练习 2：几何分布的共轭先验
+
+> **Ubung 2: Konjugierter Prior fur die geometrische Verteilung**
+
+设 $X_1, \ldots, X_n$ 是参数为 $\pi$ 的几何分布的 i.i.d. 样本，即 $X_i \sim \mathrm{Geom}(\pi)$。
+
+**a)** 假设 $\pi$ 的先验为 Beta 分布，即 $X_i | \pi \sim \mathrm{Geom}(\pi)$, $\pi \sim \mathrm{Beta}(\alpha, \beta)$。证明 Beta 分布是几何似然的共轭先验。
+
+提示：Beta 分布 $\mathrm{Beta}(\alpha, \beta)$ 的密度为 $f(x;\alpha,\beta) = \frac{1}{c} x^{\alpha-1}(1-x)^{\beta-1}$，期望为 $E(X) = \frac{\alpha}{\alpha+\beta}$。
+
+**b)** 计算 $\pi$ 的后验均值。
+
+```{r}
+#| label: exercise-2
+#| code-fold: false
+
+cat("练习 2：几何分布的共轭先验\n")
+cat("Ubung 2: Konjugierter Prior fur die geometrische Verteilung\n\n")
+
+cat("a) 推导过程:\n\n")
+cat("  几何分布 PMF: P(X=k|pi) = pi * (1-pi)^{k-1}, k = 1,2,...\n\n")
+cat("  似然函数:\n")
+cat("    L(pi) = prod_{i=1}^n pi * (1-pi)^{x_i-1}\n")
+cat("          = pi^n * (1-pi)^{sum(x_i) - n}\n\n")
+cat("  先验: p(pi) ∝ pi^{alpha-1} * (1-pi)^{beta-1}\n\n")
+cat("  后验:\n")
+cat("    p(pi|x) ∝ L(pi) * p(pi)\n")
+cat("             = pi^n * (1-pi)^{sum(x_i)-n} * pi^{alpha-1} * (1-pi)^{beta-1}\n")
+cat("             = pi^{n+alpha-1} * (1-pi)^{sum(x_i)-n+beta-1}\n\n")
+cat("  这是 Beta(n+alpha, sum(x_i)-n+beta) 的核!\n")
+cat("  因此 pi|x ~ Beta(alpha + n, beta + sum(x_i) - n)\n")
+cat("  -> Beta 分布确实是几何似然的共轭先验。  QED\n\n")
+
+cat("b) 后验均值:\n\n")
+cat("  E(pi|x) = (alpha + n) / (alpha + n + beta + sum(x_i) - n)\n")
+cat("          = (alpha + n) / (alpha + beta + sum(x_i))\n\n")
+
+# 数值验证
+set.seed(42)
+alpha_ex <- 2; beta_ex <- 5
+pi_ex <- 0.3
+n_ex <- 30
+x_ex <- rgeom(n_ex, pi_ex) + 1  # R 的 rgeom 从0开始
+
+alpha_post_ex <- alpha_ex + n_ex
+beta_post_ex <- beta_ex + sum(x_ex) - n_ex
+post_mean_ex <- alpha_post_ex / (alpha_post_ex + beta_post_ex)
+
+cat(sprintf("  数值验证 (pi_true=%.1f, n=%d, alpha=%d, beta=%d):\n",
+            pi_ex, n_ex, alpha_ex, beta_ex))
+cat(sprintf("    sum(x_i) = %d\n", sum(x_ex)))
+cat(sprintf("    后验: Beta(%d, %d)\n", alpha_post_ex, beta_post_ex))
+cat(sprintf("    后验均值: %.4f  (真实值: %.1f, MLE: %.4f)\n",
+            post_mean_ex, pi_ex, n_ex / sum(x_ex)))
+```
+
+## 练习 3：Metropolis-Hastings 离散示例
+
+> **Ubung 3: Diskretes Metropolis-Hastings-Beispiel**
+
+考虑离散随机变量 $Y$ 有三个状态 (H), (R), (W)，概率为
+
+$$
+\pi_H = P(H) = 0.3, \quad \pi_R = P(R) = 0.1, \quad \pi_W = P(W) = 0.6.
+$$
+
+使用 Metropolis(-Hastings) 算法构造以 $\pi = (\pi_H, \pi_R, \pi_W)$ 为平稳分布的 Markov 链。假设对称提议密度，提议矩阵为
+
+$$
+Q = \begin{pmatrix} 1-2q & q & q \\ q & 1-2q & q \\ q & q & 1-2q \end{pmatrix}, \quad q \in (0, 0.5].
+$$
+
+```{r}
+#| label: exercise-3
+#| code-fold: false
+
+cat("练习 3：离散 Metropolis-Hastings 算法\n")
+cat("Ubung 3: Diskretes Metropolis-Hastings\n\n")
+
+pi_target <- c(H = 0.3, R = 0.1, W = 0.6)
+states <- c("H", "R", "W")
+
+cat("a) 接受矩阵 A:\n\n")
+cat("  alpha_ij = min(1, pi_j / pi_i) (因为提议密度对称, q_ij = q_ji)\n\n")
+
+A <- matrix(0, 3, 3)
+for (i in 1:3) {
+  for (j in 1:3) {
+    A[i, j] <- min(1, pi_target[j] / pi_target[i])
+  }
+}
+rownames(A) <- colnames(A) <- states
+cat("  A =\n")
+print(round(A, 4))
+
+cat("\n  具体计算:\n")
+cat(sprintf("    alpha(H,R) = min(1, pi_R/pi_H) = min(1, 0.1/0.3) = %.4f\n", A[1,2]))
+cat(sprintf("    alpha(H,W) = min(1, pi_W/pi_H) = min(1, 0.6/0.3) = %.4f\n", A[1,3]))
+cat(sprintf("    alpha(R,H) = min(1, pi_H/pi_R) = min(1, 0.3/0.1) = %.4f\n", A[2,1]))
+cat(sprintf("    alpha(R,W) = min(1, pi_W/pi_R) = min(1, 0.6/0.1) = %.4f\n", A[2,3]))
+cat(sprintf("    alpha(W,H) = min(1, pi_H/pi_W) = min(1, 0.3/0.6) = %.4f\n", A[3,1]))
+cat(sprintf("    alpha(W,R) = min(1, pi_W/pi_R) = min(1, 0.1/0.6) = %.4f\n\n", A[3,2]))
+
+cat("b) 转移矩阵 P (以 q=0.5 为例):\n\n")
+q_val <- 0.5
+
+cat("  p_ij = q * alpha_ij  (i != j)\n")
+cat("  p_ii = 1 - sum_{k!=i} q * alpha_ik\n\n")
+
+P <- matrix(0, 3, 3)
+for (i in 1:3) {
+  off_diag_sum <- 0
+  for (j in 1:3) {
+    if (i != j) {
+      P[i, j] <- q_val * A[i, j]
+      off_diag_sum <- off_diag_sum + P[i, j]
+    }
+  }
+  P[i, i] <- 1 - off_diag_sum
+}
+rownames(P) <- colnames(P) <- states
+cat("  P =\n")
+print(round(P, 4))
+
+cat("\nc) 验证 pi 是 P 的不变分布:\n\n")
+cat("  需验证: pi * P = pi\n")
+pi_times_P <- pi_target %*% P
+cat("  pi * P = (", paste(round(pi_times_P, 4), collapse = ", "), ")\n")
+cat("  pi     = (", paste(pi_target, collapse = ", "), ")\n")
+cat(sprintf("  最大偏差: %.10f -> 确认 pi 是不变分布。\n\n", 
+            max(abs(pi_times_P - pi_target))))
+
+# 验证 detailed balance: pi_i * p_ij = pi_j * p_ji
+cat("  详细平衡验证: pi_i * p_ij = pi_j * p_ji\n")
+for (i in 1:3) for (j in (1:3)[-i]) {
+  lhs <- pi_target[i] * P[i,j]
+  rhs <- pi_target[j] * P[j,i]
+  cat(sprintf("    pi_%s*p_%s%s = %.4f,  pi_%s*p_%s%s = %.4f  %s\n",
+              states[i], states[i], states[j], lhs,
+              states[j], states[j], states[i], rhs,
+              ifelse(abs(lhs - rhs) < 1e-10, "[OK]", "[FAIL]")))
+}
+```
+
+```{r}
+#| label: exercise-3d-pseudo
+#| code-fold: false
+
+cat("\nd) Metropolis-Hastings 伪代码:\n\n")
+cat("  输入: 目标分布 pi = (pi_H, pi_R, pi_W)\n")
+cat("        提议参数 q\n")
+cat("        迭代总步数 T\n\n")
+cat("  步骤:\n")
+cat("  1. 选择初始状态 Y*(0) (例如 H)\n")
+cat("  2. 对 t = 1, ..., T:\n")
+cat("     a. 从提议分布 Q 中生成候选状态 Y'\n")
+cat("        即: 以概率 q 提议 Y*(0) 以外的每个状态\n")
+cat("            以概率 1-2q 提议当前状态\n")
+cat("     b. 计算接受概率:\n")
+cat("        alpha = min(1, pi(Y') / pi(Y*(t-1)))\n")
+cat("        (对称提议, 提议比消去)\n")
+cat("     c. 生成 U ~ Uniform(0,1)\n")
+cat("     d. 若 U <= alpha:\n")
+cat("           Y*(t) = Y'    (接受)\n")
+cat("        否则:\n")
+cat("           Y*(t) = Y*(t-1) (拒绝, 留在原处)\n")
+cat("  3. 输出链 Y*(1), ..., Y*(T)\n\n")
+```
+
+```{r}
+#| label: fig-exercise-3-simulation
+#| fig-cap: "练习 3：Metropolis-Hastings 模拟验证 | Ubung 3: MH-Simulationsverifikation"
+#| fig-height: 5.5
+
+set.seed(42)
+T_mh <- 10000
+chain_mh <- integer(T_mh)
+chain_mh[1] <- 1  # 从 H 开始
+
+for (t in 2:T_mh) {
+  current <- chain_mh[t-1]
+  # 提议
+  u_prop <- runif(1)
+  if (u_prop < q_val) {
+    candidates <- (1:3)[-current]
+    proposed <- sample(candidates, 1)
+  } else {
+    proposed <- current
+  }
+  
+  # 接受/拒绝
+  alpha_mh <- min(1, pi_target[proposed] / pi_target[current])
+  if (runif(1) < alpha_mh) {
+    chain_mh[t] <- proposed
+  } else {
+    chain_mh[t] <- current
+  }
+}
+
+# 统计频率
+freq_mh <- table(factor(chain_mh, levels = 1:3)) / T_mh
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+barplot(rbind(pi_target, as.numeric(freq_mh)),
+        beside = TRUE, col = c("#2563EB", "#EA580C"),
+        names.arg = states,
+        xlab = "状态 | Zustand",
+        ylab = "概率 | Wahrscheinlichkeit",
+        main = sprintf("MH 模拟验证 (T=%d, q=%.1f) | MH-Verifikation", T_mh, q_val),
+        cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+        ylim = c(0, 0.7))
+grid(col = "#E2E8F0")
+legend("topright",
+       legend = c("目标分布 pi | Zielverteilung",
+                  "MH 模拟频率 | MH-Simulationsfrequenz"),
+       fill = c("#2563EB", "#EA580C"),
+       bty = "n", cex = 0.85)
+
+# 标注具体数字
+text(c(1.5, 4.5, 7.5), pi_target + 0.02,
+     sprintf("%.2f", pi_target), col = "#2563EB", font = 2, cex = 0.8)
+text(c(2.5, 5.5, 8.5), as.numeric(freq_mh) + 0.02,
+     sprintf("%.3f", as.numeric(freq_mh)), col = "#EA580C", font = 2, cex = 0.8)
+```
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 贝叶斯基础
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Bayes-Statistik | 贝叶斯统计 | Bayesian statistics |
+| die Prior-Verteilung | 先验分布 | prior distribution |
+| die Posterior-Verteilung | 后验分布 | posterior distribution |
+| die Bayes-Regel | 贝叶斯规则 | Bayes' rule |
+| die inverse Wahrscheinlichkeit | 逆概率 | inverse probability |
+| der Hyperparameter | 超参数 | hyperparameter |
+| der Hyperparameterraum | 超参数空间 | hyperparameter space |
+| das Kredibilitatsintervall | 可信区间 | credibility interval |
+| die Unsicherheit | 不确定性 | uncertainty |
+| die Wahrscheinlichkeitsmasse | 概率质量 | probability mass |
+
+## 共轭先验与渐近
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| der konjugierte Prior | 共轭先验 | conjugate prior |
+| die Beta-Verteilung | Beta 分布 | Beta distribution |
+| die Gamma-Verteilung | Gamma 分布 | Gamma distribution |
+| die Beta-Funktion | Beta 函数 | Beta function |
+| die Normalisierungskonstante | 归一化常数 | normalization constant |
+| die Proportionalitat | 正比关系 | proportionality |
+| der Satz von Bernstein-von Mises | Bernstein-von Mises 定理 | Bernstein-von Mises theorem |
+| die penalisierte Likelihood | 惩罚似然 | penalized likelihood |
+| der uneigentliche Prior | 非正常先验 | improper prior |
+| der flache Prior | 平坦先验 | flat prior |
+
+## MCMC 与计算方法
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Markov-Kette-Monte-Carlo-Methode | 马尔可夫链蒙特卡罗方法 | Markov Chain Monte Carlo |
+| der Metropolis-Hastings-Algorithmus | Metropolis-Hastings 算法 | Metropolis-Hastings algorithm |
+| das Gibbs-Sampling | Gibbs 采样 | Gibbs sampling |
+| die Vorschlagsverteilung | 提议分布 | proposal distribution |
+| die Akzeptanzwahrscheinlichkeit | 接受概率 | acceptance probability |
+| die Einschwingphase (Burn-in) | 预热期 (Burn-in) | burn-in phase |
+| die Mischung (Mixing) | 混合性 | mixing |
+| der Posterior-Mittelwert | 后验均值 | posterior mean |
+| die Posterior-Varianz | 后验方差 | posterior variance |
+| die Posterior-Mode | 后验模式 | posterior mode |
+
+## ABC 与变分推断
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die approximative Bayes-Berechnung | 近似贝叶斯计算 | approximate Bayes computation |
+| das Distanzmass | 距离度量 | distance measure |
+| die Schwelle (Epsilon) | 阈值 | threshold |
+| die variationelle Bayes-Inferenz | 变分贝叶斯推断 | variational Bayes inference |
+| die Kullback-Leibler-Divergenz | KL 散度 | Kullback-Leibler divergence |
+| die untere Schranke (ELBO) | 证据下界 | evidence lower bound |
+| die Lernrate | 学习率 | learning rate |
+| der stochastische Gradientenaufstieg | 随机梯度上升 | stochastic gradient ascent |
+| die Regularisierung | 正则化 | regularization |
+| die nullinflationierte Verteilung | 零膨胀分布 | zero-inflated distribution |
+:::

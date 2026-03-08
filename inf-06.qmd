@@ -1,0 +1,1445 @@
+---
+title: "第六章：回归分析"
+subtitle: "从一条直线到广义线性模型的完整旅程 | Von der Geraden zum verallgemeinerten linearen Modell"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+在前面的章节中，我们介绍了统计推断的一般概念，重点讨论的是观测数据 $y_1, \ldots, y_n$ 的情形，并且为了简化表述省略了输入变量。现在，我们将目光转向一个新场景：观测到一个结果变量 $Y$（可以是多维的），它依赖于某些输入变量 $x$（可以是一维或高维的）。在这个框架下，$Y$ 通常被称为"结果变量""目标变量"或"因变量"，因为它的分布取决于 $x$，后者被称为"输入变量""特征""自变量"或"协变量"。因此，我们观测到成对的值 $(y_i, x_i)$，目标是建模 $Y$ 给定 $X$ 的条件分布。这类分析在统计学中统称为回归分析。
+
+*In den vorherigen Kapiteln haben wir statistische Inferenz ohne Eingabevariablen behandelt. Nun modellieren wir die bedingte Verteilung von $Y$ gegeben $X$ -- dies nennt man Regression.*
+
+具体来说，我们将从最简单的模型出发，逐步构建完整的回归分析框架：
+
+1. **简单线性模型** -- 一个自变量、一条直线、最小二乘法
+2. **多元线性回归** -- 多个协变量、矩阵表示、系数解读
+3. **Logistic 回归** -- 二元响应变量、对数几率、S 形曲线
+4. **广义线性模型** -- 指数族、响应函数、Poisson 回归
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图 | Lernroadmap dieses Kapitels"
+#| fig-height: 4.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+steps_x <- c(2.5, 6.0, 9.5, 13.0)
+steps_y <- rep(4.2, 4)
+arrows(steps_x[-4] + 1.2, steps_y[-4], steps_x[-1] - 1.2, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("简单线性模型\nGalton / OLS", 
+               "多元线性回归\n矩阵表示 / 系数解读",
+               "Logistic 回归\n二元响应 / 对数几率",
+               "广义线性模型\n指数族 / 响应函数")
+labels_de <- c("Einfaches lineares\nModell", 
+               "Multiple lineare\nRegression",
+               "Logistische\nRegression",
+               "Verallgemeinerte\nlineare Modelle")
+colors <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#E0E7FF")
+borders <- c("#2563EB", "#D97706", "#DB2777", "#6366F1")
+
+for (i in 1:4) {
+  rect(steps_x[i] - 1.2, steps_y[i] - 1.0, steps_x[i] + 1.2, steps_y[i] + 1.0,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.3, labels_cn[i], cex = 0.55, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.6, labels_de[i], cex = 0.42, col = "#64748B", font = 3)
+  text(steps_x[i] - 0.9, steps_y[i] + 0.85, paste0("\u00a76.", i), 
+       cex = 0.5, col = borders[i], font = 2)
+}
+
+arrows(0.5, 1.2, 15.5, 1.2, col = "#DC2626", lwd = 2, length = 0.15)
+text(8, 1.6, "从一条直线到一般化框架，层层递进  >>>", cex = 0.85, col = "#DC2626")
+```
+
+**最终目标**：理解下面这条链路中每一个概念的含义 --
+
+$$
+\text{简单线性模型} \;\xrightarrow{\text{多协变量}}\; \text{多元线性回归} \;\xrightarrow{\text{二元响应}}\; \text{Logistic 回归} \;\xrightarrow{\text{一般化}}\; \text{GLM}
+$$
+
+现在看不懂？**完全没关系** -- 读完本章，这条链将变得水到渠成。
+
+{{< pagebreak >}}
+
+# 简单线性模型 {#sec-simple-linear}
+
+> **Einfaches lineares Modell**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- "回归"一词的**历史起源**：Galton 的身高遗传研究
+- 简单线性模型的**数学定义**：截距、斜率、误差项
+- 正态误差假设下的**对数似然函数**
+- **最大似然估计**与**最小二乘法**的等价性
+- **矩阵记法**的表达与 MLE 的矩阵公式
+- 估计量的**无偏性**与**最优性**（Gauss-Markov 性质）
+:::
+
+## 从 Galton 说起：回归的起源
+
+> **Historischer Ursprung: Sir Francis Galton**
+
+::: {.callout-tip icon="false"}
+## 向平均回归的比喻 | Die Regression-zur-Mitte-Metapher
+
+想象一场篮球联赛。某队第一场狂胜 40 分，你会预测他们第二场也赢 40 分吗？大概率不会 -- 你会预期成绩"回落"到接近平均水平。这就是"向平均回归"的核心思想。
+
+Galton 在研究父母与子女身高时发现了同样的现象：身材极高的父母，其子女虽然也倾向于偏高，但平均而言不如父母那么高。他将这种趋势称为"向平均回归"（regression towards the mean），并将描述这种趋势的直线称为"回归线"（regression line）。如今，"回归分析"一词已被广泛用于描述因变量与一个或多个自变量之间关系的统计建模过程。
+
+*Galton beobachtete: Kinder sehr grosser Eltern sind im Schnitt kleiner als ihre Eltern -- eine Regression zur Mitte. Die Trendlinie nannte er "Regressionslinie".*
+:::
+
+## 模型定义
+
+> **Modelldefinition**
+
+简单线性模型旨在量化响应变量 $Y$ 的均值如何依赖于**单个**自变量 $x$。如名称所暗示的，这种关系被假设为线性的：
+
+$$
+Y = \beta_0 + \beta_1 x + \epsilon
+$$
+
+其中 $\beta_0$ 是**截距**（Achsenabschnitt），$\beta_1$ 是回归线的**斜率**（Steigung），$\epsilon$ 称为**误差项**或**残差**（Fehlerterm / Residuum），是均值为 0 的随机成分。正因为此，$Y$ 的期望值被假定为 $x$ 的线性函数：
+
+$$
+E(Y \mid x) = \beta_0 + \beta_1 x
+$$
+
+换言之，我们做了两个基本假设：(a) $x$ 与 $Y$ 之间存在**线性关系**；(b) 这种关系只被残差 $\epsilon$ 干扰。这是线性回归模型的两个基本假设。
+
+::: {.callout-tip icon="false"}
+## 信号与噪声的比喻 | Die Signal-und-Rauschen-Metapher
+
+把线性模型想象成收音机收听电台。电台发出的信号是 $\beta_0 + \beta_1 x$（真实的线性关系），而你听到的声音 $Y$ 还叠加了背景噪声 $\epsilon$。我们的目标就是从带噪声的信号中还原出纯净的信号 -- 即估计 $\beta_0$ 和 $\beta_1$。
+
+*Das lineare Modell ist wie ein Radio: Das Signal ist $\beta_0 + \beta_1 x$, das Rauschen ist $\epsilon$. Wir wollen das Signal vom Rauschen trennen.*
+:::
+
+## 正态误差假设与似然函数
+
+> **Normalverteilte Fehler und Likelihood-Funktion**
+
+一个常见的设定是假设残差为独立同分布的正态随机变量：
+
+$$
+\epsilon_i \sim N(0, \sigma^2), \quad \text{i.i.d. fur } i = 1, \ldots, n
+$$
+
+其中 $\sigma^2$ 称为**误差方差**（Fehlervarianz）。在此假设下，给定 $x_i$，$Y_i$ 服从条件正态分布：
+
+$$
+Y_i \mid x_i \sim N(\mu_i, \sigma^2)
+$$
+
+其中
+
+$$
+\mu_i = E(Y_i \mid x_i) = \beta_0 + \beta_1 x_i, \qquad \text{Var}(Y_i \mid x_i) = \sigma^2
+$$
+
+方差 $\sigma^2$ 对所有 $i$ 恒定的性质称为**同方差性**（Homoskedastizitat），与之对应的是**异方差性**（Heteroskedastizitat），即方差也依赖于 $x$。我们在此不讨论后者。
+
+在正态性和独立性假设下，对数似然函数为：
+
+$$
+l(\beta_0, \beta_1, \sigma^2) = \sum_{i=1}^{n} \left[ -\frac{1}{2} \log \sigma^2 - \frac{1}{2} \frac{(y_i - \beta_0 - \beta_1 x_i)^2}{\sigma^2} \right]
+$$
+
+## 最大似然估计与最小二乘法
+
+> **Maximum-Likelihood-Schatzung und Methode der kleinsten Quadrate**
+
+对对数似然函数分别关于三个参数求导并令其为零，得到最大似然估计：
+
+$$
+\hat{\beta}_1 = \frac{\sum_{i=1}^{n}(x_i - \bar{x})(y_i - \bar{y})}{\sum_{i=1}^{n}(x_i - \bar{x})^2}, \qquad \hat{\beta}_0 = \bar{y} - \hat{\beta}_1 \bar{x}
+$$
+
+以及
+
+$$
+\hat{\sigma}^2 = \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{\beta}_0 - \hat{\beta}_1 x_i)^2
+$$
+
+这些估计也被称为"最小二乘估计"（Kleinste-Quadrate-Schatzer），因为它们同样可以通过最小化**残差平方和**得到。最小二乘法的历史可以追溯到 Gauss (1777--1855)，比最大似然法更早，其目标是找到使预测值与观测值之间平方偏差之和最小的参数：
+
+$$
+\min_{\beta_0, \beta_1} \sum_{i=1}^{n} (y_i - \beta_0 - \beta_1 x_i)^2
+$$
+
+两种方法的等价性从对数似然函数中清楚可见 -- 对数似然中恰好包含了这个平方和。
+
+::: {.callout-tip icon="false"}
+## 橡皮筋的比喻 | Die Gummiband-Metapher
+
+想象散点图中每个数据点都通过一根竖直的小橡皮筋连接到一条直线上。每根橡皮筋的张力正比于距离的平方（拉得越远，弹力增长越快）。最小二乘回归线就是让**所有橡皮筋的总张力最小**的那条直线 -- 它尽可能贴近所有数据点。
+
+*Stellen Sie sich vor, jeder Datenpunkt ist mit einem Gummiband an die Linie gebunden. Die OLS-Linie minimiert die Gesamtspannung aller Bander.*
+:::
+
+```{r}
+#| label: fig-ols-intuition
+#| fig-cap: "最小二乘法的几何直觉：回归线最小化竖直距离的平方和 | Geometrische Intuition der kleinsten Quadrate"
+#| fig-height: 5.5
+
+set.seed(42)
+n_demo <- 20
+x_demo <- runif(n_demo, 5, 25)
+y_demo <- 3 + 0.8 * x_demo + rnorm(n_demo, 0, 2.5)
+fit_demo <- lm(y_demo ~ x_demo)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(x_demo, y_demo, pch = 16, col = "#2563EB", cex = 1.5,
+     xlab = "x", ylab = "Y",
+     main = "最小二乘法：最小化竖直残差的平方和 | Methode der kleinsten Quadrate",
+     cex.lab = 1.1, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(fit_demo, col = "#DC2626", lwd = 3)
+
+y_hat_demo <- fitted(fit_demo)
+for (i in 1:n_demo) {
+  segments(x_demo[i], y_demo[i], x_demo[i], y_hat_demo[i],
+           col = adjustcolor("#EA580C", 0.6), lwd = 1.5, lty = 2)
+}
+
+legend("topleft",
+       legend = c("数据点 | Datenpunkte",
+                  expression(paste("回归线 ", hat(Y) == hat(beta)[0] + hat(beta)[1] * x)),
+                  "残差 | Residuen"),
+       pch = c(16, NA, NA), col = c("#2563EB", "#DC2626", "#EA580C"),
+       lwd = c(NA, 3, 1.5), lty = c(NA, 1, 2), bty = "n", cex = 0.85)
+```
+
+## 矩阵表示
+
+> **Matrixdarstellung**
+
+将回归模型写成矩阵形式可以极大地简化表达。定义：
+
+$$
+\boldsymbol{y} = \begin{pmatrix} y_1 \\ \vdots \\ y_n \end{pmatrix} \in \mathbb{R}^{n \times 1}, \quad
+\boldsymbol{X} = \begin{pmatrix} 1 & x_1 \\ \vdots & \vdots \\ 1 & x_n \end{pmatrix} \in \mathbb{R}^{n \times 2}, \quad
+\boldsymbol{\epsilon} = \begin{pmatrix} \epsilon_1 \\ \vdots \\ \epsilon_n \end{pmatrix} \in \mathbb{R}^{n \times 1}
+$$
+
+则回归模型可写为：
+
+$$
+\boldsymbol{Y} = \boldsymbol{X} \boldsymbol{\beta} + \boldsymbol{\epsilon}
+$$
+
+其中 $\boldsymbol{\beta} = (\beta_0, \beta_1)^\top$，$\boldsymbol{Y} = (Y_1, \ldots, Y_n)^\top$。矩阵 $\boldsymbol{X}$ 通常被称为**设计矩阵**（Designmatrix），默认包含一列全 1 的列，意味着模型包含截距项。
+
+利用矩阵记法，对数似然函数可写为：
+
+$$
+l(\boldsymbol{\beta}, \sigma^2) = -\frac{n}{2} \log \sigma^2 - \frac{1}{2\sigma^2} (\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta})^\top (\boldsymbol{y} - \boldsymbol{X}\boldsymbol{\beta})
+$$
+
+对 $\boldsymbol{\beta}$ 求导并令其为零，得到最大似然估计的矩阵形式：
+
+$$
+\hat{\boldsymbol{\beta}} = (\boldsymbol{X}^\top \boldsymbol{X})^{-1} \boldsymbol{X}^\top \boldsymbol{y}
+$$
+
+这与前面给出的分量形式完全一致，只是表达更加紧凑。
+
+## 估计量的性质
+
+> **Eigenschaften des Schatzers**
+
+容易验证 $\hat{\boldsymbol{\beta}}$ 是**无偏的**（erwartungstreu）：
+
+$$
+E(\hat{\boldsymbol{\beta}}) = (\boldsymbol{X}^\top \boldsymbol{X})^{-1} \boldsymbol{X}^\top E(\boldsymbol{Y} \mid \boldsymbol{X}) = (\boldsymbol{X}^\top \boldsymbol{X})^{-1} \boldsymbol{X}^\top \boldsymbol{X} \boldsymbol{\beta} = \boldsymbol{\beta}
+$$
+
+由于 $\text{Var}(\boldsymbol{\epsilon}) = \sigma^2 I_n$（$I_n$ 为 $n$ 维单位矩阵），$\hat{\boldsymbol{\beta}}$ 的方差矩阵为：
+
+$$
+\text{Var}(\hat{\boldsymbol{\beta}}) = \sigma^2 (\boldsymbol{X}^\top \boldsymbol{X})^{-1}
+$$
+
+可以证明 $\sigma^2 (\boldsymbol{X}^\top \boldsymbol{X})^{-1}$ 等于 Fisher 信息矩阵的逆，这意味着估计量的方差是**最小的**。此外，$\hat{\boldsymbol{\beta}}$ 是 $\boldsymbol{\beta}$ 的**最优线性无偏估计量**（Best Linear Unbiased Estimator, BLUE），这也被称为 **Gauss-Markov 性质**。
+
+::: {.callout-tip icon="false"}
+## BLUE 的比喻 | Die BLUE-Metapher
+
+在所有"公正的直线拟合方法"（无偏线性估计）中，最小二乘法找到的直线是**最稳定的** -- 如果你反复抽样，这条直线的波动最小。就好比射击比赛中，一位射手既没有系统偏差（无偏），又最精准（方差最小），他就是"最佳射手"。
+
+*Unter allen unverzerrten linearen Schatzern hat der OLS-Schatzer die kleinste Varianz -- er ist der "beste Schutze".*
+:::
+
+## 例 6.1：学生身高与体重
+
+> **Beispiel 6.1: Korpergrosse und Gewicht von Studierenden**
+
+```{r}
+#| label: fig-example-6-1
+#| fig-cap: "身高与体重的散点图及回归线（仿教材 Fig. 6.1）| Streudiagramm von Gewicht und Grosse mit Regressionslinie"
+#| fig-height: 5.5
+
+set.seed(2024)
+n_students <- 30
+height <- round(rnorm(n_students, mean = 172, sd = 9))
+weight <- round(0.89 * height - 80 + rnorm(n_students, 0, 6), 1)
+
+fit_hw <- lm(weight ~ height)
+b0_hw <- coef(fit_hw)[1]
+b1_hw <- coef(fit_hw)[2]
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(height, weight, pch = 16, col = "#2563EB", cex = 1.5,
+     xlab = "身高 (cm) | Korpergrosse (cm)",
+     ylab = "体重 (kg) | Gewicht (kg)",
+     main = "例 6.1：学生身高与体重 | Beispiel 6.1: Grosse und Gewicht",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(fit_hw, col = "#DC2626", lwd = 3)
+
+text(max(height) - 2, min(weight) + 5,
+     bquote(hat(beta)[1] == .(round(b1_hw, 2))),
+     col = "#DC2626", font = 2, cex = 1.0, pos = 2)
+text(max(height) - 2, min(weight) + 2,
+     bquote(hat(beta)[0] == .(round(b0_hw, 2))),
+     col = "#DC2626", font = 2, cex = 1.0, pos = 2)
+```
+
+```{r}
+#| label: example-6-1-code
+#| code-fold: false
+
+# 例 6.1：简单线性回归 -- 身高预测体重
+cat("例 6.1：简单线性回归 | Beispiel 6.1: Einfache lineare Regression\n\n")
+cat("  模型: weight_i = beta_0 + beta_1 * height_i + epsilon_i\n\n")
+
+summary_hw <- summary(fit_hw)
+cat("  估计结果 | Schatzwerte:\n")
+cat(sprintf("    beta_0 (截距)  = %7.2f  (p = %.4f)\n", b0_hw, summary_hw$coefficients[1, 4]))
+cat(sprintf("    beta_1 (身高)  = %7.2f  (p = %.4f)\n", b1_hw, summary_hw$coefficients[2, 4]))
+cat(sprintf("    sigma^2        = %7.2f\n", summary_hw$sigma^2))
+cat("\n  解读: 身高每增加 1cm, 体重平均增加约", round(b1_hw, 2), "kg。\n")
+```
+
+在这个例子中，30 名统计学学生的身高与体重信息被收集。我们以体重为响应变量，身高为协变量，估计简单线性回归模型 $\text{weight}_i = \beta_0 + \beta_1 \cdot \text{height}_i + \epsilon_i$。估计出的斜率约为 $\hat{\beta}_{\text{height}} \approx 0.89$，意味着身高每增加 1cm，体重平均增加约 0.89 kg。
+
+{{< pagebreak >}}
+
+# 多元线性回归 {#sec-multiple-linear}
+
+> **Multiple lineare Regression**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 从**单变量**到**多变量**回归的自然扩展
+- 多元线性回归模型的**矩阵形式**
+- 系数的解读：**控制其他变量后**的偏效应
+- **指示变量**、**变量变换**、**多项式**和**交互项**的使用
+- "线性"的真正含义：对参数线性，而非对协变量
+:::
+
+## 模型定义
+
+> **Modelldefinition**
+
+到目前为止，我们考虑的是响应变量 $Y$ 假定线性地依赖于**单个**协变量 $x$ 的情形。然而在现实世界中，事情往往复杂得多：$Y$ 的变异通常由多种因素解释，这些因素还可能诱导非线性依赖关系并彼此交互。幸运的是，将单变量回归扩展到多协变量情形非常直接。
+
+::: {.callout-tip icon="false"}
+## 交响乐团的比喻 | Die Orchester-Metapher
+
+简单线性回归就像一个独奏者在演奏 -- 只有一种乐器（一个协变量）影响着音乐（响应变量）。多元线性回归则像一个交响乐团 -- 多种乐器（多个协变量）同时演奏，每种乐器都对最终的音效做出独立的贡献。回归系数就是每种乐器的"音量旋钮"：它告诉你在其他乐器保持不变时，该乐器的音量变化对整体效果的影响。
+
+*Einfache Regression = Solist, Multiple Regression = Orchester. Jeder Koeffizient ist der Lautstarkeregler eines Instruments bei konstantem Rest.*
+:::
+
+多元线性回归模型定义为：
+
+$$
+Y_i = \beta_0 + \beta_1 x_{i1} + \beta_2 x_{i2} + \cdots + \beta_k x_{ik} + \epsilon_i
+$$
+
+其中 $x_i = (x_{i1}, x_{i2}, \ldots, x_{ik})$ 是 $k$ 个不同协变量的向量，假定它们影响响应变量 $Y$。分量 $\beta_1, \beta_2, \ldots, \beta_k$ 给出回归系数，$\epsilon_i$ 是随机误差项。与之前一样，各误差 $\epsilon_i$ 假定服从均值为 0、方差为 $\sigma^2$ 的正态分布。这意味着 $Y_i$ 的条件期望为模型的结构部分：
+
+$$
+E(Y_i \mid x_i) = \beta_0 + \beta_1 x_{i1} + \beta_2 x_{i2} + \cdots + \beta_k x_{ik}
+$$
+
+## 矩阵形式与 MLE
+
+> **Matrixform und MLE**
+
+定义设计矩阵 $\boldsymbol{X}$ 为：
+
+$$
+\boldsymbol{X} = \begin{pmatrix} 1 & x_{11} & x_{12} & \cdots & x_{1k} \\ \vdots & \vdots & \vdots & \ddots & \vdots \\ 1 & x_{n1} & x_{n2} & \cdots & x_{nk} \end{pmatrix} \in \mathbb{R}^{n \times (k+1)}
+$$
+
+则多元线性回归模型可以写为与简单情形相同的矩阵形式 $\boldsymbol{Y} = \boldsymbol{X}\boldsymbol{\beta} + \boldsymbol{\epsilon}$，其中 $\boldsymbol{\beta} = (\beta_0, \beta_1, \ldots, \beta_k)^\top$。最大似然估计同样为：
+
+$$
+\hat{\boldsymbol{\beta}} = (\boldsymbol{X}^\top \boldsymbol{X})^{-1} \boldsymbol{X}^\top \boldsymbol{y}
+$$
+
+## 例 6.2：学生身高、性别、年龄与体重
+
+> **Beispiel 6.2: Grosse, Geschlecht, Alter und Gewicht**
+
+```{r}
+#| label: example-6-2
+#| fig-cap: "例 6.2 多元线性回归：系数估计及其解读 | Beispiel 6.2: Multiple Regression"
+#| fig-height: 5.5
+
+set.seed(2024)
+n_stu <- 30
+gender <- rbinom(n_stu, 1, 0.5)
+age <- sample(19:28, n_stu, replace = TRUE)
+height_m <- round(rnorm(n_stu, 172, 9))
+weight_m <- round(-7.05 + 0.42 * height_m - 0.06 * age + 13.69 * gender + rnorm(n_stu, 0, 4), 1)
+
+fit_multi <- lm(weight_m ~ height_m + age + gender)
+sm <- summary(fit_multi)
+
+cat("例 6.2：多元线性回归 | Beispiel 6.2: Multiple lineare Regression\n\n")
+cat("  模型: weight_i = beta_0 + beta_1*height_i + beta_2*age_i + beta_3*gender_i + epsilon_i\n\n")
+cat("  系数估计 | Koeffizientenschatzungen:\n\n")
+cat(sprintf("  %-22s  估计值  标准误   p-值\n", ""))
+cat(sprintf("  %-22s  %6.2f  %6.2f  %6.4f\n", 
+            "beta_0 (截距)", sm$coefficients[1, 1], sm$coefficients[1, 2], sm$coefficients[1, 4]))
+cat(sprintf("  %-22s  %6.2f  %6.2f  %6.4f\n", 
+            "beta_1 (height)", sm$coefficients[2, 1], sm$coefficients[2, 2], sm$coefficients[2, 4]))
+cat(sprintf("  %-22s  %6.2f  %6.2f  %6.4f\n", 
+            "beta_2 (age)", sm$coefficients[3, 1], sm$coefficients[3, 2], sm$coefficients[3, 4]))
+cat(sprintf("  %-22s  %6.2f  %6.2f  %6.4f\n", 
+            "beta_3 (gender)", sm$coefficients[4, 1], sm$coefficients[4, 2], sm$coefficients[4, 4]))
+
+# 可视化：实际 vs 拟合
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+y_fit <- fitted(fit_multi)
+cols_gender <- ifelse(gender == 1, "#2563EB", "#DC2626")
+plot(y_fit, weight_m, pch = ifelse(gender == 1, 16, 17),
+     col = cols_gender, cex = 1.5,
+     xlab = "拟合值 | Angepasste Werte",
+     ylab = "观测体重 (kg) | Beobachtetes Gewicht",
+     main = "例 6.2：实际值 vs 拟合值 | Beobachtet vs. Angepasst",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(0, 1, col = "#16A34A", lwd = 2.5, lty = 2)
+legend("topleft",
+       legend = c("男性 | mannlich", "女性 | weiblich", "完美拟合线"),
+       pch = c(16, 17, NA), col = c("#2563EB", "#DC2626", "#16A34A"),
+       lwd = c(NA, NA, 2.5), lty = c(NA, NA, 2), bty = "n", cex = 0.85)
+```
+
+系数解读需要特别注意**"控制其他变量不变"**（ceteris paribus）这一条件。在多元回归中，系数 $\beta_k$ 描述的是第 $k$ 个协变量与响应变量之间的"纯"关联，排除了其他变量的影响。具体来说：
+
+$\hat{\beta}_0$（截距）：可以解读为所有协变量取值为 0 时响应变量的期望值。在本例中，身高为 0cm 完全超出了样本范围，因此截距没有实质性的解读意义。
+
+$\hat{\beta}_1$（身高）：在性别和年龄保持不变的条件下，身高每增加 1cm，体重平均增加约 0.42 kg。
+
+$\hat{\beta}_2$（年龄）：在身高和性别保持不变的条件下，年龄增加一岁与体重平均减少约 0.06 kg 相关。注意该系数的标准误远大于系数本身的绝对值，导致 p 值很大。这意味着现有数据不足以证明年龄对体重有显著影响。
+
+$\hat{\beta}_3$（性别）：在身高和年龄相同的条件下，男性学生的平均体重比女性学生高约 13.69 kg。
+
+## 协变量变换与"线性"的含义
+
+> **Kovariatentransformationen und die Bedeutung von "linear"**
+
+读者可能注意到，上例中"性别"变量并非连续变量，而是取值 0/1 的二元分类指示变量。这完全没有问题，因为线性回归模型**不对协变量的性质做任何假设**。事实上，自变量可以进行多种变换，从而大大扩展我们可用的依赖结构，远超简单的线性关联。可能的变换包括：**指示变量**（任意数量类别），用于建模非数值变量与 $Y$ 的关联；**变量变换**如 $\log(x)$ 或 $1/x$，用于建模非线性关系；**多项式**如同时包含 $x, x^2, x^3$，用于建模更复杂的关系；**交互项**如同时包含 $x_1, x_2$ 及其乘积 $x_3 = x_1 x_2$，用于量化两个变量如何相互交互影响 $Y$。
+
+非线性可以被捕获这一点似乎与章节名称矛盾：毕竟，模型类被称为"多元**线性**回归"。这个困惑很容易解决：**模型对参数始终是线性的**，但对协变量不一定是线性的 -- 协变量可以被非线性地变换。
+
+::: {.callout-tip icon="false"}
+## 调料组合的比喻 | Die Gewurzmischung-Metapher
+
+把回归系数想象成厨师的调料配方。"线性"不是说菜品只能有一种味道，而是说每种调料的**用量**（系数）以固定比例混合。你可以加入盐（$x$）、糖的对数（$\log(x)$）、胡椒的平方（$x^2$）-- 只要最终的味道是各调料用量的加权和，就仍然是"线性配方"。
+
+*"Linear" bezieht sich auf die Parameter, nicht auf die Kovariaten. Man kann beliebige Transformationen der Kovariaten verwenden.*
+:::
+
+```{r}
+#| label: fig-polynomial
+#| fig-cap: "多项式回归示例：线性 vs 二次 vs 三次拟合 | Polynomiale Regression: linear vs. quadratisch vs. kubisch"
+#| fig-height: 5.5
+
+set.seed(123)
+n_poly <- 60
+x_poly <- seq(0, 10, length.out = n_poly)
+y_poly <- 2 + 0.5 * x_poly - 0.08 * x_poly^2 + 0.005 * x_poly^3 + rnorm(n_poly, 0, 1.2)
+
+fit1 <- lm(y_poly ~ x_poly)
+fit2 <- lm(y_poly ~ x_poly + I(x_poly^2))
+fit3 <- lm(y_poly ~ x_poly + I(x_poly^2) + I(x_poly^3))
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(x_poly, y_poly, pch = 16, col = "#6B7280", cex = 1.2,
+     xlab = "x", ylab = "Y",
+     main = "多项式回归：所有模型对参数都是线性的 | Polynomiale Regression",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+x_pred <- seq(0, 10, length.out = 200)
+lines(x_pred, predict(fit1, newdata = data.frame(x_poly = x_pred)),
+      col = "#2563EB", lwd = 2.5, lty = 2)
+lines(x_pred, predict(fit2, newdata = data.frame(x_poly = x_pred)),
+      col = "#EA580C", lwd = 2.5, lty = 1)
+lines(x_pred, predict(fit3, newdata = data.frame(x_poly = x_pred)),
+      col = "#DC2626", lwd = 3, lty = 1)
+
+legend("topleft",
+       legend = c(expression(paste("线性: ", beta[0] + beta[1]*x)),
+                  expression(paste("二次: ", beta[0] + beta[1]*x + beta[2]*x^2)),
+                  expression(paste("三次: ", beta[0] + beta[1]*x + beta[2]*x^2 + beta[3]*x^3))),
+       col = c("#2563EB", "#EA580C", "#DC2626"),
+       lwd = c(2.5, 2.5, 3), lty = c(2, 1, 1), bty = "n", cex = 0.85)
+```
+
+{{< pagebreak >}}
+
+# Logistic 回归 {#sec-logistic}
+
+> **Logistische Regression**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 为什么**线性模型不适用于**二元响应变量
+- **Logistic 函数**的 S 形曲线及其性质
+- **Logit 模型**的三种等价表述：概率、对数几率、几率比
+- 系数的解读：对数几率的变化与乘法因子
+- 最大似然估计与实例分析
+:::
+
+## 为什么线性模型对二元响应会失败？
+
+> **Warum das lineare Modell fur binare Responses versagt**
+
+线性回归模型适用于响应变量近似服从正态分布的情形。然而现实中存在大量非正态分布的变量。有些变量甚至不是连续的，而是分类的，即取有限个非数值的值。我们这里关注**二元响应变量**，即只取两个可能值的变量。例如：疾病检测结果（阳性/阴性）、选举中是否投票给某政党（是/否）、考试结果（通过/未通过）。
+
+一般来说，二元变量 $Y$ 的两种结果可以编码为"成功"（$Y = 1$）和"失败"（$Y = 0$）。如果我们仍然用线性模型来建模：
+
+$$
+Y_i = \beta_0 + \beta_1 x_{i1} + \cdots + \beta_k x_{ik} + \epsilon_i
+$$
+
+会出现两个根本性问题。首先，对于二元 0/1 变量，有 $E(Y_i) = P(Y_i = 1)$，任何概率只能取 0 到 1 之间的值，而右侧的预测值是无界的。其次，误差 $\epsilon_i$ 不可能服从正态分布。
+
+::: {.callout-tip icon="false"}
+## 方钉圆孔的比喻 | Die eckiger-Stift-rundes-Loch-Metapher
+
+把线性模型用于二元响应就像把方形钉子硬塞进圆孔 -- 形状根本不匹配。线性模型的预测值可以从 $-\infty$ 到 $+\infty$ 任意取值，而概率被严格限制在 $[0, 1]$ 区间。我们需要一个"适配器"来把实数轴上的值"压缩"到 $[0, 1]$ 之间。这个适配器就是 Logistic 函数。
+
+*Das lineare Modell ist ein eckiger Stift fur ein rundes Loch -- die Vorhersagen sind unbeschrankt, wahrend Wahrscheinlichkeiten in $[0,1]$ liegen. Die logistische Funktion ist der "Adapter".*
+:::
+
+## 响应函数与线性预测子
+
+> **Response-Funktion und linearer Pradiktor**
+
+解决方案是：只建模 $Y_i$ 的**条件期望** $\pi_i := E(Y_i \mid x_{i1}, \ldots, x_{ik}) = P(Y_i = 1 \mid x_{i1}, \ldots, x_{ik})$，而不是直接预测 $Y_i$，并通过一个函数 $h(\cdot)$ 变换线性模型的输出：
+
+$$
+\pi_i = P(Y_i = 1 \mid x_{i1}, \ldots, x_{ik}) = h(\beta_0 + \beta_1 x_{i1} + \beta_2 x_{i2} + \cdots + \beta_k x_{ik})
+$$
+
+其中 $h(\cdot)$ 是一个从实数轴 $(-\infty, +\infty)$ 到区间 $[0, 1]$ 的映射函数。通过建模期望值，我们不需要对误差做任何假设；通过函数 $h$ 变换输出，我们确保预测概率只取合法值。
+
+函数 $h$ 的参数被称为**线性预测子**（linearer Pradiktor），通常记为 $\eta_i$：
+
+$$
+\eta_i = \beta_0 + \beta_1 x_{i1} + \beta_2 x_{i2} + \cdots + \beta_k x_{ik}
+$$
+
+为了可解读性，函数 $h(\cdot)$ 通常被选择为单调递增的，使得线性预测子 $\eta_i$ 越大，预测概率 $\pi_i$ 越高。这使得连续随机变量的**累积分布函数**成为首选，因为它们天然地被限制在 $[0, 1]$ 内且始终单调递增。
+
+## Logistic 函数
+
+> **Die logistische Funktion**
+
+标准选择是 **Logistic 分布函数**：
+
+$$
+h(\eta) = \frac{\exp(\eta)}{1 + \exp(\eta)}
+$$
+
+```{r}
+#| label: fig-logistic-function
+#| fig-cap: "Logistic 分布函数的特征 S 形曲线（仿教材 Fig. 6.2）| Logistische Verteilungsfunktion"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+eta_range <- seq(-7, 7, length.out = 400)
+pi_logistic <- exp(eta_range) / (1 + exp(eta_range))
+
+plot(eta_range, pi_logistic, type = "l", col = "#2563EB", lwd = 3.5,
+     xlab = expression(paste("线性预测子 ", eta[i], " | Linearer Pradiktor")),
+     ylab = expression(paste(pi[i], " = P(Y"[i], " = 1)")),
+     main = expression(paste("Logistic 函数: ", pi == frac(exp(eta), 1 + exp(eta)))),
+     cex.lab = 1.0, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+abline(h = 0, col = "#94A3B8", lty = 3)
+abline(h = 1, col = "#94A3B8", lty = 3)
+abline(h = 0.5, col = "#DC2626", lty = 2, lwd = 1.5)
+abline(v = 0, col = "#DC2626", lty = 2, lwd = 1.5)
+
+text(-5, 0.85, expression(pi %->% 1), col = "#16A34A", font = 2, cex = 1)
+text(5, 0.15, expression(pi %->% 0), col = "#EA580C", font = 2, cex = 1)
+text(0.5, 0.55, expression(paste(eta == 0, " -> ", pi == 0.5)),
+     col = "#DC2626", font = 2, cex = 0.9, pos = 4)
+
+points(0, 0.5, pch = 16, col = "#DC2626", cex = 2)
+```
+
+从图中可以清楚看到它的特征 **S 形曲线**（Sigmoidkurve）。使用 Logistic 函数得到的模型称为 **Logistic 回归模型**，或简称 **Logit 模型**：
+
+$$
+\pi_i = P(Y_i = 1 \mid \eta_i) = \frac{\exp(\eta_i)}{1 + \exp(\eta_i)}
+$$
+
+## Logit 模型的三种等价表述
+
+> **Drei aquivalente Formulierungen des Logit-Modells**
+
+**第一种表述（概率形式）**：直接给出成功概率。
+
+$$
+\pi_i = \frac{\exp(\eta_i)}{1 + \exp(\eta_i)}
+$$
+
+**第二种表述（对数几率形式）**：对上式求解 $\eta_i$，得到：
+
+$$
+\eta_i = \log \frac{\pi_i}{1 - \pi_i} = \log \frac{P(Y_i = 1)}{1 - P(Y_i = 1)} = \beta_0 + \beta_1 x_{i1} + \cdots + \beta_k x_{ik}
+$$
+
+量 $\log \frac{\pi_i}{1 - \pi_i}$ 称为**对数几率**（Log-Odds）。这个表述类似于线性模型，只是作为 $\eta_i$ 的线性函数的量变成了对数几率。因此我们可以类似地解读："协变量 $x_j$ 增加 1 个单位，导致对数几率增加 $\beta_j$。"
+
+**第三种表述（几率比形式）**：对上式两边取 exp：
+
+$$
+\frac{\pi_i}{1 - \pi_i} = \frac{P(Y_i = 1)}{P(Y_i = 0)} = \exp(\beta_0) \exp(\beta_1 x_{i1}) \exp(\beta_2 x_{i2}) \cdots \exp(\beta_k x_{ik})
+$$
+
+通过这个表述，我们清楚地看到协变量 $x_j$ 增加 1 个单位将导致几率 $\frac{\pi_i}{1 - \pi_i}$ **乘以** $\exp(\beta_j)$。
+
+::: {.callout-tip icon="false"}
+## 杠杆与支点的比喻 | Die Hebel-und-Drehpunkt-Metapher
+
+把 Logistic 回归想象成一个杠杆系统。线性预测子 $\eta$ 是杠杆的位置，Logistic 函数把它转换为概率。当 $\eta = 0$ 时，杠杆在支点上，概率恰好是 0.5（五五开）。$\eta$ 越大，杠杆越往"成功"方向倾斜；$\eta$ 越小（越负），杠杆越往"失败"方向倾斜。但杠杆永远不会完全倒向一边 -- 概率永远在 0 和 1 之间。
+
+每个回归系数 $\beta_j$ 就是一个"推力"：正系数往成功方向推，负系数往失败方向推。推力的大小取决于系数的绝对值。
+
+*Der lineare Pradiktor $\eta$ ist die Position eines Hebels. Die logistische Funktion wandelt ihn in eine Wahrscheinlichkeit um, die nie 0 oder 1 erreicht.*
+:::
+
+## 例 6.3：心脏病预测
+
+> **Beispiel 6.3: Vorhersage von Herzerkrankungen**
+
+```{r}
+#| label: example-6-3-data
+#| code-fold: false
+
+# 例 6.3：心脏病数据的 Logistic 回归
+set.seed(2024)
+n_heart <- 47
+age_h <- sample(30:75, n_heart, replace = TRUE)
+gender_h <- rbinom(n_heart, 1, 0.55)
+eta_h <- -5.53 + 0.06 * age_h + 1.45 * gender_h
+pi_h <- exp(eta_h) / (1 + exp(eta_h))
+disease <- rbinom(n_heart, 1, pi_h)
+
+heart_data <- data.frame(disease = disease, age = age_h, gender = gender_h)
+
+fit_logit <- glm(disease ~ age + gender, data = heart_data, family = binomial)
+sl <- summary(fit_logit)
+
+cat("例 6.3：Logistic 回归 -- 心脏病预测 | Beispiel 6.3: Logistische Regression\n\n")
+cat("  模型: P(Y_i = 1) = exp(eta_i) / (1 + exp(eta_i))\n")
+cat("  eta_i = beta_0 + beta_1 * age_i + beta_2 * gender_i\n\n")
+cat("  系数估计 | Koeffizientenschatzungen:\n\n")
+cat(sprintf("  %-22s  估计值   标准误   p-值\n", ""))
+for (j in 1:3) {
+  nm <- c("beta_0 (截距)", "beta_1 (age)", "beta_2 (gender)")[j]
+  cat(sprintf("  %-22s  %7.2f  %6.2f  %6.4f\n",
+              nm, sl$coefficients[j, 1], sl$coefficients[j, 2], sl$coefficients[j, 4]))
+}
+```
+
+将估计系数代入模型方程：
+
+$$
+\eta_i = \log \frac{\pi_i}{1 - \pi_i} = -5.53 + 0.06 \cdot \text{age}_i + 1.45 \cdot \text{gender}_i
+$$
+
+系数解读如下，需注意线性解读适用于对数几率。
+
+$\hat{\beta}_0$（截距）：给出所有协变量为 0 时的心脏病对数几率期望值，即年龄为 0 的女性患者。由于年龄为 0 超出了变量的定义域，截距在此没有实质性解读意义。
+
+$\hat{\beta}_1$（年龄）：在性别固定的条件下，年龄每增加一岁，心脏病的对数几率平均增加 0.06。等价地，年龄每增加一岁，心脏病的几率（$\frac{P(\text{disease}_i = 1)}{P(\text{disease}_i = 0)}$）乘以 $e^{0.06} = 1.06$ 倍。
+
+$\hat{\beta}_2$（性别）：男性患者的心脏病对数几率平均比同年龄女性患者高 1.45 个单位。等价地，男性患者的心脏病几率是同年龄女性患者的 $e^{1.45} = 4.26$ 倍。
+
+```{r}
+#| label: fig-heart-disease
+#| fig-cap: "心脏病预测概率随年龄和性别的变化（仿教材 Fig. 6.3）| Vorhergesagte Wahrscheinlichkeit fur Herzerkrankung"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+age_pred <- seq(30, 80, length.out = 200)
+b_h <- coef(fit_logit)
+eta_male <- b_h[1] + b_h[2] * age_pred + b_h[3] * 1
+eta_female <- b_h[1] + b_h[2] * age_pred + b_h[3] * 0
+pi_male <- exp(eta_male) / (1 + exp(eta_male))
+pi_female <- exp(eta_female) / (1 + exp(eta_female))
+
+plot(age_pred, pi_male, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "年龄 (岁) | Alter (Jahre)",
+     ylab = expression(paste(pi[i], " = P(心脏病 | Herzerkrankung)")),
+     main = "例 6.3：心脏病预测概率 | Vorhergesagte Wahrscheinlichkeit",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, 1))
+lines(age_pred, pi_female, col = "#DC2626", lwd = 3, lty = 2)
+grid(col = "#E2E8F0")
+
+# 实际数据点
+points(age_h[gender_h == 1], disease[gender_h == 1], 
+       pch = 16, col = adjustcolor("#2563EB", 0.5), cex = 1.2)
+points(age_h[gender_h == 0], disease[gender_h == 0], 
+       pch = 17, col = adjustcolor("#DC2626", 0.5), cex = 1.2)
+
+legend("topleft",
+       legend = c("男性 | mannlich", "女性 | weiblich",
+                  "男性数据点", "女性数据点"),
+       col = c("#2563EB", "#DC2626", 
+               adjustcolor("#2563EB", 0.5), adjustcolor("#DC2626", 0.5)),
+       lwd = c(3, 3, NA, NA), lty = c(1, 2, NA, NA),
+       pch = c(NA, NA, 16, 17), bty = "n", cex = 0.85)
+
+abline(h = 0.5, col = "#94A3B8", lty = 3)
+text(35, 0.53, expression(pi == 0.5), col = "#94A3B8", cex = 0.8, font = 2)
+```
+
+从图中可以清楚看到，心脏病风险随年龄增长而增大，且男性的风险在各年龄段均高于女性。
+
+```{r}
+#| label: logit-odds-demo
+#| code-fold: false
+
+# 几率比的具体计算
+cat("几率比解读示例 | Odds-Ratio Interpretation:\n\n")
+
+# 年龄效应
+cat("  年龄效应:\n")
+cat(sprintf("    exp(beta_1) = exp(%.2f) = %.4f\n", b_h[2], exp(b_h[2])))
+cat("    解读: 年龄每增加 1 岁, 心脏病几率乘以", round(exp(b_h[2]), 4), "\n\n")
+
+# 性别效应
+cat("  性别效应:\n")
+cat(sprintf("    exp(beta_2) = exp(%.2f) = %.4f\n", b_h[3], exp(b_h[3])))
+cat("    解读: 男性心脏病几率是女性的", round(exp(b_h[3]), 2), "倍\n\n")
+
+# 具体预测
+age_example <- 55
+for (g in c(0, 1)) {
+  eta_ex <- b_h[1] + b_h[2] * age_example + b_h[3] * g
+  pi_ex <- exp(eta_ex) / (1 + exp(eta_ex))
+  label <- ifelse(g == 1, "男性", "女性")
+  cat(sprintf("  %d 岁%s: eta = %.2f, P(心脏病) = %.4f\n", 
+              age_example, label, eta_ex, pi_ex))
+}
+```
+
+{{< pagebreak >}}
+
+# 广义线性模型 {#sec-glm}
+
+> **Verallgemeinerte lineare Modelle (GLMs)**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **广义线性模型（GLM）** 的统一框架
+- **指数族分布**作为响应变量分布的一般化条件
+- **响应函数** $h(\cdot)$ 的角色与选择
+- 线性回归和 Logistic 回归作为 GLM 的**特例**
+- **Poisson 回归**实例：计数数据的建模
+:::
+
+## 从 Logistic 到一般化
+
+> **Von der logistischen zur allgemeinen Regression**
+
+在上一节中，我们展示了如何通过关注建模响应变量的条件期望 $E(Y \mid x)$ 并以适当方式变换线性模型的输出，将线性建模框架扩展到处理二元响应变量。现在，我们将说明这种一般化不仅在二元情形下可行，也适用于**多种不同类型的响应变量**，如 Poisson、指数、Gamma 等分布。这些对线性模型的扩展构成了**广义线性模型（GLM）** 类，由 Nelder 和 Wedderburn (1972) 引入。
+
+::: {.callout-tip icon="false"}
+## 万能转换器的比喻 | Die Universaladapter-Metapher
+
+想象你在国际旅行，不同国家有不同的插座标准（不同类型的响应变量）。你需要一个万能转换器来把你的充电器（线性预测子 $\eta$）插入任何国家的插座（不同的分布假设）。GLM 的响应函数 $h(\cdot)$ 就是这个万能转换器 -- 它把线性预测子"转换"成与响应变量分布兼容的形式。
+
+对于正态分布，不需要转换（直通），因为正态变量可以取任意实数值。对于二元变量，需要 Logistic 转换（压缩到 $[0, 1]$）。对于计数变量，需要指数转换（映射到正数）。
+
+*Die Response-Funktion $h(\cdot)$ ist ein Universaladapter: Sie wandelt den linearen Pradiktor in einen mit der Verteilung kompatiblen Erwartungswert um.*
+:::
+
+## GLM 的定义
+
+> **Definition der GLMs**
+
+广义线性模型具有以下两个性质：
+
+**性质 1**：响应变量 $Y$ 的（条件）分布属于**指数族分布**（Exponentialfamilie）这一广泛的分布类。这个类包含了大多数常用的分布。
+
+**性质 2**：响应变量的期望值 $E(Y_i \mid x_i)$ 通过**响应函数** $h(\cdot)$ 与线性预测子 $\eta_i = \beta_0 + \beta_1 x_{i1} + \cdots + \beta_k x_{ik}$ 相连：
+
+$$
+E(Y_i \mid x_i) = \mu_i = h(\eta_i)
+$$
+
+GLM 框架显然非常一般，涵盖了许多不同的回归场景。响应函数 $h(\eta)$ 扮演着至关重要的角色，应当选择为与被建模的响应变量 $Y$ 的类型相兼容。在上一节中，我们看到了二元变量的情形，其中响应函数的主要任务是将一般无界的实值线性预测子变换为只取 0 到 1 之间实值的概率。另一个特例是正态分布响应变量：在那种情形下，正态随机变量可以取实数轴上的所有值，无需变换线性预测子 $\eta$。换言之，响应函数 $h$ 就是恒等函数，即 $h(\eta) = \eta$，退化为经典线性模型的情形。
+
+```{r}
+#| label: fig-glm-family
+#| fig-cap: "GLM 统一框架下的三个重要特例 | Drei wichtige Spezialfalle des GLM-Rahmenwerks"
+#| fig-height: 6.5
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(4.5, 4.5, 3.5, 1))
+
+# 1. 正态 (identity link)
+eta_norm <- seq(-3, 3, length.out = 200)
+mu_norm <- eta_norm  # h(eta) = eta
+plot(eta_norm, mu_norm, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(eta), ylab = expression(mu == h(eta)),
+     main = expression(paste("正态: h(", eta, ") = ", eta)),
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+text(0, -2, expression(Y %~% N(mu, sigma^2)), col = "#2563EB", font = 2, cex = 0.9)
+
+# 2. 二元 (logit link)
+eta_bin <- seq(-6, 6, length.out = 200)
+mu_bin <- exp(eta_bin) / (1 + exp(eta_bin))
+plot(eta_bin, mu_bin, type = "l", col = "#DC2626", lwd = 3,
+     xlab = expression(eta), ylab = expression(mu == h(eta)),
+     main = expression(paste("二元: h(", eta, ") = ", frac(e^eta, 1+e^eta))),
+     cex.main = 0.95, col.main = "#1E293B",
+     ylim = c(0, 1))
+grid(col = "#E2E8F0")
+abline(h = c(0, 1), col = "#94A3B8", lty = 3)
+text(0, 0.15, expression(Y %~% Bernoulli(pi)), col = "#DC2626", font = 2, cex = 0.9)
+
+# 3. Poisson (log link)
+eta_pois <- seq(-1, 4, length.out = 200)
+mu_pois <- exp(eta_pois)
+plot(eta_pois, mu_pois, type = "l", col = "#16A34A", lwd = 3,
+     xlab = expression(eta), ylab = expression(mu == h(eta)),
+     main = expression(paste("Poisson: h(", eta, ") = ", e^eta)),
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+text(1, 40, expression(Y %~% Poisson(lambda)), col = "#16A34A", font = 2, cex = 0.9)
+
+par(mfrow = c(1, 1))
+```
+
+## 例 6.4：电商产品销量 Poisson 回归
+
+> **Beispiel 6.4: Poisson-Regression fur Produktverkaufe**
+
+```{r}
+#| label: example-6-4-data
+
+set.seed(2024)
+n_prod <- 200
+review_score <- round(runif(n_prod, 2.0, 5.0), 1)
+price <- round(runif(n_prod, 15, 100), 0)
+promotion <- rbinom(n_prod, 1, 0.35)
+
+eta_pois <- 0.642 + 0.473 * review_score + 0.001 * price + 0.166 * promotion
+lambda_pois <- exp(eta_pois)
+sales <- rpois(n_prod, lambda_pois)
+
+product_data <- data.frame(sales = sales, review_score = review_score,
+                           price = price, promotion = promotion)
+```
+
+一家电子商务网站希望了解评分、价格和促销活动与产品销量之间的关系。研究团队考虑了 200 种不同产品在一周内的总销量。鉴于销量是典型的计数变量，使用 Poisson GLM 来建模是合理的，即假设响应变量服从 Poisson 分布。
+
+```{r}
+#| label: fig-sales-barplot
+#| fig-cap: "产品销量分布（仿教材 Fig. 6.4）：形态与 Poisson 分布一致 | Verteilung der Verkaufszahlen"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+hist(sales, breaks = seq(min(sales) - 0.5, max(sales) + 0.5, by = 1),
+     col = adjustcolor("#2563EB", 0.4), border = "#2563EB",
+     xlab = "周销量 | Wochentliche Verkaufe",
+     ylab = "产品数量 | Anzahl Produkte",
+     main = "产品销量分布 | Verteilung der Verkaufszahlen",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+text(max(sales) * 0.7, n_prod * 0.12,
+     "形态与 Poisson\n分布一致",
+     col = "#DC2626", font = 2, cex = 0.9)
+```
+
+由于选择了 Poisson 分布假设，只需选择响应函数 $h$，将线性预测子 $\eta$（评分、价格和促销的线性组合）映射到 $Y$ 的期望值（销量）。鉴于销量只能取正值，指数函数是合理的选择。我们的模型为：
+
+$$
+E(Y_i \mid x_i) = \exp(\eta_i)
+$$
+
+其中
+
+$$
+\eta_i = \beta_0 + \beta_1 \cdot \text{review\_score}_i + \beta_2 \cdot \text{price}_i + \beta_3 \cdot \text{promotion}_i
+$$
+
+```{r}
+#| label: example-6-4-fit
+#| code-fold: false
+
+fit_pois <- glm(sales ~ review_score + price + promotion, 
+                data = product_data, family = poisson)
+sp <- summary(fit_pois)
+
+cat("例 6.4：Poisson 回归 -- 产品销量 | Beispiel 6.4: Poisson-Regression\n\n")
+cat("  系数估计 | Koeffizientenschatzungen:\n\n")
+cat(sprintf("  %-28s  估计值   标准误   p-值\n", ""))
+nms <- c("beta_0 (截距)", "beta_1 (review score)", 
+         "beta_2 (price)", "beta_3 (promotion)")
+for (j in 1:4) {
+  cat(sprintf("  %-28s  %7.3f  %6.3f  %s\n",
+              nms[j], sp$coefficients[j, 1], sp$coefficients[j, 2],
+              ifelse(sp$coefficients[j, 4] < 0.01, "<0.01",
+                     round(sp$coefficients[j, 4], 4))))
+}
+
+cat("\n  模型方程:\n")
+cat(sprintf("    eta_i = %.3f + %.3f * review_score + %.3f * price + %.3f * promotion\n",
+            coef(fit_pois)[1], coef(fit_pois)[2], coef(fit_pois)[3], coef(fit_pois)[4]))
+```
+
+系数解读与 Logistic 回归类似，需要记住线性解读适用于响应变量的**对数**。具体来说：
+
+$\hat{\beta}_0$（截距）：给出所有协变量为 0 时销量对数期望值。由于部分协变量取 0 无实际意义，截距在此没有实质性解读。
+
+$\hat{\beta}_1$（评分）：在价格和促销固定的条件下，评分每增加 1 颗星与周销量对数增加约 0.473 相关。等价地，评分每增加 1 颗星，销量乘以 $e^{0.473} \approx 1.605$ 倍（即增长约 60%）。
+
+$\hat{\beta}_2$（价格）：系数非常小，p 值接近 1。在控制评分和促销后，没有证据表明商品价格与销量有关联。
+
+$\hat{\beta}_3$（促销）：在评分和价格固定的条件下，促销活动与周销量对数增加约 0.166 相关。等价地，有促销时，预期销量增长约 $e^{0.166} \approx 1.18$ 倍（即增长约 18%）。
+
+```{r}
+#| label: fig-poisson-effects
+#| fig-cap: "Poisson 回归：评分和促销对预测销量的影响 | Poisson-Regression: Effekte auf Verkaufe"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+score_seq <- seq(2, 5, length.out = 200)
+bp <- coef(fit_pois)
+
+# 中位价格
+med_price <- median(price)
+
+mu_promo <- exp(bp[1] + bp[2] * score_seq + bp[3] * med_price + bp[4] * 1)
+mu_no_promo <- exp(bp[1] + bp[2] * score_seq + bp[3] * med_price + bp[4] * 0)
+
+plot(score_seq, mu_promo, type = "l", col = "#16A34A", lwd = 3,
+     xlab = "评分 (星) | Bewertung (Sterne)",
+     ylab = expression(paste("预测周销量 | E(Sales | x) = ", e^eta)),
+     main = "Poisson 回归：评分与促销对销量的影响",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, max(mu_promo) * 1.1))
+lines(score_seq, mu_no_promo, col = "#EA580C", lwd = 3, lty = 2)
+grid(col = "#E2E8F0")
+
+# 数据点
+points(review_score[promotion == 1], sales[promotion == 1],
+       pch = 16, col = adjustcolor("#16A34A", 0.3), cex = 0.8)
+points(review_score[promotion == 0], sales[promotion == 0],
+       pch = 17, col = adjustcolor("#EA580C", 0.3), cex = 0.8)
+
+legend("topleft",
+       legend = c("有促销 | Mit Aktion", "无促销 | Ohne Aktion"),
+       col = c("#16A34A", "#EA580C"),
+       lwd = 3, lty = c(1, 2), bty = "n", cex = 0.9)
+
+text(3.5, max(mu_promo) * 0.3,
+     bquote("评分每增 1 星" %->% "销量" %*% e^{0.473} %~~% 1.6 * "倍"),
+     col = "#DC2626", font = 2, cex = 0.85)
+```
+
+```{r}
+#| label: fig-glm-summary
+#| fig-cap: "GLM 框架总结：三类模型的比较 | Zusammenfassung des GLM-Rahmenwerks"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 15), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("GLM 统一框架 | Einheitlicher GLM-Rahmen")),
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 中心的 GLM 框
+rect(5, 3.5, 10, 5.5, col = "#F3E8FF", border = "#9333EA", lwd = 3)
+text(7.5, 4.8, "广义线性模型 (GLM)", font = 2, cex = 0.9, col = "#1E293B")
+text(7.5, 4.2, expression(E(Y~"|"~x) == h(eta)), cex = 0.85, col = "#9333EA")
+
+# 三个特例
+rects_x <- c(1.5, 7.5, 13.5)
+rects_y <- rep(1.2, 3)
+fills <- c("#DBEAFE", "#FCE7F3", "#D1FAE5")
+borders <- c("#2563EB", "#DB2777", "#16A34A")
+labels_top <- c("线性回归", "Logistic 回归", "Poisson 回归")
+labels_mid <- c(expression(h(eta) == eta), 
+                expression(h(eta) == frac(e^eta, 1+e^eta)),
+                expression(h(eta) == e^eta))
+labels_bot <- c(expression(Y %~% N(mu, sigma^2)),
+                expression(Y %~% Bernoulli(pi)),
+                expression(Y %~% Poisson(lambda)))
+
+for (i in 1:3) {
+  rect(rects_x[i] - 1.8, rects_y[i] - 0.8, rects_x[i] + 1.8, rects_y[i] + 0.8,
+       col = fills[i], border = borders[i], lwd = 2)
+  text(rects_x[i], rects_y[i] + 0.45, labels_top[i], font = 2, cex = 0.75, col = "#1E293B")
+  text(rects_x[i], rects_y[i] + 0.05, labels_mid[i], cex = 0.7, col = borders[i])
+  text(rects_x[i], rects_y[i] - 0.4, labels_bot[i], cex = 0.65, col = "#6B7280")
+}
+
+# 箭头
+for (i in 1:3) {
+  arrows(rects_x[i], 2.0, rects_x[i], 3.4,
+         col = "#94A3B8", lwd = 2, length = 0.1, code = 1)
+}
+text(0.5, 3.0, "特例", col = "#6B7280", font = 3, cex = 0.8)
+```
+
+正如从这些简单例子中可以看到的，广义线性模型是在相当一般的条件下度量变量间关联的强大工具。可用的分布族范围广泛，加上响应函数的选择，为用户提供了显著的灵活性。然而，这种灵活性的代价是将选择权交给了建模者。尽管如此，有多种工具可以确保模型正确设定，即合理选择分布和结构假设。
+
+{{< pagebreak >}}
+
+# 练习题 {#sec-exercises}
+
+> **Ubungsaufgaben**
+
+## 练习 1：剧院开支
+
+> **Ubung 1: Theaterausgaben**
+
+数据集 `theatre.txt` 包含了苏黎世市民的年度剧院开支数据，包含以下变量：Age（年龄，岁）、Sex（性别，0: 男 / 1: 女）、Salary（年薪，千瑞士法郎）、Culture（文化活动支出，瑞士法郎）、Theatre（本年剧院支出，瑞士法郎）、Theatre_prevYear（上年剧院支出，瑞士法郎）。
+
+我们的目标是理解哪些变量与剧院支出相关，并使用回归模型来分析。
+
+```{r}
+#| label: exercise-1
+#| code-fold: false
+
+# 模拟剧院数据 | Simulierte Theaterdaten
+set.seed(42)
+n_th <- 80
+theatre_data <- data.frame(
+  Age = sample(20:70, n_th, replace = TRUE),
+  Sex = rbinom(n_th, 1, 0.5),
+  Salary = round(rnorm(n_th, 80, 25), 1),
+  Culture = round(rgamma(n_th, 3, 0.01), 0)
+)
+theatre_data$Theatre_prevYear <- round(50 + 0.3 * theatre_data$Culture + 
+                                       rnorm(n_th, 0, 30), 0)
+theatre_data$Theatre_prevYear[theatre_data$Theatre_prevYear < 0] <- 0
+theatre_data$Theatre <- round(20 + 0.1 * theatre_data$Age + 
+                              15 * theatre_data$Sex +
+                              0.5 * theatre_data$Salary +
+                              0.2 * theatre_data$Culture +
+                              0.6 * theatre_data$Theatre_prevYear + 
+                              rnorm(n_th, 0, 25), 0)
+theatre_data$Theatre[theatre_data$Theatre < 0] <- 0
+
+cat("练习 1: 剧院开支数据 | Ubung 1: Theaterdaten\n\n")
+
+# a) 完整模型 M0
+cat("a) 模型 M0: Theatre ~ Age + Sex + Salary + Culture + Theatre_prevYear\n\n")
+M0 <- lm(Theatre ~ Age + Sex + Salary + Culture + Theatre_prevYear, data = theatre_data)
+print(summary(M0))
+
+# b) 去除不显著变量
+cat("\nb) 去除不显著变量后的模型 M1:\n\n")
+# 基于 p 值逐步去除
+M1 <- step(M0, direction = "backward", trace = 0)
+print(summary(M1))
+cat("\n  M1 更优: 更少的参数, 更好的可解读性, AIC 更低。\n")
+
+# c) 交互项
+cat("\nc) 加入 Sex 与 Theatre_prevYear 的交互项:\n\n")
+M2 <- update(M1, . ~ . + Sex:Theatre_prevYear)
+print(summary(M2))
+
+# d) 变量变换
+cat("\nd) 变量变换的比较:\n\n")
+cat("  对数变换和平方根变换可以捕捉非线性关系。\n")
+cat("  比较不同变换的 R^2 和 AIC 来选择最优模型。\n")
+```
+
+## 练习 2：航天飞机挑战者号数据
+
+> **Ubung 2: Space Shuttle Challenger**
+
+数据集 `shuttle` 描述了 1986 年挑战者号灾难前 23 次航天飞机飞行中的起飞温度（华氏度）和热过载的发生情况。变量包括：flight（飞行编号）、temp（温度，华氏度）、td（热过载，1 = 是 / 0 = 否）。
+
+转换公式为 $T_F = 1.8 \cdot T_C + 32$。
+
+```{r}
+#| label: exercise-2-data
+#| code-fold: false
+
+# 模拟航天飞机数据
+shuttle <- data.frame(
+  flight = 1:23,
+  temp = c(66, 70, 69, 68, 67, 72, 73, 70, 57, 63,
+           70, 78, 67, 53, 67, 75, 70, 81, 76, 79,
+           75, 76, 58),
+  td = c(0, 1, 0, 0, 0, 0, 0, 0, 1, 1,
+         1, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+         1, 0, 1)
+)
+shuttle$tempC <- (shuttle$temp - 32) / 1.8
+
+cat("练习 2: 挑战者号数据 | Ubung 2: Challenger-Daten\n\n")
+cat("  温度转换: tempC = (temp - 32) / 1.8\n\n")
+```
+
+```{r}
+#| label: fig-exercise-2a
+#| fig-cap: "练习 2a: 热过载组与非过载组的温度比较 | Ubung 2a: Temperaturvergleich"
+#| fig-height: 5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# a) 图形比较
+boxplot(temp ~ td, data = shuttle, col = c("#D1FAE5", "#FEE2E2"),
+        border = c("#16A34A", "#DC2626"),
+        xlab = "热过载 | Thermische Uberlastung (td)",
+        ylab = "温度 (F) | Temperatur (F)",
+        main = "a) 箱线图比较 | Boxplot-Vergleich",
+        cex.main = 0.95, col.main = "#1E293B",
+        names = c("td = 0", "td = 1"))
+grid(col = "#E2E8F0")
+
+# b) 线性模型拟合
+fit_lm_shuttle <- lm(td ~ temp, data = shuttle)
+plot(shuttle$temp, shuttle$td, pch = 16, col = "#2563EB", cex = 1.5,
+     xlab = "温度 (F) | Temperatur (F)",
+     ylab = "P(热过载) | P(Uberlastung)",
+     main = "b) 线性模型（有问题!) | Lineares Modell",
+     cex.main = 0.95, col.main = "#1E293B",
+     ylim = c(-0.3, 1.3))
+grid(col = "#E2E8F0")
+abline(fit_lm_shuttle, col = "#DC2626", lwd = 2.5)
+abline(h = c(0, 1), col = "#94A3B8", lty = 3)
+text(73, 1.15, "概率超出 [0,1]!", col = "#DC2626", font = 2, cex = 0.85)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: exercise-2-logit
+#| code-fold: false
+
+cat("b-d) 线性模型 vs Logistic 模型:\n\n")
+
+# 线性模型
+cat("  线性模型 summary:\n")
+print(summary(fit_lm_shuttle))
+
+cat("\n  问题: 线性模型的残差非正态, 预测值超出 [0,1]。\n")
+cat("  对二元响应变量使用线性模型在理论上不合理。\n\n")
+
+# c) 温度单位转换的影响
+cat("c) 摄氏度 vs 华氏度:\n\n")
+fit_C <- lm(td ~ tempC, data = shuttle)
+cat("  华氏度斜率:", round(coef(fit_lm_shuttle)[2], 6), "\n")
+cat("  摄氏度斜率:", round(coef(fit_C)[2], 6), "\n")
+cat("  关系: beta_C = 1.8 * beta_F (线性变换)\n")
+cat("  同时加入两个变量: 完全共线性, X'X 不可逆!\n\n")
+
+# e-f) Logistic 回归
+cat("e) Logistic 回归:\n\n")
+fit_logit_shuttle <- glm(td ~ temp, data = shuttle, family = binomial)
+print(summary(fit_logit_shuttle))
+
+b_shuttle <- coef(fit_logit_shuttle)
+cat("\ne) 斜率解读:\n")
+cat(sprintf("   温度每升高 1F, 热过载的对数几率变化 %.4f\n", b_shuttle[2]))
+cat(sprintf("   即几率乘以 exp(%.4f) = %.4f\n", b_shuttle[2], exp(b_shuttle[2])))
+cat("   (负值: 温度越高, 热过载风险越低)\n\n")
+
+# f) 31F 时的概率
+temp_challenger <- 31
+eta_31 <- b_shuttle[1] + b_shuttle[2] * temp_challenger
+pi_31 <- exp(eta_31) / (1 + exp(eta_31))
+cat(sprintf("f) 挑战者号灾难当天 (31F) 热过载概率:\n"))
+cat(sprintf("   eta = %.2f + %.4f * 31 = %.4f\n", b_shuttle[1], b_shuttle[2], eta_31))
+cat(sprintf("   P(td = 1 | temp = 31) = %.4f\n\n", pi_31))
+
+# g) P = 0.5 的温度
+temp_50 <- -b_shuttle[1] / b_shuttle[2]
+cat(sprintf("g) P(热过载) = 0.5 的温度:\n"))
+cat(sprintf("   当 eta = 0 时 P = 0.5\n"))
+cat(sprintf("   0 = %.2f + %.4f * temp\n", b_shuttle[1], b_shuttle[2]))
+cat(sprintf("   temp = %.2f F = %.2f C\n", temp_50, (temp_50 - 32) / 1.8))
+```
+
+```{r}
+#| label: fig-exercise-2-logit
+#| fig-cap: "练习 2: Logistic 回归拟合与挑战者号预测 | Ubung 2: Logistische Regression und Challenger-Vorhersage"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+temp_pred_range <- seq(25, 85, length.out = 300)
+eta_pred <- b_shuttle[1] + b_shuttle[2] * temp_pred_range
+pi_pred <- exp(eta_pred) / (1 + exp(eta_pred))
+
+plot(temp_pred_range, pi_pred, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "温度 (F) | Temperatur (F)",
+     ylab = expression(paste("P(热过载) = P(td = 1 | temp)")),
+     main = "Logistic 回归拟合与挑战者号预测",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, 1))
+grid(col = "#E2E8F0")
+
+points(shuttle$temp, shuttle$td, pch = 16, col = "#6B7280", cex = 1.5)
+
+# 挑战者号预测
+abline(v = 31, col = "#DC2626", lwd = 2, lty = 2)
+points(31, pi_31, pch = 18, col = "#DC2626", cex = 3)
+text(33, pi_31 + 0.06, sprintf("31F: P = %.2f", pi_31),
+     col = "#DC2626", font = 2, cex = 0.9, pos = 4)
+
+# P = 0.5 的温度
+abline(h = 0.5, col = "#EA580C", lty = 3, lwd = 1.5)
+abline(v = temp_50, col = "#EA580C", lty = 3, lwd = 1.5)
+points(temp_50, 0.5, pch = 16, col = "#EA580C", cex = 2)
+text(temp_50 + 1, 0.55, sprintf("P = 0.5 at %.1fF", temp_50),
+     col = "#EA580C", font = 2, cex = 0.85, pos = 4)
+
+legend("topright",
+       legend = c("Logistic 拟合曲线", "观测数据",
+                  "挑战者号 (31F)", "P = 0.5 处温度"),
+       col = c("#2563EB", "#6B7280", "#DC2626", "#EA580C"),
+       pch = c(NA, 16, 18, 16), lwd = c(3, NA, NA, NA),
+       lty = c(1, NA, NA, NA), bty = "n", cex = 0.85)
+```
+
+::: {.callout-tip icon="false"}
+## 挑战者号的教训 | Die Lektion des Challenger-Ungluecks
+
+1986 年 1 月 28 日，当天温度仅为 31 华氏度（约 -0.6 摄氏度），远低于以往任何一次发射温度。我们的 Logistic 模型预测在该温度下热过载概率极高。如果当时 NASA 的工程师使用了这样的模型，也许这场悲剧就可以避免。这个例子深刻地说明了统计模型在决策支持中的重要性。
+
+*Hatte man ein logistisches Modell verwendet, hatte man die extrem hohe Ausfallwahrscheinlichkeit bei 31F vorhersagen konnen. Statistik rettet Leben.*
+:::
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心概念链
+
+```{r}
+#| label: fig-summary-chain
+#| fig-cap: "本章知识逻辑链 | Logikkette der Konzepte dieses Kapitels"
+#| fig-height: 6
+#| fig-width: 12
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 7), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("第六章知识逻辑链 | Logikkette Kapitel 6")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+nx <- c(3, 8, 13, 5.5, 10.5)
+ny <- c(5.5, 5.5, 5.5, 2.5, 2.5)
+labels <- c(
+  "简单线性模型\nOLS / MLE\nEinfaches Modell",
+  "多元线性回归\n矩阵形式 / 变换\nMultiple Regression",
+  "Logistic 回归\n对数几率 / S 形曲线\nLogistische Reg.",
+  "协变量变换\n多项式 / 交互项\nTransformationen",
+  "广义线性模型\n指数族 / 响应函数\nGLMs"
+)
+fills <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#D1FAE5", "#E0E7FF")
+bords <- c("#2563EB", "#D97706", "#DB2777", "#16A34A", "#6366F1")
+
+for (i in 1:5) {
+  rect(nx[i]-1.8, ny[i]-0.8, nx[i]+1.8, ny[i]+0.8,
+       col = fills[i], border = bords[i], lwd = 2)
+  text(nx[i], ny[i], labels[i], cex = 0.55, font = 2, col = "#1E293B")
+}
+
+draw_arrow <- function(x1, y1, x2, y2, label) {
+  arrows(x1, y1, x2, y2, col = "#64748B", lwd = 2, length = 0.12)
+  mx <- (x1 + x2) / 2; my <- (y1 + y2) / 2
+  text(mx, my + 0.3, label, cex = 0.5, col = "#EA580C", font = 3)
+}
+
+draw_arrow(4.8, 5.5, 6.2, 5.5, "多协变量")
+draw_arrow(9.8, 5.5, 11.2, 5.5, "二元响应")
+draw_arrow(8, 4.7, 5.5, 3.3, "非线性变换")
+draw_arrow(13, 4.7, 10.5, 3.3, "一般化")
+draw_arrow(7.3, 2.5, 8.7, 2.5, "统一框架")
+```
+
+## 公式速查表
+
+| 公式 | 名称 | 编号 |
+|:-----|:-----|:----:|
+| $Y = \beta_0 + \beta_1 x + \epsilon$ | 简单线性模型 | 6.1 |
+| $E(Y \mid x) = \beta_0 + \beta_1 x$ | 条件期望 | -- |
+| $\hat{\boldsymbol{\beta}} = (\boldsymbol{X}^\top \boldsymbol{X})^{-1} \boldsymbol{X}^\top \boldsymbol{y}$ | MLE / OLS 矩阵形式 | 6.7 |
+| $\text{Var}(\hat{\boldsymbol{\beta}}) = \sigma^2 (\boldsymbol{X}^\top \boldsymbol{X})^{-1}$ | 估计量方差 | -- |
+| $Y_i = \beta_0 + \sum_{j=1}^{k} \beta_j x_{ij} + \epsilon_i$ | 多元线性回归 | 6.8 |
+| $\pi_i = \frac{\exp(\eta_i)}{1 + \exp(\eta_i)}$ | Logistic 回归 | 6.12 |
+| $\log \frac{\pi_i}{1 - \pi_i} = \eta_i$ | 对数几率形式 | 6.13 |
+| $\frac{\pi_i}{1 - \pi_i} = \prod_j \exp(\beta_j x_{ij})$ | 几率比形式 | 6.14 |
+| $E(Y_i \mid x_i) = h(\eta_i)$ | GLM 一般形式 | -- |
+
+## 本章的六个核心洞察
+
+| 编号 | 洞察 | 关键词 |
+|:----:|:------|:------|
+| 1 | 线性回归通过最小化残差平方和来估计参数，MLE 与 OLS 等价 | 最小二乘 |
+| 2 | 矩阵公式 $\hat{\boldsymbol{\beta}} = (\boldsymbol{X}^\top \boldsymbol{X})^{-1} \boldsymbol{X}^\top \boldsymbol{y}$ 是最优线性无偏估计（BLUE） | Gauss-Markov |
+| 3 | 多元回归系数的解读必须加上"控制其他变量不变"的条件 | 偏效应 |
+| 4 | "线性"指对参数线性，协变量可以自由变换（多项式、交互项等） | 模型灵活性 |
+| 5 | Logistic 回归用 S 形函数将无界预测值映射到 $[0,1]$，系数解读为对数几率的变化 | 对数几率 |
+| 6 | GLM 通过选择分布族和响应函数，将线性框架推广到多种响应变量类型 | 统一框架 |
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 简单线性回归
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Regression | 回归 | regression |
+| die Regressionslinie | 回归线 | regression line |
+| die Regression zur Mitte | 向平均回归 | regression towards the mean |
+| der Achsenabschnitt (Intercept) | 截距 | intercept |
+| die Steigung (Slope) | 斜率 | slope |
+| der Fehlerterm / das Residuum | 误差项 / 残差 | error term / residual |
+| die Fehlervarianz | 误差方差 | error variance |
+| die Homoskedastizitat | 同方差性 | homoscedasticity |
+| die Heteroskedastizitat | 异方差性 | heteroscedasticity |
+| die Methode der kleinsten Quadrate | 最小二乘法 | method of least squares |
+| der Kleinste-Quadrate-Schatzer | 最小二乘估计量 | least squares estimator |
+| die Designmatrix | 设计矩阵 | design matrix |
+| die Gauss-Markov-Eigenschaft | Gauss-Markov 性质 | Gauss-Markov property |
+| der beste lineare unverzerrte Schatzer (BLUE) | 最优线性无偏估计量 | best linear unbiased estimator |
+| die abhangige Variable | 因变量 | dependent variable |
+| die unabhangige Variable | 自变量 | independent variable |
+| die Kovariaten | 协变量 | covariates |
+
+## 多元线性回归
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die multiple lineare Regression | 多元线性回归 | multiple linear regression |
+| der Regressionskoeffizient | 回归系数 | regression coefficient |
+| die Indikatorvariable | 指示变量 | indicator variable |
+| die Variablentransformation | 变量变换 | variable transformation |
+| das Polynom | 多项式 | polynomial |
+| der Interaktionsterm | 交互项 | interaction term |
+| ceteris paribus | 其他条件不变 | ceteris paribus |
+| die Strukturkomponente | 结构成分 | structural component |
+
+## Logistic 回归
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die logistische Regression | Logistic 回归 | logistic regression |
+| das Logit-Modell | Logit 模型 | logit model |
+| die binare Responsevariable | 二元响应变量 | binary response variable |
+| die logistische Verteilungsfunktion | Logistic 分布函数 | logistic distribution function |
+| die Response-Funktion | 响应函数 | response function |
+| der lineare Pradiktor | 线性预测子 | linear predictor |
+| die Log-Odds | 对数几率 | log-odds |
+| das Odds-Ratio | 几率比 | odds ratio |
+| die Erfolgswahrscheinlichkeit | 成功概率 | success probability |
+| der Wald-Test (p-Wert) | Wald 检验 (p 值) | Wald test (p-value) |
+
+## 广义线性模型
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| das verallgemeinerte lineare Modell (GLM) | 广义线性模型 | generalized linear model |
+| die Exponentialfamilie | 指数族 | exponential family |
+| die Poisson-Regression | Poisson 回归 | Poisson regression |
+| die Gamma-Regression | Gamma 回归 | Gamma regression |
+| die Identitatsfunktion | 恒等函数 | identity function |
+| die Exponentialfunktion | 指数函数 | exponential function |
+| der bedingte Erwartungswert | 条件期望值 | conditional expectation |
+| die Modellspezifikation | 模型设定 | model specification |
+| die Verteilungsannahme | 分布假设 | distributional assumption |
+| die Zahlvariable (Count Variable) | 计数变量 | count variable |
+:::

@@ -1,0 +1,1601 @@
+---
+title: "第十章：极端数据推断"
+subtitle: "从罕见事件到极值理论的完整旅程 | Von seltenen Ereignissen zur Extremwerttheorie"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+在当今世界，我们越来越频繁地观测到极端事件：极端干旱、极端降雨、河流的极端水位。前几章中我们所依赖的渐近推断工具（如中心极限定理）是为分布的"中心地带"设计的。然而当我们的兴趣转向分布的尾部时，这些经典工具将不再适用。幸运的是，极端事件拥有自己的极限定理，正如中心极限定理为均值提供了正态分布的理论依据，极值定理为最大值提供了极值分布的理论依据。
+
+*In der heutigen Welt beobachten wir immer mehr Extremereignisse. Die asymptotischen Werkzeuge wie der zentrale Grenzwertsatz gelten nur fur die Mitte der Verteilung. Fur die Rander gibt es jedoch eigene Grenzwertsatze -- die Extremwerttheorie.*
+
+本章分为两个核心部分：
+
+1. **罕见事件** -- 当事件发生概率极低（如 $y = 0$），渐近方法失效，精确推断如何补救
+2. **极端数据** -- 分布尾部的极限定理，广义极值分布（GEV），参数估计与应用
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图 | Lernroadmap dieses Kapitels"
+#| fig-height: 4.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+steps_x <- c(3.0, 8.0, 13.0)
+steps_y <- rep(4.2, 3)
+arrows(steps_x[-3] + 1.5, steps_y[-3], steps_x[-1] - 1.5, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("罕见事件\n精确置信区间\nClopper-Pearson / Garwood", 
+               "极端数据\n极值定理\nGumbel / Weibull / Frechet",
+               "广义极值分布\nGEV 参数估计\n气候 / 保险应用")
+labels_de <- c("Seltene Ereignisse\nExakte Konfidenzintervalle", 
+               "Extremwerttheorie\nGrenzwertsatz fur Maxima",
+               "Verallgemeinerte\nExtremwertverteilung")
+colors <- c("#DBEAFE", "#FEF3C7", "#FCE7F3")
+borders <- c("#2563EB", "#D97706", "#DB2777")
+
+for (i in 1:3) {
+  rect(steps_x[i] - 1.5, steps_y[i] - 1.0, steps_x[i] + 1.5, steps_y[i] + 1.0,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.3, labels_cn[i], cex = 0.52, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.7, labels_de[i], cex = 0.42, col = "#64748B", font = 3)
+  text(steps_x[i] - 1.2, steps_y[i] + 0.85, paste0("\u00a710.", i), 
+       cex = 0.5, col = borders[i], font = 2)
+}
+
+arrows(0.5, 1.2, 15.5, 1.2, col = "#DC2626", lwd = 2, length = 0.15)
+text(8, 1.6, "从渐近方法的失败到极值理论的成功  >>>", cex = 0.85, col = "#DC2626")
+```
+
+**最终目标**：理解下面这条链路中每一个概念的含义 --
+
+$$
+\text{罕见事件 (精确推断)} \;\xrightarrow{\text{极端观测}}\; \text{极值的分布} \;\xrightarrow{\text{极限定理}}\; \text{GEV 分布}
+$$
+
+现在看不懂？**完全没关系** -- 读完本章，这条链将变得水到渠成。
+
+{{< pagebreak >}}
+
+# 罕见事件 {#sec-rare-events}
+
+> **Seltene Ereignisse**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- **罕见事件**为何让渐近推断方法失效
+- 二项分布下**精确置信区间**的 Clopper-Pearson 方法
+- 泊松分布下**精确置信区间**的 Garwood 方法
+- 为什么"没有观测到事件"不意味着"事件不可能发生"
+:::
+
+罕见事件是指发生频率很低和/或概率很小的事件。它们可以是极端事件（如导致洪水的高水位、极端热浪），也可以是极为罕见的事件（如核电站事故或飞机坠毁）。本节我们聚焦于事件发生次数极少的情形。
+
+::: {.callout-tip icon="false"}
+## 黑天鹅的比喻 | Die Schwarze-Schwan-Metapher
+
+想象一位鸟类学家来到一个湖边，观察了 10 只天鹅，全部是白色的。他能否因此断定"这个湖里没有黑天鹅"？当然不能。同样，在一个小样本中没有观测到某事件，并不意味着该事件的发生概率为零。罕见事件推断的核心挑战就在于：如何在"零观测"的情况下，对事件的真实概率给出有意义的估计和置信区间。
+
+*Stellen Sie sich einen Ornithologen vor, der 10 Schwane beobachtet -- alle weiss. Kann er behaupten, es gebe keine schwarzen Schwane? Naturlich nicht. Ebenso bedeutet das Nichtbeobachten eines Ereignisses nicht, dass es unmoeglich ist.*
+:::
+
+## 二项分布的动机案例
+
+> **Motivierendes Beispiel: Binomialverteilung**
+
+我们用一个简单的例子来引出核心思想。假设我们对学生中药物成瘾的比例 $\pi$ 感兴趣。我们抽取了 $n$ 名学生，每人回答是否成瘾（$Y = 1$ 表示是，$Y = 0$ 表示否）。为简单起见，假设学生都如实回答。现在假设样本量很小，$n = 10$，且没有一个学生回答"是"，即 $y_i = 0$（$i = 1, \ldots, 10$）。
+
+在二项分布假设下，对数似然函数为：
+
+$$
+l(\pi) = 10 \log(1 - \pi)
+$$
+
+这是 $\pi$ 的递减函数，其最大值在 $\hat{\pi} = 0$ 处取到。
+
+## 渐近方法的失败
+
+> **Versagen der asymptotischen Methoden**
+
+注意，此时对数似然函数在最大值处的一阶导数**不等于零** -- 最大值出现在参数空间的边界上，而不是内部。这与第 4 章推导的渐近结论相矛盾，后者要求 $\partial l(\hat{\theta}) / \partial \theta = 0$ 作为推导的基础。
+
+如果我们盲目地套用第 4 章的渐近结果，会得到毫无意义的推断：由于 $\hat{\pi} = 0$，估计的方差也是零，这反过来意味着 $\pi = 0$ 是精确已知的。然而这显然不对 -- 仅仅因为我们没有在样本中观察到成瘾学生，并不意味着不存在成瘾学生。
+
+::: {.callout-tip icon="false"}
+## 放大镜与原子的比喻 | Die Lupe-und-Atom-Metapher
+
+渐近推断方法就像一把普通放大镜 -- 它在观察常见尺度的物体时效果很好，但如果你试图用它观察原子级别的微小事物，它就完全失效了。中心极限定理和似然比的渐近卡方分布是为"正常规模"的数据设计的，当事件极其罕见时，我们需要更精密的工具。
+
+*Die asymptotische Theorie ist wie eine Lupe -- sie funktioniert gut fur normale Grossenordnungen, versagt aber bei atomaren Skalen. Fur seltene Ereignisse brauchen wir prazisere Werkzeuge.*
+:::
+
+作为一种尝试，我们可以利用似然比检验的渐近结果。根据第 4 章公式 (4.19)，有
+
+$$
+2[l(\hat{\pi}) - l(\pi)] \sim \chi^2_1
+$$
+
+因此，对 $H_0 : \pi = \pi_0$ 的检验在下式成立时拒绝原假设：
+
+$$
+l(\hat{\pi}) - l(\pi) > \frac{\chi^2_{1, 1-\alpha}}{2}
+$$
+
+由此导出的近似置信区间为
+
+$$
+\left[0, \; \exp\left(-\frac{\chi^2_{1, 1-\alpha}}{2n}\right)\right]
+$$
+
+但必须强调，这个区间**没有数学上的严格证明**，实际上它过于狭窄。换言之，第 4 章的渐近论证不成立，因为 $\partial l(\hat{\theta}) / \partial \theta \neq 0$。
+
+```{r}
+#| label: fig-10-1
+#| fig-cap: "图 10.1: 基于（无效的）渐近卡方近似的置信区间（左）与基于精确计算的置信区间（右），二项数据 n = 10, y = 0 | Abb. 10.1: Konfidenzintervalle basierend auf (ungueltiger) asymptotischer Chi-Quadrat-Approximation (links) und exakter Berechnung (rechts)"
+#| fig-height: 5.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3.5, 1))
+
+# ===== 左图：对数似然比 =====
+n_obs <- 10
+y_obs <- 0
+alpha <- 0.05
+
+pi_seq <- seq(0.001, 0.5, length.out = 500)
+ll_pi <- n_obs * log(1 - pi_seq)
+ll_max <- 0  # l(hat_pi) = l(0) = 0
+lr <- ll_max - ll_pi  # 即 -l(pi)，因为 l(0) = 0
+
+plot(pi_seq, lr, type = "l", col = palette_main$blue, lwd = 3,
+     xlab = expression(pi), ylab = "对数似然比 | Log-Likelihood-Ratio",
+     main = expression(paste("渐近近似 (无效) | Asymptotische Approx.")),
+     cex.lab = 1.0, cex.main = 0.95, col.main = "#1E293B",
+     ylim = c(min(lr), 0))
+grid(col = "#E2E8F0")
+
+# 渐近 CI 上界
+chi2_crit <- qchisq(1 - alpha, 1)
+ci_upper_asymp <- exp(-chi2_crit / (2 * n_obs))
+abline(v = ci_upper_asymp, col = palette_main$red, lwd = 2.5, lty = 2)
+abline(h = -chi2_crit / 2, col = palette_main$orange, lwd = 1.5, lty = 3)
+
+text(ci_upper_asymp + 0.02, min(lr) * 0.3,
+     bquote(pi[r]^{asymp} == .(round(ci_upper_asymp, 3))),
+     col = palette_main$red, font = 2, cex = 0.85, pos = 4)
+text(0.35, -chi2_crit / 2 + 0.15,
+     bquote(-chi[1*","*0.95]^2 / 2 == .(round(-chi2_crit / 2, 2))),
+     col = palette_main$orange, cex = 0.75)
+
+legend("bottomleft",
+       legend = c(expression(l(hat(pi)) - l(pi)), "渐近 CI 上界"),
+       col = c(palette_main$blue, palette_main$red),
+       lwd = c(3, 2.5), lty = c(1, 2), bty = "n", cex = 0.8)
+
+# ===== 右图：P(Y <= 0) 精确计算 =====
+pi_seq2 <- seq(0.001, 0.5, length.out = 500)
+prob_y0 <- (1 - pi_seq2)^n_obs  # P(Y = 0) = (1-pi)^n
+
+plot(pi_seq2, prob_y0, type = "l", col = palette_main$blue, lwd = 3,
+     xlab = expression(pi), ylab = expression(P(Y <= 0)),
+     main = expression(paste("精确计算 | Exakte Berechnung")),
+     cex.lab = 1.0, cex.main = 0.95, col.main = "#1E293B",
+     ylim = c(0, 1))
+grid(col = "#E2E8F0")
+
+# alpha/2 水平线
+abline(h = alpha / 2, col = palette_main$red, lwd = 2, lty = 2)
+
+# 精确 CI 上界
+ci_upper_exact <- 1 - (alpha / 2)^(1 / n_obs)
+abline(v = ci_upper_exact, col = palette_main$green, lwd = 2.5, lty = 2)
+points(ci_upper_exact, alpha / 2, pch = 16, col = palette_main$red, cex = 2)
+
+text(0.35, 0.08,
+     bquote(alpha / 2 == .(alpha / 2)),
+     col = palette_main$red, font = 2, cex = 0.85)
+text(ci_upper_exact + 0.02, 0.5,
+     bquote(pi[r]^{exact} == .(round(ci_upper_exact, 3))),
+     col = palette_main$green, font = 2, cex = 0.85, pos = 4)
+
+legend("topright",
+       legend = c(expression(P(Y <= 0) == (1-pi)^n),
+                  expression(alpha / 2),
+                  "精确 CI 上界"),
+       col = c(palette_main$blue, palette_main$red, palette_main$green),
+       lwd = c(3, 2, 2.5), lty = c(1, 2, 2), bty = "n", cex = 0.8)
+
+par(mfrow = c(1, 1))
+```
+
+从图 10.1 的左侧可以看到，渐近方法给出的置信区间上界约为 $\exp(-\chi^2_{1,0.95}/20) \approx 0.826$（不合理地小），而右侧的精确方法给出的上界约为 $1 - (0.025)^{1/10} \approx 0.308$，这更加合理。
+
+## Clopper-Pearson 精确置信区间
+
+> **Exakte Konfidenzintervalle nach Clopper und Pearson**
+
+二项分布的结构允许我们计算**精确置信区间**，从而即使在罕见事件情形下也能进行有效的统计推断。这一方法由 Clopper 和 Pearson (1934) 提出。
+
+其核心思想是：假设在 $n$ 次试验中观测到 $y = 0$。我们可以计算，对于给定的 $n$ 但不同的 $\pi$ 值，观测到 $Y = 0$ 的概率。然后，我们寻找使得这个概率等于 $\alpha/2$ 的阈值 $\pi_r$。
+
+一般构造原则如下。对于 $Y = y$，置信区间的下界为
+
+$$
+c_l = \begin{cases} 0 & \text{若 } y = 0 \\ \pi_l \text{ 满足 } P(Y \geq y;\, \pi_l) = \frac{\alpha}{2} & \text{其他} \end{cases}
+$$
+
+置信区间的上界为
+
+$$
+c_r = \begin{cases} 1 & \text{若 } y = n \\ \pi_r \text{ 满足 } P(Y \leq y;\, \pi_r) = \frac{\alpha}{2} & \text{其他} \end{cases}
+$$
+
+这个区间称为**精确置信区间**（exaktes Konfidenzintervall）。
+
+::: {.callout-tip icon="false"}
+## 量身定制的西装比喻 | Die Massanzug-Metapher
+
+渐近置信区间就像成衣 -- 对大多数人（大样本、常见事件）穿着合身，但对极端身材（极小样本、罕见事件）就合不上了。Clopper-Pearson 精确置信区间则像量身定制的西装 -- 它精确地利用了二项分布的形状，为每种具体情形提供恰到好处的覆盖。
+
+*Das asymptotische KI ist wie Konfektionskleidung -- passt fur die meisten, aber nicht fur Extreme. Das Clopper-Pearson-KI ist ein Massanzug, der exakt auf die Binomialverteilung zugeschnitten ist.*
+:::
+
+在实际计算中，Clopper-Pearson 精确置信区间可以通过 Beta 分布的分位数函数方便地实现：下界为 $\text{qbeta}(\alpha/2,\, y,\, n - y + 1)$，上界为 $\text{qbeta}(1 - \alpha/2,\, y + 1,\, n - y)$。
+
+```{r}
+#| label: fig-10-2
+#| fig-cap: "图 10.2: 基于 Clopper-Pearson 方法的精确置信区间 | Abb. 10.2: Exakte Konfidenzintervalle nach Clopper-Pearson"
+#| fig-height: 6.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+alpha_cp <- 0.05
+n_values <- c(5, 10, 20, 50)
+cols_n <- c(palette_main$blue, palette_main$red, palette_main$green, palette_main$purple)
+
+plot(NULL, xlim = c(0, 1), ylim = c(0, 1),
+     xlab = "y / n", ylab = "置信区间 | Konfidenzintervall",
+     main = "Clopper-Pearson 精确置信区间 | Exakte Konfidenzintervalle",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (idx in seq_along(n_values)) {
+  nn <- n_values[idx]
+  y_vals <- 0:nn
+  prop_vals <- y_vals / nn
+  
+  ci_lower <- ifelse(y_vals == 0, 0, qbeta(alpha_cp / 2, y_vals, nn - y_vals + 1))
+  ci_upper <- ifelse(y_vals == nn, 1, qbeta(1 - alpha_cp / 2, y_vals + 1, nn - y_vals))
+  
+  for (j in seq_along(y_vals)) {
+    segments(prop_vals[j], ci_lower[j], prop_vals[j], ci_upper[j],
+             col = adjustcolor(cols_n[idx], 0.6), lwd = 1.5)
+  }
+  points(prop_vals, ci_lower, pch = "-", col = cols_n[idx], cex = 0.8)
+  points(prop_vals, ci_upper, pch = "-", col = cols_n[idx], cex = 0.8)
+}
+
+abline(0, 1, col = "#94A3B8", lty = 3, lwd = 1.5)
+
+legend("topleft",
+       legend = paste0("n = ", n_values),
+       col = cols_n, lwd = 2.5, bty = "n", cex = 0.9)
+```
+
+从图中可以看到几个重要特征。当 $y/n$ 远离 0 和 $n$ 且 $n$ 较大时，精确区间与渐近区间趋于一致。当 $y/n$ 接近 0 或 1 时，精确区间变得不对称 -- 这正是精确方法的优势所在。随着 $n$ 增大，置信区间变窄，反映了更多数据带来的更高精度。
+
+```{r}
+#| label: clopper-pearson-code
+#| code-fold: false
+
+# Clopper-Pearson 精确置信区间的 R 实现
+clopper_pearson_ci <- function(y, n, alpha = 0.05) {
+  lower <- ifelse(y == 0, 0, qbeta(alpha / 2, y, n - y + 1))
+  upper <- ifelse(y == n, 1, qbeta(1 - alpha / 2, y + 1, n - y))
+  return(c(lower = lower, upper = upper))
+}
+
+# 示例：n = 10, y = 0
+cat("Clopper-Pearson 精确置信区间 | Exaktes Konfidenzintervall\n\n")
+cat("  n = 10, y = 0, alpha = 0.05:\n")
+ci_binom <- clopper_pearson_ci(y = 0, n = 10, alpha = 0.05)
+cat(sprintf("  95%% CI: [%.4f, %.4f]\n", ci_binom[1], ci_binom[2]))
+cat("  解读: 虽然没有观测到事件, 但真实比例最高可达", 
+    round(ci_binom[2], 3), "\n\n")
+
+# 比较不同 y 值
+cat("  不同 y 值下的精确 CI (n = 10):\n\n")
+cat(sprintf("  %3s  %10s  %10s\n", "y", "下界", "上界"))
+for (yy in 0:5) {
+  ci_tmp <- clopper_pearson_ci(yy, 10, 0.05)
+  cat(sprintf("  %3d  %10.4f  %10.4f\n", yy, ci_tmp[1], ci_tmp[2]))
+}
+```
+
+## 泊松分布的精确推断
+
+> **Exakte Inferenz fur die Poisson-Verteilung**
+
+类似的思路也适用于泊松分布。假设我们有 $n$ 个独立同分布的泊松随机变量
+
+$$
+Y_i \sim \text{Poisson}(\lambda), \quad \text{i.i.d.}
+$$
+
+但我们观测到的是罕见事件，即 $\lambda$ 极小。在最极端的情形下，我们根本没有观测到事件发生，即 $y_i = 0$（$i = 1, \ldots, n$）。数据清楚地表明 $\lambda$ 很小，但并不意味着 $\lambda = 0$（尽管这是最大似然估计的值）。因此，我们需要不依赖渐近论证的置信区间。
+
+首先考察似然函数。我们得到
+
+$$
+L(\lambda) = \prod_{i=1}^{n} \frac{\lambda^{y_i}}{y_i!} e^{-\lambda} \propto \lambda^{\sum_{i=1}^{n} y_i} e^{-n\lambda}
+$$
+
+这表明 $Y = \sum_{i=1}^{n} Y_i$ 服从参数为 $n\lambda$ 的泊松分布，因此我们可以针对单个观测 $Y \sim \text{Poisson}(\lambda_n)$（其中 $\lambda_n = n\lambda$）推导置信区间。如果我们希望得到 $\lambda$（而非 $\lambda_n$）的置信区间，只需将区间端点除以 $n$ 即可。
+
+泊松分布的精确置信区间可以追溯到 Garwood (1936)。对于 $\lambda_n$ 的置信区间，下界由下式给出
+
+$$
+c_l = \begin{cases} 0 & \text{若 } Y = 0 \\ \lambda_l \text{ 满足 } P(Y \geq y;\, \lambda_n = \lambda_l) = \frac{\alpha}{2} & \text{其他} \end{cases}
+$$
+
+上界为
+
+$$
+c_r = \lambda_r \text{ 满足 } P(Y \leq y;\, \lambda_n = \lambda_r) = \frac{\alpha}{2}
+$$
+
+在实际计算中，Garwood 精确置信区间可以通过卡方分布的分位数实现：下界为 $\chi^2_{2y,\, \alpha/2} / 2$（$y > 0$ 时），上界为 $\chi^2_{2(y+1),\, 1-\alpha/2} / 2$。
+
+```{r}
+#| label: fig-10-3
+#| fig-cap: "图 10.3: 泊松分布的精确置信区间 | Abb. 10.3: Exakte Konfidenzintervalle fuer die Poisson-Verteilung"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+garwood_ci <- function(y, alpha = 0.05) {
+  lower <- ifelse(y == 0, 0, qchisq(alpha / 2, 2 * y) / 2)
+  upper <- qchisq(1 - alpha / 2, 2 * (y + 1)) / 2
+  return(c(lower = lower, upper = upper))
+}
+
+y_range <- 0:10
+ci_pois_mat <- t(sapply(y_range, function(y) garwood_ci(y, 0.05)))
+
+plot(y_range, rowMeans(ci_pois_mat), type = "n",
+     xlim = c(-0.5, 10.5), ylim = c(0, max(ci_pois_mat[, 2]) + 1),
+     xlab = "y (观测值)", ylab = expression(lambda[n]),
+     main = expression(paste("泊松精确置信区间 | Exakte Poisson-Konfidenzintervalle")),
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (i in seq_along(y_range)) {
+  segments(y_range[i], ci_pois_mat[i, 1], y_range[i], ci_pois_mat[i, 2],
+           col = palette_main$blue, lwd = 3)
+  points(y_range[i], ci_pois_mat[i, 1], pch = 16, col = palette_main$green, cex = 1.2)
+  points(y_range[i], ci_pois_mat[i, 2], pch = 16, col = palette_main$red, cex = 1.2)
+  points(y_range[i], y_range[i], pch = 4, col = palette_main$orange, cex = 1.5, lwd = 2)
+}
+
+legend("topleft",
+       legend = c("95% 精确 CI", "CI 下界", "CI 上界", expression(hat(lambda)[n] == y)),
+       col = c(palette_main$blue, palette_main$green, palette_main$red, palette_main$orange),
+       pch = c(NA, 16, 16, 4), lwd = c(3, NA, NA, 2), bty = "n", cex = 0.85)
+```
+
+```{r}
+#| label: garwood-code
+#| code-fold: false
+
+# Garwood 精确置信区间的 R 实现
+cat("Garwood 精确置信区间 | Exakte Poisson-Konfidenzintervalle\n\n")
+
+cat("  单个观测 Y ~ Poisson(lambda_n):\n\n")
+cat(sprintf("  %3s  %10s  %10s  %10s\n", "y", "下界", "MLE", "上界"))
+for (yy in 0:6) {
+  ci_g <- garwood_ci(yy, 0.05)
+  cat(sprintf("  %3d  %10.4f  %10d  %10.4f\n", yy, ci_g[1], yy, ci_g[2]))
+}
+
+cat("\n  n 个 i.i.d. 样本的情形:\n")
+cat("  若 Y_1, ..., Y_n ~ Poisson(lambda), 则 Y = sum(Y_i) ~ Poisson(n*lambda)\n")
+cat("  lambda 的 CI = Garwood CI / n\n\n")
+
+# 例：n = 20, 总和 y = 4
+n_ex <- 20; y_sum_ex <- 4
+ci_nlamb <- garwood_ci(y_sum_ex, 0.05)
+cat(sprintf("  例: n = %d, sum(y_i) = %d\n", n_ex, y_sum_ex))
+cat(sprintf("  lambda_n 的 95%% CI: [%.4f, %.4f]\n", ci_nlamb[1], ci_nlamb[2]))
+cat(sprintf("  lambda   的 95%% CI: [%.4f, %.4f]\n", ci_nlamb[1] / n_ex, ci_nlamb[2] / n_ex))
+```
+
+我们可以得出结论：对于泊松分布和二项分布，即使我们没有观测到一个事件，也能得到有效的置信区间。置信区间的计算比渐近情形更复杂且不那么直观，但借助现有的精确计算程序，这已不再是问题。
+
+{{< pagebreak >}}
+
+# 极端数据 {#sec-extreme-data}
+
+> **Extremwertdaten**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 极端事件的**定义**：数据最大值/最小值的分布
+- 为什么 $F^n(y)$ 的直接极限会**退化**
+- **标准化序列** $a_n, b_n$ 的作用：类比中心极限定理中的 $\sqrt{n}$
+- **极值定理**（Property 10.1）：极值世界的"中心极限定理"
+- **三种极值分布**：Gumbel、Weibull、Frechet-Pareto
+- **广义极值分布（GEV）** 的统一参数化与最大似然估计
+:::
+
+在上一节中，我们讨论了罕见事件。现在我们将其扩展到极端事件 -- 它们本身也是罕见的。例子包括河流的极端水位或极端温度。
+
+::: {.callout-tip icon="false"}
+## 极值理论 = 极端世界的"中心极限定理" | EVT = Der ZGS der Extremwelt
+
+回忆一下中心极限定理（CLT）：无论原始数据服从什么分布，标准化后的样本均值的极限分布都是正态分布。极值定理扮演着完全类似的角色，只不过主角从"均值"换成了"最大值" -- 无论原始数据服从什么分布，经过适当标准化的样本最大值的极限分布只有三种可能。如果说 CLT 是统计学中"万有引力定律"在分布中心的体现，那么极值定理就是"万有引力"在分布尾部的体现。
+
+*Der zentrale Grenzwertsatz beschreibt das Verhalten von Mittelwerten; die Extremwerttheorie beschreibt das Verhalten von Maxima -- beide sind universelle Grenzwertsatze.*
+:::
+
+## 例 10.1：赫尔戈兰岛温度数据
+
+> **Beispiel 10.1: Temperaturdaten der Insel Helgoland**
+
+赫尔戈兰岛（Helgoland）是德国北海中的一个岛屿。我们展示近几十年来记录的每日最高温度数据。可以清楚地看到年度周期变化。我们关注两个量：第一，每年的日最高温度的**年度最大值**；第二，每年的日最高温度的**年度最小值**（即一年中"最暖也最冷"的那一天的最高温度）。年度最小值低于零度线表示该年没有一天的最高温度低于冰点。
+
+```{r}
+#| label: fig-10-4
+#| fig-cap: "图 10.4: 赫尔戈兰岛温度数据（仿教材）| Abb. 10.4: Temperaturdaten der Insel Helgoland"
+#| fig-height: 10
+
+set.seed(2024)
+years <- 1952:2022
+n_years <- length(years)
+
+# 模拟赫尔戈兰岛每日最高温度
+daily_max_list <- list()
+for (yr_idx in seq_along(years)) {
+  days <- 365
+  day_of_year <- 1:days
+  # 季节性变化 + 长期升温趋势
+  mean_temp <- 9 + 10 * sin(2 * pi * (day_of_year - 105) / 365) + 
+               0.025 * (years[yr_idx] - 1952)
+  daily_temp <- mean_temp + rnorm(days, 0, 4.5)
+  daily_max_list[[yr_idx]] <- daily_temp
+}
+
+# 计算年度统计量
+yearly_max <- sapply(daily_max_list, max)
+yearly_min_max <- sapply(daily_max_list, min)
+
+# 构建完整的每日数据用于绘图
+all_dates <- c()
+all_temps <- c()
+for (yr_idx in seq_along(years)) {
+  all_dates <- c(all_dates, years[yr_idx] + (0:364) / 365)
+  all_temps <- c(all_temps, daily_max_list[[yr_idx]])
+}
+
+par(mfrow = c(3, 1), bg = "#F8FAFC")
+
+# 上图：每日最高温度
+par(mar = c(3, 4.5, 3, 1))
+plot(all_dates, all_temps, type = "l", col = adjustcolor(palette_main$blue, 0.3),
+     lwd = 0.3,
+     xlab = "", ylab = "每日最高温度 [C]",
+     main = "每日最高温度 | Tagliche Maximaltemperatur [Celsius]",
+     cex.lab = 1.0, cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 中图：年度最高温度
+par(mar = c(3, 4.5, 3, 1))
+plot(years, yearly_max, type = "b", pch = 16, col = palette_main$red, lwd = 2, cex = 1.0,
+     xlab = "", ylab = "年度最高温度 [C]",
+     main = "年度最高温度 | Jahrliche Maximaltemperatur [Celsius]",
+     cex.lab = 1.0, cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+# 趋势线
+fit_trend <- lm(yearly_max ~ years)
+abline(fit_trend, col = palette_main$orange, lwd = 2, lty = 2)
+
+# 下图：年度最低的日最高温度
+par(mar = c(4.5, 4.5, 3, 1))
+plot(years, yearly_min_max, type = "b", pch = 16, col = palette_main$purple, lwd = 2, cex = 1.0,
+     xlab = "年份 | Jahr", ylab = "最低日最高温度 [C]",
+     main = "每年最低的日最高温度 | Niedrigste Tagesmaximaltemp. pro Jahr [Celsius]",
+     cex.lab = 1.0, cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = 0, col = palette_main$red, lwd = 2, lty = 3)
+text(1960, 1.5, "冰点线 | Gefrierpunkt", col = palette_main$red, cex = 0.85, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+中间图中年度最高温度呈现明显的上升趋势。下图中零度线以上的点表示该年没有一天出现持续霜冻。本节的目标是为这些极端数据找到合适的分布模型。
+
+## 最大值的分布
+
+> **Verteilung des Maximums**
+
+让我们形式化地定义上面的研究对象。假设经典设定
+
+$$
+Y_i \sim F(\cdot) \quad \text{i.i.d.}, \quad i = 1, \ldots, n
+$$
+
+我们的兴趣在于
+
+$$
+Y_{\max, n} = \max\{Y_1, \ldots, Y_n\}
+$$
+
+的分布。基于独立同分布假设，不难推导出最大值的分布函数：
+
+$$
+F_{Y_{\max, n}}(y) = P(Y_{\max, n} \leq y) = P(Y_1 \leq y, \ldots, Y_n \leq y) = P(Y_1 \leq y) \cdots P(Y_n \leq y) = F^n(y)
+$$
+
+## 为什么直接取极限会退化
+
+> **Warum der direkte Grenzwert degeneriert**
+
+如果我们直接取极限 $n \to \infty$，不会得到有用的极限分布。考虑两种情形：
+
+**情形一：支撑集有界**。若存在一个最大值 $c$，使得 $c = \sup\{y : F(y) < 1\}$，则
+
+$$
+\lim_{n \to \infty} F_{Y_{\max, n}}(y) = \begin{cases} 0 & \text{若 } y < c \\ 1 & \text{若 } y \geq c \end{cases}
+$$
+
+极限分布退化为集中在一点 $c$ 的分布 -- 对于无穷多数据，最大值就等于上界 $c$。
+
+**情形二：支撑集无界**。此时随着 $n$ 增大，最大值会越来越大，$F_{Y_{\max, n}}(y)$ 变得退化。
+
+```{r}
+#| label: fig-10-5
+#| fig-cap: "图 10.5: 标准正态随机变量的最大值随 n 增长 | Abb. 10.5: Maximum von n standardnormalverteilten Zufallsvariablen mit n = 10^k"
+#| fig-height: 5
+
+set.seed(42)
+k_values <- 1:8
+max_values <- numeric(length(k_values))
+for (k in k_values) {
+  n_sim <- 10^k
+  if (n_sim <= 1e6) {
+    max_values[k] <- max(rnorm(n_sim))
+  } else {
+    # 对于非常大的 n，分块计算
+    block_max <- numeric(100)
+    for (b in 1:100) {
+      block_max[b] <- max(rnorm(n_sim / 100))
+    }
+    max_values[k] <- max(block_max)
+  }
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(k_values, max_values, type = "b", pch = 16, col = palette_main$blue, lwd = 2.5, cex = 1.5,
+     xlab = expression(paste("样本量 n  [ ", 10^k, " ]")),
+     ylab = expression(Y[max]),
+     main = expression(paste("标准正态变量的最大值 | Maximum von N(0,1)-Variablen")),
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     xaxt = "n")
+axis(1, at = k_values, labels = k_values)
+grid(col = "#E2E8F0")
+
+# 理论渐近线 sqrt(2 log n) 近似
+n_theory <- 10^(seq(1, 8, length.out = 200))
+a_n <- sqrt(2 * log(n_theory))
+lines(log10(n_theory), a_n, col = palette_main$red, lwd = 2, lty = 2)
+
+legend("bottomright",
+       legend = c("模拟最大值",
+                  expression(paste("渐近: ", sqrt(2 * log(n))))),
+       col = c(palette_main$blue, palette_main$red),
+       pch = c(16, NA), lwd = c(2.5, 2), lty = c(1, 2), bty = "n", cex = 0.9)
+
+text(6, 3.0, expression(paste(Y[max] %->% infinity, " 随 n 增大")),
+     col = palette_main$orange, font = 2, cex = 1.0)
+```
+
+从图中可以清楚看到：随着 $k$ 增大（即 $n = 10^k$ 增大），最大值持续增长并趋向 $\infty$。这意味着我们需要以某种合理的方式**标准化**数据。
+
+## 标准化与极值定理
+
+> **Standardisierung und der Extremwertsatz**
+
+::: {.callout-tip icon="false"}
+## 显微镜调焦的比喻 | Die Mikroskop-Metaphor
+
+直接观察 $F^n(y)$ 的极限就像把显微镜的放大倍率固定不动却想观察越来越小的物体 -- 你什么也看不清。标准化序列 $a_n$ 和 $b_n$ 就是在不断调整显微镜的焦距和放大倍率：$b_n$ 调整焦点位置（平移），$a_n$ 调整放大倍率（缩放）。只有不断调整，才能在极限下看到清晰的"图像"（非退化分布）。
+
+类比中心极限定理中的 $\sqrt{n}$：如果不除以 $\sqrt{n}$，样本均值的 $n$ 倍会趋向无穷；除以 $\sqrt{n}$ 后才得到标准正态极限。
+
+*Die Standardisierungssequenzen $a_n$ und $b_n$ sind wie die Fokussierung eines Mikroskops -- ohne Anpassung wird das Bild unscharf. Erst die richtige Skalierung liefert ein nicht-degeneriertes Grenzbild.*
+:::
+
+我们假设存在序列 $a_n$ 和 $b_n$（可以依赖于样本量），使得
+
+$$
+\frac{Y_{\max, n} - b_n}{a_n}
+$$
+
+收敛到某个**非退化分布**。因此
+
+$$
+\lim_{n \to \infty} P\left(\frac{Y_{\max, n} - b_n}{a_n} \leq y\right) = \lim_{n \to \infty} P(Y_{\max, n} \leq a_n y + b_n) = \lim_{n \to \infty} F^n(a_n y + b_n) = H(y)
+$$
+
+其中 $y \in \mathbb{R}$，$H$ 是某个非退化分布。后者被称为**极值分布**，如下面的结果所示。
+
+::: {.callout-important icon="false"}
+## 性质 10.1：极值定理 | Eigenschaft 10.1: Extremwertsatz
+
+设 $\{Y_i\}_{i=1}^{\infty}$ 为 i.i.d. 随机变量，$Y_{\max, n} := \max(Y_1, \ldots, Y_n)$。若存在实数序列 $\{a_n\}_{n=1}^{\infty}$，$\{b_n\}_{n=1}^{\infty}$ 使得
+
+$$
+\frac{Y_{\max, n} - b_n}{a_n} \xrightarrow{d} Z \quad \text{当 } n \to \infty
+$$
+
+则 $Z$ 服从以下三种分布之一：
+
+**1. 极值分布或 Gumbel 分布：**
+
+$$
+H_1(z) = \exp(-\exp(-z)), \quad z \in \mathbb{R}
+$$
+
+**2. （反转的）Weibull 分布：**
+
+$$
+H_2(z) = \begin{cases} \exp(-(- z)^{1/k}) & \text{若 } z \leq 0 \\ 1 & \text{若 } z > 0 \end{cases}
+$$
+
+**3. Frechet-Pareto 分布：**
+
+$$
+H_3(z) = \begin{cases} 0 & \text{若 } z < 0 \\ \exp(-z^{-1/k}) & \text{若 } z \geq 0 \end{cases}
+$$
+:::
+
+我们可以将性质 10.1 理解为**分布尾部的极限定理**。换言之，如果关注的不是分布的中心（均值）而是尾部（极大值或极小值），也存在极限定理和自然的分布模型。
+
+这一方法论可以追溯到 Gumbel (1958)，一位德国统计学家。他在政治上遭受迫害，在二战期间逃离纳粹德国前往美国。在那里，他研究了极值问题，如今被视为极值理论的奠基人。更多关于 Gumbel 生平和贡献的细节可参见 Rendtel et al. (2021)。
+
+```{r}
+#| label: fig-three-evd
+#| fig-cap: "三种极值分布的形态比较 | Die drei Extremwertverteilungstypen im Vergleich"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+z_seq <- seq(-4, 6, length.out = 500)
+
+# Gumbel
+h1 <- exp(-exp(-z_seq))
+
+# Weibull (k = 2)
+k_w <- 2
+h2 <- ifelse(z_seq <= 0, exp(-(-z_seq)^(1/k_w)), 1)
+
+# Frechet-Pareto (k = 2)
+k_f <- 2
+h3 <- ifelse(z_seq < 0, 0, exp(-z_seq^(-1/k_f)))
+
+plot(z_seq, h1, type = "l", col = palette_main$blue, lwd = 3,
+     xlab = "z", ylab = "H(z)",
+     main = "三种极值分布 | Drei Extremwertverteilungen",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, 1))
+lines(z_seq, h2, col = palette_main$red, lwd = 3, lty = 2)
+lines(z_seq, h3, col = palette_main$green, lwd = 3, lty = 4)
+grid(col = "#E2E8F0")
+
+legend("bottomright",
+       legend = c(expression(paste(H[1], ": Gumbel, ", gamma == 0)),
+                  expression(paste(H[2], ": Weibull (k=2), ", gamma > 0)),
+                  expression(paste(H[3], ": Frechet-Pareto (k=2), ", gamma < 0))),
+       col = c(palette_main$blue, palette_main$red, palette_main$green),
+       lwd = 3, lty = c(1, 2, 4), bty = "n", cex = 0.85)
+```
+
+## 广义极值分布 (GEV)
+
+> **Definition 10.1: Die verallgemeinerte Extremwertverteilung (GEV)**
+
+三种分布 $H_1(\cdot)$、$H_2(\cdot)$ 和 $H_3(\cdot)$ 可以统一写成一种形式，称为**广义极值分布**（Generalized Extreme Value distribution, GEV）。
+
+::: {.callout-important icon="false"}
+## 定义 10.1：广义极值分布 | Definition 10.1: Verallgemeinerte Extremwertverteilung
+
+GEV 有三个参数：位置参数 $\mu$、尺度参数 $\sigma$ 和形状参数 $\gamma$。其分布函数为
+
+$$
+H(z) = \begin{cases} \exp\left(-(1 + \gamma z)^{-1/\gamma}\right) & \text{若 } \gamma \neq 0 \\ \exp(-\exp(-z)) & \text{若 } \gamma = 0 \end{cases}
+$$
+
+其中 $z = (x - \mu) / \sigma$。
+:::
+
+对 (10.2) 中的参数进行解读，与其他分布类似。参数 $\mu$ 给出位置参数，$\sigma$ 是尺度参数。形状参数 $\gamma$ 决定了分布的类型：
+
+1. $\gamma = 0$ 给出 Gumbel 分布 $H_1(\cdot)$
+2. $\gamma > 0$ 给出（反转的）Weibull 分布 $H_2(\cdot)$
+3. $\gamma < 0$ 给出 Frechet-Pareto 分布 $H_3(\cdot)$
+
+::: {.callout-tip icon="false"}
+## 三种人格的比喻 | Die drei Personlichkeitstypen-Metapher
+
+把三种极值分布想象成三种不同的"尾部人格"：
+
+**Gumbel（$\gamma = 0$）** 是"温和型" -- 尾部衰减速度适中（指数级），就像正态分布的尾部。大多数自然现象的极值属于这一类。
+
+**Weibull（$\gamma > 0$）** 是"有限型" -- 存在一个上界，极值永远不会超过某个最大值。想象一个有天花板的房间，球再怎么弹也不会超过天花板。
+
+**Frechet-Pareto（$\gamma < 0$）** 是"重尾型" -- 尾部衰减极慢（幂律衰减），极端事件比你预期的更常发生。想象一个没有天花板的房间，球偶尔能弹到惊人的高度。
+
+*Gumbel = mittlerer Schwanz, Weibull = beschrankter Schwanz, Frechet-Pareto = schwerer Schwanz.*
+:::
+
+GEV 的参数化开辟了使用最大似然法估计参数的可能性，进而估计极值分布的类型。这体现了极值分布方法的普适性和实用性。该领域已发展成熟，更多细节可参考 Coles et al. (2001) 或 Haan and Ferreira (2006)。
+
+```{r}
+#| label: fig-gev-shapes
+#| fig-cap: "GEV 分布在不同形状参数 gamma 下的密度函数 | GEV-Dichte fuer verschiedene Werte von gamma"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# GEV 密度函数
+dgev_manual <- function(x, mu, sigma, gamma) {
+  z <- (x - mu) / sigma
+  if (abs(gamma) < 1e-8) {
+    # Gumbel
+    t_val <- exp(-z)
+    dens <- (1 / sigma) * t_val * exp(-t_val)
+  } else {
+    t_val <- 1 + gamma * z
+    valid <- t_val > 0
+    dens <- rep(0, length(x))
+    dens[valid] <- (1 / sigma) * t_val[valid]^(-1/gamma - 1) * 
+                   exp(-t_val[valid]^(-1/gamma))
+  }
+  return(dens)
+}
+
+x_range <- seq(-3, 8, length.out = 500)
+gamma_vals <- c(0, 0.3, -0.3)
+col_vals <- c(palette_main$blue, palette_main$red, palette_main$green)
+lty_vals <- c(1, 2, 4)
+label_vals <- c(expression(paste(gamma == 0, " (Gumbel)")),
+                expression(paste(gamma == 0.3, " (Weibull)")),
+                expression(paste(gamma == -0.3, " (Frechet-Pareto)")))
+
+plot(NULL, xlim = c(-3, 8), ylim = c(0, 0.45),
+     xlab = "x", ylab = "密度 h(x)",
+     main = "GEV 密度函数 | GEV-Dichtefunktion",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (g_idx in seq_along(gamma_vals)) {
+  dens_g <- dgev_manual(x_range, mu = 0, sigma = 1, gamma = gamma_vals[g_idx])
+  lines(x_range, dens_g, col = col_vals[g_idx], lwd = 3, lty = lty_vals[g_idx])
+}
+
+legend("topright",
+       legend = label_vals,
+       col = col_vals, lwd = 3, lty = lty_vals, bty = "n", cex = 0.85)
+```
+
+## GEV 的最大似然估计
+
+> **Maximum-Likelihood-Schatzung der GEV**
+
+GEV 分布的对数似然函数为：
+
+对于 $\gamma \neq 0$：
+
+$$
+l(\mu, \sigma, \gamma) = -n \log \sigma - \left(\frac{1}{\gamma} + 1\right) \sum_{i=1}^{n} \log\left(1 + \gamma \frac{y_i - \mu}{\sigma}\right) - \sum_{i=1}^{n} \left(1 + \gamma \frac{y_i - \mu}{\sigma}\right)^{-1/\gamma}
+$$
+
+条件是 $1 + \gamma (y_i - \mu) / \sigma > 0$ 对所有 $i$ 成立。
+
+对于 $\gamma = 0$（Gumbel 情形）：
+
+$$
+l(\mu, \sigma) = -n \log \sigma - \sum_{i=1}^{n} \frac{y_i - \mu}{\sigma} - \sum_{i=1}^{n} \exp\left(-\frac{y_i - \mu}{\sigma}\right)
+$$
+
+这些对数似然函数可以通过数值优化方法（如 R 中的 `optim()`）最大化，从而获得参数估计。
+
+```{r}
+#| label: gev-fitting-functions
+#| code-fold: false
+
+# GEV 负对数似然函数
+nll_gev <- function(par, data) {
+  mu <- par[1]
+  sigma <- par[2]
+  gamma <- par[3]
+  n <- length(data)
+  
+  if (sigma <= 0) return(1e10)
+  
+  z <- (data - mu) / sigma
+  
+  if (abs(gamma) < 1e-8) {
+    # Gumbel 情形
+    nll <- n * log(sigma) + sum(z) + sum(exp(-z))
+  } else {
+    t_val <- 1 + gamma * z
+    if (any(t_val <= 0)) return(1e10)
+    nll <- n * log(sigma) + (1/gamma + 1) * sum(log(t_val)) + sum(t_val^(-1/gamma))
+  }
+  return(nll)
+}
+
+# GEV 拟合函数
+fit_gev <- function(data, start = NULL) {
+  if (is.null(start)) {
+    # Gumbel 矩估计作为初始值
+    mu0 <- mean(data) - 0.5772 * sd(data) * sqrt(6) / pi
+    sigma0 <- sd(data) * sqrt(6) / pi
+    gamma0 <- 0.01
+    start <- c(mu0, sigma0, gamma0)
+  }
+  
+  result <- optim(start, nll_gev, data = data, method = "Nelder-Mead",
+                  hessian = TRUE,
+                  control = list(maxit = 10000))
+  
+  se <- tryCatch(sqrt(diag(solve(result$hessian))), error = function(e) rep(NA, 3))
+  
+  list(
+    par = result$par,
+    se = se,
+    nll = result$value,
+    convergence = result$convergence
+  )
+}
+```
+
+## 例 10.2：赫尔戈兰岛年度极端温度的 GEV 拟合
+
+> **Beispiel 10.2: GEV-Anpassung an die Helgoland-Daten**
+
+```{r}
+#| label: example-10-2
+#| code-fold: false
+
+# 拟合 GEV 到年度最高温度
+cat("例 10.2: GEV 拟合 | Beispiel 10.2: GEV-Anpassung\n\n")
+
+# 年度最高温度
+gev_max <- fit_gev(yearly_max)
+cat("  年度最高温度的 GEV 参数估计:\n")
+cat(sprintf("    mu    = %6.2f  (SE: %.2f)\n", gev_max$par[1], gev_max$se[1]))
+cat(sprintf("    sigma = %6.2f  (SE: %.2f)\n", gev_max$par[2], gev_max$se[2]))
+cat(sprintf("    gamma = %6.2f  (SE: %.2f)\n", gev_max$par[3], gev_max$se[3]))
+
+gamma_hat <- gev_max$par[3]
+if (abs(gamma_hat) < 0.05) {
+  cat("    -> gamma 接近 0: Gumbel 分布\n\n")
+} else if (gamma_hat > 0) {
+  cat("    -> gamma > 0: (反转的) Weibull 分布\n\n")
+} else {
+  cat("    -> gamma < 0: Frechet-Pareto 分布\n\n")
+}
+
+# 年度最低日最高温度
+# 对最小值的极值分析：取负号转为最大值问题
+neg_min_max <- -yearly_min_max
+gev_min <- fit_gev(neg_min_max)
+# 参数回转
+mu_min <- -gev_min$par[1]
+sigma_min <- gev_min$par[2]
+gamma_min <- gev_min$par[3]
+
+cat("  年度最低日最高温度的 GEV 参数估计:\n")
+cat(sprintf("    mu    = %6.2f  (SE: %.2f)\n", mu_min, gev_min$se[1]))
+cat(sprintf("    sigma = %6.2f  (SE: %.2f)\n", sigma_min, gev_min$se[2]))
+cat(sprintf("    gamma = %6.2f  (SE: %.2f)\n", gamma_min, gev_min$se[3]))
+```
+
+```{r}
+#| label: fig-10-6
+#| fig-cap: "图 10.6: 年度最高温度和年度最低日最高温度的拟合极值分布 | Abb. 10.6: Angepasste Extremwertverteilungen"
+#| fig-height: 9
+
+# GEV 分布函数
+pgev_manual <- function(x, mu, sigma, gamma) {
+  z <- (x - mu) / sigma
+  if (abs(gamma) < 1e-8) {
+    p <- exp(-exp(-z))
+  } else {
+    t_val <- 1 + gamma * z
+    valid <- t_val > 0
+    p <- rep(0, length(x))
+    p[valid] <- exp(-t_val[valid]^(-1/gamma))
+    if (gamma > 0) {
+      p[!valid & z < -1/gamma] <- 0
+    } else {
+      p[!valid & z > -1/gamma] <- 1
+    }
+  }
+  return(p)
+}
+
+par(mfrow = c(2, 1), bg = "#F8FAFC")
+
+# ===== 上图：年度最高温度 =====
+par(mar = c(4.5, 4.5, 3, 1))
+ecdf_max <- ecdf(yearly_max)
+x_plot <- seq(min(yearly_max) - 2, max(yearly_max) + 2, length.out = 300)
+p_fitted <- pgev_manual(x_plot, gev_max$par[1], gev_max$par[2], gev_max$par[3])
+
+plot(ecdf_max, pch = 16, col = palette_main$gray, cex = 0.8,
+     main = expression(paste("年度最高温度 GEV 拟合 | Anpassung an ", Y[max])),
+     xlab = "最高温度 [C] | Maximaltemperatur [Celsius]",
+     ylab = expression(paste(H(y), " 和 ", F[n](y))),
+     cex.lab = 1.0, cex.main = 0.95, col.main = "#1E293B")
+lines(x_plot, p_fitted, col = palette_main$red, lwd = 3)
+grid(col = "#E2E8F0")
+
+legend("bottomright",
+       legend = c(expression(F[n](y) ~ "(经验)"),
+                  expression(hat(H)(y) ~ "(GEV 拟合)")),
+       col = c(palette_main$gray, palette_main$red),
+       pch = c(16, NA), lwd = c(NA, 3), bty = "n", cex = 0.85)
+
+# ===== 下图：年度最低日最高温度 =====
+par(mar = c(4.5, 4.5, 3, 1))
+ecdf_min <- ecdf(yearly_min_max)
+x_plot_min <- seq(min(yearly_min_max) - 2, max(yearly_min_max) + 2, length.out = 300)
+
+# 对最小值，使用反转的 GEV: P(min <= x) = 1 - H(-x)
+p_fitted_min <- 1 - pgev_manual(-x_plot_min, gev_min$par[1], gev_min$par[2], gev_min$par[3])
+
+plot(ecdf_min, pch = 16, col = palette_main$gray, cex = 0.8,
+     main = "年度最低日最高温度 GEV 拟合 | Anpassung an niedrigste Tagesmaximaltemp.",
+     xlab = "最低日最高温度 [C] | Niedrigste Tagesmaximaltemp. [Celsius]",
+     ylab = expression(paste(H(y), " 和 ", F[n](y))),
+     cex.lab = 1.0, cex.main = 0.95, col.main = "#1E293B")
+lines(x_plot_min, p_fitted_min, col = palette_main$purple, lwd = 3)
+grid(col = "#E2E8F0")
+
+legend("bottomright",
+       legend = c(expression(F[n](y) ~ "(经验)"),
+                  expression(hat(H)(y) ~ "(GEV 拟合)")),
+       col = c(palette_main$gray, palette_main$purple),
+       pch = c(16, NA), lwd = c(NA, 3), bty = "n", cex = 0.85)
+
+par(mfrow = c(1, 1))
+```
+
+我们可以进一步检验数据是否同分布的 -- 即早期年份的年度最高温度是否与最近年份的分布相同。为此，我们将数据分为 1985 年之前和 1985 年之后两组。
+
+```{r}
+#| label: fig-10-7
+#| fig-cap: "图 10.7: 1985 年前后年度最高温度分布的比较 | Abb. 10.7: Verteilungsvergleich vor und nach 1985"
+#| fig-height: 5.5
+
+idx_before <- years < 1985
+idx_after <- years >= 1985
+max_before <- yearly_max[idx_before]
+max_after <- yearly_max[idx_after]
+
+gev_before <- fit_gev(max_before)
+gev_after <- fit_gev(max_after)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+ecdf_before <- ecdf(max_before)
+ecdf_after <- ecdf(max_after)
+
+x_range_comp <- seq(min(yearly_max) - 2, max(yearly_max) + 2, length.out = 300)
+p_before <- pgev_manual(x_range_comp, gev_before$par[1], gev_before$par[2], gev_before$par[3])
+p_after <- pgev_manual(x_range_comp, gev_after$par[1], gev_after$par[2], gev_after$par[3])
+
+plot(ecdf_before, pch = 16, col = palette_main$blue, cex = 0.8,
+     main = "1985 年前后年度最高温度分布 | Vor und nach 1985",
+     xlab = "最高温度 [C] | Maximaltemperatur [Celsius]",
+     ylab = expression(paste(H(y), " 和 ", F[n](y))),
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+plot(ecdf_after, pch = 17, col = palette_main$red, cex = 0.8, add = TRUE)
+lines(x_range_comp, p_before, col = palette_main$blue, lwd = 3)
+lines(x_range_comp, p_after, col = palette_main$red, lwd = 3, lty = 2)
+grid(col = "#E2E8F0")
+
+legend("bottomright",
+       legend = c("1985 年前 | vor 1985", "1985 年后 | nach 1985"),
+       col = c(palette_main$blue, palette_main$red),
+       pch = c(16, 17), lwd = c(3, 3), lty = c(1, 2), bty = "n", cex = 0.9)
+```
+
+```{r}
+#| label: table-10-1
+#| code-fold: false
+
+# 表 10.1: 两个时间段的参数估计
+cat("表 10.1: 两个时间段的参数估计 | Tabelle 10.1: Parameterschatzungen\n\n")
+cat(sprintf("  %-10s  %18s  %18s\n", "", "1985 前 | vor 1985", "1985 后 | nach 1985"))
+cat(sprintf("  %-10s  %8.2f (%4.2f)     %8.2f (%4.2f)\n",
+            "mu", gev_before$par[1], gev_before$se[1],
+            gev_after$par[1], gev_after$se[1]))
+cat(sprintf("  %-10s  %8.2f (%4.2f)     %8.2f (%4.2f)\n",
+            "sigma", gev_before$par[2], gev_before$se[2],
+            gev_after$par[2], gev_after$se[2]))
+cat(sprintf("  %-10s  %8.2f (%4.2f)     %8.2f (%4.2f)\n",
+            "gamma", gev_before$par[3], gev_before$se[3],
+            gev_after$par[3], gev_after$se[3]))
+
+shift <- gev_after$par[1] - gev_before$par[1]
+cat(sprintf("\n  位置参数偏移: %.2f 度 (摄氏)\n", shift))
+cat("  分布明显向右偏移, 表明近年来极端高温更加频繁和强烈。\n")
+```
+
+从图 10.7 和表 10.1 中可以看到，分布向右的明显偏移是引人注目的。位置参数 $\mu$ 的偏移是显著的，数量级约为 2 度（摄氏度）。
+
+## 证明概要
+
+> **Beweisskizze fur Eigenschaft 10.1**
+
+为了给出性质 10.1 的证明概要，将 $Y_{\max, n}$ 视为矩阵形式数据的最大值是有帮助的。将 $Y$ 用双下标写成矩阵形式：
+
+$$
+\begin{pmatrix} Y_{11} & Y_{12} & \cdots & Y_{1K} \\ Y_{21} & Y_{22} & \cdots & Y_{2K} \\ \vdots & \vdots & \ddots & \vdots \\ Y_{T1} & Y_{T2} & \cdots & Y_{TK} \end{pmatrix}
+$$
+
+其中 $n = T \times K$。例如，$Y_{t1}, \ldots, Y_{tK}$ 可以视为第 $t$ 年的每日温度。定义
+
+$$
+Y_{t, \max, K} = \max\{Y_{t1}, \ldots, Y_{tK}\}
+$$
+
+为行最大值（在例子中即年度最高温度）。总最大值为
+
+$$
+Y_{\max, n} = \max_{1 \leq t \leq T}\left\{\max_{1 \leq k \leq K}(Y_{tk})\right\} = \max_{1 \leq t \leq T}\{Y_{t, \max, K}\}
+$$
+
+这也被称为取"分块最大值"（Blockmaxima），其中分块在这里对应年份。
+
+如果存在标准化序列 $(a_n, b_n)$ 使得 $(Y_{\max, n} - b_n)/a_n$ 收敛到分布 $Z$，那么相同的极限也应对行最大值成立。假设独立性，所有行最大值具有相同的分布 $F_{Y_{\max, K}}$。利用上式我们得到
+
+$$
+F_{Y_{\max, TK}}(y) = F_{Y_{\max, K}}^T(y)
+$$
+
+两个序列经过适当标准化后收敛到相同的分布函数。应用标准化，可以推导出变量 $Z$ 的分布函数具有以下性质：
+
+$$
+F_Z(b_T + a_T z) = [F_Z(z)]^T
+$$
+
+可以验证上述极值分布满足这一性质。以 Gumbel 分布为例，设 $a_T = 1$ 和 $b_T = \log(T)$，则
+
+$$
+H_1(y - \log(T)) = \exp(-\exp(-(y - \log(T)))) = \exp(-\exp(-y) \cdot T) = [\exp(-\exp(-y))]^T = H_1(y)^T
+$$
+
+类似地，可以对其他极值分布验证此性质，从而完成证明。
+
+```{r}
+#| label: fig-block-maxima
+#| fig-cap: "分块最大值方法的示意图 | Illustration der Blockmaxima-Methode"
+#| fig-height: 5.5
+
+set.seed(123)
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 模拟 5 年的数据，每年 30 天
+T_blocks <- 5
+K_per_block <- 30
+block_cols <- c("#2563EB", "#DC2626", "#16A34A", "#EA580C", "#9333EA")
+
+x_all <- c()
+y_all <- c()
+col_all <- c()
+block_max <- numeric(T_blocks)
+
+for (t in 1:T_blocks) {
+  x_block <- ((t-1) * K_per_block + 1):(t * K_per_block)
+  y_block <- rnorm(K_per_block, mean = 5 + 0.3 * t, sd = 2)
+  x_all <- c(x_all, x_block)
+  y_all <- c(y_all, y_block)
+  col_all <- c(col_all, rep(block_cols[t], K_per_block))
+  block_max[t] <- max(y_block)
+}
+
+plot(x_all, y_all, pch = 16, col = adjustcolor(col_all, 0.5), cex = 1.0,
+     xlab = "观测编号 | Beobachtungsnummer",
+     ylab = "Y",
+     main = "分块最大值方法 | Blockmaxima-Methode",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 标记每个分块的最大值
+for (t in 1:T_blocks) {
+  x_block <- ((t-1) * K_per_block + 1):(t * K_per_block)
+  y_block <- y_all[x_block]
+  max_idx <- which.max(y_block)
+  points(x_block[max_idx], block_max[t], pch = 18, col = block_cols[t], cex = 3)
+  
+  # 分块分隔线
+  if (t < T_blocks) {
+    abline(v = t * K_per_block + 0.5, col = "#94A3B8", lty = 3)
+  }
+  text(mean(x_block), min(y_all) - 0.3,
+       paste0("Block ", t), col = block_cols[t], font = 2, cex = 0.75)
+}
+
+legend("topleft",
+       legend = c("数据点 | Datenpunkte", "分块最大值 | Blockmaxima"),
+       pch = c(16, 18), col = c(palette_main$gray, palette_main$red),
+       cex = 0.9, bty = "n")
+```
+
+{{< pagebreak >}}
+
+# 练习题 {#sec-exercises}
+
+> **Ubungsaufgaben**
+
+## 练习 1：网络安全漏洞
+
+> **Ubung 1: Cybersicherheitsvorfalle**
+
+下表总结了过去一年中 20 家科技公司的重大网络安全漏洞数量。每家公司由一个希腊字母表示。"重大漏洞"定义为导致客户数据泄露或运营停机超过 24 小时的事件。
+
+| 公司 | $\alpha$ | $\beta$ | $\gamma$ | $\delta$ | $\epsilon$ | $\zeta$ | $\eta$ | $\theta$ | $\iota$ | $\kappa$ | $\lambda$ | $\mu$ | $\nu$ | $\xi$ | $o$ | $\pi$ | $\rho$ | $\sigma$ | $\tau$ | $\upsilon$ |
+|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| 漏洞数 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 1 | 0 | 0 |
+
+```{r}
+#| label: exercise-1
+#| code-fold: false
+
+# 练习 1: 网络安全漏洞 | Ubung 1: Cybersicherheitsvorfaelle
+breaches <- c(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0)
+n_firms <- length(breaches)
+y_total <- sum(breaches)
+
+cat("=" , rep("=", 60), "\n", sep = "")
+cat("练习 1: 网络安全漏洞 | Ubung 1: Cybersicherheitsvorfaelle\n")
+cat("=" , rep("=", 60), "\n\n", sep = "")
+
+# (a) 对数似然函数
+cat("(a) 对数似然函数推导:\n\n")
+cat("  假设 Y_i ~ Poisson(lambda), i = 1, ..., 20\n")
+cat("  联合似然: L(lambda) = prod_{i=1}^{20} lambda^{y_i} / y_i! * exp(-lambda)\n")
+cat("  对数似然: l(lambda) = sum(y_i) * log(lambda) - n * lambda - sum(log(y_i!))\n")
+cat(sprintf("  代入数据: l(lambda) = %d * log(lambda) - %d * lambda + const\n\n",
+            y_total, n_firms))
+
+# (b) 最大似然估计
+lambda_hat <- y_total / n_firms
+cat("(b) 最大似然估计:\n\n")
+cat("  令 dl/dlambda = sum(y_i)/lambda - n = 0\n")
+cat(sprintf("  hat{lambda} = sum(y_i) / n = %d / %d = %.2f\n", y_total, n_firms, lambda_hat))
+cat("  解读: 平均每家公司每年经历 0.2 次重大安全漏洞。\n")
+cat("  即大约每 5 家公司中有 1 家在一年内经历一次重大漏洞。\n\n")
+
+# (c) 精确置信区间
+cat("(c) 95% 精确置信区间 (Garwood):\n\n")
+ci_total <- garwood_ci(y_total, 0.05)
+cat(sprintf("  对 n*lambda 的精确 CI: [%.4f, %.4f]\n", ci_total[1], ci_total[2]))
+cat(sprintf("  对 lambda 的精确 CI:   [%.4f, %.4f]\n", ci_total[1] / n_firms, ci_total[2] / n_firms))
+cat("\n  为何精确区间优于渐近区间?\n")
+cat("  因为 hat{lambda} = 0.2 非常小, 泊松分布高度偏斜。\n")
+cat("  渐近正态近似 (lambda +/- z * sqrt(lambda/n)) 可能产生负的下界,\n")
+cat("  这对强度参数来说毫无意义。精确区间保证了有效覆盖率。\n\n")
+
+# 渐近 CI 作为对比
+se_asymp <- sqrt(lambda_hat / n_firms)
+ci_asymp_lower <- lambda_hat - 1.96 * se_asymp
+ci_asymp_upper <- lambda_hat + 1.96 * se_asymp
+cat(sprintf("  对比: 渐近 CI: [%.4f, %.4f]\n", ci_asymp_lower, ci_asymp_upper))
+cat("  渐近下界为负值 -- 这是不合理的!\n\n")
+
+# (d) P(至少一次漏洞)
+cat("(d) P(随机公司至少 1 次漏洞):\n\n")
+p_at_least_1 <- 1 - dpois(0, lambda_hat)
+cat(sprintf("  P(Y >= 1) = 1 - P(Y = 0) = 1 - exp(-%.2f) = %.4f\n",
+            lambda_hat, p_at_least_1))
+cat(sprintf("  约 %.1f%% 的公司在一年内会经历至少一次重大漏洞。\n\n", p_at_least_1 * 100))
+
+# (e) P(50 家中至少 3 家)
+cat("(e) P(50 家公司中至少 3 家经历漏洞):\n\n")
+cat("  每家公司独立, P(漏洞) = P(Y >= 1) 约为", round(p_at_least_1, 4), "\n")
+cat("  设 X ~ Binomial(50, p), 求 P(X >= 3)\n\n")
+p_breach <- p_at_least_1
+prob_at_least_3 <- 1 - pbinom(2, 50, p_breach)
+cat(sprintf("  P(X >= 3) = 1 - P(X <= 2) = %.4f\n", prob_at_least_3))
+cat(sprintf("  约 %.1f%% 的概率至少有 3 家公司经历漏洞。\n", prob_at_least_3 * 100))
+```
+
+```{r}
+#| label: fig-exercise-1
+#| fig-cap: "练习 1: 泊松精确置信区间 vs 渐近置信区间 | Ubung 1: Exaktes vs. asymptotisches KI"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 5.5, 3, 1))
+
+# 不同总观测值下的精确 CI vs 渐近 CI
+y_range_ex <- 0:8
+n_ex <- 20
+
+plot(NULL, xlim = c(-0.5, 8.5), ylim = c(0, 0.8),
+     xlab = expression(paste("观测总漏洞数 sum(y"[i], ")")),
+     ylab = expression(lambda),
+     main = "精确 vs 渐近置信区间 (n = 20) | Exakt vs. Asymptotisch",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (y in y_range_ex) {
+  # 精确 CI
+  ci_ex <- garwood_ci(y, 0.05) / n_ex
+  segments(y - 0.15, ci_ex[1], y - 0.15, ci_ex[2], col = palette_main$blue, lwd = 3)
+  points(y - 0.15, y / n_ex, pch = 16, col = palette_main$blue, cex = 1.2)
+  
+  # 渐近 CI
+  lam_hat <- y / n_ex
+  se_lam <- sqrt(lam_hat / n_ex)
+  ci_as_l <- max(0, lam_hat - 1.96 * se_lam)
+  ci_as_u <- lam_hat + 1.96 * se_lam
+  segments(y + 0.15, ci_as_l, y + 0.15, ci_as_u, col = palette_main$red, lwd = 3, lty = 2)
+  points(y + 0.15, lam_hat, pch = 17, col = palette_main$red, cex = 1.2)
+}
+
+# 标记 y = 4 的位置（实际数据）
+abline(v = 4, col = palette_main$orange, lty = 3, lwd = 1.5)
+text(4.3, 0.75, "实际数据\ny = 4", col = palette_main$orange, cex = 0.8, font = 2)
+
+legend("topleft",
+       legend = c("精确 CI (Garwood)", "渐近 CI"),
+       col = c(palette_main$blue, palette_main$red),
+       lwd = 3, lty = c(1, 2), pch = c(16, 17), bty = "n", cex = 0.85)
+```
+
+## 练习 2：丹麦火灾保险数据
+
+> **Ubung 2: Danische Feuerversicherungsdaten**
+
+下表来自经典的"丹麦火灾保险"数据集（de Carvalho and Marques, 2012），包含 1980--1990 年间保险索赔的年度最大到达间隔时间（以天为单位）。到达间隔时间定义为两次连续索赔之间的天数。
+
+| 年份 | 1980 | 1981 | 1982 | 1983 | 1984 | 1985 | 1986 | 1987 | 1988 | 1989 | 1990 |
+|:----:|:----:|:----:|:----:|:----:|:----:|:----:|:----:|:----:|:----:|:----:|:----:|
+| 最大间隔 | 11 | 12 | 10 | 22 | 16 | 19 | 14 | 8 | 12 | 16 | 9 |
+
+假设每年内的到达间隔时间服从强度为 $\lambda > 0$ 的指数分布，且年度最大间隔时间为 i.i.d.。
+
+```{r}
+#| label: exercise-2
+#| code-fold: false
+
+# 练习 2: 丹麦火灾保险 | Ubung 2: Danische Feuerversicherung
+danish_max <- c(11, 12, 10, 22, 16, 19, 14, 8, 12, 16, 9)
+years_danish <- 1980:1990
+
+cat("=" , rep("=", 60), "\n", sep = "")
+cat("练习 2: 丹麦火灾保险 | Ubung 2: Danische Feuerversicherung\n")
+cat("=" , rep("=", 60), "\n\n")
+
+# (a) 指数分布最大值趋向 Gumbel
+cat("(a) 指数分布 i.i.d. 序列最大值近似 Gumbel 分布:\n\n")
+cat("  设 X_1, ..., X_n ~ Exp(lambda) i.i.d.\n")
+cat("  CDF: F(x) = 1 - exp(-lambda * x), x >= 0\n\n")
+cat("  F^n(x) = [1 - exp(-lambda * x)]^n\n\n")
+cat("  考虑标准化: M_n = max(X_1, ..., X_n)\n")
+cat("  设 a_n = 1/lambda, b_n = log(n)/lambda\n\n")
+cat("  则 P((M_n - b_n)/a_n <= z)\n")
+cat("     = F^n(a_n * z + b_n)\n")
+cat("     = [1 - exp(-lambda * (z/lambda + log(n)/lambda))]^n\n")
+cat("     = [1 - exp(-z - log(n))]^n\n")
+cat("     = [1 - exp(-z)/n]^n\n")
+cat("     -> exp(-exp(-z)) 当 n -> infty\n\n")
+cat("  这正是 Gumbel 分布 H_1(z)!\n\n")
+cat("  因此, GEV 的位置参数 mu = b_n = log(n)/lambda\n")
+cat("  尺度参数 sigma = a_n = 1/lambda\n")
+cat("  形状参数 gamma = 0 (Gumbel 类型)\n\n")
+
+# (b) GEV 的 MLE
+cat("(b) GEV 最大似然估计:\n\n")
+cat("  对年度最大间隔时间拟合 GEV:\n\n")
+
+gev_danish <- fit_gev(danish_max)
+
+cat(sprintf("  参数估计:\n"))
+cat(sprintf("    mu    = %6.2f  (SE: %.2f)\n", gev_danish$par[1], gev_danish$se[1]))
+cat(sprintf("    sigma = %6.2f  (SE: %.2f)\n", gev_danish$par[2], gev_danish$se[2]))
+cat(sprintf("    gamma = %6.2f  (SE: %.2f)\n", gev_danish$par[3], gev_danish$se[3]))
+
+# Gumbel 专用拟合 (gamma = 0)
+cat("\n  由于 (a) 的理论预测 gamma = 0, 也拟合 Gumbel 模型:\n\n")
+nll_gumbel <- function(par, data) {
+  mu <- par[1]; sigma <- par[2]
+  if (sigma <= 0) return(1e10)
+  z <- (data - mu) / sigma
+  n <- length(data)
+  n * log(sigma) + sum(z) + sum(exp(-z))
+}
+
+gumbel_fit <- optim(c(mean(danish_max) - 0.5772 * sd(danish_max) * sqrt(6)/pi,
+                       sd(danish_max) * sqrt(6)/pi),
+                    nll_gumbel, data = danish_max, method = "Nelder-Mead",
+                    hessian = TRUE)
+se_gumbel <- sqrt(diag(solve(gumbel_fit$hessian)))
+
+cat(sprintf("    mu    = %6.2f  (SE: %.2f)\n", gumbel_fit$par[1], se_gumbel[1]))
+cat(sprintf("    sigma = %6.2f  (SE: %.2f)\n", gumbel_fit$par[2], se_gumbel[2]))
+
+# 从 Gumbel 参数推算 lambda
+lambda_est <- 1 / gumbel_fit$par[2]
+cat(sprintf("\n  从 Gumbel 参数推算:\n"))
+cat(sprintf("    sigma = 1/lambda => lambda = 1/%.2f = %.4f\n",
+            gumbel_fit$par[2], lambda_est))
+
+# (c) P(年度最大间隔 > 25)
+cat("\n(c) P(年度最大间隔 > 25 天):\n\n")
+
+# 使用 GEV 拟合
+z_25 <- (25 - gev_danish$par[1]) / gev_danish$par[2]
+if (abs(gev_danish$par[3]) < 1e-6) {
+  p_25_gev <- exp(-exp(-z_25))
+} else {
+  t_25 <- 1 + gev_danish$par[3] * z_25
+  if (t_25 > 0) {
+    p_25_gev <- exp(-t_25^(-1/gev_danish$par[3]))
+  } else {
+    p_25_gev <- 0
+  }
+}
+prob_exceed_25_gev <- 1 - p_25_gev
+
+# 使用 Gumbel 拟合
+z_25_gumbel <- (25 - gumbel_fit$par[1]) / gumbel_fit$par[2]
+p_25_gumbel <- exp(-exp(-z_25_gumbel))
+prob_exceed_25_gumbel <- 1 - p_25_gumbel
+
+cat(sprintf("  GEV 模型:    P(max > 25) = 1 - H(25) = %.4f\n", prob_exceed_25_gev))
+cat(sprintf("  Gumbel 模型: P(max > 25) = 1 - H(25) = %.4f\n", prob_exceed_25_gumbel))
+cat(sprintf("\n  即年度最大索赔间隔超过 25 天的概率约为 %.1f%%。\n",
+            prob_exceed_25_gumbel * 100))
+```
+
+```{r}
+#| label: fig-exercise-2
+#| fig-cap: "练习 2: 丹麦火灾保险数据的 GEV 拟合 | Ubung 2: GEV-Anpassung an die danischen Daten"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 经验 CDF 与拟合 GEV
+ecdf_danish <- ecdf(danish_max)
+x_danish <- seq(5, 30, length.out = 300)
+
+# GEV 拟合曲线
+p_gev_danish <- pgev_manual(x_danish, gev_danish$par[1], gev_danish$par[2], gev_danish$par[3])
+
+# Gumbel 拟合曲线
+z_gumbel <- (x_danish - gumbel_fit$par[1]) / gumbel_fit$par[2]
+p_gumbel_danish <- exp(-exp(-z_gumbel))
+
+plot(ecdf_danish, pch = 16, col = palette_main$gray, cex = 1.2,
+     main = "丹麦火灾保险: 年度最大间隔的 GEV 拟合",
+     xlab = "最大到达间隔 [天] | Max. Zwischenankunftszeit [Tage]",
+     ylab = expression(paste(H(y), " 和 ", F[n](y))),
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     xlim = c(5, 30))
+lines(x_danish, p_gev_danish, col = palette_main$blue, lwd = 3)
+lines(x_danish, p_gumbel_danish, col = palette_main$red, lwd = 3, lty = 2)
+grid(col = "#E2E8F0")
+
+# 标记 25 天
+abline(v = 25, col = palette_main$orange, lwd = 2, lty = 3)
+text(25.5, 0.5, "25 天", col = palette_main$orange, font = 2, cex = 0.9)
+
+legend("bottomright",
+       legend = c(expression(F[n](y) ~ "(经验)"),
+                  "GEV 拟合",
+                  expression(paste("Gumbel 拟合 (", gamma == 0, ")"))),
+       col = c(palette_main$gray, palette_main$blue, palette_main$red),
+       pch = c(16, NA, NA), lwd = c(NA, 3, 3), lty = c(NA, 1, 2),
+       bty = "n", cex = 0.85)
+```
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心概念链
+
+```{r}
+#| label: fig-summary-chain
+#| fig-cap: "本章知识逻辑链 | Logikkette der Konzepte dieses Kapitels"
+#| fig-height: 6
+#| fig-width: 12
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 7), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("第十章知识逻辑链 | Logikkette Kapitel 10")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+nx <- c(2.5, 7.0, 11.5, 4.5, 9.5, 14.0)
+ny <- c(5.5, 5.5, 5.5, 2.5, 2.5, 2.5)
+labels <- c(
+  "渐近方法失败\nMLE = 0 / 方差 = 0\nAsymptotik versagt",
+  "精确置信区间\nClopper-Pearson\nExakte KI",
+  "极端数据\n分布尾部\nExtremdaten",
+  "Garwood\n泊松精确 CI\nPoisson exakt",
+  "极值定理\nGumbel/Weibull/Frechet\nExtremwertsatz",
+  "GEV 分布\n统一参数化\nMLE 估计"
+)
+fills <- c("#FEE2E2", "#DBEAFE", "#FEF3C7", "#D1FAE5", "#FCE7F3", "#E0E7FF")
+bords <- c("#DC2626", "#2563EB", "#D97706", "#16A34A", "#DB2777", "#6366F1")
+
+for (i in 1:6) {
+  rect(nx[i]-1.5, ny[i]-0.8, nx[i]+1.5, ny[i]+0.8,
+       col = fills[i], border = bords[i], lwd = 2)
+  text(nx[i], ny[i], labels[i], cex = 0.5, font = 2, col = "#1E293B")
+}
+
+draw_arrow <- function(x1, y1, x2, y2, label = "") {
+  arrows(x1, y1, x2, y2, col = "#64748B", lwd = 2, length = 0.12)
+  if (nchar(label) > 0) {
+    mx <- (x1 + x2) / 2; my <- (y1 + y2) / 2
+    text(mx, my + 0.3, label, cex = 0.45, col = "#EA580C", font = 3)
+  }
+}
+
+draw_arrow(4.0, 5.5, 5.5, 5.5, "二项精确")
+draw_arrow(8.5, 5.5, 10.0, 5.5, "尾部极限")
+draw_arrow(7.0, 4.7, 4.5, 3.3, "泊松情形")
+draw_arrow(11.5, 4.7, 9.5, 3.3, "标准化")
+draw_arrow(11.0, 2.5, 12.5, 2.5, "统一框架")
+```
+
+## 公式速查表
+
+| 公式 | 名称 | 编号 |
+|:-----|:-----|:----:|
+| $l(\pi) = n \log(1 - \pi)$ | 二项对数似然（$y = 0$） | (10.1) |
+| $P(Y \leq y;\, \pi_r) = \alpha/2$ | Clopper-Pearson 精确 CI 上界条件 | -- |
+| $L(\lambda) \propto \lambda^{\sum y_i} e^{-n\lambda}$ | 泊松似然 | -- |
+| $F_{Y_{\max,n}}(y) = F^n(y)$ | 最大值分布 | -- |
+| $\lim_{n \to \infty} F^n(a_n y + b_n) = H(y)$ | 标准化极限 | -- |
+| $H_1(z) = \exp(-\exp(-z))$ | Gumbel 分布 | -- |
+| $H(z) = \exp(-(1 + \gamma z)^{-1/\gamma})$ | GEV 分布（$\gamma \neq 0$） | (10.2) |
+| $F_Z(b_T + a_T z) = [F_Z(z)]^T$ | 极值分布的稳定性性质 | (10.5) |
+
+## 本章的六个核心洞察
+
+| 编号 | 洞察 | 关键词 |
+|:----:|:------|:------|
+| 1 | 当 MLE 在参数空间边界上取得时，渐近推断工具失效 | 渐近失败 |
+| 2 | Clopper-Pearson 和 Garwood 精确置信区间即使在零观测下也提供有效推断 | 精确 CI |
+| 3 | 最大值的直接极限 $F^n(y)$ 退化，需要标准化序列 $a_n, b_n$ | 标准化 |
+| 4 | 极值定理是尾部的"中心极限定理"，给出三种可能的极限分布 | 极值定理 |
+| 5 | GEV 分布统一了三种极值分布，形状参数 $\gamma$ 决定分布类型 | GEV |
+| 6 | 分块最大值方法将数据组织为矩阵，行最大值的分布可以用 GEV 建模 | 分块最大值 |
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 罕见事件
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| das seltene Ereignis | 罕见事件 | rare event |
+| das exakte Konfidenzintervall | 精确置信区间 | exact confidence interval |
+| die asymptotische Approximation | 渐近近似 | asymptotic approximation |
+| die Binomialverteilung | 二项分布 | binomial distribution |
+| die Poisson-Verteilung | 泊松分布 | Poisson distribution |
+| die Log-Likelihood-Funktion | 对数似然函数 | log-likelihood function |
+| der Maximum-Likelihood-Schatzer (MLE) | 最大似然估计量 | maximum likelihood estimator |
+| das Clopper-Pearson-Intervall | Clopper-Pearson 区间 | Clopper-Pearson interval |
+| das Garwood-Intervall | Garwood 区间 | Garwood interval |
+| die Intensitat (Poisson) | 强度（泊松） | intensity (Poisson) |
+| der Parameterraum | 参数空间 | parameter space |
+| die Randlosung | 边界解 | boundary solution |
+| der Likelihood-Quotienten-Test | 似然比检验 | likelihood ratio test |
+| die Chi-Quadrat-Verteilung | 卡方分布 | chi-squared distribution |
+
+## 极值理论
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Extremwerttheorie | 极值理论 | extreme value theory |
+| die Extremwertverteilung | 极值分布 | extreme value distribution |
+| das Maximum | 最大值 | maximum |
+| das Minimum | 最小值 | minimum |
+| der Schwanz der Verteilung | 分布尾部 | tail of the distribution |
+| die Standardisierungssequenz | 标准化序列 | standardizing sequence |
+| die nicht-degenerierte Verteilung | 非退化分布 | non-degenerate distribution |
+| die Gumbel-Verteilung | Gumbel 分布 | Gumbel distribution |
+| die Weibull-Verteilung | Weibull 分布 | Weibull distribution |
+| die Frechet-Pareto-Verteilung | Frechet-Pareto 分布 | Frechet-Pareto distribution |
+| der Grenzwertsatz | 极限定理 | limit theorem |
+| die Verteilungsfunktion | 分布函数 | distribution function |
+
+## 广义极值分布 (GEV)
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die verallgemeinerte Extremwertverteilung (GEV) | 广义极值分布 | generalized extreme value distribution |
+| der Lageparameter | 位置参数 | location parameter |
+| der Skalenparameter | 尺度参数 | scale parameter |
+| der Formparameter | 形状参数 | shape parameter |
+| das Blockmaximum | 分块最大值 | block maximum |
+| die Zeilenmatrix | 行矩阵 | row matrix |
+| die empirische Verteilungsfunktion | 经验分布函数 | empirical distribution function |
+| die Stabilitat der Verteilung | 分布的稳定性 | stability of the distribution |
+| die Ruckkehrperiode | 重现期 | return period |
+| der Klimawandel | 气候变化 | climate change |
+| die Hochwasserstatistik | 洪水统计 | flood statistics |
+| die Versicherungsmathematik | 保险精算 | actuarial science |
+:::

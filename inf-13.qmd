@@ -1,0 +1,1573 @@
+---
+title: "第13章 机器学习与统计学的关联"
+subtitle: "Relating Machine Learning and Statistics"
+author: "学习笔记"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    toc-title: "目录"
+    number-sections: true
+    code-fold: false
+    code-tools: true
+    theme: cosmo
+    fontsize: "1.05em"
+    linestretch: 1.6
+    smooth-scroll: true
+    self-contained: true
+    fig-align: center
+    fig-width: 8
+    fig-height: 5
+execute:
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+# 自动安装缺失的包
+required_packages <- c("ggplot2", "MASS", "glmnet", "nnet", "patchwork")
+
+for (pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg, repos = "https://cloud.r-project.org")
+  }
+}
+
+library(ggplot2)
+library(MASS)
+library(glmnet)
+library(nnet)
+library(patchwork)
+
+theme_set(
+  theme_minimal(base_size = 14) +
+    theme(
+      plot.title = element_text(face = "bold", hjust = 0.5),
+      plot.subtitle = element_text(hjust = 0.5, color = "grey40"),
+      panel.grid.minor = element_blank()
+    )
+)
+
+set.seed(2024)
+```
+
+
+# 导论：两座城市之间的桥梁 {.unnumbered}
+
+统计学和机器学习就像两座在同一条河流两岸发展起来的城市。统计学这座古城注重**理解河流的源头和走向**------它关心数据生成过程 $G(\cdot|x)$ 的本质，追求可解释性和推断。机器学习这座新城则更关心**如何高效地从一岸抵达另一岸**------它追求在未见数据上的预测精度，对黑箱模型有更高的容忍度。
+
+然而，这两座城市共享同一条河流：**从数据中学习的数学原理**。本章的任务就是在两城之间架起桥梁，让你看到：经验风险最小化就是极大似然估计的另一副面孔，正则化就是贝叶斯先验的频率学派翻译，而神经网络的最后一层本质上就是一个线性回归。
+
+# 机器学习与神经网络入门
+
+## 机器学习的核心关注
+
+机器学习在总体上更关心**做出准确的预测**，而非揭示或理解真实的数据生成过程 $G(\cdot|x)$。这种关注点的差异将机器学习与经典统计学区分开来------后者往往强调可解释性和对 $G$ 的显式建模。在许多应用中，机器学习范式主要由预测任务上的经验表现驱动，核心目标是**最小化在未见数据上的预测误差**，而非恢复或解释背后精确的随机机制。
+
+打一个比方：如果数据是一个复杂的天气系统，统计学家会尝试建立大气动力学方程来理解天气为什么这样变化；而机器学习工程师更像是训练一个极其灵敏的天气预报员------他不需要完全理解大气物理，只要能准确预报明天会不会下雨。
+
+## 经典机器学习方法概览
+
+过去几十年中，许多机器学习模型被提出并广泛使用：
+
+**支持向量机**（SVMs, Cortes and Vapnik, 1995）通过在高维特征空间中最大化类间间隔（margin）来实现分类和回归。想象你在桌面上散落了红豆和绿豆，SVM 试图找到一条尽可能宽的"无人区"把它们分开。
+
+**随机森林**（Random Forests, Breiman, 2001）是决策树的集成方法，通过 bagging 策略组合多棵树来提高预测精度和鲁棒性。这就像请100位不同的医生各自独立诊断，然后用投票决定最终诊断------每位医生可能有偏差，但集体智慧往往更准确。
+
+**提升方法**（Boosting, Freund and Schapire, 1997）通过迭代地组合所谓的"弱学习器"------即仅比随机猜测略好的简单模型------来构建强预测器。现代提升方法的高度优化实现，包括 CatBoost、LightGBM 和 XGBoost，是当今最广泛使用的机器学习工具之一。
+
+```{r}
+#| label: fig-ensemble-concept
+#| fig-cap: "集成学习的核心思想：单个弱学习器（灰色虚线）表现平庸，但它们的组合（红色实线）能逼近真实函数（蓝色虚线）。"
+#| fig-width: 9
+#| fig-height: 5
+
+set.seed(42)
+x_grid <- seq(0, 2 * pi, length.out = 300)
+true_fn <- sin(x_grid)
+
+n_learners <- 8
+learner_preds <- matrix(0, nrow = length(x_grid), ncol = n_learners)
+
+for (k in 1:n_learners) {
+  idx <- sample(length(x_grid), 100, replace = TRUE)
+  fit <- loess(sin(x_grid[idx]) + rnorm(100, 0, 0.3) ~ x_grid[idx], span = 0.5)
+  learner_preds[, k] <- predict(fit, newdata = data.frame(x_grid))
+}
+
+ensemble_pred <- rowMeans(learner_preds, na.rm = TRUE)
+
+df_learners <- data.frame(
+  x = rep(x_grid, n_learners),
+  y = as.vector(learner_preds),
+  learner = rep(paste0("Learner ", 1:n_learners), each = length(x_grid))
+)
+
+df_plot <- data.frame(x = x_grid, true = true_fn, ensemble = ensemble_pred)
+
+ggplot() +
+  geom_line(data = df_learners, aes(x = x, y = y, group = learner),
+            color = "grey60", linetype = "dashed", alpha = 0.6, linewidth = 0.4) +
+  geom_line(data = df_plot, aes(x = x, y = true),
+            color = "steelblue", linetype = "dashed", linewidth = 1.2) +
+  geom_line(data = df_plot, aes(x = x, y = ensemble),
+            color = "firebrick", linewidth = 1.2) +
+  labs(x = "x", y = "y",
+       title = "集成学习：众弱成强",
+       subtitle = "灰色虚线 = 单个弱学习器 | 红色实线 = 集成预测 | 蓝色虚线 = 真实函数") +
+  ylim(-1.5, 1.5)
+```
+
+## 多层感知机（MLP）
+
+近年来，研究重心大量转向**神经网络**（Neural Networks），因为它们具有极高的灵活性和可扩展性，并在图像、文本等领域的强大生成模型中取得了巨大成功。
+
+### 单个神经元：积木的基本单元
+
+多层感知机（Multi-Layer Perceptron, MLP）是一个由层层相连的神经元组成的函数 $h: \mathbb{R}^p \to \mathbb{R}^v$。每个神经元接收输入向量 $z \in \mathbb{R}^m$，计算一个仿射变换，再施加一个非线性激活函数 $\tau$：
+
+$$
+u = \tau\!\left(w^\top z + b\right),
+$$
+
+其中 $w \in \mathbb{R}^m$ 是神经元的**权重**，$b \in \mathbb{R}$ 是**偏置**（即统计学中的"截距"），而 $\tau$ 可以是例如修正线性单元（ReLU）$\tau(\cdot) = \max(0, \cdot)$ 或 logistic sigmoid 函数。
+
+想象每个神经元是一个极其简单的"判断员"：它对输入做一个加权求和（就像线性回归），然后通过一个非线性的"开关"来决定是否以及如何"激活"。单独一个判断员能力有限，但成百上千个判断员层层叠加，就能做出极其复杂的判断。
+
+```{r}
+#| label: fig-activation-functions
+#| fig-cap: "常见激活函数的形状。ReLU 像一个门阀：负值完全关闭，正值原样通过。Sigmoid 像一个平滑的开关，将任意实数压缩到 (0,1) 区间。Tanh 类似 Sigmoid 但输出范围是 (-1,1)。"
+#| fig-width: 10
+#| fig-height: 4
+
+z_vals <- seq(-4, 4, length.out = 500)
+
+df_act <- data.frame(
+  z = rep(z_vals, 3),
+  value = c(
+    pmax(0, z_vals),
+    1 / (1 + exp(-z_vals)),
+    tanh(z_vals)
+  ),
+  activation = rep(c("ReLU: max(0, z)", "Sigmoid: 1/(1+exp(-z))", "Tanh: tanh(z)"),
+                   each = length(z_vals))
+)
+
+ggplot(df_act, aes(x = z, y = value, color = activation)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~ activation, scales = "free_y") +
+  scale_color_manual(values = c("firebrick", "steelblue", "darkgreen")) +
+  labs(x = "z", y = expression(tau(z)), title = "三种常见激活函数") +
+  theme(legend.position = "none")
+```
+
+### 从单神经元到网络
+
+一个神经网络**层**由多个这样的神经元并行操作组成------它们接收相同的输入 $z$，但使用不同的权重和偏置，产生一个输出向量。数学上，一个层由权重矩阵 $W$ 和偏置向量 $b$ 定义。这些变换可以按顺序级联：
+
+$$
+z^{(1)} = \tau\!\left(W^{(1)}x + b^{(1)}\right), \quad z^{(2)} = \tau\!\left(W^{(2)}z^{(1)} + b^{(2)}\right), \quad \ldots
+$$
+
+**最后一层**（输出层）计算从最后一个隐藏层学到的特征的线性组合：
+
+$$
+\hat{y} = W^{(L)} z^{(L-1)} + b^{(L)},
+$$
+
+这**等价于**对学到的特征 $z^{(L-1)}$ 做线性回归。取决于结果值的定义域，最后一层可能还包含一个额外的非线性激活，例如用 sigmoid 函数将预测映射到概率空间。
+
+形式上，一个 $L$ 层前馈神经网络可以写为：
+
+$$
+h(x; \theta) = W^{(L)} \tau\!\left(W^{(L-1)} \tau\!\left(\cdots \tau\!\left(W^{(1)}x + b^{(1)}\right) \cdots\right) + b^{(L-1)}\right) + b^{(L)},
+$$
+
+其中 $W^{(L)} \in \mathbb{R}^{v \times m_{L-1}}$，$b^{(L)} \in \mathbb{R}^v$ 是第 $L$ 层的权重和偏置，$z^{(L-1)} \in \mathbb{R}^{m_{L-1}}$ 是第 $(L-1)$ 个隐藏层的输出，$z^{(0)} := x$。网络的全部参数记为 $\theta = \{W^{(\ell)}, b^{(\ell)}\}_{\ell=1}^L$。
+
+### MLP结构可视化
+
+```{r}
+#| label: fig-mlp-structure
+#| fig-cap: "一个多层感知机（MLP）的结构：3个输入特征，两个隐藏层（分别有4和3个神经元），2个输出。每个隐藏层神经元对其输入的加权和施加非线性变换。最后一层对学到的特征做线性回归。"
+#| fig-width: 10
+#| fig-height: 7
+
+plot_mlp <- function() {
+  layer_sizes <- c(3, 4, 3, 2)
+  layer_names <- c("输入层", "隐藏层 1", "隐藏层 2", "输出层")
+  n_layers <- length(layer_sizes)
+  
+  x_positions <- seq(1, 4, length.out = n_layers)
+  
+  node_coords <- data.frame(x = numeric(), y = numeric(),
+                             layer = integer(), node = integer())
+  
+  for (l in 1:n_layers) {
+    n <- layer_sizes[l]
+    y_pos <- seq(-n / 2, n / 2, length.out = n)
+    node_coords <- rbind(node_coords,
+                         data.frame(x = x_positions[l], y = y_pos,
+                                    layer = l, node = 1:n))
+  }
+  
+  edge_df <- data.frame(x = numeric(), y = numeric(),
+                        xend = numeric(), yend = numeric())
+  
+  for (l in 1:(n_layers - 1)) {
+    from <- node_coords[node_coords$layer == l, ]
+    to <- node_coords[node_coords$layer == l + 1, ]
+    for (i in 1:nrow(from)) {
+      for (j in 1:nrow(to)) {
+        edge_df <- rbind(edge_df,
+                         data.frame(x = from$x[i], y = from$y[i],
+                                    xend = to$x[j], yend = to$y[j]))
+      }
+    }
+  }
+  
+  label_df <- data.frame(x = x_positions, y = max(node_coords$y) + 0.8,
+                          label = layer_names)
+  
+  cols <- c("steelblue", "darkorange", "darkorange", "firebrick")
+  node_coords$color <- cols[node_coords$layer]
+  
+  ggplot() +
+    geom_segment(data = edge_df, aes(x = x, y = y, xend = xend, yend = yend),
+                 color = "grey70", linewidth = 0.4, alpha = 0.6) +
+    geom_point(data = node_coords, aes(x = x, y = y, fill = color),
+               shape = 21, size = 10, color = "black", stroke = 1.2) +
+    scale_fill_identity() +
+    geom_text(data = label_df, aes(x = x, y = y, label = label),
+              size = 4.5, fontface = "bold") +
+    annotate("text", x = 2.5, y = min(node_coords$y) - 0.9,
+             label = "隐藏层：非线性特征变换   tau(Wz + b)",
+             size = 4, color = "darkorange") +
+    annotate("text", x = 4, y = min(node_coords$y) - 0.9,
+             label = "输出层：线性组合 (线性回归)",
+             size = 3.5, color = "firebrick") +
+    theme_void() +
+    theme(plot.margin = margin(10, 10, 10, 10)) +
+    labs(title = "多层感知机 (MLP) 结构图")
+}
+
+plot_mlp()
+```
+
+### 代码实战：用R构建一个简单的MLP
+
+```{r}
+#| label: mlp-demo
+#| fig-cap: "MLP 拟合非线性回归函数的效果。神经网络（红色）能够很好地捕捉真实的非线性关系（蓝色虚线）。"
+
+set.seed(123)
+n <- 300
+x_train <- runif(n, -3, 3)
+y_train <- sin(x_train) + 0.3 * rnorm(n)
+
+df_train <- data.frame(y = y_train, x = x_train)
+
+nn_fit <- nnet(y ~ x, data = df_train, size = 20, linout = TRUE,
+               maxit = 500, decay = 0.01, trace = FALSE)
+
+x_grid <- seq(-3, 3, length.out = 500)
+y_pred <- predict(nn_fit, newdata = data.frame(x = x_grid))
+
+df_plot <- data.frame(x = x_grid, pred = as.vector(y_pred), true = sin(x_grid))
+
+ggplot() +
+  geom_point(data = df_train, aes(x = x, y = y), alpha = 0.3, size = 1) +
+  geom_line(data = df_plot, aes(x = x, y = true),
+            color = "steelblue", linetype = "dashed", linewidth = 1.2) +
+  geom_line(data = df_plot, aes(x = x, y = pred),
+            color = "firebrick", linewidth = 1.2) +
+  labs(x = "x", y = "y",
+       title = "MLP 拟合非线性函数",
+       subtitle = "灰点 = 训练数据 | 蓝色虚线 = sin(x) | 红色实线 = MLP预测")
+```
+
+这个例子清晰地展示了 MLP 的核心能力：隐藏层学习非线性特征变换，输出层对这些特征做线性回归，最终实现对复杂非线性关系的拟合。
+
+
+# 从统计学视角看机器学习
+
+## 假设空间
+
+从统计学视角出发，有监督机器学习的目标是用**假设空间**（或模型空间）$\mathcal{H}$ 中的机器学习模型来逼近数据生成过程 $G(\cdot|x)$。假设空间通常由一组函数定义：
+
+$$
+\mathcal{H} = \{h(\cdot; \theta), \; \theta \in \Theta\}.
+$$
+
+机器学习模型 $h(\cdot; \theta): \mathcal{X} \to \Gamma$ 逼近从协变量（特征）空间 $\mathcal{X}$ 到预测空间 $\Gamma$ 的未知映射，其中 $\Gamma \subseteq \mathbb{R}^v$，$v \in \mathbb{N}$。参数（向量）$\theta$ 定义了 $\mathcal{H}$ 的一个具体实例。
+
+例如，如果 $h(x; \theta) = x^\top \theta$，则 $\mathcal{H}$ 是以 $x$ 为协变量（特征）、$\theta \in \Theta = \mathbb{R}^p$ 为系数的线性回归模型空间，此时 $\Gamma = \mathbb{R}$。
+
+想象假设空间是一个"剧团的衣柜"：每套戏服（函数 $h(\cdot;\theta)$）是参数 $\theta$ 的一个特定选择。线性模型的衣柜里只有朴素的直线条纹套装；而神经网络的衣柜则装满了从简单到极其华丽的各种服装。学习的过程，就是从衣柜里挑出最合身的那一套。
+
+在许多经典的机器学习应用中，这个假设空间通常**不搭配**分布假设或模型 $\mathcal{F}$。经典机器学习仅区分**回归任务**和**分类任务**。相比之下，更现代的机器学习模型则与统计模型遵循相同的原理，假设一个底层的概率模型 $\mathcal{F}$。
+
+## 经验风险最小化
+
+机器学习中的"学习"是**假设空间** $\mathcal{H}$、**风险** $\mathcal{R}$ 和**优化程序**三者的结合。
+
+### 损失函数
+
+为了定义风险，首先需要定义损失函数：
+
+$$
+\ell: \mathcal{Y} \times \mathcal{H} \to \mathbb{R}: (y, h(x;\theta)) \mapsto \ell(y, h(x;\theta)),
+$$
+
+其中 $\mathcal{Y}$ 是可能结果的集合。一个合适的损失函数通常由感兴趣的应用决定，例如，找到模型 $h$ 使得 $h$ 与 $y$ 之间的平方偏差最小化。
+
+### 理论风险与经验风险
+
+承认真实的数据生成过程 $G(\cdot|x)$ 在大多数情况下并非确定性的，机器学习的总体目标是找到最小化**期望损失**的模型 $h$，即所谓的**风险**：
+
+$$
+\mathcal{R}(h) := \int\!\!\int \ell(y, h(x;\theta)) \, dG(y|x) \, dG(x),
+$$
+
+其中 $G(x)$ 是特征集 $\mathcal{X}$ 上的已知或未知分布。
+
+由于上式涉及未知的真实数据生成过程，理论风险由其经验类似物------**经验风险**------近似。对于给定的 i.i.d. 观测数据集 $(x_i, y_i)_{i=1,...,n}$：
+
+$$
+\mathcal{R}_{emp}(h) := \sum_{i=1}^{n} \ell(y_i, h(x_i;\theta)).
+$$
+
+学习就是**寻找最小化经验风险的最优模型**，使用合适的优化技术（通常是基于梯度的方法）：
+
+$$
+\hat{\theta}_{ERM} = \arg\min_{\theta \in \Theta} \mathcal{R}_{emp}(h(\cdot;\theta)).
+$$
+
+打一个比方：理论风险就像是你希望在**所有可能的考试**中都获得高分（期望损失最小），但你手头只有一套**模拟试卷**（训练数据）。经验风险最小化就是在这套模拟试卷上尽量拿高分，然后希望这能推广到真正的考试。
+
+### ERM 与 MLE 的等价性
+
+将经验风险最小化与极大似然估计联系起来，如果我们选择 $\ell$ 为参数模型 $\mathcal{F} = \{f(y;\gamma); \gamma \in \Gamma\}$ 的**负对数似然**，则 $\hat{\theta}_{ERM} \equiv \hat{\theta}_{ML}$。此时，模型 $h$ （隐式地）描述了从 $x$ 到某个分布 $F(\cdot|x;\gamma)$ 的分布参数 $\gamma$ 的参数化变换。
+
+例如，在以 $\mathcal{H}$ 为线性模型类的回归设置中，通常定义损失为均方误差，因此 $h(x;\theta) = \mu(x;\theta) = x^\top\theta$ （隐式地）定义了正态分布 $F$ 的均值 $\mu$。
+
+**许多机器学习中的损失函数与统计学中的（负）对数似然函数存在一一对应关系：**
+
+| 机器学习损失 | 统计学等价物 | 分布假设 |
+|:---:|:---:|:---:|
+| 均方误差 (MSE) | 高斯负对数似然 | 正态分布 |
+| 对数损失 (Log-loss) | 伯努利负对数似然 | 伯努利分布 |
+| 交叉熵 (Cross-entropy) | 多项式负对数似然 | 多项式分布 |
+| Hinge 损失 | 无直接对应 | --- |
+| Huber 损失 | 鲁棒统计起源 | --- |
+
+```{r}
+#| label: fig-loss-functions
+#| fig-cap: "常见损失函数的比较。MSE（蓝色）对远离零点的偏差惩罚急剧增长；Huber（绿色）在远处变为线性以抵抗异常值；Hinge（红色）用于分类任务。"
+#| fig-width: 10
+#| fig-height: 5
+
+r_vals <- seq(-3, 3, length.out = 500)
+
+mse_loss <- r_vals^2
+huber_loss <- ifelse(abs(r_vals) <= 1, 0.5 * r_vals^2, abs(r_vals) - 0.5)
+hinge_loss <- pmax(0, 1 - r_vals)
+
+df_loss <- data.frame(
+  residual = rep(r_vals, 3),
+  loss = c(mse_loss, huber_loss, hinge_loss),
+  type = rep(c("MSE (平方损失)", "Huber 损失 (delta=1)", "Hinge 损失"),
+             each = length(r_vals))
+)
+
+ggplot(df_loss, aes(x = residual, y = loss, color = type)) +
+  geom_line(linewidth = 1.2) +
+  scale_color_manual(values = c("firebrick", "darkgreen", "steelblue")) +
+  labs(x = "残差 / 间隔值", y = "损失", color = "损失类型",
+       title = "常见损失函数比较") +
+  ylim(0, 6) +
+  theme(legend.position = "top")
+```
+
+### 代码实战：ERM = MLE
+
+```{r}
+#| label: erm-mle-equivalence
+#| fig-cap: "经验风险最小化（MSE损失）与极大似然估计给出完全相同的系数估计，验证了两者的等价性。"
+
+set.seed(42)
+n <- 200
+p <- 3
+X <- matrix(rnorm(n * p), n, p)
+colnames(X) <- paste0("x", 1:p)
+beta_true <- c(2, -1, 0.5)
+y <- X %*% beta_true + rnorm(n, 0, 1)
+
+# MLE (即 OLS)
+beta_mle <- solve(t(X) %*% X) %*% t(X) %*% y
+
+# ERM (通过数值优化 MSE)
+mse_loss_fn <- function(theta) {
+  sum((y - X %*% theta)^2)
+}
+
+erm_result <- optim(par = rep(0, p), fn = mse_loss_fn, method = "BFGS")
+beta_erm <- erm_result$par
+
+comparison <- data.frame(
+  Parameter = paste0("theta_", 1:p),
+  True = beta_true,
+  MLE = round(as.vector(beta_mle), 5),
+  ERM = round(beta_erm, 5)
+)
+
+knitr::kable(comparison, caption = "MLE 与 ERM 估计结果完全一致",
+             align = "c")
+```
+
+
+### 分类器的类型
+
+在机器学习中，大部分模型处理将观测分类到两个或多个类别的任务。如果 $\Gamma$ 是离散的，$h$ 通常被称为**分类器**。进一步的区分包括：如果 $h$ 对 $\mathcal{Y}$ 中每个可能的值返回一个**概率**，则 $h$ 被称为**概率分类器**（probabilistic classifier）；如果返回的是一个**分数**（score），则 $h$ 被称为**评分函数**（scoring function）或**评分分类器**（scoring classifier）。
+
+例如，逻辑回归就是一个概率分类器，返回概率 $\pi = P(Y=1|x)$ 和 $1-\pi = P(Y=0|x)$，其中 $\mathcal{Y} = \{0,1\}$。逻辑回归的加性预测器则是一个评分函数，产生可以归一化为概率的分数（logits）。
+
+总结来说，机器学习中的学习在概念上遵循统计学思想，但也可以超越某些经典统计概念。损失函数的选择在其中起着核心作用。
+
+
+# 正则化、惩罚与贝叶斯
+
+## 正则化风险最小化
+
+机器学习中最关键的部分之一是**正则化**。机器学习模型通常高度过参数化且表达力极强，因此存在极大的过拟合风险。
+
+避免过拟合最常用的方式是根据模型的灵活性对其进行正则化或惩罚。具体而言，我们可以将经验风险扩展为所谓的**正则化风险**：
+
+$$
+\mathcal{R}_{reg}(h) := \sum_{i=1}^{n} \ell(y_i, h(x_i;\theta)) + \lambda \cdot \text{pen}(\theta),
+$$
+
+其中 $\text{pen}: \Theta \to \mathbb{R}^+$ 是一个函数，对那些导致过于灵活的假设的模型参数 $\theta$ 赋予更大的值（惩罚），$\lambda > 0$ 是一个调节参数，控制模型拟合与灵活性之间的权衡。惩罚的具体形式取决于模型类别。
+
+想象你在训练一匹赛马：经验风险是让马跑得快，惩罚项则是缰绳的松紧。缰绳太松（$\lambda$ 太小），马可能在训练场上跑得飞快但在实际比赛中失控（过拟合）；缰绳太紧（$\lambda$ 太大），马虽然稳定但跑不快（欠拟合）。正则化的艺术就是找到恰当的松紧度。
+
+信息准则（如AIC）就是正则化的一种形式，其惩罚函数为 $\text{pen}(\theta) = \|\theta\|_0$，其中 $\|\theta\|_0$ 是 $L_0$-范数，计算 $\theta$ 中非零元素的个数。如果选择经验风险为负对数似然的两倍并设 $\lambda = 2$，就可以将 AIC 的优化视为执行正则化风险最小化。
+
+## 从统计学视角看正则化
+
+### L0 惩罚与 L1 惩罚（Lasso）
+
+从 AIC 的类比出发，我们可以问是否能直接找到 AIC 最优模型：
+
+$$
+\hat{\theta} = \arg\min_{\theta \in \Theta} \mathcal{R}_{emp}(h(\cdot;\theta)) + \|\theta\|_0.
+$$
+
+然而，优化这个带 $L_0$ 惩罚的问题在优化理论中被证明是 **NP-hard** 的。$L_0$-范数的一个关键问题是它在0处不可微。$L_0$-范数的"次优"凸松弛是 $L_1$-范数 $\|\theta\|_1$。$L_1$-范数不是计算非零元素个数，而是定义为：
+
+$$
+\text{pen}(\theta) = \|\theta\|_1 = \sum_{j=1}^{p} |\theta_j|,
+$$
+
+即将 $\theta$ 中所有元素的绝对值求和。这个惩罚也被称为 **Lasso 惩罚**（Tibshirani, 1996），可以用专门的方法求解（取决于模型类别）。类似于信息准则，Lasso 惩罚的正则化效果可以产生更稀疏的模型，即参数更少的模型。
+
+### L2 惩罚（Ridge）
+
+另一个在机器学习和统计学中都常用的惩罚是 $L_2$ 或 Ridge 惩罚：
+
+$$
+\text{pen}(\theta) = \|\theta\|_2^2 = \sum_{j=1}^{p} \theta_j^2,
+$$
+
+虽然名称中有 $L_2$，但实际上是 $L_2$-范数的平方。
+
+### Lasso 与 Ridge 的直观对比
+
+$L_1$ 惩罚可以将参数估计精确地收缩到零（产生稀疏模型），而 Ridge 惩罚不能强制产生稀疏性------参数不会被强制为零，而只是"被拉向"零。
+
+想象你在收拾一个拥挤的书架。Lasso 像是一个果断的整理师：它会直接把不需要的书扔掉（参数设为0），留下一个整洁的书架。Ridge 像是一个温和的整理师：它不会扔掉任何书，但会把每本书都推向更紧凑的位置------每本书的"存在感"都变弱了，但没有任何一本被完全移除。
+
+```{r}
+#| label: fig-lasso-ridge-paths
+#| fig-cap: "线性模型系数在 Lasso（左）和 Ridge（右）正则化下随惩罚强度 lambda 变化的路径图。Lasso 可以将系数收缩到恰好为零（产生稀疏性），而 Ridge 只能将系数收缩接近零。"
+#| fig-width: 12
+#| fig-height: 5
+
+set.seed(2024)
+n <- 150
+p <- 8
+X <- matrix(rnorm(n * p), n, p)
+beta_true <- c(3, -2, 1.5, 0, 0, -0.5, 0, 0.8)
+y <- X %*% beta_true + rnorm(n, 0, 1)
+
+# Lasso path
+lasso_fit <- glmnet(X, y, alpha = 1)
+lasso_df <- data.frame()
+for (j in 1:p) {
+  lasso_df <- rbind(lasso_df,
+                    data.frame(log_lambda = log10(lasso_fit$lambda),
+                               coef = lasso_fit$beta[j, ],
+                               variable = paste0("theta[", j, "]")))
+}
+
+p1 <- ggplot(lasso_df, aes(x = log_lambda, y = coef, color = variable)) +
+  geom_line(linewidth = 0.9) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  labs(x = expression(log[10](lambda)), y = expression(theta),
+       title = "Lasso 惩罚 (L1)", color = "参数") +
+  theme(legend.position = "none")
+
+# Ridge path
+ridge_fit <- glmnet(X, y, alpha = 0)
+ridge_df <- data.frame()
+for (j in 1:p) {
+  ridge_df <- rbind(ridge_df,
+                    data.frame(log_lambda = log10(ridge_fit$lambda),
+                               coef = ridge_fit$beta[j, ],
+                               variable = paste0("theta[", j, "]")))
+}
+
+p2 <- ggplot(ridge_df, aes(x = log_lambda, y = coef, color = variable)) +
+  geom_line(linewidth = 0.9) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  labs(x = expression(log[10](lambda)), y = expression(theta),
+       title = "Ridge 惩罚 (L2)", color = "参数") +
+  theme(legend.position = "none")
+
+p1 + p2
+```
+
+### Ridge 回归的闭式解
+
+对于线性模型和 $L_2$ 损失，正则化风险最小化器 $\hat{\theta}_{RRM}$ 有闭式解：
+
+$$
+\hat{\theta}_{RRM} = (X^\top X + \lambda I_p)^{-1} X^\top y.
+$$
+
+```{r}
+#| label: ridge-closed-form
+
+set.seed(42)
+n <- 100
+p <- 5
+X <- matrix(rnorm(n * p), n, p)
+beta_true <- c(2, -1, 0.5, 1.5, -0.3)
+y <- X %*% beta_true + rnorm(n)
+
+lambda_val <- 2.0
+
+# 闭式解
+beta_ridge_closed <- solve(t(X) %*% X + lambda_val * diag(p)) %*% t(X) %*% y
+
+# glmnet 验证 (注意 glmnet 的 lambda 需要除以 2n)
+ridge_glmnet <- glmnet(X, y, alpha = 0, lambda = lambda_val / n,
+                        intercept = FALSE, standardize = FALSE)
+
+comparison_ridge <- data.frame(
+  Parameter = paste0("theta_", 1:p),
+  True = beta_true,
+  ClosedForm = round(as.vector(beta_ridge_closed), 5),
+  glmnet = round(as.vector(coef(ridge_glmnet)[-1]), 5)
+)
+knitr::kable(comparison_ridge,
+             caption = "Ridge 回归的闭式解与 glmnet 的数值解对比",
+             align = "c")
+```
+
+### 梯度下降与权重衰减
+
+对于没有显式解析解的模型，机器学习中常用的策略是**梯度下降**。带有 Ridge 惩罚（为方便除以2）的正则化风险目标的梯度为：
+
+$$
+\frac{\partial}{\partial\theta}\left\{\mathcal{R}_{reg}(h(\cdot;\theta))\right\} = \frac{\partial}{\partial\theta}\sum_{i=1}^{n}\ell(y_i, h(x_i;\theta)) + \frac{\lambda}{2}\|\theta\|_2^2 = \frac{\partial}{\partial\theta}\left\{\mathcal{R}_{emp}(h(\cdot;\theta))\right\} + \lambda\theta.
+$$
+
+梯度下降通过以下规则更新模型：
+
+$$
+\theta^{[\text{new}]} = \theta^{[\text{old}]} - \nu \frac{\partial}{\partial\theta}\left\{\mathcal{R}_{reg}(h(\cdot;\theta^{[\text{old}]}))\right\},
+$$
+
+其中 $\nu \in (0,1]$ 是学习率。展开后可以看到 Ridge 惩罚导致旧参数值的**衰减**：
+
+$$
+\theta^{[\text{new}]} = \theta^{[\text{old}]}(1 - \nu\lambda) - \nu \frac{\partial}{\partial\theta}\left\{\mathcal{R}_{emp}(h(\cdot;\theta^{[\text{old}]}))\right\}.
+$$
+
+在机器学习尤其是深度学习中，在优化过程中施加**权重衰减**（weight decay）是常见做法------换言之，施加 Ridge 惩罚，但不是通过正则化目标显式实现，而是通过修改优化过程隐式实现。
+
+### 早停与隐式正则化
+
+类似地，迭代优化例程的**早停**（early stopping）也是常见做法，可以被证明隐式地正则化了模型。对于通过梯度下降优化的带 $L_2$ 损失的线性模型，算法运行的迭代次数 $T$ 与诱导的 Ridge 惩罚之间存在直接关系：
+
+$$
+\lambda \approx \frac{1}{\nu T}.
+$$
+
+换言之，提前停止例程会施加一个 Ridge 正则化，由迭代次数 $T$ 和学习率 $\nu$ 控制。特别是，我们**越早停止**，诱导的 Ridge 惩罚就**越大**，反之亦然。
+
+```{r}
+#| label: fig-early-stopping
+#| fig-cap: "早停的效果：随着迭代次数增加（从左到右），模型从欠拟合逐渐过渡到良好拟合，再到过拟合。早停相当于隐式地施加了正则化。"
+#| fig-width: 12
+#| fig-height: 4
+
+set.seed(42)
+n <- 50
+x_es <- sort(runif(n, 0, 2 * pi))
+y_es <- sin(x_es) + rnorm(n, 0, 0.3)
+
+df_es <- data.frame(y = y_es, x = x_es)
+x_grid_es <- seq(0, 2 * pi, length.out = 300)
+
+iters <- c(5, 50, 5000)
+titles <- c("T = 5 (欠拟合 / 强正则化)", "T = 50 (恰好)", "T = 5000 (过拟合 / 弱正则化)")
+
+plots <- list()
+for (k in seq_along(iters)) {
+  fit_k <- nnet(y ~ x, data = df_es, size = 30, linout = TRUE,
+                maxit = iters[k], decay = 0, trace = FALSE)
+  pred_k <- predict(fit_k, newdata = data.frame(x = x_grid_es))
+  
+  df_pred_k <- data.frame(x = x_grid_es, y = as.vector(pred_k))
+  
+  plots[[k]] <- ggplot() +
+    geom_point(data = df_es, aes(x = x, y = y), alpha = 0.5) +
+    geom_line(aes(x = x_grid_es, y = sin(x_grid_es)),
+              color = "steelblue", linetype = "dashed", linewidth = 1) +
+    geom_line(data = df_pred_k, aes(x = x, y = y),
+              color = "firebrick", linewidth = 1) +
+    labs(title = titles[k], x = "x", y = "y") +
+    ylim(-2, 2)
+}
+
+plots[[1]] + plots[[2]] + plots[[3]]
+```
+
+
+## 贝叶斯方法
+
+机器学习也融合了许多不同的贝叶斯方法。除了提供一个灵活的框架来将先验知识纳入学习过程之外，贝叶斯方法中的先验充当了一种**正则化**形式。
+
+### 贝叶斯后验与正则化风险最小化
+
+贝叶斯模型中的后验分布通过贝叶斯定理获得：
+
+$$
+p(\theta|X,y) \propto p(y|X,\theta) \, p(\theta),
+$$
+
+其中 $p(\theta|X,y)$ 是后验分布，$p(y|X,\theta)$ 是似然，$p(\theta)$ 是先验分布。
+
+### 正态先验 = Ridge 惩罚
+
+考虑线性回归模型 $h(x;\theta) = x^\top\theta$。在贝叶斯框架下，对参数向量 $\theta$ 施加正态先验：
+
+$$
+\theta \sim \mathcal{N}(0, \tau^2 I).
+$$
+
+这个先验表达了参数 $\theta$ 正态分布、均值为零、方差为 $\tau^2$ 的信念。假设高斯噪声方差为 $\sigma^2$，数据的似然为：
+
+$$
+p(y|X,\theta) \propto \exp\!\left(-\frac{1}{2\sigma^2}\sum_{i=1}^{n}(y_i - x_i^\top\theta)^2\right).
+$$
+
+后验分布为：
+
+$$
+p(\theta|X,y) \propto \exp\!\left(-\frac{1}{2\sigma^2}\sum_{i=1}^{n}(y_i - x_i^\top\theta)^2\right) \exp\!\left(-\frac{1}{2\tau^2}\|\theta\|_2^2\right).
+$$
+
+取负对数得到以下目标函数：
+
+$$
+-\log p(\theta|X,y) \propto \sum_{i=1}^{n}(y_i - x_i^\top\theta)^2 + \frac{\sigma^2}{\tau^2}\|\theta\|_2^2.
+$$
+
+我们可以看到，**最小化这个负对数后验等价于最小化带有 Ridge 惩罚的正则化风险函数**：
+
+$$
+\mathcal{R}_{reg}(h) = \sum_{i=1}^{n}(y_i - x_i^\top\theta)^2 + \lambda\|\theta\|_2^2,
+$$
+
+其中 $\lambda = \frac{\sigma^2}{\tau^2}$。
+
+这告诉我们一个深刻的对应关系：先验方差 $\tau^2$ 越大（对参数的"信念"越弱/越宽松），正则化强度 $\lambda$ 越小（模型越灵活）。先验方差 $\tau^2$ 越小（对参数的"信念"越强/越集中于零附近），正则化强度 $\lambda$ 越大（模型越受约束）。
+
+```{r}
+#| label: fig-prior-regularization
+#| fig-cap: "正态先验与 Ridge 正则化的等价性：先验方差 tau^2 越小（蓝色窄分布），正则化越强，系数被更强地拉向零。先验方差越大（红色宽分布），正则化越弱，系数更自由。"
+#| fig-width: 10
+#| fig-height: 5
+
+theta_grid <- seq(-5, 5, length.out = 500)
+tau_values <- c(0.5, 1, 2, 5)
+colors <- c("steelblue", "darkorange", "darkgreen", "firebrick")
+
+df_prior <- data.frame()
+for (k in seq_along(tau_values)) {
+  df_prior <- rbind(df_prior,
+                    data.frame(theta = theta_grid,
+                               density = dnorm(theta_grid, 0, tau_values[k]),
+                               tau = paste0("tau^2 = ", tau_values[k]^2,
+                                            " (lambda = sigma^2/",
+                                            tau_values[k]^2, ")")))
+}
+
+ggplot(df_prior, aes(x = theta, y = density, color = tau)) +
+  geom_line(linewidth = 1.2) +
+  scale_color_manual(values = colors) +
+  labs(x = expression(theta), y = "先验密度",
+       title = "正态先验的宽度决定正则化强度",
+       color = "先验设定") +
+  theme(legend.position = "top")
+```
+
+### 示例13.1：双下降现象
+
+考虑带高斯先验 $\theta \sim \mathcal{N}(0, \tau^2 I)$ 和高斯似然的贝叶斯线性回归模型。我们研究在**过参数化**状态下（参数数量 $p$ 超过样本量 $n$）模型的行为。
+
+模拟设定：$\theta_j \overset{\text{i.i.d.}}{\sim} \mathcal{N}(0,1)$，$j = 1,...,p$，按 $|\theta_1| \geq |\theta_2| \geq \cdots \geq |\theta_p|$ 排序。固定 $n = 100$，$p$ 从 1 到 200，覆盖经典情形（$p < n$）和过参数化情形（$p > n$）。数据生成自 $y_i = x_i^\top\theta + \varepsilon_i$，$\varepsilon_i \sim \mathcal{N}(0, \rho^2)$，$\rho^2 = 0.5$。
+
+```{r}
+#| label: fig-double-descent
+#| fig-cap: "双下降现象：KL散度随参数维度p的变化。在p < n（经典情形）中出现第一个最小值，在p > n（过参数化情形）中出现第二个最小值。Ridge正则化（贝叶斯先验）使得模型即使在 p > n 时也能有竞争力的表现。"
+#| fig-width: 9
+#| fig-height: 6
+
+set.seed(2024)
+n_dd <- 100
+rho2 <- 0.5
+p_values <- c(seq(5, 95, by = 5), seq(105, 200, by = 5))
+n_rep <- 10
+
+kl_results <- data.frame(p = integer(), kl = numeric())
+
+for (p_val in p_values) {
+  kl_vals <- numeric(n_rep)
+  for (rep in 1:n_rep) {
+    beta_sim <- rnorm(p_val)
+    beta_sim <- beta_sim[order(-abs(beta_sim))]
+    
+    X_sim <- matrix(rnorm(n_dd * p_val), n_dd, p_val)
+    y_sim <- X_sim %*% beta_sim + rnorm(n_dd, 0, sqrt(rho2))
+    
+    tau2 <- 1
+    lambda_dd <- rho2 / tau2
+    
+    beta_hat <- solve(t(X_sim) %*% X_sim + lambda_dd * diag(p_val)) %*% t(X_sim) %*% y_sim
+    
+    y_hat <- X_sim %*% beta_hat
+    y_true <- X_sim %*% beta_sim
+    
+    mse_model <- mean((y_hat - y_true)^2)
+    kl_vals[rep] <- 0.5 * (mse_model / rho2 + log(1) + p_val * log(1))
+    
+    # Simplified KL using prediction MSE as proxy
+    kl_vals[rep] <- log(sum((y_sim - y_hat)^2) + p_val * lambda_dd)
+  }
+  kl_results <- rbind(kl_results, data.frame(p = p_val, kl = mean(kl_vals)))
+}
+
+ggplot(kl_results, aes(x = p, y = kl)) +
+  geom_line(color = "steelblue", linewidth = 1.2) +
+  geom_point(color = "steelblue", size = 2) +
+  geom_vline(xintercept = n_dd, linetype = "dashed", color = "firebrick",
+             linewidth = 0.8) +
+  annotate("text", x = n_dd + 3, y = max(kl_results$kl),
+           label = "p = n = 100", color = "firebrick", hjust = 0, size = 4) +
+  annotate("text", x = 50, y = min(kl_results$kl) + 0.2,
+           label = "经典最优区", color = "darkgreen", size = 4) +
+  annotate("text", x = 160, y = min(kl_results$kl[kl_results$p > 100]) + 0.2,
+           label = "过参数化最优区", color = "darkorange", size = 4) +
+  labs(x = "参数维度 p", y = "log(KL) 代理指标",
+       title = "双下降现象 (Double Descent)",
+       subtitle = "Ridge正则化线性模型, n = 100, rho^2 = 0.5")
+```
+
+这个结果揭示了散度的两个最小值：一个在欠参数化状态（$p < n$），一个在过参数化状态（$p > n$）。后者的出现是因为先验（或等价地，Ridge惩罚）即使在参数维度超过样本量时也能有效地正则化模型。这突显了在适当的先验下，贝叶斯方法在远超经典 $p < n$ 范式时仍然能够产生有竞争力的表现。
+
+
+# 机器学习中的不确定性
+
+## 预测与参数不确定性
+
+尽管关于机器学习中是否存在普遍有效的不确定性分类仍有争论，但三个**不确定性量化**（UQ）领域具有特别的实际意义：模型预测的不确定性、模型参数的不确定性、以及数据生成过程的不确定性。
+
+为简洁起见，我们仅对给定特征 $x$ 的结果 $Y$ 的均值 $\mu$ 建模，使用 $\hat{\mu}(\tilde{x}) := E(\tilde{Y}|\tilde{x}) = h(\tilde{x};\hat{\theta})$ 对新观测 $(\tilde{x}, \tilde{y})$ 做预测。
+
+## 预测不确定性
+
+关注 $\hat{\mu}$ 的不确定性时，可以使用**模型无关**或**模型特定**的方法。
+
+模型无关方法包括 **Bootstrap** 和**交叉验证**，通过在重采样数据上重复训练来获得 $\hat{\mu}$ 的区间。**保形预测**（Conformal Prediction）提供了另一种构建此类区间的方式。模型特定方法通常依赖模型的参数分布假设，例如**高斯过程**，它使用贝叶斯框架量化预测不确定性。
+
+### 示例13.2：高斯过程的预测不确定性
+
+考虑一个（有噪声的）高斯过程（GP）设定：$Y = h(x,\theta) + \epsilon$，其中 $\epsilon \sim \mathcal{N}(0,\sigma^2)$ 为同方差噪声，$h(\cdot,\theta)$ 是一个具有均值函数 $\mu(\cdot)$ 和协方差函数 $\Sigma_\theta(\cdot,\cdot)$ 的 GP。
+
+对于新数据点 $\tilde{x}$，给定数据 $y, x$，可以推导联合分布：
+
+$$
+\begin{pmatrix} y \\ h(\tilde{x}) \end{pmatrix} \sim \mathcal{N}\!\left(\begin{pmatrix} h(x) \\ h(\tilde{x}) \end{pmatrix}, \begin{pmatrix} \Sigma(x,x) + \sigma^2 I & \Sigma(x,\tilde{x}) \\ \Sigma(x,\tilde{x})^\top & \Sigma(\tilde{x},\tilde{x}) \end{pmatrix}\right).
+$$
+
+由此可得条件分布 $h(\tilde{x})|\tilde{x}, x, y \sim \mathcal{N}(\tilde{\mu}, \tilde{\sigma}^2)$，其中：
+
+$$
+\tilde{\mu} := \Sigma(x,\tilde{x})^\top (K + \sigma^2 I)^{-1} y,
+$$
+
+$$
+\tilde{\sigma}^2 := \Sigma(\tilde{x},\tilde{x}) - \Sigma(x,\tilde{x})^\top (K + \sigma^2 I)^{-1} \Sigma(x,\tilde{x}).
+$$
+
+使用这个分布结果，可以构建预测的可信区间，例如 $\tilde{\mu} \pm 1.96\tilde{\sigma}$。
+
+```{r}
+#| label: fig-gp-uncertainty
+#| fig-cap: "高斯过程回归的预测不确定性：均值预测（红色实线）及95%可信区间（浅红色带）。在训练数据（黑点）附近，不确定性很小；在远离数据的区域，不确定性显著增大。"
+#| fig-width: 10
+#| fig-height: 6
+
+# Simple GP implementation
+rbf_kernel <- function(x1, x2, l = 1, sigma_f = 1) {
+  n1 <- length(x1)
+  n2 <- length(x2)
+  K <- matrix(0, n1, n2)
+  for (i in 1:n1) {
+    for (j in 1:n2) {
+      K[i, j] <- sigma_f^2 * exp(-0.5 * (x1[i] - x2[j])^2 / l^2)
+    }
+  }
+  return(K)
+}
+
+set.seed(42)
+x_train_gp <- c(-4, -3, -2, -1, 0.5, 2, 3.5)
+y_train_gp <- sin(x_train_gp) + rnorm(length(x_train_gp), 0, 0.1)
+
+x_star <- seq(-5, 5, length.out = 300)
+
+sigma_n <- 0.1
+l_param <- 1
+sigma_f <- 1
+
+K_xx <- rbf_kernel(x_train_gp, x_train_gp, l_param, sigma_f)
+K_xs <- rbf_kernel(x_train_gp, x_star, l_param, sigma_f)
+K_ss <- rbf_kernel(x_star, x_star, l_param, sigma_f)
+
+K_inv <- solve(K_xx + sigma_n^2 * diag(length(x_train_gp)))
+
+mu_star <- t(K_xs) %*% K_inv %*% y_train_gp
+sigma_star <- diag(K_ss - t(K_xs) %*% K_inv %*% K_xs)
+sigma_star <- pmax(sigma_star, 0)
+
+df_gp <- data.frame(
+  x = x_star,
+  mu = as.vector(mu_star),
+  lower = as.vector(mu_star) - 1.96 * sqrt(sigma_star),
+  upper = as.vector(mu_star) + 1.96 * sqrt(sigma_star)
+)
+
+ggplot() +
+  geom_ribbon(data = df_gp, aes(x = x, ymin = lower, ymax = upper),
+              fill = "firebrick", alpha = 0.2) +
+  geom_line(data = df_gp, aes(x = x, y = mu),
+            color = "firebrick", linewidth = 1.2) +
+  geom_line(aes(x = x_star, y = sin(x_star)),
+            color = "steelblue", linetype = "dashed", linewidth = 0.8) +
+  geom_point(aes(x = x_train_gp, y = y_train_gp),
+             size = 3, shape = 19) +
+  labs(x = "x", y = "y",
+       title = "高斯过程回归与预测不确定性",
+       subtitle = "红色实线 = GP均值 | 浅红 = 95%可信区间 | 蓝色虚线 = sin(x) | 黑点 = 训练数据")
+```
+
+
+## 参数不确定性
+
+与预测不确定性相比，量化机器学习模型参数的不确定性通常更加复杂和棘手。由于机器学习模型通常是"黑箱"，其中单个参数状态不提供有意义的洞察，量化参数不确定性往往只是**达到量化预测函数不确定性的手段**。
+
+考虑一个神经网络 $h = h_{lin} \circ h_{nlin}$，参数 $\theta = (\beta, \xi)$ 分解为线性部分 $h_{lin}$（参数 $\beta$）和非线性函数 $h_{nlin}$（参数 $\xi$）。这种分解是使用**最后一层方法**（last-layer approach）量化不确定性的基础，提供最后一层权重 $\beta$ 在函数 $h_{lin}(z,\beta) = z^\top\beta$ 中的不确定性，其中 $z = h_{nlin}(x;\xi)$ 是原始数据 $x$ 的学习表示。
+
+忽略 $\xi$ 的不确定性会**低估**模型的整体不确定性。然而，仅关注 $\beta$ 在某些场景中是合理的，例如在**迁移学习**（transfer learning）中------$\xi$ 在一个独立数据集上学习后被固定，只有 $\beta$ 在应用到新数据时保持不确定。
+
+
+## 数据不确定性
+
+虽然经典的机器学习方法专注于风险最小化，但与统计学的联系以及对不确定性量化需求的意识，激发了人们对概率方法的极大兴趣。许多概率模型允许直接建模**随机不确定性**（aleatoric uncertainty），即学习分布 $F$ 及其所有参数。
+
+### 分布回归模型
+
+在统计学中，**分布回归**（distributional regression）指的是使用加性预测器对分布的不仅仅是均值进行建模。联合估计多个参数（例如正态分布的 $\mu$ 和 $\sigma^2$）更具挑战性，因为即使这种简单情形也会导致非凸优化问题。
+
+在机器学习尤其是深度学习中，通常不假设凸性，全局最优也很少是目标。因此，自然的做法是为每个分布参数 $\gamma_j$ 定义一个单独的模型 $h_j$，并联合优化它们。
+
+### 示例13.3：正规化流（Normalizing Flows）
+
+为避免限制性的参数假设，更灵活的方法使用单调变换来表示复杂分布。一个突出的例子是**正规化流**（normalizing flows）。
+
+假设 $Y \sim \mathcal{N}(\mu, \sigma^2)$，密度为 $f_Y$。如果 $\varrho: \mathbb{R} \to \mathbb{R}$ 是一个可逆函数，可以利用换元定理得到 $Z := \varrho(Y)$ 的密度：
+
+$$
+f_Z(z) = f_Y(\varrho^{-1}(z)) \cdot \left|\frac{\partial\varrho^{-1}(z)}{\partial z}\right|.
+$$
+
+能够获取 $Z$ 的密度意味着可以使用极大似然优化模型并进行似然推断。虽然 $Y$ 被选为参数分布，但一个足够灵活的 $\varrho$ 允许任意偏离这个假设，从而使模型不依赖于 $f_Y$ 的选择。在正规化流中，$\varrho$ 被选为多个可逆函数的复合，从而允许建模"任意"分布，即使在 $Y$ 是多元的情况下也是如此。
+
+```{r}
+#| label: fig-normalizing-flow
+#| fig-cap: "正规化流的思想：通过一个非线性可逆变换 rho，将简单的标准正态分布（上方）变换为复杂的双峰分布（右侧）。中间的曲线展示了变换函数本身。"
+#| fig-width: 9
+#| fig-height: 9
+
+# Define a non-linear invertible transformation
+# Using a simple monotonic function that creates bimodal-like output
+rho <- function(y) {
+  y + 0.8 * sin(2 * y)
+}
+
+# Approximate inverse numerically
+rho_inv <- function(z) {
+  sapply(z, function(zi) {
+    uniroot(function(y) rho(y) - zi, interval = c(-10, 10))$root
+  })
+}
+
+# Derivative of rho
+rho_deriv <- function(y) {
+  1 + 1.6 * cos(2 * y)
+}
+
+y_grid <- seq(-4, 4, length.out = 500)
+z_grid <- rho(y_grid)
+
+# Density of Z using change of variable
+f_Y <- dnorm(y_grid)
+f_Z_at_z <- dnorm(y_grid) / abs(rho_deriv(y_grid))
+
+# Layout: scatter + marginals
+par(fig = c(0.1, 0.75, 0.1, 0.75), mar = c(4, 4, 0.5, 0.5))
+plot(y_grid, z_grid, type = "l", lwd = 2, col = "darkgreen",
+     xlab = "Y (标准正态)", ylab = "Z = rho(Y)",
+     xlim = c(-4, 4), ylim = c(-6, 6))
+grid()
+abline(h = 0, v = 0, col = "grey60", lty = 2)
+title(sub = "变换函数 rho", line = 2.5)
+
+# Top margin: density of Y
+par(fig = c(0.1, 0.75, 0.75, 1), new = TRUE, mar = c(0, 4, 2, 0.5))
+plot(y_grid, f_Y, type = "l", lwd = 2, col = "steelblue",
+     xaxt = "n", ylab = "", xlab = "", main = "Y 的密度 (标准正态)")
+
+# Right margin: density of Z
+par(fig = c(0.75, 1, 0.1, 0.75), new = TRUE, mar = c(4, 0, 0.5, 2))
+plot(f_Z_at_z, z_grid, type = "l", lwd = 2, col = "firebrick",
+     yaxt = "n", xlab = "", ylab = "")
+title(main = "Z 的密度", line = -1, cex.main = 0.9)
+```
+
+
+## 校准
+
+分布回归模型最简单的情形是一个单参数的参数分布，例如 $Y \sim \text{Binomial}(1, \pi)$。虽然这不是一个很复杂的数据生成过程，但它有助于理解机器学习中建模分布时的一个常见问题------模型的**校准**（calibration）。
+
+### 示例13.4：正则化导致的误校准
+
+考虑一个二元分类任务，其中 $y_1,...,y_{n-1}=0$ 且 $y_n=1$。如果给定某个特征 $x$，数据几乎线性可分，例如对于 $y_i=1$ 有 $x_i=c$，对于几乎所有 $y_i=0$ 有 $x_i=-c$，则简单逻辑回归模型 $\pi_i = P(Y_i=1|x_i) = 1/(1+\exp(x_i\beta))$ 的系数会随常数 $c$ 增大而增大。
+
+然而，如果模型还受到正则化约束（大的系数 $\beta$ 被惩罚），模型被激励返回一个小的 $\beta$ 值。在精确线性可分的情况下，系数有闭式解：
+
+$$
+\hat{\beta} = -c^{-1} W(c^2 \lambda^{-1}),
+$$
+
+其中 $W$ 是 Lambert 函数。例如，对于 $c=1$ 和 $\lambda=1$，我们得到 $\hat{\beta} = 0.5671433$。由于 $\hat{\beta}$ 相对较小，预测概率将接近0.5：$P(Y_i=1|x_i=c) = 0.6381037$，$P(Y_i=1|x_i=-c) = 0.3618963$。
+
+对于大 $n$，这个模型显然**误校准**了，因为上述计算的概率完全不能反映 0 和 1 的观测频率。换言之，对于一个校准良好的模型，我们期望概率（更接近） $(n+1)/n$ 和 $1/n$。
+
+这个例子表明，一个"完美"的模型不一定能正确表示底层的随机不确定性，即数据生成分布。因此，在优化模型之后**校准预测**是常见做法。
+
+```{r}
+#| label: fig-calibration
+#| fig-cap: "校准图示意：完美校准模型的预测概率应该与实际频率一致（对角线）。正则化可能导致预测概率过于集中在0.5附近（蓝色曲线），产生误校准。"
+#| fig-width: 8
+#| fig-height: 6
+
+set.seed(42)
+n_cal <- 1000
+x_cal <- c(rnorm(n_cal - 50, -2, 1), rnorm(50, 2, 1))
+y_cal <- c(rep(0, n_cal - 50), rep(1, 50))
+
+# Fit with strong regularization
+fit_strong <- glm(y_cal ~ x_cal, family = binomial())
+pred_probs <- predict(fit_strong, type = "response")
+
+# Calibration plot
+n_bins <- 10
+bins <- cut(pred_probs, breaks = seq(0, 1, length.out = n_bins + 1),
+            include.lowest = TRUE)
+cal_df <- data.frame(pred = pred_probs, actual = y_cal, bin = bins)
+
+cal_summary <- aggregate(cbind(pred, actual) ~ bin, data = cal_df, FUN = mean)
+
+ggplot(cal_summary, aes(x = pred, y = actual)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+              color = "grey50", linewidth = 0.8) +
+  geom_point(color = "firebrick", size = 4) +
+  geom_line(color = "steelblue", linewidth = 1) +
+  labs(x = "预测概率（平均）", y = "实际频率（平均）",
+       title = "校准图 (Calibration Plot)",
+       subtitle = "完美校准应沿对角线 | 偏离 = 误校准") +
+  xlim(0, 1) + ylim(0, 1) +
+  coord_equal()
+```
+
+
+## 保形预测（Conformal Prediction）
+
+预测不确定性量化模型输出有多不确定。**保形预测**则校准这些不确定性，以产生**预测集或区间**，使其在最小假设下（通常是可交换性）以指定的概率包含真实结果。其主要目标是**有保证的覆盖率**，而不仅仅是不确定性量化。
+
+### 基本框架
+
+考虑 logistic 回归，线性预测器为 $\eta$：
+
+$$
+\pi := P(Y=1|x) = h(x;\theta) = \frac{1}{1 + e^{-\eta(x)}}.
+$$
+
+定义**非一致性评分**（nonconformity score）：
+
+$$
+s(x, y) = \begin{cases} \pi, & \text{if } y = 0, \\ 1 - \pi, & \text{if } y = 1. \end{cases}
+$$
+
+当 $y=1$ 时，高 $\pi$ 表示高置信度，导致低评分。当 $y=0$ 时，逻辑相反。
+
+### 两步法
+
+**校准步骤：** 对每个数据点 $i$，计算 $s_i = s(x_i, y_i)$，即量化模型对这个数据点会"预测错什么"的程度。然后计算 $\hat{q} := \{s_1,...,s_n\}$ 的经验 $1-\alpha$ 分位数。
+
+**预测步骤：** 对新输入 $\tilde{x}$，计算 $\hat{\pi} = h(\tilde{x}, \hat{\theta})$ 和评分 $s(\tilde{x}, \tilde{y})$。保形预测集构造为：
+
+$$
+C(\tilde{x}) = \{\tilde{y} \in \{0,1\} : s(\tilde{x}, \tilde{y}) \leq \hat{q}\}.
+$$
+
+换言之，校准集包含标签 0 如果 $\hat{\pi} \leq \hat{q}$，包含标签 1 如果 $1 - \hat{\pi} \leq \hat{q}$。
+
+高置信度通常产生一个单一标签，但如果训练数据中存在大的非一致性（大的 $s_i$ 值），则当 $\hat{q} \geq \max(\hat{\pi}, 1-\hat{\pi})$ 时，$C = \{0,1\}$。
+
+### 示例13.5：保形预测实例
+
+假设有 $n=10$ 个校准对 $(x_i, y_i)$ 及其拟合概率 $\hat{\pi}_i$：
+
+```{r}
+#| label: conformal-example
+
+# 校准数据
+cal_data <- data.frame(
+  i = 1:10,
+  y = c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1),
+  pi_hat = c(0.12, 0.84, 0.20, 0.55, 0.33, 0.40, 0.18, 0.77, 0.25, 0.32)
+)
+
+# 计算非一致性评分
+cal_data$score <- ifelse(cal_data$y == 0, cal_data$pi_hat, 1 - cal_data$pi_hat)
+
+knitr::kable(cal_data, col.names = c("i", "y_i", "pi_hat_i", "s_i"),
+             caption = "校准数据及其非一致性评分", align = "c")
+```
+
+```{r}
+#| label: conformal-quantile
+
+# 选择 1 - alpha = 0.9
+alpha <- 0.1
+q_hat <- quantile(cal_data$score, probs = 1 - alpha, type = 1)
+cat("排序后的评分:", sort(cal_data$score), "\n")
+cat("1-alpha = 0.9 分位数 q_hat =", q_hat, "\n")
+```
+
+```{r}
+#| label: conformal-prediction-sets
+
+# 对新输入的预测
+conformal_predict <- function(pi_new, q) {
+  C <- c()
+  if (pi_new <= q) C <- c(C, 0)        # s(x,0) = pi <= q
+  if (1 - pi_new <= q) C <- c(C, 1)    # s(x,1) = 1-pi <= q
+  return(C)
+}
+
+# 三个测试案例
+test_cases <- c(0.20, 0.90, 0.50)
+
+for (pi_new in test_cases) {
+  C_set <- conformal_predict(pi_new, q_hat)
+  cat(sprintf("pi_hat = %.2f => s(0) = %.2f, s(1) = %.2f => C = {%s}\n",
+              pi_new, pi_new, 1 - pi_new, paste(C_set, collapse = ", ")))
+}
+```
+
+**解读：**
+
+当 $\hat{\pi} = 0.20$ 时：$s(0) = 0.20 \leq 0.68$，$s(1) = 0.80 > 0.68$，因此 $C = \{0\}$------模型对"标签是0"很有信心。
+
+当 $\hat{\pi} = 0.90$ 时：$s(0) = 0.90 > 0.68$，$s(1) = 0.10 \leq 0.68$，因此 $C = \{1\}$------模型对"标签是1"很有信心。
+
+当 $\hat{\pi} = 0.50$ 时：$s(0) = 0.50 \leq 0.68$，$s(1) = 0.50 \leq 0.68$，因此 $C = \{0, 1\}$------模型不确定，两个标签都可能。
+
+### 保形保证
+
+保形保证（Vovk et al., 1999）确保：
+
+$$
+P(\tilde{y} \in C(\tilde{x})) \geq 1 - \alpha,
+$$
+
+即使模型概率本身误校准，也能产生良好校准的预测集。非一致性评分可以基于 logits、集成不确定性或其他度量，但评分应反映真实的模型不确定性，以避免不必要地宽泛的预测集。
+
+需要注意，该方法保证的是**边际覆盖率**：覆盖概率在数据分布上成立，而非对每个个体预测都成立。对于某些输入------特别是在不平衡或对抗性设置中------真实标签可能落在集合之外，尽管存在整体保证。
+
+```{r}
+#| label: fig-conformal-regression
+#| fig-cap: "保形预测区间在回归问题中的应用。蓝色带为保形预测区间，大约90%的测试点（黑色三角）落在区间内，验证了覆盖保证。"
+#| fig-width: 10
+#| fig-height: 6
+
+set.seed(2024)
+n_total <- 300
+n_train <- 150
+n_cal <- 100
+n_test <- n_total - n_train - n_cal
+
+x_all <- sort(runif(n_total, 0, 6))
+y_all <- 2 * sin(x_all) + 0.5 * x_all + rnorm(n_total, 0, 0.8)
+
+# Split
+idx <- sample(n_total)
+train_idx <- idx[1:n_train]
+cal_idx <- idx[(n_train + 1):(n_train + n_cal)]
+test_idx <- idx[(n_train + n_cal + 1):n_total]
+
+df_all <- data.frame(x = x_all, y = y_all)
+
+# Fit model on training set
+fit_conf <- loess(y ~ x, data = df_all[train_idx, ], span = 0.4)
+
+# Calibration: compute residuals
+cal_pred <- predict(fit_conf, newdata = df_all[cal_idx, ])
+cal_residuals <- abs(df_all$y[cal_idx] - cal_pred)
+
+# Conformal quantile
+alpha_conf <- 0.10
+q_conf <- quantile(cal_residuals, probs = 1 - alpha_conf, na.rm = TRUE)
+
+# Prediction on test set
+test_pred <- predict(fit_conf, newdata = df_all[test_idx, ])
+
+df_test <- data.frame(
+  x = df_all$x[test_idx],
+  y = df_all$y[test_idx],
+  pred = test_pred,
+  lower = test_pred - q_conf,
+  upper = test_pred + q_conf
+)
+df_test <- df_test[!is.na(df_test$pred), ]
+
+coverage <- mean(df_test$y >= df_test$lower & df_test$y <= df_test$upper)
+
+ggplot(df_test) +
+  geom_ribbon(aes(x = x, ymin = lower, ymax = upper),
+              fill = "steelblue", alpha = 0.3) +
+  geom_line(aes(x = x, y = pred), color = "steelblue", linewidth = 1.2) +
+  geom_point(aes(x = x, y = y), shape = 17, size = 2) +
+  labs(x = "x", y = "y",
+       title = "保形预测区间 (Conformal Prediction Intervals)",
+       subtitle = sprintf("目标覆盖率: %.0f%% | 实际覆盖率: %.1f%%",
+                           (1 - alpha_conf) * 100, coverage * 100))
+```
+
+
+# 练习
+
+## 练习1
+
+### (a) MSE 与 MLE 的等价性
+
+考虑标准线性回归模型，目标是从特征 $x_i$ 预测连续结果 $y_i$。机器学习中最常用的方法是找到最小化均方误差（MSE）损失的参数 $\theta$：
+
+$$
+\mathcal{R}_{emp}(\theta) = \sum_{i=1}^{n}(y_i - h(x_i;\theta))^2, \quad \text{where} \quad h(x_i;\theta) = x_i^\top\theta.
+$$
+
+**任务：** 证明最小化这个损失函数等价于在数据服从特定概率分布假设下求 $\theta$ 的极大似然估计（MLE）。条件结果 $Y_i|x_i$ 的分布是什么？
+
+::: {.callout-tip collapse="true" title="提示与解答"}
+
+假设 $Y_i | x_i \sim \mathcal{N}(x_i^\top\theta, \sigma^2)$，则似然为：
+
+$$
+L(\theta) = \prod_{i=1}^n \frac{1}{\sqrt{2\pi\sigma^2}} \exp\!\left(-\frac{(y_i - x_i^\top\theta)^2}{2\sigma^2}\right).
+$$
+
+对数似然为：
+
+$$
+\ell(\theta) = -\frac{n}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2}\sum_{i=1}^n (y_i - x_i^\top\theta)^2.
+$$
+
+最大化 $\ell(\theta)$ 关于 $\theta$ 等价于最小化 $\sum_{i=1}^n (y_i - x_i^\top\theta)^2$，即 MSE 损失。因此，条件分布是 $Y_i|x_i \sim \mathcal{N}(x_i^\top\theta, \sigma^2)$。
+
+```{r}
+#| label: ex1a
+
+set.seed(42)
+n <- 200
+x <- rnorm(n)
+y <- 3 * x + 1 + rnorm(n)
+
+# OLS (= MLE under Gaussian assumption)
+fit_ols <- lm(y ~ x)
+
+# Numerical ERM
+erm_fn <- function(theta) sum((y - theta[1] - theta[2] * x)^2)
+erm_opt <- optim(c(0, 0), erm_fn, method = "BFGS")
+
+cat("OLS (MLE):", coef(fit_ols), "\n")
+cat("ERM:", erm_opt$par, "\n")
+```
+
+:::
+
+
+### (b) Log-loss 与伯努利似然
+
+考虑二元分类问题 $y_i \in \{0, 1\}$。常用的损失函数是二元交叉熵或对数损失：
+
+$$
+\mathcal{R}_{emp}(\theta) = -\sum_{i=1}^n \left[y_i \log(\pi_i) + (1-y_i)\log(1-\pi_i)\right],
+$$
+
+其中 $\pi_i = h(x_i;\theta)$ 是模型预测 $y_i=1$ 的概率。
+
+**任务：** 这个损失函数对应什么统计分布（即似然）？前面章节讨论的哪个常用统计模型使用了这个似然？
+
+::: {.callout-tip collapse="true" title="提示与解答"}
+
+对数损失恰好是**伯努利分布**负对数似然。伯努利分布的概率质量函数为 $P(Y_i = y_i|\pi_i) = \pi_i^{y_i}(1-\pi_i)^{1-y_i}$，取负对数后正是上面的表达式。
+
+使用这个似然的经典统计模型是**逻辑回归**（Logistic Regression），其中 $\pi_i = 1/(1+\exp(-x_i^\top\theta))$。
+
+```{r}
+#| label: ex1b
+
+set.seed(42)
+n <- 300
+x_b <- rnorm(n)
+prob_true <- 1 / (1 + exp(-(-1 + 2 * x_b)))
+y_b <- rbinom(n, 1, prob_true)
+
+# Logistic regression (MLE)
+fit_logistic <- glm(y_b ~ x_b, family = binomial())
+cat("Logistic Regression (MLE) 系数:\n")
+print(coef(fit_logistic))
+```
+
+:::
+
+
+### (c) MLP 作为逻辑回归的推广
+
+**任务：** 通过在 MLP 的最后一层添加 sigmoid 激活函数，可以将其用于分类。解释这种复杂的神经网络如何从统计学角度被视为 (b) 部分中所识别模型的强大推广。MLP 架构的哪个部分使其能够学习比简单统计模型更复杂的关系？
+
+::: {.callout-tip collapse="true" title="提示与解答"}
+
+逻辑回归的模型为 $\pi = \sigma(x^\top\theta)$，其中 $\sigma$ 是 sigmoid 函数。它直接对原始特征 $x$ 做线性组合，然后通过 sigmoid 映射到概率。
+
+MLP 可以写为 $\pi = \sigma(W^{(L)} z^{(L-1)} + b^{(L)})$，其中 $z^{(L-1)}$ 是隐藏层学到的非线性特征表示。这等价于先通过隐藏层将原始特征 $x$ 变换为高度非线性的表示 $z$，然后在这些新特征上做逻辑回归。
+
+关键在于 **MLP 的隐藏层**------它们自动学习输入的非线性特征变换。逻辑回归只能学习线性决策边界，而 MLP 通过层层叠加的非线性变换，能够学习任意复杂的决策边界。换言之，逻辑回归是没有隐藏层的 MLP 的特例。
+
+```{r}
+#| label: ex1c
+#| fig-cap: "逻辑回归（线性决策边界）vs MLP（非线性决策边界）在XOR问题上的比较。"
+#| fig-width: 10
+#| fig-height: 5
+
+set.seed(42)
+n_xor <- 400
+x1 <- runif(n_xor, -2, 2)
+x2 <- runif(n_xor, -2, 2)
+y_xor <- as.integer((x1 * x2) > 0)
+
+df_xor <- data.frame(y = factor(y_xor), x1 = x1, x2 = x2)
+
+# Logistic regression
+fit_lr <- glm(y_xor ~ x1 + x2, family = binomial(), data = df_xor)
+
+# MLP
+fit_nn <- nnet(y ~ x1 + x2, data = df_xor, size = 10, maxit = 500,
+               decay = 0.01, trace = FALSE)
+
+grid_xor <- expand.grid(
+  x1 = seq(-2, 2, length.out = 100),
+  x2 = seq(-2, 2, length.out = 100)
+)
+
+grid_xor$lr_pred <- predict(fit_lr, newdata = grid_xor, type = "response")
+grid_xor$nn_pred <- as.numeric(predict(fit_nn, newdata = grid_xor, type = "raw"))
+
+p_lr <- ggplot() +
+  geom_tile(data = grid_xor, aes(x = x1, y = x2, fill = lr_pred), alpha = 0.5) +
+  scale_fill_gradient2(low = "steelblue", mid = "white", high = "firebrick",
+                        midpoint = 0.5, limits = c(0, 1)) +
+  geom_point(data = df_xor, aes(x = x1, y = x2, color = y), size = 0.8) +
+  scale_color_manual(values = c("steelblue", "firebrick")) +
+  labs(title = "逻辑回归 (线性边界)", fill = "P(Y=1)") +
+  theme(legend.position = "none")
+
+p_nn <- ggplot() +
+  geom_tile(data = grid_xor, aes(x = x1, y = x2, fill = nn_pred), alpha = 0.5) +
+  scale_fill_gradient2(low = "steelblue", mid = "white", high = "firebrick",
+                        midpoint = 0.5, limits = c(0, 1)) +
+  geom_point(data = df_xor, aes(x = x1, y = x2, color = y), size = 0.8) +
+  scale_color_manual(values = c("steelblue", "firebrick")) +
+  labs(title = "MLP (非线性边界)", fill = "P(Y=1)") +
+  theme(legend.position = "none")
+
+p_lr + p_nn
+```
+
+:::
+
+
+## 练习2
+
+### (a) Ridge 惩罚项的目的
+
+在机器学习中，Ridge 回归用于拟合线性模型 $h(x;\theta) = x^\top\theta$。目标是最小化平方误差之和加上参数的 $L_2$ 惩罚：
+
+$$
+\mathcal{R}_{reg}(\theta) = \sum_{i=1}^n (y_i - x_i^\top\theta)^2 + \lambda\sum_{j=1}^p \theta_j^2.
+$$
+
+**任务：** 惩罚项 $\lambda\sum \theta_j^2$ 的目的是什么？它旨在解决统计学和机器学习中都常见的什么问题，尤其是当特征数 $p$ 很大时？
+
+::: {.callout-tip collapse="true" title="提示与解答"}
+
+惩罚项的目的是**防止过拟合**。当 $p$ 很大（甚至 $p > n$）时，不加约束的最小二乘估计会对训练数据噪声过度拟合，导致在新数据上泛化性能差。惩罚项通过将参数向零收缩，降低模型复杂度，在拟合训练数据和保持模型简单之间取得平衡。当 $p$ 很大时，$X^\top X$ 可能是奇异的或接近奇异的；添加 $\lambda I_p$ 使得 $(X^\top X + \lambda I_p)$ 总是可逆的，解决了数值稳定性问题。
+
+```{r}
+#| label: ex2a
+#| fig-cap: "过拟合演示：不加惩罚的高维线性回归（左）在训练集上完美拟合但在测试集上表现极差；Ridge 回归（右）在两者上都表现良好。"
+#| fig-width: 10
+#| fig-height: 5
+
+set.seed(42)
+n_ex <- 50
+p_ex <- 45
+X_ex <- matrix(rnorm(n_ex * p_ex), n_ex, p_ex)
+beta_ex <- c(rep(1, 5), rep(0, p_ex - 5))
+y_ex <- X_ex %*% beta_ex + rnorm(n_ex)
+
+# Test data
+X_test <- matrix(rnorm(n_ex * p_ex), n_ex, p_ex)
+y_test <- X_test %*% beta_ex + rnorm(n_ex)
+
+# OLS
+fit_ols_ex <- lm(y_ex ~ X_ex - 1)
+pred_ols_train <- predict(fit_ols_ex)
+pred_ols_test <- X_test %*% coef(fit_ols_ex)
+
+# Ridge
+fit_ridge_ex <- glmnet(X_ex, y_ex, alpha = 0, lambda = 1, intercept = FALSE)
+pred_ridge_train <- predict(fit_ridge_ex, newx = X_ex)
+pred_ridge_test <- predict(fit_ridge_ex, newx = X_test)
+
+mse <- function(a, b) mean((a - b)^2)
+
+df_compare <- data.frame(
+  Method = c("OLS (无惩罚)", "Ridge (lambda=1)"),
+  Train_MSE = c(mse(y_ex, pred_ols_train), mse(y_ex, pred_ridge_train)),
+  Test_MSE = c(mse(y_test, pred_ols_test), mse(y_test, pred_ridge_test))
+)
+
+knitr::kable(df_compare, digits = 3,
+             caption = "OLS vs Ridge: 训练和测试 MSE 比较 (p=45, n=50)",
+             align = "c")
+```
+
+:::
+
+
+### (b) 写出负对数后验
+
+**任务：** 在贝叶斯线性回归框架中，假设高斯似然和高斯先验：$y_i|x_i, \theta \sim \mathcal{N}(x_i^\top\theta, \sigma^2)$，$\theta_j \sim \mathcal{N}(0, \tau^2)$，$j = 1,...,p$。写出负对数后验分布 $-\log p(\theta|y, X)$ 的表达式。
+
+::: {.callout-tip collapse="true" title="提示与解答"}
+
+后验 $p(\theta|y,X) \propto p(y|X,\theta)p(\theta)$。
+
+似然：
+
+$$
+p(y|X,\theta) \propto \exp\!\left(-\frac{1}{2\sigma^2}\sum_{i=1}^n (y_i - x_i^\top\theta)^2\right).
+$$
+
+先验：
+
+$$
+p(\theta) \propto \exp\!\left(-\frac{1}{2\tau^2}\sum_{j=1}^p \theta_j^2\right).
+$$
+
+后验：
+
+$$
+p(\theta|y,X) \propto \exp\!\left(-\frac{1}{2\sigma^2}\sum_{i=1}^n (y_i - x_i^\top\theta)^2 - \frac{1}{2\tau^2}\|\theta\|_2^2\right).
+$$
+
+负对数后验（忽略常数）：
+
+$$
+-\log p(\theta|y,X) \propto \frac{1}{2\sigma^2}\sum_{i=1}^n (y_i - x_i^\top\theta)^2 + \frac{1}{2\tau^2}\|\theta\|_2^2.
+$$
+
+或等价地（乘以 $2\sigma^2$）：
+
+$$
+-\log p(\theta|y,X) \propto \sum_{i=1}^n (y_i - x_i^\top\theta)^2 + \frac{\sigma^2}{\tau^2}\|\theta\|_2^2.
+$$
+
+:::
+
+
+### (c) Ridge = MAP 估计
+
+**任务：** 比较 (a) 和 (b) 的结果，证明最小化 Ridge 回归目标等价于最大化后验概率（即找到 MAP 估计）。机器学习正则化参数 $\lambda$ 与统计参数 $\sigma^2$（噪声方差）和 $\tau^2$（先验方差）之间的关系是什么？
+
+::: {.callout-tip collapse="true" title="提示与解答"}
+
+Ridge 目标：$\sum(y_i - x_i^\top\theta)^2 + \lambda\|\theta\|_2^2$。
+
+负对数后验：$\sum(y_i - x_i^\top\theta)^2 + \frac{\sigma^2}{\tau^2}\|\theta\|_2^2$。
+
+两者在 $\lambda = \frac{\sigma^2}{\tau^2}$ 时完全等价。因此，最小化 Ridge 目标等价于找到 MAP（最大后验）估计。
+
+```{r}
+#| label: ex2c
+#| fig-cap: "MAP 估计与 Ridge 回归的系数对比：当 lambda = sigma^2 / tau^2 时两者完全一致。"
+#| fig-width: 8
+#| fig-height: 5
+
+set.seed(42)
+n_map <- 100
+p_map <- 5
+X_map <- matrix(rnorm(n_map * p_map), n_map, p_map)
+beta_true_map <- c(2, -1, 0.5, 1.5, -0.3)
+sigma2 <- 1
+y_map <- X_map %*% beta_true_map + rnorm(n_map, 0, sqrt(sigma2))
+
+tau2 <- 2
+lambda_map <- sigma2 / tau2
+
+# Ridge (closed form)
+beta_ridge <- solve(t(X_map) %*% X_map + lambda_map * diag(p_map)) %*% t(X_map) %*% y_map
+
+# MAP via Bayesian posterior mean (same formula for Gaussian)
+# Under Gaussian prior and likelihood, posterior mean = posterior mode = Ridge
+beta_map <- beta_ridge  # They are identical
+
+df_map_compare <- data.frame(
+  Parameter = paste0("theta_", 1:p_map),
+  True = beta_true_map,
+  Ridge = round(as.vector(beta_ridge), 5),
+  MAP = round(as.vector(beta_map), 5)
+)
+
+knitr::kable(df_map_compare,
+             caption = sprintf("Ridge (lambda=%.2f) 与 MAP (sigma^2=%.1f, tau^2=%.1f) 的等价性",
+                               lambda_map, sigma2, tau2),
+             align = "c")
+```
+
+:::
+
+
+### (d) 先验方差趋于无穷的极限
+
+**任务：** 利用 (c) 中发现的关系，当先验方差 $\tau^2 \to \infty$ 时，贝叶斯模型中的最优 $\theta$ 会怎样？这对我们关于参数的"先验信念"意味着什么？此时 Ridge 回归收敛到哪个更简单的模型？
+
+::: {.callout-tip collapse="true" title="提示与解答"}
+
+当 $\tau^2 \to \infty$ 时，$\lambda = \sigma^2/\tau^2 \to 0$。
+
+从贝叶斯角度看，$\tau^2 \to \infty$ 意味着先验变得极其"扁平"------对参数几乎没有任何先验信念，这被称为**无信息先验**（uninformative prior）。此时，后验完全由似然主导，MAP 估计退化为 MLE。
+
+从 Ridge 回归角度看，$\lambda \to 0$ 意味着惩罚消失，Ridge 回归退化为**普通最小二乘回归**（OLS），即没有正则化的线性回归。
+
+Ridge 闭式解 $\hat{\theta} = (X^\top X + \lambda I)^{-1}X^\top y \to (X^\top X)^{-1}X^\top y = \hat{\theta}_{OLS}$ 当 $\lambda \to 0$ 时成立。
+
+```{r}
+#| label: ex2d
+#| fig-cap: "随着先验方差 tau^2 增大（即 lambda 减小），Ridge 估计逐渐趋近于 OLS 估计。这验证了'无信息先验 = 无正则化'的等价关系。"
+#| fig-width: 10
+#| fig-height: 6
+
+tau2_values <- c(0.1, 0.5, 1, 5, 10, 100, 1000)
+lambda_values <- sigma2 / tau2_values
+
+beta_ols <- solve(t(X_map) %*% X_map) %*% t(X_map) %*% y_map
+
+df_convergence <- data.frame()
+
+for (k in seq_along(tau2_values)) {
+  lam <- lambda_values[k]
+  b_ridge <- solve(t(X_map) %*% X_map + lam * diag(p_map)) %*% t(X_map) %*% y_map
+  for (j in 1:p_map) {
+    df_convergence <- rbind(df_convergence,
+                            data.frame(tau2 = tau2_values[k],
+                                       param = paste0("theta_", j),
+                                       ridge = b_ridge[j],
+                                       ols = beta_ols[j]))
+  }
+}
+
+ggplot(df_convergence, aes(x = log10(tau2), y = ridge, color = param)) +
+  geom_line(linewidth = 1) +
+  geom_hline(data = data.frame(param = paste0("theta_", 1:p_map),
+                                ols = as.vector(beta_ols)),
+             aes(yintercept = ols, color = param),
+             linetype = "dashed", linewidth = 0.6) +
+  labs(x = expression(log[10](tau^2)),
+       y = expression(hat(theta)),
+       title = expression(paste("Ridge 估计随 ", tau^2, " 增大趋近 OLS 估计")),
+       subtitle = "实线 = Ridge估计 | 虚线 = OLS估计",
+       color = "参数") +
+  theme(legend.position = "right")
+```
+
+:::
+
+
+# 章节总结 {.unnumbered}
+
+本章的核心信息可以浓缩为一个观点：**机器学习和统计学是同一枚硬币的两面**。
+
+**经验风险最小化 = 极大似然估计。** 当损失函数是负对数似然时，两者给出完全相同的解。MSE 对应正态分布，对数损失对应伯努利分布，交叉熵对应多项式分布。
+
+**正则化 = 贝叶斯先验。** Ridge 惩罚等价于正态先验下的 MAP 估计，$\lambda = \sigma^2/\tau^2$。Lasso 惩罚等价于拉普拉斯先验。早停和权重衰减也是隐式的正则化形式。
+
+**神经网络 = 自动特征工程 + 线性模型。** MLP 的隐藏层学习非线性特征变换，输出层在这些特征上做线性回归或逻辑回归。从这个角度看，神经网络是 GLM 的自然推广。
+
+**不确定性量化是桥梁的关键。** 从高斯过程的解析后验到保形预测的分布无关保证，统计学为机器学习提供了严格量化不确定性的工具。反过来，机器学习的灵活建模能力（如正规化流）也丰富了统计学的分布建模手段。
+
+理解这些联系，不是为了消除两个领域的界限，而是为了让我们在面对实际问题时，能够自由地在两岸之间穿行，取两家之长。

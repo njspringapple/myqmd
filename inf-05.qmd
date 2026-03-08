@@ -1,0 +1,2421 @@
+---
+title: "第五章：数据驱动的决策"
+subtitle: "从 p 值到最优检验的完整旅程 | Von p-Werten zu optimalen Tests"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+在第四章中，我们掌握了最大似然估计的渐近理论，知道了如何估计参数并量化不确定性。现在，想象你是一位法官，手中握着证据（数据），面前是一项指控（假设）。本章要回答的核心问题是：**这些证据足够推翻指控吗？我们如何量化"足够"？**
+
+*Im letzten Kapitel haben wir die asymptotische Theorie des MLE beherrscht. Nun fragen wir: Reichen die Beweise aus, um eine Hypothese zu verwerfen? Wie quantifizieren wir "ausreichend"?*
+
+具体来说，我们将建立数据驱动决策的完整框架：
+
+1. **p 值与显著性检验** -- 量化反对假设的证据强度
+2. **统计假设检验** -- 在两种状态之间做出二元决策
+3. **经典参数检验** -- Wald 检验、似然比检验、得分检验、卡方检验
+4. **检验的功效与 Neyman-Pearson 引理** -- 什么是"最优"检验
+5. **检验与置信区间的对偶** -- 同一枚硬币的两面
+6. **多重检验** -- 同时做很多判决时如何避免冤假错案
+7. **通用推断** -- 当渐近分布未知时的万能方法
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图 | Lernroadmap dieses Kapitels"
+#| fig-height: 4.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+steps_x <- c(1.5, 3.8, 6.1, 8.4, 10.7, 13.0, 15.0)
+steps_y <- rep(4.2, 7)
+arrows(steps_x[-7] + 0.9, steps_y[-7], steps_x[-1] - 0.9, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("p值\n显著性检验", "假设检验\n决策矩阵", 
+               "经典检验\nWald/LR/Score",
+               "卡方检验\n独立性", 
+               "检验功效\nNeyman-Pearson",
+               "检验与CI\n对偶关系",
+               "多重检验\n通用推断")
+labels_de <- c("p-Wert\nSignifikanz", "Hypothesen-\ntest", 
+               "Wald/LR/\nScore-Test",
+               "Chi-Quadrat\nUnabhangigkeit",
+               "Power\nNeyman-Pearson",
+               "Test & CI\nDualitat",
+               "Multiples\nTesten")
+colors <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#E0E7FF", "#FEE2E2", "#D1FAE5", "#F3E8FF")
+borders <- c("#2563EB", "#D97706", "#DB2777", "#6366F1", "#DC2626", "#16A34A", "#9333EA")
+
+for (i in 1:7) {
+  rect(steps_x[i] - 0.9, steps_y[i] - 0.9, steps_x[i] + 0.9, steps_y[i] + 0.9,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.25, labels_cn[i], cex = 0.52, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.4, col = "#64748B", font = 3)
+  text(steps_x[i] - 0.65, steps_y[i] + 0.75, paste0("\u00a75.", i), 
+       cex = 0.5, col = borders[i], font = 2)
+}
+
+arrows(0.5, 1.2, 15.5, 1.2, col = "#DC2626", lwd = 2, length = 0.15)
+text(8, 1.6, "从证据量化到最优决策，层层递进  >>>", cex = 0.85, col = "#DC2626")
+```
+
+**最终目标**：理解下面这条链路中每一个概念的含义 --
+
+$$
+p\text{-value} \;\xrightarrow{\text{阈值}\alpha}\; \text{假设检验} \;\xrightarrow{\text{功效分析}}\; \text{最优检验(NP引理)} \;\xrightarrow{\text{对偶}}\; \text{置信区间}
+$$
+
+现在看不懂？**完全没关系** -- 读完本章，这条链将变得水到渠成。
+
+{{< pagebreak >}}
+
+# 显著性检验与 p 值 {#sec-pvalue}
+
+> **Signifikanztests und p-Wert**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- **零假设（Nullhypothese）** 的定义与直觉
+- **p 值（p-Wert）** 的精确定义：量化反对假设的证据
+- 利用中心极限定理计算 p 值
+- p 值**本身是随机变量**：零假设下服从均匀分布
+- p 值的常见**误解**
+:::
+
+## 从历史出发：Laplace 与新生儿性别比
+
+> **Historischer Einstieg: Laplace und das Geschlechterverhaltnis**
+
+::: {.callout-tip icon="false"}
+## 法官的比喻 | Die Richter-Metapher
+
+想象你是一位法官。被告声称"男婴和女婴出生比例完全相等"（这就是假设 $H_0$）。你无法直接证明这个声明是对的，但你可以收集反对它的证据。当反对证据足够压倒性时，你会推翻这个声明。
+
+p 值就是衡量"证据有多强"的尺子：它告诉你，如果被告的声明是真的，那么出现**比当前证据更极端**的情况的概率有多大。如果这个概率极小，说明当前证据已经足够极端，声明大概率是假的。
+
+*Der p-Wert misst: Wie wahrscheinlich ist es, noch extremere Daten zu sehen, wenn die Hypothese stimmt? Je kleiner der p-Wert, desto starker die Evidenz gegen die Hypothese.*
+:::
+
+Pierre-Simon Laplace (1749-1827) 可能是统计学最早的先驱之一。他注意到男婴出生率略高于女婴这一现象，但在他的时代，量化假设反对证据的方法尚不存在。这正是 p 值概念的历史起源。
+
+让我们用现代数据重现这个问题。2021 年德国共有 795,478 名新生儿，其中男婴 408,490 名，女婴 387,027 名。
+
+```{r}
+#| label: fig-newborn-data
+#| fig-cap: "德国新生儿数据（仿教材 Fig. 5.1）：左图为男女新生儿数量，右图为男婴比例 | Neugeborene in Deutschland"
+#| fig-height: 5
+
+years <- 2017:2021
+boys  <- c(399981, 401631, 397838, 399042, 408490)
+girls <- c(378675, 380351, 377023, 377112, 387027)
+total <- boys + girls
+ratio <- boys / total
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 左图：男女数量
+plot(years, boys, type = "b", pch = 16, col = "#2563EB", lwd = 2.5,
+     ylim = range(c(boys, girls)) * c(0.98, 1.02),
+     xlab = "年份 | Jahr", ylab = "新生儿数量 | Anzahl Neugeborene",
+     main = "新生儿数量 | Neugeborene",
+     cex.main = 1.1, col.main = "#1E293B")
+lines(years, girls, type = "b", pch = 17, col = "#DC2626", lwd = 2.5, lty = 2)
+grid(col = "#E2E8F0")
+legend("bottomright", legend = c("男婴 | Jungen", "女婴 | Madchen"),
+       pch = c(16, 17), col = c("#2563EB", "#DC2626"), lwd = 2.5,
+       lty = c(1, 2), bty = "n", cex = 0.85)
+
+# 右图：比例
+plot(years, ratio, type = "b", pch = 16, col = "#9333EA", lwd = 2.5,
+     xlab = "年份 | Jahr", ylab = "男婴比例 | Anteil Jungen",
+     main = "男婴比例 | Jungenanteil",
+     cex.main = 1.1, col.main = "#1E293B",
+     ylim = c(0.5125, 0.515))
+grid(col = "#E2E8F0")
+abline(h = 0.5, col = "#DC2626", lty = 3, lwd = 2)
+text(2019, 0.5005, expression(pi == 0.5 ~ "(假设)"), col = "#DC2626", cex = 0.85, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+## 零假设的定义
+
+> **Definition der Nullhypothese**
+
+::: {.callout-important icon="false"}
+## 定义 5.1：零假设 | Definition 5.1: Nullhypothese
+
+我们将假设记为 $H_0$，称之为**零假设（Nullhypothese）**。
+:::
+
+在统计显著性检验中，假设往往可以被公式化为对参数的假设。以新生儿性别问题为例，设 $Y_i$ 为第 $i$ 个新生儿的编码性别（$Y_i = 1$ 表示男婴，$Y_i = 0$ 表示女婴）。假设独立性成立，一年中男婴总数为：
+
+$$
+Y := \sum_{i=1}^{n} Y_i \sim B(n, \pi)
+$$
+
+那么性别比例相等的假设可以表述为：
+
+$$
+H_0: \pi = \frac{1}{2}
+$$
+
+## p 值的精确定义
+
+> **Prazise Definition des p-Werts**
+
+$\hat{\pi} = Y/n$ 是最大似然估计，$\hat{\pi}$ 离 $1/2$ 越远，反对假设的证据越强。关键在于**量化**这个证据。
+
+::: {.callout-important icon="false"}
+## 定义 5.2：p 值 | Definition 5.2: p-Wert
+
+**p 值**表示在**假设成立**的前提下，观测到比当前数据**更加矛盾于假设**的数据的概率。
+
+$$
+p\text{-value} := P(Y > y_{obs} \mid H_0)
+$$
+:::
+
+::: {.callout-tip icon="false"}
+## 温度计的比喻 | Die Thermometer-Metapher
+
+把 p 值想象成一个"惊讶程度温度计"。如果假设是真的，看到当前数据时你有多惊讶？p 值越小，你越惊讶，因为在假设成立的世界里，当前数据（或更极端的情况）几乎不可能出现。
+
+*Der p-Wert ist ein "Ueberraschungsthermometer": Je kleiner er ist, desto ueberraschender sind die Daten unter der Hypothese.*
+:::
+
+对于 2021 年的数据，$y_{obs} = 408490$，$n = 795478$。在 $H_0$ 下 $Y \sim B(795478, 0.5)$。利用中心极限定理：
+
+$$
+p\text{-value} = P(Y > y_{obs} \mid H_0) = P\!\left(\underbrace{\frac{Y - n \cdot 0.5}{\sqrt{n \cdot 0.5 \cdot 0.5}}}_{\overset{a}{\sim} N(0,1)} > \underbrace{\frac{y_{obs} - n \cdot 0.5}{\sqrt{n \cdot 0.25}}}_{= z_{obs}}\right)
+$$
+
+$$
+= 1 - \Phi\!\left(\frac{408490 - 795478/2}{\sqrt{795478 \times 0.25}}\right) = 1 - \Phi(24.108) \approx 0
+$$
+
+```{r}
+#| label: pvalue-birth
+#| code-fold: false
+
+# 新生儿性别比 p 值计算
+y_obs <- 408490
+n_total <- 795478
+pi_0 <- 0.5
+
+z_obs <- (y_obs - n_total * pi_0) / sqrt(n_total * pi_0 * (1 - pi_0))
+p_value <- 1 - pnorm(z_obs)
+
+cat("新生儿性别比检验 | Test Geschlechterverhaltnis:\n\n")
+cat("  观测男婴数: y_obs =", y_obs, "\n")
+cat("  总新生儿:   n     =", n_total, "\n")
+cat("  H0 下期望:  n*0.5 =", n_total * pi_0, "\n")
+cat("  标准化统计量: z   =", round(z_obs, 4), "\n")
+cat("  p-value           =", format(p_value, scientific = TRUE), "\n\n")
+cat("结论: p 值几乎为零。数据中存在压倒性的证据反对 H0。\n")
+cat("男婴确实比女婴更常见。\n")
+```
+
+p 值几乎为零。在假设成立的世界里，观测到如此极端（或更极端）的结果概率为零。因此我们可以拒绝假设，得出结论：男婴出生率确实高于女婴。
+
+Fisher 提出了以下关于 p 值的阈值标准：
+
+| p 值范围 | 证据强度 | Starke der Evidenz |
+|:---------|:---------|:-------------------|
+| $p \leq 0.1$ | 弱证据反对 $H_0$ | schwache Evidenz |
+| $p \leq 0.05$ | 中等证据反对 $H_0$ | erhohte Evidenz |
+| $p \leq 0.01$ | 强证据反对 $H_0$ | starke Evidenz |
+
+## 性别比例是否随时间变化？
+
+> **Andert sich das Geschlechterverhaltnis uber die Zeit?**
+
+接下来考虑一个不同的问题：性别比例在各年份之间是否恒定？特别是 2020 年（COVID-19 开始）的比例是否异常？
+
+假设 $H_0$：$Y_t \sim B(n_t, \pi)$，对 $t = 2017, \ldots, 2021$，其中 $\pi$ 未指定但**在时间上恒定**。
+
+对两个年份 $t$ 和 $t'$，定义：
+
+$$
+D_{t,t'} := \bar{Y}_t - \bar{Y}_{t'}
+$$
+
+其中 $\bar{Y}_t = Y_t / n_t$。在 $H_0$ 下 $D_{t,t'}$ 的均值为零（因为 $\pi$ 在两年中相同），方差可通过二项分布估计：
+
+$$
+\text{Var}(D_{t,t'}) = \frac{\bar{Y}_t(1 - \bar{Y}_t)}{n_t} + \frac{\bar{Y}_{t'}(1 - \bar{Y}_{t'})}{n_{t'}}
+$$
+
+p 值通过标准化后的正态近似计算：
+
+$$
+p\text{-value} = P\!\left(\left|\frac{D_{t,t'}}{\sqrt{\text{Var}(D_{t,t'})}}\right| > \left|\frac{d_{t,t',obs}}{\sqrt{\text{Var}(D_{t,t'})}}\right| \;\middle|\; H_0\right)
+$$
+
+```{r}
+#| label: fig-pairwise-pvalues
+#| fig-cap: "年份间两两比较（仿教材 Fig. 5.2）：左图为标准化差值与标准正态分布，右图为 p 值 | Paarweise Vergleiche"
+#| fig-height: 5
+
+years <- 2017:2021
+boys  <- c(399981, 401631, 397838, 399042, 408490)
+girls <- c(378675, 380351, 377023, 377112, 387027)
+n_t   <- boys + girls
+y_bar <- boys / n_t
+
+pairs <- combn(1:5, 2)
+n_pairs <- ncol(pairs)
+z_vals <- numeric(n_pairs)
+p_vals <- numeric(n_pairs)
+
+for (k in 1:n_pairs) {
+  i <- pairs[1, k]; j <- pairs[2, k]
+  d_obs <- y_bar[i] - y_bar[j]
+  var_d <- y_bar[i] * (1 - y_bar[i]) / n_t[i] + y_bar[j] * (1 - y_bar[j]) / n_t[j]
+  z_vals[k] <- d_obs / sqrt(var_d)
+  p_vals[k] <- 2 * (1 - pnorm(abs(z_vals[k])))
+}
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 左图: 标准正态 + z 值
+x_norm <- seq(-3.5, 3.5, length.out = 300)
+plot(x_norm, dnorm(x_norm), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "z", ylab = "密度 | Dichte",
+     main = "标准化差值 | Standardisierte Differenzen",
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+points(z_vals, rep(0.01, n_pairs), pch = 17, col = "#DC2626", cex = 1.5)
+for (k in 1:n_pairs) {
+  segments(z_vals[k], 0, z_vals[k], dnorm(z_vals[k]), col = "#DC2626", lty = 3)
+}
+
+# 右图: p 值
+plot(1:n_pairs, p_vals, pch = 16, col = "#9333EA", cex = 2,
+     xlab = "比较编号 | Paarweiser Vergleich",
+     ylab = "p-value",
+     main = "两两比较的 p 值 | p-Werte",
+     cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, 1))
+grid(col = "#E2E8F0")
+abline(h = 0.05, col = "#DC2626", lty = 2, lwd = 2)
+text(8, 0.08, expression(alpha == 0.05), col = "#DC2626", cex = 0.9, font = 2)
+
+par(mfrow = c(1, 1))
+
+cat("\n所有 p 值均远大于 0.05。\n")
+cat("结论: 没有证据表明性别比例随时间变化。2020年的峰值可由随机波动解释。\n")
+```
+
+所有 p 值都远大于 0.05。图 5.1 中 2020 年的峰值完全可以用随机波动来解释，没有证据表明 COVID-19 疫情影响了新生儿性别比。
+
+## p 值本身是随机变量
+
+> **Der p-Wert als Zufallsvariable**
+
+p 值基于数据计算，而数据来自随机过程，因此 p 值本身也是随机变量。这个视角非常重要。
+
+考虑 $Y_i \sim N(\mu, \sigma^2)$，i.i.d.，$\sigma^2$ 已知，假设 $H_0: \mu \leq \mu_0$。p 值为：
+
+$$
+p\text{-value} = 1 - \Phi\!\left(\underbrace{\frac{\bar{y}_{obs} - \mu_0}{\sqrt{\sigma^2/n}}}_{:= z_{obs}}\right)
+$$
+
+将 $z_{obs}$ 视为随机变量 $Z_{obs}$，在 $H_0$（取 $\mu = \mu_0$）下 $Z_{obs} \sim N(0,1)$。p 值的分布为：
+
+$$
+P(p\text{-value} \leq p) = P(1 - \Phi(Z_{obs}) \leq p) = P(\Phi(Z_{obs}) \geq 1 - p) = 1 - (1 - p) = p
+$$
+
+::: {.callout-important icon="false"}
+## 核心性质：零假设下 p 值服从均匀分布
+
+$$
+P(p\text{-value} \leq p \mid H_0) = p, \quad p \in [0, 1]
+$$
+
+即 p 值在 $H_0$ 下服从 $\text{Uniform}[0,1]$ 分布。这是 p 值**无偏性**的必要条件。
+:::
+
+当假设**不成立**时（$\mu > \mu_0$），p 值倾向于取小值。设 $c = (\mu - \mu_0)/\sqrt{\sigma^2/n}$ 为真均值与假设均值之间的标准化距离，则：
+
+$$
+P(p\text{-value} \leq p \mid \mu) = 1 - \Phi(z_{1-p} - c)
+$$
+
+$c$ 越大（真模型离假设越远），p 值取小值的概率越大。
+
+```{r}
+#| label: fig-pvalue-distribution
+#| fig-cap: "p 值的分布（仿教材 Fig. 5.3）：c=0 时均匀分布，c 越大越偏向小值 | Verteilung des p-Werts"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+p_range <- seq(0.001, 0.999, length.out = 300)
+c_vals <- c(0, 0.5, 1, 2)
+cols_c <- c("#2563EB", "#EA580C", "#DC2626", "#9333EA")
+
+plot(NULL, xlim = c(0, 1), ylim = c(0, 1),
+     xlab = "p", ylab = expression(P(p*"-value" <= p)),
+     main = expression(paste("p 值的累积分布函数 | CDF des p-Werts")),
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+for (k in seq_along(c_vals)) {
+  cc <- c_vals[k]
+  cdf_p <- 1 - pnorm(qnorm(1 - p_range) - cc)
+  lines(p_range, cdf_p, col = cols_c[k], lwd = 2.5)
+}
+
+legend("bottomright",
+       legend = c("c = 0 (H0 成立)", "c = 0.5", "c = 1", "c = 2 (H0 严重不成立)"),
+       col = cols_c, lwd = 2.5, bty = "n", cex = 0.85)
+
+text(0.6, 0.3, "c 越大\np 值越倾向于取小值!", col = "#DC2626", font = 2, cex = 0.9)
+```
+
+## p 值的常见误解
+
+> **Haufige Missverstandnisse zum p-Wert**
+
+Goodman (2008) 列举了十二种典型的 p 值误解。以下两种尤其常见且危险。
+
+**错误说法一**："如果 p < 0.05，那么假设成立的概率只有 5%。" 这是**完全错误**的。p 值没有对假设的有效性做出任何概率陈述。p 值衡量的是"在假设成立时数据的极端程度"，而不是"假设成立的概率"。
+
+**错误说法二**："如果 p > 0.05，那么假设被证实了。" 这也是**错误的**。我们永远无法证明假设成立，只能在证据充分时拒绝它。高 p 值仅意味着"没有足够证据反对假设"，而非"假设正确"。
+
+p 值是量化**反对假设的证据**的工具，不多也不少。
+
+## 例 5.1：Mendel 的遗传实验
+
+> **Beispiel 5.1: Mendels Vererbungsexperiment**
+
+1865 年，Gregor Mendel 发表了著名的遗传实验。他将纯种黄色/圆形豌豆与纯种绿色/皱形豌豆杂交，根据遗传规律预测第二代后代应以特定比例展示不同性状。
+
+```{r}
+#| label: mendel-data
+#| code-fold: false
+
+# Mendel 的实验数据
+outcome <- c("圆/黄 | rund/gelb", "皱/黄 | runzlig/gelb", 
+             "圆/绿 | rund/grun", "皱/绿 | runzlig/grun")
+assumed_prop <- c(9/16, 3/16, 3/16, 1/16)
+n_mendel <- 556
+expected <- n_mendel * assumed_prop
+observed <- c(315, 101, 108, 32)
+
+cat("Mendel 实验数据 | Mendels Experimentaldaten:\n\n")
+for (i in 1:4) {
+  cat(sprintf("  %s: 假设比例 = %5.4f, 期望 = %6.2f, 观测 = %3d\n",
+              outcome[i], assumed_prop[i], expected[i], observed[i]))
+}
+```
+
+设每颗豌豆 $Y_i \in \{1, 2, 3, 4\}$，i.i.d. 服从多项分布，细胞概率为 $\pi_0 = (9/16, 3/16, 3/16, 1/16)$。对数似然函数为：
+
+$$
+l(\pi) = \sum_{i=1}^{n} \sum_{k=1}^{4} \mathbf{1}\{Y_i = k\} \log(\pi_k)
+$$
+
+MLE 为 $\hat{\pi}_k = \frac{\sum_{i=1}^{n} \mathbf{1}\{Y_i = k\}}{n}$。对数似然比为 $2\{l(\hat{\pi}) - l(\pi_0)\}$，渐近服从 $\chi^2_3$（自由度 $p = 3$，因为四个概率之和为一）。
+
+```{r}
+#| label: fig-mendel-pvalue
+#| fig-cap: "Mendel 数据的似然比与 p 值（仿教材 Fig. 5.4）| Likelihood-Ratio fur Mendels Daten"
+#| fig-height: 5
+
+# 计算对数似然比
+pi_hat <- observed / n_mendel
+ll_hat <- sum(observed * log(pi_hat))
+ll_0 <- sum(observed * log(assumed_prop))
+lr_stat <- 2 * (ll_hat - ll_0)
+p_val_mendel <- 1 - pchisq(lr_stat, df = 3)
+
+cat("Mendel 数据的似然比检验 | LR-Test fur Mendels Daten:\n\n")
+cat("  对数似然比统计量: 2(l(pi_hat) - l(pi_0)) =", round(lr_stat, 3), "\n")
+cat("  自由度: p = 3\n")
+cat("  p-value = P(Chi^2_3 >", round(lr_stat, 3), ") =", round(p_val_mendel, 3), "\n\n")
+cat("p 值极大 (0.971)，几乎没有反对 Mendel 假设的证据。\n")
+cat("(这反而引起了怀疑: Mendel 可能选择性报告了最有利的实验结果!)\n")
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x_chi <- seq(0.01, 15, length.out = 300)
+plot(x_chi, dchisq(x_chi, df = 3), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "lr", ylab = "密度 | Dichte",
+     main = expression(paste("Mendel 数据: 似然比与 ", chi[3]^2, " 分布")),
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# p 值区域
+x_fill <- seq(lr_stat, 15, length.out = 200)
+polygon(c(x_fill, rev(x_fill)),
+        c(dchisq(x_fill, df = 3), rep(0, length(x_fill))),
+        col = adjustcolor("#DC2626", 0.15), border = NA)
+# 左侧区域（p值对应区域）
+x_fill_left <- seq(0.01, lr_stat, length.out = 200)
+polygon(c(x_fill_left, rev(x_fill_left)),
+        c(dchisq(x_fill_left, df = 3), rep(0, length(x_fill_left))),
+        col = adjustcolor("#16A34A", 0.15), border = NA)
+
+abline(v = lr_stat, col = "#DC2626", lty = 2, lwd = 2)
+text(lr_stat + 0.5, 0.18, bquote("lr = " ~ .(round(lr_stat, 3))),
+     col = "#DC2626", font = 2, cex = 0.9)
+text(8, 0.08, bquote("p-value = " ~ .(round(p_val_mendel, 3))),
+     col = "#DC2626", font = 2, cex = 1.1)
+```
+
+p 值为 0.971 -- 极其大，说明几乎没有反对假设的证据。值得注意的是，如此大的 p 值反而引发了历史上的质疑：Mendel 可能从多次实验中选择性报告了与理论最吻合的那一次。
+
+{{< pagebreak >}}
+
+# 统计假设检验 {#sec-hypothesis-test}
+
+> **Statistische Hypothesentests**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 假设 $H_0$ 与备择假设 $H_1$ 的定义
+- **决策矩阵**：第一类错误（$\alpha$ 错误）与第二类错误（$\beta$ 错误）
+- **显著性水平 $\alpha$** 的定义
+- 假设检验的五步构造流程
+- p 值与假设检验的**等价关系**
+:::
+
+## 从量化证据到二元决策
+
+> **Von der Evidenzquantifizierung zur binaren Entscheidung**
+
+p 值给出的是一个**连续**的证据度量。但在实际中，我们常常需要做出**二元决策**：接受还是拒绝假设？这要求我们引入一个明确的对立面。
+
+::: {.callout-important icon="false"}
+## 定义 5.3：零假设与备择假设 | Definition 5.3: Null- und Alternativhypothese
+
+我们将假设记为 $H_0$，将备择假设记为 $H_1$。假定两种状态中恰有一种成立。
+:::
+
+::: {.callout-tip icon="false"}
+## 法庭审判的比喻 | Die Gerichtsverhandlung-Metapher
+
+假设检验就像法庭审判。$H_0$ 是"无罪推定"（默认立场），$H_1$ 是"有罪"。陪审团基于证据（数据）做出裁决（"H_0" 或 "H_1"）。
+
+两种错误：把无辜者定罪（第一类错误，冤枉好人）和放过有罪者（第二类错误，漏网坏人）。法律体系优先控制第一类错误（"宁可放过一千，不可冤枉一个"），统计学也是如此 -- 我们首先限制第一类错误的概率 $\leq \alpha$。
+
+*Der Hypothesentest gleicht einer Gerichtsverhandlung: $H_0$ = Unschuldsvermutung, $H_1$ = schuldig. Typ-I-Fehler = Unschuldigen verurteilen, Typ-II-Fehler = Schuldigen freisprechen.*
+:::
+
+## 决策矩阵
+
+> **Entscheidungsmatrix**
+
+| | 决策 "H_0" | 决策 "H_1" |
+|:---|:---:|:---:|
+| **真实为 $H_0$** | 正确决策 | 第一类错误（$\alpha$ 错误）|
+| **真实为 $H_1$** | 第二类错误（$\beta$ 错误）| 正确决策 |
+
+**不可能同时避免两种错误。** 如果为了避免第一类错误而总是决策 "H_0"，则 $H_1$ 为真时必定犯第二类错误。因此合理的策略不是"避免错误"，而是**限制错误发生的概率**。
+
+::: {.callout-important icon="false"}
+## 定义 5.4：统计假设检验 | Definition 5.4: Statistischer Hypothesentest
+
+统计假设检验假设两种状态 $H_0$ 和 $H_1$，以及两种决策 "H_0" 和 "H_1"。决策规则的构造使得：
+
+$$
+P("H_1" \mid H_0) \leq \alpha \tag{5.3}
+$$
+
+其中 $\alpha$ 称为**显著性水平（Signifikanzniveau）**，是一个预先固定的小值。
+:::
+
+## 假设检验的五步流程
+
+> **Funf Schritte eines Hypothesentests**
+
+**步骤 1**：构造检验统计量 $t(Y_1, \ldots, Y_n)$，使其能区分 $H_0$ 和 $H_1$。例如大值说明 $H_1$，小值说明 $H_0$。
+
+**步骤 2**：推导 $t(Y_1, \ldots, Y_n)$ 在 $H_0$ 下的分布。
+
+**步骤 3**：决策规则："若 $t(Y_1, \ldots, Y_n) > c$，则拒绝 $H_0$"，即 "H_1": $t(Y_1, \ldots, Y_n) > c$。
+
+**步骤 4**：确定临界值 $c$，使得 $P(t(Y_1, \ldots, Y_n) > c \mid H_0) \leq \alpha$。
+
+**步骤 5**：计算观测值 $t_{obs} = t(y_1, \ldots, y_n)$，与 $c$ 比较。若 $t_{obs} \leq c$ 则决策 "H_0"，否则决策 "H_1"。
+
+## p 值与假设检验的等价
+
+> **Aquivalenz von p-Wert und Hypothesentest**
+
+::: {.callout-important icon="false"}
+## 性质 5.1：p 值与检验决策的等价关系 | Eigenschaft 5.1
+
+假设有一个显著性水平为 $\alpha$ 的统计假设检验，则：
+
+$$
+p\text{-value} \leq \alpha \quad \Longleftrightarrow \quad "H_1" \tag{5.4}
+$$
+:::
+
+**证明**：假设检验统计量 $t(\cdot)$ 满足 $t(y_{obs}) > c$ 时决策 "H_1"，且 $P(t(Y) > c \mid H_0) \leq \alpha$。因为 $p\text{-value} = P(t(Y) > t(y_{obs}) \mid H_0)$，若 $t(y_{obs}) > c$，则 p-value $\leq \alpha$，反之亦然。
+
+p 值比检验决策包含更多信息——它还告诉你反对假设的证据有多强。正如 Efron (2010) 所写："Fisher 著名的 $\alpha = 0.05$ 标准虽然被过度使用，但在规范科学报告方面起到了至关重要的作用。"
+
+```{r}
+#| label: fig-test-pvalue-equiv
+#| fig-cap: "p 值与检验决策的等价关系 | Aquivalenz von p-Wert und Testentscheidung"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x_seq <- seq(-4, 4, length.out = 300)
+plot(x_seq, dnorm(x_seq), type = "l", col = "#2563EB", lwd = 3,
+     xlab = "检验统计量 t | Teststatistik t", ylab = "密度 | Dichte",
+     main = expression(paste("拒绝域、p 值与临界值的关系 | Ablehnbereich, p-Wert und kritischer Wert")),
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 拒绝域
+alpha <- 0.05
+c_crit <- qnorm(1 - alpha)
+x_rej <- seq(c_crit, 4, length.out = 100)
+polygon(c(x_rej, rev(x_rej)), c(dnorm(x_rej), rep(0, length(x_rej))),
+        col = adjustcolor("#DC2626", 0.25), border = NA)
+
+# 具体 p 值
+t_obs_demo <- 2.3
+x_pval <- seq(t_obs_demo, 4, length.out = 100)
+polygon(c(x_pval, rev(x_pval)), c(dnorm(x_pval), rep(0, length(x_pval))),
+        col = adjustcolor("#9333EA", 0.35), border = NA)
+
+abline(v = c_crit, col = "#DC2626", lwd = 2, lty = 2)
+abline(v = t_obs_demo, col = "#9333EA", lwd = 2, lty = 2)
+
+text(c_crit, 0.32, bquote(c == .(round(c_crit, 2))),
+     col = "#DC2626", font = 2, cex = 0.85, pos = 4)
+text(t_obs_demo, 0.25, bquote(t[obs] == .(t_obs_demo)),
+     col = "#9333EA", font = 2, cex = 0.85, pos = 4)
+
+legend("topleft",
+       legend = c(expression(paste("拒绝域: ", alpha == 0.05)),
+                  expression(paste("p-value = P(t > ", t[obs], " | ", H[0], ")"))),
+       fill = c(adjustcolor("#DC2626", 0.25), adjustcolor("#9333EA", 0.35)),
+       border = NA, bty = "n", cex = 0.85)
+
+text(0, 0.15, bquote(t[obs] > c ~ "且" ~ "p-value" < alpha),
+     col = "#1E293B", font = 2, cex = 0.9)
+text(0, 0.1, "两者等价!", col = "#16A34A", font = 2, cex = 1)
+```
+
+{{< pagebreak >}}
+
+# 经典统计参数检验 {#sec-classical-tests}
+
+> **Klassische statistische Parametertests**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **Wald 检验**、**似然比检验**、**得分检验** 三大检验原理
+- 三种检验的直觉：从似然函数的水平差、垂直差、斜率三个角度出发
+- **卡方检验** 用于检验分布假设和独立性
+- **Wilcoxon 检验** 和 **Kolmogorov-Smirnov 检验** 等无分布检验
+:::
+
+## 基于似然的三大检验
+
+> **Drei Likelihood-basierte Tests**
+
+我们考虑 Fisher 正则分布 $Y_i \sim f(y; \theta)$，i.i.d.。假设为 $H_0: \theta = \theta_0$，备择 $H_1: \theta \neq \theta_0$。第四章推导的 MLE 渐近性质现在转化为三种检验原理。
+
+::: {.callout-tip icon="false"}
+## 三座桥的比喻 | Die drei Brucken-Metapher
+
+想象似然函数是一座山，山顶在 $\hat{\theta}$，假设值 $\theta_0$ 在山腰。有三种方式判断 $\theta_0$ 是否离山顶太远：
+
+**Wald 检验**（水平距离）：直接量 $\hat{\theta}$ 和 $\theta_0$ 之间的**水平距离**。距离大说明假设不靠谱。
+
+**似然比检验**（垂直距离）：比较山顶高度 $l(\hat{\theta})$ 和 $\theta_0$ 处的高度 $l(\theta_0)$ 之间的**垂直落差**。落差大说明假设不靠谱。
+
+**得分检验**（斜率）：看 $\theta_0$ 处山坡的**陡峭程度**（得分函数的绝对值）。如果 $\theta_0$ 处山坡很陡，说明 $\theta_0$ 远未到达山顶，假设不靠谱。
+
+*Wald = horizontaler Abstand, LR = vertikaler Abstand, Score = Steigung am hypothetischen Punkt.*
+:::
+
+```{r}
+#| label: fig-three-tests
+#| fig-cap: "三大似然检验的几何直觉（仿教材 Fig. 5.5）| Geometrische Intuition der drei Tests"
+#| fig-height: 5.5
+
+set.seed(42)
+y_demo <- rnorm(50, mean = 3.5, sd = 2)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+mu_range <- seq(0, 7, by = 0.02)
+ll_demo <- sapply(mu_range, function(mu) sum(dnorm(y_demo, mu, 2, log = TRUE)))
+
+mu_hat <- mean(y_demo)
+theta_0 <- 2.5
+ll_hat <- sum(dnorm(y_demo, mu_hat, 2, log = TRUE))
+ll_0 <- sum(dnorm(y_demo, theta_0, 2, log = TRUE))
+
+plot(mu_range, ll_demo, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(theta), ylab = expression(l(theta)),
+     main = "三大似然检验的几何直觉 | Drei Likelihood-basierte Tests",
+     cex.lab = 1.1, cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+points(mu_hat, ll_hat, pch = 23, bg = "#DC2626", col = "white", cex = 2.5, lwd = 2)
+points(theta_0, ll_0, pch = 16, col = "#16A34A", cex = 2)
+text(mu_hat + 0.15, ll_hat + 0.8, expression(hat(theta)), col = "#DC2626", font = 2, cex = 1)
+text(theta_0 - 0.15, ll_0 + 0.8, expression(theta[0]), col = "#16A34A", font = 2, cex = 1)
+
+# Wald (水平)
+arrows(theta_0, ll_0 - 5, mu_hat, ll_0 - 5,
+       col = "#EA580C", lwd = 3, length = 0.12, code = 3)
+text((theta_0 + mu_hat) / 2, ll_0 - 6.5, "Wald 检验\n(水平距离)", 
+     col = "#EA580C", font = 2, cex = 0.8)
+
+# LR (垂直)
+arrows(mu_hat + 1.2, ll_0, mu_hat + 1.2, ll_hat,
+       col = "#9333EA", lwd = 3, length = 0.12, code = 3)
+text(mu_hat + 2, (ll_0 + ll_hat) / 2, "似然比检验\n(垂直距离)", 
+     col = "#9333EA", font = 2, cex = 0.8)
+
+# Score (斜率)
+score_at_0 <- sum((y_demo - theta_0) / 4)
+slope_display <- score_at_0 / 50
+x_tang <- seq(theta_0 - 0.8, theta_0 + 0.8, length.out = 50)
+y_tang <- ll_0 + score_at_0 * (x_tang - theta_0)
+lines(x_tang, y_tang, col = "#DB2777", lwd = 3, lty = 2)
+text(theta_0 - 1.3, ll_0 + 2, "得分检验\n(斜率)", 
+     col = "#DB2777", font = 2, cex = 0.8)
+```
+
+### Wald 检验
+
+> **Der Wald-Test**
+
+由第四章的渐近正态性 $\hat{\theta} \overset{a}{\sim} N(\theta_0, I^{-1}(\theta_0))$，得决策规则：
+
+$$
+"H_1" \quad \Longleftrightarrow \quad |\hat{\theta} - \theta_0| > c, \quad \text{其中 } c = z_{1-\alpha/2} \sqrt{I^{-1}(\theta_0)}
+$$
+
+实际中常用 $I(\hat{\theta})$ 替代 $I(\theta_0)$，因为在 $H_0$ 下 $\hat{\theta}$ 收敛到 $\theta_0$。Wald 检验由 Wald (1943) 提出，是统计学中**使用最广泛**的检验原理。它只需要 MLE 及其方差估计。
+
+### 似然比检验
+
+> **Der Likelihood-Ratio-Test**
+
+由第四章的似然比渐近分布 $2[l(\hat{\theta}) - l(\theta_0)] \overset{a}{\sim} \chi^2_p$，决策规则为：
+
+$$
+"H_1" \quad \Longleftrightarrow \quad 2\{l(\hat{\theta}) - l(\theta_0)\} > c
+$$
+
+其中临界值 $c$ 为 $\chi^2_p$ 分布的 $1 - \alpha$ 分位数。Neyman-Pearson 引理（本章后文）将证明似然比检验是**最优的**检验。
+
+### 得分检验
+
+> **Der Score-Test**
+
+由第四章的得分函数性质（$s(\theta_0)$ 在真参数处均值为零），决策规则为：
+
+$$
+"H_1" \quad \Longleftrightarrow \quad |s(\theta_0; y_1, \ldots, y_n)| > c, \quad \text{其中 } c = z_{1-\alpha/2} \sqrt{I(\theta_0)}
+$$
+
+得分检验的独特优势在于：**不需要计算 MLE $\hat{\theta}$**。只需在假设值 $\theta_0$ 处计算得分函数。当 MLE 的计算量大或数值不稳定时，得分检验特别有用。
+
+```{r}
+#| label: three-tests-demo
+#| code-fold: false
+
+# 正态分布三大检验的数值演示
+set.seed(42)
+n_test <- 200
+sigma_known <- 0.5
+y_test <- rnorm(n_test, mean = 1.08, sd = sigma_known)
+mu_hat_test <- mean(y_test)
+mu_0 <- 1.0
+alpha_test <- 0.1
+
+# Fisher 信息
+I_mu <- n_test / sigma_known^2
+
+# Wald 检验
+wald_stat <- (mu_hat_test - mu_0)^2 * I_mu
+wald_crit <- qchisq(1 - alpha_test, df = 1)
+wald_pval <- 1 - pchisq(wald_stat, df = 1)
+
+# 似然比检验
+ll_hat <- sum(dnorm(y_test, mu_hat_test, sigma_known, log = TRUE))
+ll_0 <- sum(dnorm(y_test, mu_0, sigma_known, log = TRUE))
+lr_stat_test <- 2 * (ll_hat - ll_0)
+lr_pval <- 1 - pchisq(lr_stat_test, df = 1)
+
+# 得分检验
+score_at_0 <- sum((y_test - mu_0) / sigma_known^2)
+score_stat <- score_at_0^2 / I_mu
+score_pval <- 1 - pchisq(score_stat, df = 1)
+
+cat("正态分布三大检验比较 | Vergleich der drei Tests (N(mu, sigma^2)):\n")
+cat("  n =", n_test, ", sigma =", sigma_known, ", mu_hat =", round(mu_hat_test, 4), 
+    ", mu_0 =", mu_0, ", alpha =", alpha_test, "\n\n")
+
+cat(sprintf("  %-14s  统计量 = %7.4f   临界值 = %7.4f   p-value = %6.4f   决策: %s\n",
+            "Wald 检验:", wald_stat, wald_crit, wald_pval, 
+            ifelse(wald_stat > wald_crit, "拒绝 H0", "不拒绝 H0")))
+cat(sprintf("  %-14s  统计量 = %7.4f   临界值 = %7.4f   p-value = %6.4f   决策: %s\n",
+            "似然比检验:", lr_stat_test, wald_crit, lr_pval,
+            ifelse(lr_stat_test > wald_crit, "拒绝 H0", "不拒绝 H0")))
+cat(sprintf("  %-14s  统计量 = %7.4f   临界值 = %7.4f   p-value = %6.4f   决策: %s\n",
+            "得分检验:", score_stat, wald_crit, score_pval,
+            ifelse(score_stat > wald_crit, "拒绝 H0", "不拒绝 H0")))
+
+cat("\n注: 对于正态分布已知方差的情形，三种检验完全等价!\n")
+```
+
+对于正态分布已知方差的情形，三种检验统计量完全等价（均化简为同一个量）。在一般情形下，三者渐近等价但有限样本下可能给出不同结果。
+
+## 卡方检验
+
+> **Chi-Quadrat-Tests**
+
+### 拟合优度检验
+
+> **Anpassungstest**
+
+考虑离散随机变量 $V \in \{1, \ldots, K\}$，$P(V = k) = \pi_k$，$\sum_{k=1}^{K} \pi_k = 1$。设 $V_1, \ldots, V_n$ 为 i.i.d. 样本，令 $Y_k = \sum_{i=1}^{n} \mathbf{1}\{V_i = k\}$ 为第 $k$ 类的观测计数。假设 $H_0: \pi = \pi_0$，则卡方统计量为：
+
+$$
+X^2 = \sum_{k=1}^{K} \frac{(y_k - e_k)^2}{e_k} \tag{5.6}
+$$
+
+其中 $e_k = n \pi_{0k}$ 是 $H_0$ 下的**期望计数**。
+
+::: {.callout-tip icon="false"}
+## 天平的比喻 | Die Waage-Metapher
+
+卡方统计量就像一架多臂天平。每只臂对应一个类别。一侧放的是"期望的砝码"（$e_k$），另一侧放的是"实际的砝码"（$y_k$）。差值越大说明假设越不靠谱。
+
+除以 $e_k$ 的作用是**标准化**：在稀有类别中（$e_k$ 小），即使小偏差也很重要；在常见类别中（$e_k$ 大），同样的偏差则不那么显著。这就像一克差异对蚂蚁是致命的，但对大象来说无关紧要。
+
+*Die Division durch $e_k$ standardisiert: Ein kleiner Unterschied in einer seltenen Kategorie wiegt schwerer als in einer haufigen.*
+:::
+
+$X^2$ 渐近服从 $\chi^2_{K-1}$ 分布。这可以从似然比检验推导出来（详见本节末尾的证明）。
+
+### 独立性检验
+
+> **Unabhangigkeitstest**
+
+设 $Z_i = (Z_{i1}, Z_{i2})$ 是二维离散随机变量，$Z_{i1} \in \{1, \ldots, K_1\}$，$Z_{i2} \in \{1, \ldots, K_2\}$。列联表中 $n_{kl}$ 为观测计数，边际和为 $n_{k\cdot}$ 和 $n_{\cdot l}$。
+
+在独立性假设下：$P(Z_{i1} = k, Z_{i2} = l) = P(Z_{i1} = k) \cdot P(Z_{i2} = l)$
+
+独立性下的期望计数为：
+
+$$
+e_{kl} = n_{..} \hat{\pi}_{k.} \hat{\pi}_{.l} = \frac{n_{k.} n_{.l}}{n_{..}}
+$$
+
+卡方统计量为：
+
+$$
+X^2 = \sum_{k=1}^{K_1} \sum_{l=1}^{K_2} \frac{(n_{kl} - e_{kl})^2}{e_{kl}}
+$$
+
+自由度按如下规则计算：$\text{df} = \text{细胞数} - \text{约束数} - \text{估计参数数}$
+
+$$
+K_1 K_2 - 1 - (K_1 + K_2 - 2) = (K_1 - 1)(K_2 - 1)
+$$
+
+```{r}
+#| label: fig-chisq-independence
+#| fig-cap: "卡方独立性检验示例 | Beispiel Chi-Quadrat-Unabhangigkeitstest"
+#| fig-height: 5.5
+
+set.seed(2024)
+
+# 模拟一个 3x3 列联表
+# H1: 不独立
+n_obs <- 500
+Z1 <- sample(1:3, n_obs, replace = TRUE, prob = c(0.3, 0.4, 0.3))
+# 让 Z2 依赖 Z1
+Z2 <- ifelse(Z1 == 1, sample(1:3, n_obs, replace = TRUE, prob = c(0.6, 0.2, 0.2)),
+        ifelse(Z1 == 2, sample(1:3, n_obs, replace = TRUE, prob = c(0.2, 0.6, 0.2)),
+               sample(1:3, n_obs, replace = TRUE, prob = c(0.2, 0.2, 0.6))))
+
+contingency <- table(Z1, Z2)
+chi_result <- chisq.test(contingency)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 绘制列联表热力图
+colors_heat <- colorRampPalette(c("#F8FAFC", "#2563EB"))(20)
+image(1:3, 1:3, as.matrix(contingency), col = colors_heat,
+      xlab = expression(Z[1]), ylab = expression(Z[2]),
+      main = bquote("列联表热力图 | Kontingenztabelle" ~ 
+                    "(p-value =" ~ .(round(chi_result$p.value, 4)) ~ ")"),
+      cex.lab = 1.1, cex.main = 1.0, col.main = "#1E293B",
+      axes = FALSE)
+axis(1, at = 1:3); axis(2, at = 1:3)
+
+for (i in 1:3) for (j in 1:3) {
+  text(i, j, labels = contingency[i, j], col = "white", font = 2, cex = 1.3)
+  text(i, j - 0.25, paste0("(", round(chi_result$expected[i, j], 1), ")"),
+       col = adjustcolor("white", 0.7), cex = 0.7)
+}
+
+cat("\n卡方独立性检验 | Chi-Quadrat-Unabhangigkeitstest:\n\n")
+cat("  X^2 统计量:", round(chi_result$statistic, 4), "\n")
+cat("  自由度: (K1-1)(K2-1) =", chi_result$parameter, "\n")
+cat("  p-value:", format(chi_result$p.value, scientific = TRUE), "\n")
+cat("  (括号内为独立性假设下的期望计数)\n")
+```
+
+::: {.callout-tip collapse="true"}
+## 点击展开卡方统计量的证明思路 | Beweisskizze: X^2 ~ Chi^2
+
+$H_0$ 下的对数似然比为：
+
+$$
+2 \sum_{k=1}^{K} y_k \log\frac{\hat{\pi}_k}{\pi_{0k}} = -2 \sum_{k=1}^{K} y_k \log\left(1 + \frac{\pi_{0k} - \hat{\pi}_k}{\hat{\pi}_k}\right)
+$$
+
+用 $\log(1+x) \approx x - x^2/2$ 展开，利用 $\hat{\pi}_k = y_k/n$ 和 $\sum \hat{\pi}_k = \sum \pi_{0k} = 1$，一阶项消失，二阶项化简得：
+
+$$
+\sum_{k=1}^{K} y_k \left(\frac{\pi_{0k} - \hat{\pi}_k}{\hat{\pi}_k}\right)^2 = \sum_{k=1}^{K} \frac{(e_k - y_k)^2}{y_k}
+$$
+
+将分母 $y_k$ 替换为其 $H_0$ 下期望 $e_k$，即得 $X^2$。因此 $X^2$ 近似等于似然比，渐近服从 $\chi^2_{K-1}$。
+:::
+
+## 无分布检验
+
+> **Verteilungsfreie Tests**
+
+### Wilcoxon 检验
+
+> **Der Wilcoxon-Test**
+
+当我们不假设具体分布时，可以使用基于**秩**的检验。设两个独立样本 $Y_i \sim G_Y(\cdot)$，$i = 1, \ldots, n$ 和 $X_j \sim G_X(\cdot)$，$j = 1, \ldots, m$。假设 $H_0: G_Y(\cdot) \equiv G_X(\cdot)$（或更弱地，两者中位数相同）。
+
+将两个样本合并排序 $z_1 \leq z_2 \leq \cdots \leq z_{n+m}$，令 $rg(x_j)$ 为 $x_j$ 在合并样本中的**秩**。检验统计量为：
+
+$$
+T = \sum_{j=1}^{m} rg(x_j)
+$$
+
+::: {.callout-tip icon="false"}
+## 排队的比喻 | Die Warteschlangen-Metapher
+
+想象两组人混合排队。如果两组体能相当（$H_0$ 成立），则一组的平均队位应在队伍中间。如果一组人总是排在前面（T 很小）或后面（T 很大），说明两组有差异。
+
+*Wenn zwei Gruppen gleich sind, sollten ihre Rangplatze zufallig gemischt sein. Systematische Abweichungen sprechen gegen $H_0$.*
+:::
+
+决策规则为：$"H_1" \Longleftrightarrow (T < w_{\alpha/2}) \text{ 或 } (T > w_{1-\alpha/2})$，其中 $w_\alpha$ 是 Wilcoxon 分布的分位数。
+
+```{r}
+#| label: fig-wilcoxon
+#| fig-cap: "Wilcoxon 秩和检验的直觉（仿教材 Fig. 5.6）| Intuition des Wilcoxon-Rangsummentests"
+#| fig-height: 5
+
+set.seed(42)
+x_sample <- rnorm(8, mean = 2.5, sd = 1)
+y_sample <- rnorm(10, mean = 1.5, sd = 1)
+
+combined <- c(x_sample, y_sample)
+labels_xy <- c(rep("X", 8), rep("Y", 10))
+ord <- order(combined)
+combined_sorted <- combined[ord]
+labels_sorted <- labels_xy[ord]
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+cols_w <- ifelse(labels_sorted == "X", "#DC2626", "#2563EB")
+plot(1:18, combined_sorted, pch = 16, col = cols_w, cex = 2,
+     xlab = "秩 | Rang", ylab = "观测值 | Beobachtungswert",
+     main = "Wilcoxon 检验：合并排序后的秩 | Wilcoxon: Rangplatze im gemischten Sample",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+text(1:18, combined_sorted + 0.15, labels_sorted, col = cols_w, font = 2, cex = 0.8)
+
+# Wilcoxon 检验
+wt <- wilcox.test(x_sample, y_sample)
+legend("topleft",
+       legend = c(paste0("X 样本 (n=8)"),
+                  paste0("Y 样本 (n=10)"),
+                  paste0("p-value = ", round(wt$p.value, 4))),
+       pch = c(16, 16, NA), col = c("#DC2626", "#2563EB", NA),
+       bty = "n", cex = 0.85)
+```
+
+### Kolmogorov-Smirnov 检验
+
+> **Der Kolmogorov-Smirnov-Test**
+
+KS 检验直接检验数据是否来自某个指定分布。构造**KS 距离**：
+
+$$
+D_n := \sup_y |F_n(y) - F(y; \theta)| \tag{5.7}
+$$
+
+其中 $F_n(y) = \frac{1}{n} \sum_{i=1}^{n} \mathbf{1}\{Y_i \leq y\}$ 是经验分布函数，$F(y; \theta)$ 是假设分布。
+
+::: {.callout-important icon="false"}
+## 性质 5.2：KS 检验的枢轴分布 | Eigenschaft 5.2: Pivotale Verteilung
+
+$D_n$ 的分布（渐近地）服从 Kolmogorov-Smirnov 分布，**不依赖于**具体的假设分布 $F(\cdot; \theta)$。
+:::
+
+决策规则为：$"H_1" \Longleftrightarrow D_n \geq KS_{1-\alpha}$。
+
+```{r}
+#| label: fig-ks-test
+#| fig-cap: "Kolmogorov-Smirnov 检验可视化（仿教材 Fig. 5.7）| KS-Test Visualisierung"
+#| fig-height: 8
+
+set.seed(42)
+y_ks <- rnorm(30, mean = 0.3, sd = 1)
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+# 上图：经验分布 vs 假设分布
+x_seq_ks <- seq(-3, 4, length.out = 300)
+F_hyp <- pnorm(x_seq_ks, 0, 1)
+
+plot(ecdf(y_ks), col = "#2563EB", lwd = 2, pch = NA,
+     main = "经验分布 vs 假设分布 | Empirische vs. hypothetische Verteilung",
+     xlab = "y", ylab = "F(y)",
+     cex.main = 1.0, col.main = "#1E293B",
+     xlim = c(-3, 4))
+lines(x_seq_ks, F_hyp, col = "#DC2626", lwd = 2.5, lty = 2)
+grid(col = "#E2E8F0")
+
+# 找 D_n 最大点
+ecdf_fn <- ecdf(y_ks)
+diff_vals <- abs(ecdf_fn(x_seq_ks) - F_hyp)
+max_idx <- which.max(diff_vals)
+max_x <- x_seq_ks[max_idx]
+D_n <- diff_vals[max_idx]
+
+segments(max_x, ecdf_fn(max_x), max_x, pnorm(max_x, 0, 1),
+         col = "#16A34A", lwd = 3)
+text(max_x + 0.3, (ecdf_fn(max_x) + pnorm(max_x, 0, 1)) / 2,
+     bquote(D[n] == .(round(D_n, 3))), col = "#16A34A", font = 2, cex = 1)
+
+legend("topleft",
+       legend = c(expression(F[n](y) ~ "(经验)"), expression(F(y) ~ "(假设: N(0,1))")),
+       col = c("#2563EB", "#DC2626"), lwd = c(2, 2.5), lty = c(1, 2), bty = "n", cex = 0.85)
+
+# 下图：差值函数
+plot(x_seq_ks, ecdf_fn(x_seq_ks) - F_hyp, type = "l", col = "#9333EA", lwd = 2.5,
+     xlab = "y", ylab = expression(F[n](y) - F(y)),
+     main = expression(paste("差值 ", F[n](y) - F(y), " | Differenz")),
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = 0, col = "#94A3B8", lty = 3)
+abline(v = max_x, col = "#16A34A", lwd = 2, lty = 2)
+
+par(mfrow = c(1, 1))
+
+ks_result <- ks.test(y_ks, "pnorm", 0, 1)
+cat("\nKS 检验结果 | KS-Testergebnis:\n")
+cat("  D_n =", round(ks_result$statistic, 4), "\n")
+cat("  p-value =", round(ks_result$p.value, 4), "\n")
+```
+
+::: {.callout-tip collapse="true"}
+## 点击展开 KS 检验枢轴性的证明 | Beweis der Pivotalitat
+
+令 $U_i = F(Y_i; \theta)$。若 $F(\cdot; \theta)$ 是真分布，则 $U_i \sim \text{Uniform}[0,1]$（概率积分变换）。因此：
+
+$$
+\sup_y |F_n(y) - F(y; \theta)| = \sup_x \left|\frac{1}{n} \sum_{i=1}^{n} \mathbf{1}\{U_i \leq x\} - x\right|
+$$
+
+右侧仅涉及均匀分布的经验分布函数，不再依赖于 $F(\cdot; \theta)$。这证明了 $D_n$ 的分布是枢轴的。
+
+当参数 $\theta$ 需要估计时（$\hat{D}_n = \sup_y |F_n(y) - F(y; \hat{\theta})|$），精确分布的推导更为复杂，通常依赖于具体的分布形式。
+:::
+
+{{< pagebreak >}}
+
+# 检验的功效 {#sec-power}
+
+> **Die Macht (Power) eines Tests**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **功效函数（Gutefunktion）** 的定义
+- 功效如何随样本量和效应量变化
+- 如何通过功效分析确定**所需样本量**
+- 为什么仅控制第一类错误是不够的
+:::
+
+## 为什么只看 alpha 还不够？
+
+> **Warum alpha allein nicht ausreicht**
+
+定义 (5.3) 只要求 $P("H_1" \mid H_0) \leq \alpha$。考虑以下"病态检验"：不看数据，抽一个 $U \sim \text{Uniform}[0,1]$，当 $U \leq \alpha$ 时拒绝 $H_0$。显然 $P("H_1" \mid H_0) = \alpha$，满足定义。但这个检验**毫无用处**，因为它完全忽略了数据。
+
+因此我们还需要考虑**第二类错误**：当 $H_1$ 为真时，正确拒绝 $H_0$ 的概率应尽可能大。
+
+::: {.callout-important icon="false"}
+## 定义 5.5：检验的功效 | Definition 5.5: Macht eines Tests
+
+$$
+\text{功效} = P("H_1" \mid H_1) \tag{Power}
+$$
+:::
+
+## 功效函数的推导
+
+> **Herleitung der Gutefunktion**
+
+设 $Y_i \sim N(\mu, \sigma^2)$，i.i.d.，$\sigma^2$ 已知，$H_0: \mu \leq \mu_0$。决策规则为：
+
+$$
+"H_1" \quad \Longleftrightarrow \quad \bar{Y} \geq \mu_0 + z_{1-\alpha} \frac{\sigma}{\sqrt{n}}
+$$
+
+对任意 $\mu > \mu_0$，功效为：
+
+$$
+P("H_1" \mid \mu) = P\!\left(\frac{\bar{Y} - \mu}{\sigma/\sqrt{n}} \geq z_{1-\alpha} + \frac{\mu_0 - \mu}{\sigma/\sqrt{n}}\right) = 1 - \Phi\!\left(z_{1-\alpha} + \frac{\mu_0 - \mu}{\sigma/\sqrt{n}}\right)
+$$
+
+```{r}
+#| label: fig-power-function
+#| fig-cap: "功效函数（仿教材 Fig. 5.8）：三幅图逐步聚焦关键信息 | Gutefunktion in drei Schritten"
+#| fig-height: 10
+
+sigma_p <- 1; mu_0_p <- 0; alpha_p <- 0.05
+mu_range_p <- seq(-1, 1, by = 0.01)
+n_vals_p <- c(30, 60)
+cols_p <- c("#2563EB", "#DC2626")
+
+power_fn <- function(mu, n, sigma, mu_0, alpha) {
+  1 - pnorm(qnorm(1 - alpha) + (mu_0 - mu) / (sigma / sqrt(n)))
+}
+
+par(mfrow = c(3, 1), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+# --- 顶图：完整功效函数 ---
+plot(NULL, xlim = c(-1, 1), ylim = c(0, 1),
+     xlab = expression(mu), ylab = expression(P("H[1]" ~ "|" ~ mu)),
+     main = expression(paste("完整功效函数 | Vollstandige Gutefunktion")),
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = alpha_p, col = "#6B7280", lty = 3, lwd = 1.5)
+text(-0.9, alpha_p + 0.03, expression(alpha == 0.05), col = "#6B7280", cex = 0.8)
+abline(v = mu_0_p, col = "#94A3B8", lty = 2)
+
+for (k in 1:2) {
+  pw <- sapply(mu_range_p, power_fn, n = n_vals_p[k], sigma = sigma_p,
+               mu_0 = mu_0_p, alpha = alpha_p)
+  lines(mu_range_p, pw, col = cols_p[k], lwd = 2.5)
+}
+legend("topleft", legend = paste0("n = ", n_vals_p), col = cols_p, lwd = 2.5, bty = "n")
+text(mu_0_p - 0.3, 0.5, expression(H[0]: ~ mu <= mu[0]), col = "#6B7280", cex = 0.9, font = 2)
+
+# --- 中间图：只展示 H1 区域 ---
+plot(NULL, xlim = c(-1, 1), ylim = c(0, 1),
+     xlab = expression(mu), ylab = expression(P("H[1]" ~ "|" ~ mu)),
+     main = expression(paste("H1 区域的功效 | Gutefunktion im H1-Bereich")),
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = alpha_p, col = "#6B7280", lty = 3, lwd = 1.5)
+abline(v = mu_0_p, col = "#94A3B8", lty = 2)
+
+for (k in 1:2) {
+  pw <- sapply(mu_range_p, power_fn, n = n_vals_p[k], sigma = sigma_p,
+               mu_0 = mu_0_p, alpha = alpha_p)
+  pw_h1 <- ifelse(mu_range_p > mu_0_p, pw, NA)
+  lines(mu_range_p, pw_h1, col = cols_p[k], lwd = 2.5)
+}
+legend("topleft", legend = paste0("n = ", n_vals_p), col = cols_p, lwd = 2.5, bty = "n")
+
+# --- 底图：固定 delta 展示样本量效应 ---
+delta_p <- 0.25
+plot(NULL, xlim = c(-1, 1), ylim = c(0, 1),
+     xlab = expression(mu), ylab = expression(P("H[1]" ~ "|" ~ mu)),
+     main = bquote("在" ~ mu == mu[0] + delta ~ "处的功效 (" ~ delta == .(delta_p) ~ ")"),
+     cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = alpha_p, col = "#6B7280", lty = 3, lwd = 1.5)
+abline(v = mu_0_p, col = "#94A3B8", lty = 2)
+abline(v = mu_0_p + delta_p, col = "#16A34A", lty = 2, lwd = 2)
+
+for (k in 1:2) {
+  pw <- sapply(mu_range_p, power_fn, n = n_vals_p[k], sigma = sigma_p,
+               mu_0 = mu_0_p, alpha = alpha_p)
+  pw_h1 <- ifelse(mu_range_p > mu_0_p, pw, NA)
+  lines(mu_range_p, pw_h1, col = cols_p[k], lwd = 2.5)
+}
+
+for (k in 1:2) {
+  pw_delta <- power_fn(mu_0_p + delta_p, n_vals_p[k], sigma_p, mu_0_p, alpha_p)
+  points(mu_0_p + delta_p, pw_delta, pch = 16, col = cols_p[k], cex = 2)
+}
+
+text(mu_0_p + delta_p + 0.05, 0.15,
+     expression(H[1]: ~ mu == mu[0] + delta), col = "#16A34A", font = 2, cex = 0.9, pos = 4)
+legend("topleft", legend = paste0("n = ", n_vals_p), col = cols_p, lwd = 2.5, bty = "n")
+
+par(mfrow = c(1, 1))
+```
+
+## 样本量规划
+
+> **Fallzahlplanung**
+
+::: {.callout-tip icon="false"}
+## 实验设计者的比喻 | Die Experimentplaner-Metapher
+
+在进行实验之前（例如临床试验），你需要回答："要收集多少数据才够？" 功效分析就是这个问题的数学答案。你需要指定三个量中的任意两个来确定第三个：显著性水平 $\alpha$、功效 $1 - \beta$、效应量 $\delta$。给定这些，所需样本量 $n$ 就确定了。
+
+*Vor einem Experiment muss man planen: Wie viele Daten brauche ich? Die Power-Analyse beantwortet diese Frage.*
+:::
+
+```{r}
+#| label: fig-power-vs-n
+#| fig-cap: "功效随样本量的变化（仿教材 Fig. 5.9）| Power als Funktion der Stichprobengrosse"
+#| fig-height: 5.5
+
+delta_pn <- 0.25; sigma_pn <- 1; mu_0_pn <- 0; alpha_pn <- 0.05; beta_pn <- 0.2
+n_range_pn <- c(60, 90, 120)
+cols_pn <- c("#2563EB", "#EA580C", "#16A34A")
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+mu_range_pn <- seq(-0.1, 0.4, by = 0.005)
+
+plot(NULL, xlim = c(-0.1, 0.4), ylim = c(0, 1),
+     xlab = expression(mu), 
+     ylab = expression(P("H[1]" ~ "|" ~ mu == mu[0] + delta)),
+     main = expression(paste("不同样本量下的功效 | Power fur verschiedene n")),
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 目标区域
+rect(delta_pn - 0.01, 1 - beta_pn, 0.42, 1.02, 
+     col = adjustcolor("#16A34A", 0.15), border = NA)
+abline(h = 1 - beta_pn, col = "#16A34A", lty = 3, lwd = 1.5)
+text(0.35, 1 - beta_pn + 0.03, expression(1 - beta == 0.8), 
+     col = "#16A34A", cex = 0.85, font = 2)
+
+for (k in seq_along(n_range_pn)) {
+  pw <- sapply(mu_range_pn, power_fn, n = n_range_pn[k], sigma = sigma_pn,
+               mu_0 = mu_0_pn, alpha = alpha_pn)
+  lines(mu_range_pn, pw, col = cols_pn[k], lwd = 2.5)
+  
+  pw_at_delta <- power_fn(delta_pn, n_range_pn[k], sigma_pn, mu_0_pn, alpha_pn)
+  points(delta_pn, pw_at_delta, pch = 16, col = cols_pn[k], cex = 2)
+}
+
+abline(v = delta_pn, col = "#DC2626", lty = 2, lwd = 1.5)
+text(delta_pn + 0.01, 0.1, expression(delta == 0.25), col = "#DC2626", font = 2, cex = 0.85, pos = 4)
+
+legend("topleft", legend = paste0("n = ", n_range_pn), 
+       col = cols_pn, lwd = 2.5, bty = "n", cex = 0.9)
+```
+
+所需样本量可以通过求解以下方程获得：
+
+$$
+n_0 = \arg\min\left\{n : 1 - \beta \leq 1 - \Phi\!\left(z_{1-\alpha} - \frac{\delta}{\sigma/\sqrt{n}}\right)\right\} \tag{5.11}
+$$
+
+```{r}
+#| label: sample-size-calc
+#| code-fold: false
+
+# 样本量计算
+delta_calc <- 0.25; sigma_calc <- 1; alpha_calc <- 0.05; beta_calc <- 0.2
+
+# 解析解
+n_required <- ((qnorm(1 - alpha_calc) + qnorm(1 - beta_calc)) * sigma_calc / delta_calc)^2
+cat("样本量规划 | Fallzahlplanung:\n\n")
+cat("  效应量 delta =", delta_calc, "\n")
+cat("  标准差 sigma =", sigma_calc, "\n")
+cat("  alpha =", alpha_calc, ", beta =", beta_calc, "\n")
+cat("  所需样本量 n_0 =", ceiling(n_required), "\n\n")
+
+# R 内置函数验证
+pw_result <- power.t.test(delta = delta_calc, sd = sigma_calc,
+                          sig.level = alpha_calc, power = 1 - beta_calc,
+                          type = "one.sample", alternative = "one.sided")
+cat("  power.t.test 验证: n =", ceiling(pw_result$n), "\n")
+```
+
+{{< pagebreak >}}
+
+# Neyman-Pearson 引理 {#sec-neyman-pearson}
+
+> **Das Neyman-Pearson-Lemma**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **最优检验（machtigster Test）** 的定义
+- Neyman-Pearson 引理的陈述与直觉
+- 为什么**似然比检验是最优的**
+- 引理的严格证明
+:::
+
+## 存在最优检验吗？
+
+> **Gibt es einen optimalen Test?**
+
+我们已经知道功效越高越好。自然的问题是：在所有满足显著性水平 $\alpha$ 的检验中，是否存在一个**功效最大**的检验？Neyman 和 Pearson (1933) 给出了肯定的回答。
+
+::: {.callout-important icon="false"}
+## 性质 5.3：Neyman-Pearson 引理 | Eigenschaft 5.3: Neyman-Pearson-Lemma
+
+设 $H_0: \theta = \theta_0$ 对 $H_1: \theta = \theta_1$，显著性水平为 $\alpha$。**最优检验（功效最大的检验）** 的决策规则为：
+
+$$
+"H_1" \quad \Longleftrightarrow \quad l(\theta_0) - l(\theta_1) \leq c
+$$
+
+其中 $c$ 使得 $P("H_1" \mid H_0) \leq \alpha$。等价地：
+
+$$
+"H_1" \quad \Longleftrightarrow \quad \frac{f(y; \theta_0)}{f(y; \theta_1)} \leq k = \exp(c)
+$$
+
+此检验称为 **Neyman-Pearson 检验**。
+:::
+
+::: {.callout-tip icon="false"}
+## 最聪明的侦探 | Der klugste Detektiv
+
+在所有遵守"无罪推定"原则（$\alpha$ 水平）的侦探中，Neyman-Pearson 侦探是最聪明的——他找到真凶的概率最高。他的方法很简单：比较两种假说下数据出现的相对可能性（似然比）。如果 $H_0$ 下数据出现的可能性远低于 $H_1$ 下的可能性，就拒绝 $H_0$。
+
+*Unter allen Detektiven, die das $\alpha$-Prinzip befolgen, findet der Neyman-Pearson-Detektiv den Schuldigen am haufigsten -- indem er die Likelihood-Ratio verwendet.*
+:::
+
+这个引理再次证明了**似然在统计学中的核心地位**。
+
+```{r}
+#| label: fig-np-lemma
+#| fig-cap: "Neyman-Pearson 引理的直觉：似然比定义了最优拒绝域 | Intuition des NP-Lemmas"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+x_np <- seq(-4, 8, length.out = 400)
+
+f0 <- dnorm(x_np, 0, 1)
+f1 <- dnorm(x_np, 3, 1)
+
+plot(x_np, f0, type = "l", col = "#2563EB", lwd = 3,
+     xlab = "y", ylab = "密度 | Dichte",
+     main = "Neyman-Pearson: 似然比决定拒绝域 | LR bestimmt den Ablehnbereich",
+     cex.lab = 1.1, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, 0.45))
+lines(x_np, f1, col = "#DC2626", lwd = 3, lty = 2)
+grid(col = "#E2E8F0")
+
+# 拒绝域（f0/f1 < k 的区域，即 y 足够大）
+c_np <- qnorm(1 - 0.05, 0, 1)
+x_rej_np <- seq(c_np, 8, length.out = 150)
+polygon(c(x_rej_np, rev(x_rej_np)),
+        c(dnorm(x_rej_np, 0, 1), rep(0, length(x_rej_np))),
+        col = adjustcolor("#EA580C", 0.2), border = NA)
+
+abline(v = c_np, col = "#EA580C", lwd = 2, lty = 2)
+text(c_np + 0.1, 0.35, bquote("c =" ~ .(round(c_np, 2))), 
+     col = "#EA580C", font = 2, cex = 0.9, pos = 4)
+
+# 标注功效
+power_np <- 1 - pnorm(c_np, 3, 1)
+text(4.5, 0.2, bquote("功效 = " ~ .(round(power_np, 3))), 
+     col = "#DC2626", font = 2, cex = 1)
+
+legend("topleft",
+       legend = c(expression(paste("f(y, ", theta[0], ") (H0)")),
+                  expression(paste("f(y, ", theta[1], ") (H1)")),
+                  "拒绝域 | Ablehnbereich"),
+       col = c("#2563EB", "#DC2626", NA),
+       fill = c(NA, NA, adjustcolor("#EA580C", 0.2)),
+       border = c(NA, NA, NA),
+       lwd = c(3, 3, NA), lty = c(1, 2, NA), bty = "n", cex = 0.85)
+```
+
+::: {.callout-tip collapse="true"}
+## 点击展开 Neyman-Pearson 引理的证明 | Beweis des NP-Lemmas
+
+设 $\varphi(y)$ 为 NP 检验的决策函数（$\varphi(y) = 1$ 拒绝 $H_0$，$0$ 不拒绝），$\psi(y)$ 为任意其他显著性水平为 $\alpha$ 的检验。需证 $P(\varphi(Y) = 1; \theta_1) \geq P(\psi(Y) = 1; \theta_1)$。
+
+定义三个区域：$R_1 = \{y: f(y; \theta_0)/f(y; \theta_1) < k\}$（$\varphi = 1$），$R_2 = \{y: f(y; \theta_0)/f(y; \theta_1) > k\}$（$\varphi = 0$），$R_3 = \{y: f(y; \theta_0)/f(y; \theta_1) = k\}$。
+
+对每个区域分析 $\{\varphi(y) - \psi(y)\} f(y; \theta_1)$ 的积分：
+
+在 $R_1$ 上：$\varphi = 1$，$f(y; \theta_1) > f(y; \theta_0)/k$，所以积分 $\geq \frac{1}{k} \int_{R_1} \{\varphi - \psi\} f(y; \theta_0) dy$。
+
+在 $R_2$ 上：$\varphi = 0$，$-f(y; \theta_1) > -f(y; \theta_0)/k$，同理成立。
+
+在 $R_3$ 上：精确相等。
+
+合计：$\int \{\varphi - \psi\} f(y; \theta_1) dy \geq \frac{1}{k} \int \{\varphi - \psi\} f(y; \theta_0) dy$。
+
+由两个检验具有相同显著性水平：$\int \varphi f(y; \theta_0) dy = \int \psi f(y; \theta_0) dy = \alpha$，因此右侧等于零。证毕。
+:::
+
+{{< pagebreak >}}
+
+# 检验与置信区间 {#sec-test-ci}
+
+> **Tests und Konfidenzintervalle**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 置信区间可以**直接构造**假设检验
+- 假设检验可以**反向构造**置信区间
+- 两者是"同一枚硬币的两面"
+:::
+
+## 同一枚硬币的两面
+
+> **Zwei Seiten derselben Munze**
+
+::: {.callout-tip icon="false"}
+## 尺子与锤子的比喻 | Das Lineal und der Hammer
+
+置信区间像一把尺子 -- 它给出参数可能取值的**范围**。假设检验像一把锤子 -- 它对特定参数值做出"接受/拒绝"的**判决**。看起来是两种不同工具，但实际上可以互相转化。
+
+把尺子竖直放在参数轴上。如果某个值 $\theta_0$ 落在尺子（置信区间）**内**，锤子不敲（不拒绝）；落在**外**，锤子敲下去（拒绝）。反过来，把所有锤子不敲的值收集起来，就形成了一把尺子。
+
+*Konfidenzintervall = Lineal (Bereich), Test = Hammer (Ja/Nein). Sie sind ineinander umwandelbar.*
+:::
+
+### 从置信区间到检验
+
+> **Vom Konfidenzintervall zum Test**
+
+回顾定义 3.9 中的置信区间 $[t_l(y), t_r(y)]$，满足 $P_\theta(t_l(Y) \leq \theta \leq t_r(Y)) \geq 1 - \alpha$。定义检验：
+
+$$
+"H_1" \quad \Longleftrightarrow \quad \theta_0 \notin [t_l(y), t_r(y)]
+$$
+
+则 $P("H_1" \mid H_0) = 1 - P(\theta_0 \in [t_l(Y), t_r(Y)]) \leq 1 - (1 - \alpha) = \alpha$。这是一个显著性水平为 $\alpha$ 的检验。
+
+### 从检验到置信区间
+
+> **Vom Test zum Konfidenzintervall**
+
+设检验的决策函数为 $\varphi_\theta(Y) \in \{0, 1\}$（$0$ = 不拒绝，$1$ = 拒绝）。定义：
+
+$$
+CI(y) = \{\theta : \varphi_\theta(y) = 0\}
+$$
+
+即收集所有**不被拒绝**的参数值。由 $P(\varphi_\theta(Y) = 1 \mid \theta) \leq \alpha$，得：
+
+$$
+P(\theta \in CI(Y) \mid \theta) = 1 - P(\varphi_\theta(Y) = 1 \mid \theta) \geq 1 - \alpha
+$$
+
+这是一个覆盖率至少为 $1 - \alpha$ 的置信区间。
+
+```{r}
+#| label: fig-ci-test-duality
+#| fig-cap: "检验与置信区间的对偶关系 | Dualitat von Test und Konfidenzintervall"
+#| fig-height: 5.5
+
+set.seed(42)
+n_ci <- 50; sigma_ci <- 2
+y_ci <- rnorm(n_ci, mean = 3, sd = sigma_ci)
+y_bar_ci <- mean(y_ci)
+se_ci <- sigma_ci / sqrt(n_ci)
+alpha_ci <- 0.05
+
+ci_lower <- y_bar_ci - qnorm(1 - alpha_ci/2) * se_ci
+ci_upper <- y_bar_ci + qnorm(1 - alpha_ci/2) * se_ci
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+theta_test_range <- seq(1, 5, by = 0.01)
+
+# 对每个 theta_0 计算 p 值
+p_vals_ci <- sapply(theta_test_range, function(t0) {
+  z <- (y_bar_ci - t0) / se_ci
+  2 * (1 - pnorm(abs(z)))
+})
+
+plot(theta_test_range, p_vals_ci, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(theta[0]), ylab = "p-value",
+     main = "p 值函数与置信区间 | p-Wert-Funktion und Konfidenzintervall",
+     cex.lab = 1.1, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+abline(h = alpha_ci, col = "#DC2626", lty = 2, lwd = 2)
+text(4.5, alpha_ci + 0.03, expression(alpha == 0.05), col = "#DC2626", font = 2, cex = 0.9)
+
+# 置信区间
+rect(ci_lower, -0.05, ci_upper, alpha_ci,
+     col = adjustcolor("#16A34A", 0.2), border = "#16A34A", lwd = 2)
+
+arrows(ci_lower, -0.02, ci_upper, -0.02, col = "#16A34A", lwd = 3, code = 3, length = 0.1)
+text((ci_lower + ci_upper) / 2, -0.08, 
+     paste0("95% CI = [", round(ci_lower, 2), ", ", round(ci_upper, 2), "]"),
+     col = "#16A34A", font = 2, cex = 0.85)
+
+text(1.5, 0.5, "拒绝区域\n(p < alpha)", col = "#DC2626", font = 2, cex = 0.85)
+text(3, 0.7, "不拒绝区域\n(p >= alpha)\n= 置信区间", col = "#16A34A", font = 2, cex = 0.85)
+```
+
+{{< pagebreak >}}
+
+# 多重检验 {#sec-multiple-testing}
+
+> **Multiples Testen**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 多重检验时**家族错误率（FWER）** 的膨胀
+- **Bonferroni 校正**：简单但保守
+- **错误发现率（FDR）** 的概念
+:::
+
+## 为什么同时做很多检验会出问题？
+
+> **Warum viele gleichzeitige Tests problematisch sind**
+
+设有 $m$ 个假设 $H_{0j}: \theta_j = \theta_{0j}$，$j = 1, \ldots, m$，分别以显著性水平 $\alpha$ 进行检验。每个单独检验满足 $P("H_{1j}" \mid H_{0j}) \leq \alpha$。但同时考虑所有检验时会怎样？
+
+::: {.callout-tip icon="false"}
+## 掷骰子的比喻 | Die Wurfel-Metapher
+
+每次检验就像掷一次骰子。掷一次出"1"（犯错）的概率很小。但如果你掷 100 次，至少出一次"1"的概率就非常大了。同理，同时做 100 个检验，即使每个检验的犯错率只有 5%，至少犯一次错的概率可以高达 $1 - (1 - 0.05)^{100} \approx 0.994$ -- 几乎是确定的!
+
+*Jeder einzelne Test hat nur 5% Fehlerrate. Aber bei 100 gleichzeitigen Tests wird mindestens ein Fehler fast sicher auftreten.*
+:::
+
+多重检验的错误矩阵如下：
+
+| | 不拒绝 "H_{0j}" | 拒绝 "H_{1j}" | 合计 |
+|:---|:---:|:---:|:---:|
+| 真假设 $H_{0j}$ | $U$ | $V$ | $M_0$ |
+| 假假设（$H_{1j}$ 成立）| $T$ | $S$ | $M_1$ |
+| 合计 | $m - r$ | $r$ | $m$ |
+
+其中 $V$ 是错误拒绝的真假设数（假阳性），$r$ 是总拒绝数。
+
+::: {.callout-important icon="false"}
+## 定义 5.6：家族错误率 | Definition 5.6: Family-Wise Error Rate (FWER)
+
+$$
+\alpha_{FWER} := P(V > 0 \mid H_{0j} \text{ 对所有 } j = 1, \ldots, m) \tag{5.14}
+$$
+
+即在所有假设均成立时，至少错误拒绝一个的概率。
+:::
+
+当 $m$ 个检验**独立**时：
+
+$$
+\alpha_{FWER} = 1 - (1 - \alpha)^m \tag{5.16}
+$$
+
+随着 $m$ 增大，$\alpha_{FWER} \to 1$。
+
+```{r}
+#| label: fig-fwer
+#| fig-cap: "家族错误率随检验数量的膨胀 | FWER-Inflation mit zunehmender Testanzahl"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+m_range <- 1:200
+alpha_single <- 0.05
+fwer <- 1 - (1 - alpha_single)^m_range
+
+plot(m_range, fwer, type = "l", col = "#DC2626", lwd = 3,
+     xlab = "检验数量 m | Anzahl Tests m",
+     ylab = expression(alpha[FWER]),
+     main = expression(paste("家族错误率膨胀: ", alpha[FWER] == 1 - (1 - alpha)^m)),
+     cex.lab = 1.1, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, 1))
+grid(col = "#E2E8F0")
+
+abline(h = alpha_single, col = "#2563EB", lty = 3, lwd = 2)
+text(150, alpha_single + 0.03, expression(alpha == 0.05), col = "#2563EB", cex = 0.9, font = 2)
+
+abline(h = 1, col = "#94A3B8", lty = 3)
+text(100, 0.5, "m 增大时\nFWER 趋向 1!", col = "#DC2626", font = 2, cex = 1)
+
+# Bonferroni 校正后
+fwer_bonf <- m_range * (alpha_single / m_range)  # 恒为 alpha
+lines(m_range, rep(alpha_single, length(m_range)), col = "#16A34A", lwd = 2.5, lty = 2)
+text(150, 0.12, "Bonferroni 校正后\nFWER <= alpha", col = "#16A34A", font = 2, cex = 0.85)
+```
+
+## Bonferroni 校正
+
+> **Bonferroni-Korrektur**
+
+::: {.callout-important icon="false"}
+## 性质 5.4：Bonferroni 校正 | Eigenschaft 5.4: Bonferroni-Korrektur
+
+将每个检验的显著性水平调整为 $\alpha_{adjust} = \alpha / m$，则 FWER 被限制在 $\alpha$ 以内：
+
+$$
+\alpha_{FWER} \leq m \cdot \frac{\alpha}{m} = \alpha
+$$
+:::
+
+Bonferroni 校正简单直观，但当 $m$ 很大时过于保守（检验力大幅下降）。替代方法包括 Holm (1979) 的逐步拒绝法和 Benjamini-Hochberg (1995) 的**错误发现率（FDR）** 控制方法。FDR 不要求 $V = 0$，而是控制 $V/r$（错误拒绝在所有拒绝中的比例）的期望。
+
+```{r}
+#| label: multiple-testing-demo
+#| code-fold: false
+
+# 多重检验模拟
+set.seed(42)
+m_tests <- 100
+n_per_test <- 30
+alpha_mt <- 0.05
+
+# 所有假设均为真 (H0 成立)
+p_values_all_null <- replicate(m_tests, {
+  y <- rnorm(n_per_test, mean = 0, sd = 1)
+  t.test(y, mu = 0)$p.value
+})
+
+# 未校正
+n_reject_raw <- sum(p_values_all_null <= alpha_mt)
+
+# Bonferroni 校正
+n_reject_bonf <- sum(p_values_all_null <= alpha_mt / m_tests)
+
+# BH (FDR) 校正
+p_adjusted_bh <- p.adjust(p_values_all_null, method = "BH")
+n_reject_bh <- sum(p_adjusted_bh <= alpha_mt)
+
+# Holm 校正
+p_adjusted_holm <- p.adjust(p_values_all_null, method = "holm")
+n_reject_holm <- sum(p_adjusted_holm <= alpha_mt)
+
+cat("多重检验模拟 (m = 100, 所有 H0 均真) | Simulation multiples Testen:\n\n")
+cat(sprintf("  %-20s  错误拒绝数 = %d / %d\n", "未校正:", n_reject_raw, m_tests))
+cat(sprintf("  %-20s  错误拒绝数 = %d / %d\n", "Bonferroni:", n_reject_bonf, m_tests))
+cat(sprintf("  %-20s  错误拒绝数 = %d / %d\n", "Holm:", n_reject_holm, m_tests))
+cat(sprintf("  %-20s  错误拒绝数 = %d / %d\n", "BH (FDR):", n_reject_bh, m_tests))
+cat("\n理论上, 未校正时期望错误拒绝数 = m * alpha =", m_tests * alpha_mt, "\n")
+```
+
+```{r}
+#| label: fig-p-adjust-comparison
+#| fig-cap: "原始 p 值 vs 校正 p 值 | Rohe vs. adjustierte p-Werte"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+sorted_p <- sort(p_values_all_null)
+sorted_bonf <- p.adjust(sorted_p, method = "bonferroni")
+sorted_bh <- p.adjust(sorted_p, method = "BH")
+
+plot(1:m_tests, sorted_p, type = "p", pch = 16, cex = 0.8,
+     col = "#2563EB",
+     xlab = "排序后的检验编号 | Sortierter Testindex",
+     ylab = "p-value",
+     main = "原始 p 值 vs 校正 p 值 | Rohe vs. adjustierte p-Werte",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, 1.1))
+grid(col = "#E2E8F0")
+points(1:m_tests, pmin(sorted_bonf, 1), pch = 17, cex = 0.8, col = "#DC2626")
+points(1:m_tests, pmin(sorted_bh, 1), pch = 15, cex = 0.8, col = "#16A34A")
+
+abline(h = alpha_mt, col = "#EA580C", lty = 2, lwd = 2)
+text(80, alpha_mt + 0.04, expression(alpha == 0.05), col = "#EA580C", font = 2, cex = 0.85)
+
+legend("topleft",
+       legend = c("原始 p 值", "Bonferroni", "BH (FDR)"),
+       pch = c(16, 17, 15), col = c("#2563EB", "#DC2626", "#16A34A"),
+       bty = "n", cex = 0.9)
+```
+
+{{< pagebreak >}}
+
+# 通用推断 {#sec-universal}
+
+> **Universelle Inferenz**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 当渐近分布**未知**时如何进行推断
+- **数据分割**（Datenaufteilung）的思想
+- **通用置信区间**的构造与覆盖率保证
+- Markov 不等式在证明中的核心作用
+- 通用推断的代价：覆盖率保守
+:::
+
+## 数据分割的思想
+
+> **Die Idee der Datenaufteilung**
+
+::: {.callout-tip icon="false"}
+## 双重信封的比喻 | Die Doppelumschlag-Metapher
+
+想象你有两份密封信封，各包含一半数据。你打开第二个信封来估计参数（得到 $\hat{\theta}^{(1)}$）。然后你用第一个信封的数据来"审查"这个估计。因为估计和审查使用的是**独立的数据**，审查过程是完全客观的——审查员不可能被估计过程"影响"。
+
+*Man teilt die Daten in zwei unabhangige Halften: eine zum Schatzen, eine zum Prufen. So bleibt die Prufung objektiv.*
+:::
+
+设数据为 $Y_1, \ldots, Y_n, Y_{n+1}, \ldots, Y_{2n}$。定义前半 $D^{(0)}$ 和后半 $D^{(1)}$。用 $D^{(1)}$ 计算 MLE $\hat{\theta}^{(1)}$，用 $D^{(0)}$ 构造似然：
+
+$$
+L^{(0)}(\theta) = \prod_{i=1}^{n} f(y_i; \theta), \quad L^{(1)}(\theta) = \prod_{i=n+1}^{2n} f(y_i; \theta)
+$$
+
+::: {.callout-important icon="false"}
+## 定义 5.7：通用置信区间 | Definition 5.7: Universelles Konfidenzintervall
+
+$$
+CI_{universal} = \left\{\theta : \frac{L^{(0)}(\hat{\theta}^{(1)})}{L^{(0)}(\theta)} \leq \frac{1}{\alpha}\right\} \tag{5.18}
+$$
+
+其覆盖率至少为 $1 - \alpha$：$P(\theta \in CI_{universal}) \geq 1 - \alpha$。
+:::
+
+**证明**极为简洁，仅依赖 Markov 不等式：
+
+$$
+P\!\left(\frac{L^{(0)}(\hat{\theta}^{(1)})}{L^{(0)}(\theta)} > \frac{1}{\alpha}\right) \leq \alpha \cdot E\!\left[\frac{L^{(0)}(\hat{\theta}^{(1)})}{L^{(0)}(\theta)}\right]
+$$
+
+因为 $\hat{\theta}^{(1)}$ 独立于 $D^{(0)}$：
+
+$$
+E\!\left[\frac{L^{(0)}(\hat{\theta}^{(1)})}{L^{(0)}(\theta)}\right] = \int \frac{\prod f(y_i; \hat{\theta}^{(1)})}{\prod f(y_i; \theta)} \prod f(y_i; \theta) dy_i = \int \prod f(y_i; \hat{\theta}^{(1)}) dy_i = 1
+$$
+
+因此 $P(\theta \notin CI_{universal}) \leq \alpha$。
+
+## 正态分布的具体例子
+
+> **Konkretes Beispiel: Normalverteilung**
+
+设 $Y_i \sim N(\mu, 1)$。通用置信区间的条件化简为：
+
+$$
+T_n(\mu) = \frac{\exp\left(-\frac{1}{2}\sum_{i=1}^{n}(y_i - \bar{y}^{(1)})^2\right)}{\exp\left(-\frac{1}{2}\sum_{i=1}^{n}(y_i - \mu)^2\right)} \leq \frac{1}{\alpha}
+$$
+
+经计算化简后：
+
+$$
+CI_{universal} = \left\{\mu : 2n(\bar{y}^{(0)} - \mu)(\bar{y}^{(1)} - \mu) + n(\bar{y}^{(1)} - \mu)^2 \geq 2\log(\alpha)\right\}
+$$
+
+```{r}
+#| label: fig-universal-coverage
+#| fig-cap: "通用置信区间的覆盖率 vs 名义覆盖率（仿教材 Fig. 5.10）| Coverage des universellen CI"
+#| fig-height: 5.5
+
+# 通用 CI 覆盖率的模拟计算
+set.seed(2024)
+n_univ <- 50
+n_sim_univ <- 10000
+alpha_range_univ <- seq(0.005, 0.1, by = 0.005)
+
+coverage_universal <- numeric(length(alpha_range_univ))
+coverage_exact <- numeric(length(alpha_range_univ))
+
+for (a_idx in seq_along(alpha_range_univ)) {
+  alpha_u <- alpha_range_univ[a_idx]
+  in_ci_universal <- 0
+  in_ci_exact <- 0
+  
+  for (sim in 1:n_sim_univ) {
+    y_all <- rnorm(2 * n_univ, 0, 1)
+    y0 <- y_all[1:n_univ]
+    y1 <- y_all[(n_univ+1):(2*n_univ)]
+    ybar0 <- mean(y0)
+    ybar1 <- mean(y1)
+    
+    # 通用: 2n*(ybar0 - mu)*(ybar1 - mu) + n*(ybar1 - mu)^2 >= 2*log(alpha)
+    mu_true <- 0
+    lhs <- 2 * n_univ * (ybar0 - mu_true) * (ybar1 - mu_true) + 
+           n_univ * (ybar1 - mu_true)^2
+    if (lhs >= 2 * log(alpha_u)) in_ci_universal <- in_ci_universal + 1
+    
+    # 精确 CI (基于后半数据)
+    ci_exact_check <- n_univ * (ybar1 - mu_true)^2 <= qchisq(1 - alpha_u, 1)
+    if (ci_exact_check) in_ci_exact <- in_ci_exact + 1
+  }
+  
+  coverage_universal[a_idx] <- in_ci_universal / n_sim_univ
+  coverage_exact[a_idx] <- in_ci_exact / n_sim_univ
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(alpha_range_univ, coverage_universal, type = "b", pch = 16, col = "#2563EB", lwd = 2.5,
+     xlab = expression(alpha), ylab = expression(1 - alpha),
+     main = "通用 CI 覆盖率 vs 名义覆盖率 | Universelles CI: Coverage",
+     cex.lab = 1.1, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0.88, 1))
+grid(col = "#E2E8F0")
+lines(alpha_range_univ, 1 - alpha_range_univ, col = "#DC2626", lwd = 2.5, lty = 2)
+
+legend("bottomleft",
+       legend = c("通用 CI 实际覆盖率", expression(paste("名义 ", 1 - alpha))),
+       col = c("#2563EB", "#DC2626"), lwd = 2.5, lty = c(1, 2),
+       pch = c(16, NA), bty = "n", cex = 0.9)
+
+text(0.06, 0.97, "通用 CI 的覆盖率\n远超名义水平\n--> 过于保守", 
+     col = "#EA580C", font = 2, cex = 0.85)
+```
+
+通用置信区间的覆盖率远高于名义水平 -- 这是其代价。当精确分布可用时，不推荐使用通用方法。但在复杂情形下（如无法推导渐近分布时），通用推断提供了一个可靠的"万能方案"。
+
+```{r}
+#| label: fig-threshold-comparison
+#| fig-cap: "通用阈值 vs 渐近卡方阈值（仿教材 Fig. 5.11）| Universeller vs. asymptotischer Schwellenwert"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+alpha_thr <- seq(0.005, 0.1, by = 0.002)
+
+# 渐近阈值: 0.5 * chi^2_{1, 1-alpha}
+threshold_asymp <- 0.5 * qchisq(1 - alpha_thr, df = 1)
+
+# 通用阈值: log(1/alpha)
+threshold_univ <- log(1 / alpha_thr)
+
+plot(alpha_thr, threshold_univ, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(alpha), ylab = "阈值 (log scale) | Schwellenwert",
+     main = "通用阈值 vs 渐近阈值 | Universeller vs. asymptotischer Schwellenwert",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, max(threshold_univ)))
+grid(col = "#E2E8F0")
+lines(alpha_thr, threshold_asymp, col = "#DC2626", lwd = 3, lty = 2)
+
+legend("topright",
+       legend = c(expression(paste("通用: ", log(1/alpha))),
+                  expression(paste("渐近: ", frac(1,2) * chi[1*(1-alpha)]^2))),
+       col = c("#2563EB", "#DC2626"), lwd = 3, lty = c(1, 2), bty = "n", cex = 0.9)
+
+text(0.05, 4, "通用阈值始终更大\n--> 更宽的区间", col = "#EA580C", font = 2, cex = 0.9)
+```
+
+{{< pagebreak >}}
+
+# 灵敏度、特异度与准确率 {#sec-sensitivity}
+
+> **Sensitivitat, Spezifitat und Genauigkeit**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 将检验理论的术语翻译为**分类**领域的术语
+- 灵敏度（Recall）、特异度、精确率（Precision）等概念
+- 准确率（Accuracy）与 F-score 的定义
+:::
+
+在分类术语中，决策 "H_1" 称为**阳性（positiv）**，决策 "H_0" 称为**阴性（negativ）**。例如在医学检测中，"H_1" 表示检测到疾病（阳性），"H_0" 表示未检测到（阴性）。
+
+::: {.callout-tip icon="false"}
+## 医学检测的比喻 | Die medizinische Test-Metapher
+
+灵敏度回答的是："真正有病的人中，有多少被正确检出了？"（漏检率低）。特异度回答的是："真正没病的人中，有多少被正确排除了？"（误诊率低）。理想的检测两者都高，但现实中往往存在权衡。
+
+*Sensitivitat: Wie viele Kranke werden erkannt? Spezifitat: Wie viele Gesunde werden korrekt als gesund klassifiziert?*
+:::
+
+将检验结果对应到混淆矩阵：$S$ = 真阳性（TP），$U$ = 真阴性（TN），$V$ = 假阳性（FP），$T$ = 假阴性（FN）。
+
+关键量度的定义如下。
+
+**灵敏度 / 召回率 / 真阳性率**：
+
+$$
+\text{Sensitivity} = \text{Recall} = \text{TPR} = \frac{TP}{TP + FN} = \frac{S}{M_1} \tag{5.21}
+$$
+
+粗略地说就是检验的功效 $P("H_1" \mid H_1)$。
+
+**特异度 / 真阴性率**：
+
+$$
+\text{Specificity} = \text{TNR} = \frac{TN}{TN + FP} = \frac{U}{M_0} \tag{5.22}
+$$
+
+粗略地说就是 $P("H_0" \mid H_0) = 1 - \alpha$。
+
+**患病率 / 阳性比例**：
+
+$$
+\text{Prevalence} = \frac{M_1}{m} \tag{5.23}
+$$
+
+**错误发现率**：
+
+$$
+\text{FDR} = \frac{FP}{FP + TP} = \frac{V}{r} \tag{5.24}
+$$
+
+**精确率 / 阳性预测值**：
+
+$$
+\text{Precision} = \text{PPV} = \frac{TP}{FP + TP} = 1 - \text{FDR} \tag{5.25}
+$$
+
+**准确率**：
+
+$$
+\text{Accuracy} = \frac{TP + TN}{P + N} = \frac{U + S}{m} \tag{5.26}
+$$
+
+**F-score**：灵敏度与精确率的调和平均值：
+
+$$
+\text{F-score} = \frac{2 \cdot \text{Sensitivity} \cdot \text{Precision}}{\text{Sensitivity} + \text{Precision}} = \frac{2TP}{2TP + FP + FN} \tag{5.27}
+$$
+
+```{r}
+#| label: fig-confusion-metrics
+#| fig-cap: "各种分类指标之间的关系 | Zusammenhang der Klassifikationsmetriken"
+#| fig-height: 5.5
+
+# 模拟一个分类场景
+set.seed(42)
+n_class <- 1000
+prevalence <- 0.3
+sensitivity <- 0.85
+specificity <- 0.90
+
+# 生成真实标签和预测
+truth <- rbinom(n_class, 1, prevalence)
+pred <- numeric(n_class)
+pred[truth == 1] <- rbinom(sum(truth == 1), 1, sensitivity)
+pred[truth == 0] <- rbinom(sum(truth == 0), 1, 1 - specificity)
+
+TP <- sum(pred == 1 & truth == 1)
+TN <- sum(pred == 0 & truth == 0)
+FP <- sum(pred == 1 & truth == 0)
+FN <- sum(pred == 0 & truth == 1)
+
+acc <- (TP + TN) / n_class
+prec <- TP / (TP + FP)
+rec <- TP / (TP + FN)
+f1 <- 2 * prec * rec / (prec + rec)
+fdr <- FP / (FP + TP)
+
+par(bg = "#F8FAFC", mar = c(2, 2, 3, 2))
+
+# 混淆矩阵可视化
+mat <- matrix(c(TN, FP, FN, TP), nrow = 2, byrow = TRUE)
+colors_mat <- matrix(c("#D1FAE5", "#FEE2E2", "#FEE2E2", "#D1FAE5"), 
+                     nrow = 2, byrow = TRUE)
+
+plot(NULL, xlim = c(0, 4), ylim = c(0, 4), axes = FALSE, xlab = "", ylab = "",
+     main = "混淆矩阵与分类指标 | Konfusionsmatrix und Metriken",
+     cex.main = 1.1, col.main = "#1E293B")
+
+# 矩阵
+for (i in 1:2) for (j in 1:2) {
+  rect(j - 0.5, 3 - i, j + 0.5, 4 - i, col = colors_mat[i, j], border = "#94A3B8", lwd = 2)
+  text(j, 3.5 - i, mat[i, j], cex = 1.5, font = 2, col = "#1E293B")
+}
+
+# 标签
+labels_row <- c("真实 H0 (阴性)", "真实 H1 (阳性)")
+labels_col <- c("预测 'H0'", "预测 'H1'")
+text(1, 3.7, labels_col[1], cex = 0.75, font = 2, col = "#6B7280")
+text(2, 3.7, labels_col[2], cex = 0.75, font = 2, col = "#6B7280")
+text(-0.1, 2.5, labels_row[1], cex = 0.7, font = 2, col = "#6B7280", srt = 0, adj = 0)
+text(-0.1, 1.5, labels_row[2], cex = 0.7, font = 2, col = "#6B7280", srt = 0, adj = 0)
+
+text(0.5, 2.5, "TN", cex = 0.8, col = "#16A34A")
+text(1.5, 2.5, "FP", cex = 0.8, col = "#DC2626")
+text(0.5, 1.5, "FN", cex = 0.8, col = "#DC2626")
+text(1.5, 1.5, "TP", cex = 0.8, col = "#16A34A")
+
+# 指标
+metrics_text <- c(
+  sprintf("Accuracy   = %5.3f", acc),
+  sprintf("Precision  = %5.3f", prec),
+  sprintf("Recall     = %5.3f", rec),
+  sprintf("F-score    = %5.3f", f1),
+  sprintf("FDR        = %5.3f", fdr)
+)
+for (k in seq_along(metrics_text)) {
+  text(3.2, 3.2 - (k - 1) * 0.35, metrics_text[k], cex = 0.8, font = 2, col = "#1E293B", adj = 0)
+}
+```
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心概念链
+
+```{r}
+#| label: fig-summary-chain
+#| fig-cap: "本章知识逻辑链 | Logikkette der Konzepte dieses Kapitels"
+#| fig-height: 7
+#| fig-width: 12
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 12), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("第五章知识逻辑链 | Logikkette Kapitel 5")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+nx <- c(2, 6, 10, 2, 6, 10)
+ny <- c(6.5, 6.5, 6.5, 3.5, 3.5, 3.5)
+labels <- c(
+  "p 值\n量化证据\np-Wert",
+  "假设检验\nalpha 水平\nHypothesentest",
+  "经典检验\nWald/LR/Score\nKlassische Tests",
+  "功效分析\nNeyman-Pearson\nPower & NP",
+  "检验与CI\n对偶关系\nDualitat",
+  "多重检验\n通用推断\nMultiples Testen"
+)
+fills <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#FEE2E2", "#D1FAE5", "#E0E7FF")
+bords <- c("#2563EB", "#D97706", "#DB2777", "#DC2626", "#16A34A", "#6366F1")
+
+for (i in 1:6) {
+  rect(nx[i]-1.3, ny[i]-0.7, nx[i]+1.3, ny[i]+0.7,
+       col = fills[i], border = bords[i], lwd = 2)
+  text(nx[i], ny[i], labels[i], cex = 0.55, font = 2, col = "#1E293B")
+}
+
+draw_arrow <- function(x1, y1, x2, y2, label) {
+  arrows(x1, y1, x2, y2, col = "#64748B", lwd = 2, length = 0.12)
+  mx <- (x1 + x2) / 2; my <- (y1 + y2) / 2
+  text(mx, my + 0.35, label, cex = 0.5, col = "#EA580C", font = 3)
+}
+
+draw_arrow(3.3, 6.5, 4.7, 6.5, expression(p <= alpha))
+draw_arrow(7.3, 6.5, 8.7, 6.5, "似然函数")
+draw_arrow(2, 5.8, 2, 4.2, "第二类错误")
+draw_arrow(6, 5.8, 6, 4.2, "CI <-> Test")
+draw_arrow(10, 5.8, 10, 4.2, "FWER/数据分割")
+```
+
+## 公式速查表
+
+| 公式 | 名称 | 编号 |
+|:-----|:-----|:----:|
+| $p\text{-value} = P(Y > y_{obs} \mid H_0)$ | p 值定义 | 5.2 |
+| $P("H_1" \mid H_0) \leq \alpha$ | 假设检验定义 | 5.3 |
+| $p\text{-value} \leq \alpha \Leftrightarrow "H_1"$ | p 值与检验等价 | 5.4 |
+| $X^2 = \sum (y_k - e_k)^2/e_k$ | 卡方统计量 | 5.6 |
+| $D_n = \sup_y \|F_n(y) - F(y;\theta)\|$ | KS 距离 | 5.7 |
+| 功效 $= P("H_1" \mid H_1)$ | 检验功效 | 5.5 |
+| NP: $"H_1" \Leftrightarrow l(\theta_0) - l(\theta_1) \leq c$ | Neyman-Pearson 最优检验 | 5.3 |
+| $\alpha_{FWER} = 1 - (1-\alpha)^m$ | 独立时 FWER | 5.16 |
+| $\alpha_{adjust} = \alpha/m$ | Bonferroni 校正 | 5.4 |
+| $CI_{universal} = \{\theta: L^{(0)}(\hat{\theta}^{(1)})/L^{(0)}(\theta) \leq 1/\alpha\}$ | 通用置信区间 | 5.18 |
+
+## 本章的七个核心洞察
+
+| 编号 | 洞察 | 关键词 |
+|:----:|:------|:------|
+| 1 | p 值量化的是反对假设的证据，不是假设成立的概率 | 证据度量 |
+| 2 | 假设检验是在 alpha 水平下的二元决策，与 p 值等价 | 决策规则 |
+| 3 | Wald/LR/Score 三大检验从不同角度利用似然函数 | 似然三视角 |
+| 4 | 卡方检验通过比较观测与期望计数来检验分布/独立性 | 标准化偏差 |
+| 5 | Neyman-Pearson 引理证明似然比检验是最优的 | 最优性 |
+| 6 | 检验与置信区间是同一枚硬币的两面 | 对偶性 |
+| 7 | 多重检验时必须校正，否则 FWER 膨胀至接近 1 | Bonferroni/FDR |
+
+{{< pagebreak >}}
+
+# 练习题 {#sec-exercises}
+
+> **Ubungsaufgaben**
+
+## 练习 1：奶酪厂的球形奶酪
+
+Edumm 奶酪厂的畅销产品是 1000g 球形奶酪。生产中实际重量服从正态分布，已知方差 $\sigma^2 = 49 [g^2]$。厂长怀疑实际平均重量超过 1000g，这将影响生产效率。以 $\alpha = 0.05$ 进行检验。
+
+```{r}
+#| label: exercise1
+#| code-fold: false
+
+# a) 假设
+cat("a) 假设设定:\n")
+cat("   H0: mu <= 1000  (平均重量不超过 1000g)\n")
+cat("   H1: mu > 1000   (平均重量超过 1000g)\n")
+cat("   使用单侧 Gauss 检验 (sigma^2 已知)\n\n")
+
+# b) 检验决策
+mu_0_ch <- 1000; sigma_ch <- 7; y_bar_ch <- 1003; alpha_ch <- 0.05
+
+for (n_ch in c(10, 30)) {
+  z_ch <- (y_bar_ch - mu_0_ch) / (sigma_ch / sqrt(n_ch))
+  c_ch <- qnorm(1 - alpha_ch)
+  p_ch <- 1 - pnorm(z_ch)
+  decision <- ifelse(z_ch > c_ch, "拒绝 H0", "不拒绝 H0")
+  
+  cat(sprintf("b) n = %d:\n", n_ch))
+  cat(sprintf("   z 统计量 = (1003 - 1000)/(7/sqrt(%d)) = %.4f\n", n_ch, z_ch))
+  cat(sprintf("   临界值 c = z_{0.95} = %.4f\n", c_ch))
+  cat(sprintf("   p-value = %.4f\n", p_ch))
+  cat(sprintf("   拒绝域: [%.4f, +inf)\n", mu_0_ch + c_ch * sigma_ch / sqrt(n_ch)))
+  cat(sprintf("   决策: %s\n\n", decision))
+}
+
+# d) 90% 置信区间
+n_d <- 30
+z_90 <- qnorm(0.95)
+ci_l <- y_bar_ch - z_90 * sigma_ch / sqrt(n_d)
+ci_u <- y_bar_ch + z_90 * sigma_ch / sqrt(n_d)
+cat(sprintf("d) 90%% 置信区间 (n = 30): [%.4f, %.4f]\n", ci_l, ci_u))
+```
+
+```{r}
+#| label: fig-exercise1
+#| fig-cap: "练习 1：H0 下均值分布、拒绝域与 p 值区域 | Ubung 1: Verteilung unter H0"
+#| fig-height: 5
+
+n_plot <- 30
+se_plot <- 7 / sqrt(n_plot)
+x_plot <- seq(mu_0_ch - 4*se_plot, mu_0_ch + 4*se_plot, length.out = 300)
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(x_plot, dnorm(x_plot, mu_0_ch, se_plot), type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression(bar(Y)), ylab = "密度 | Dichte",
+     main = expression(paste("n = 30 时 ", bar(Y), " 在 H0 下的分布")),
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 拒绝域
+c_val <- mu_0_ch + qnorm(0.95) * se_plot
+x_rej_e1 <- seq(c_val, max(x_plot), length.out = 100)
+polygon(c(x_rej_e1, rev(x_rej_e1)),
+        c(dnorm(x_rej_e1, mu_0_ch, se_plot), rep(0, length(x_rej_e1))),
+        col = adjustcolor("#DC2626", 0.25), border = NA)
+
+# p 值区域
+x_pval_e1 <- seq(1003, max(x_plot), length.out = 100)
+polygon(c(x_pval_e1, rev(x_pval_e1)),
+        c(dnorm(x_pval_e1, mu_0_ch, se_plot), rep(0, length(x_pval_e1))),
+        col = adjustcolor("#9333EA", 0.35), border = NA)
+
+abline(v = c_val, col = "#DC2626", lwd = 2, lty = 2)
+abline(v = 1003, col = "#9333EA", lwd = 2, lty = 2)
+
+# 90% CI
+arrows(ci_l, max(dnorm(x_plot, mu_0_ch, se_plot)) * 0.1, 
+       ci_u, max(dnorm(x_plot, mu_0_ch, se_plot)) * 0.1,
+       col = "#16A34A", lwd = 3, code = 3, length = 0.1)
+text((ci_l + ci_u)/2, max(dnorm(x_plot, mu_0_ch, se_plot)) * 0.15,
+     "90% CI", col = "#16A34A", font = 2, cex = 0.9)
+
+legend("topleft",
+       legend = c(expression(paste("拒绝域 (", alpha, " = 0.05)")),
+                  "p-value 区域", "90% CI"),
+       fill = c(adjustcolor("#DC2626", 0.25), adjustcolor("#9333EA", 0.35), NA),
+       col = c(NA, NA, "#16A34A"), lwd = c(NA, NA, 3),
+       border = NA, bty = "n", cex = 0.8)
+```
+
+## 练习 2：三大检验的等价性
+
+考虑 $X_i \sim N(\mu, \sigma^2)$，i.i.d.，$\sigma = 0.5$ 已知，$n = 200$，$\hat{\mu} = 1.08$，$H_0: \mu = 1$，$H_1: \mu \neq 1$，$\alpha = 0.1$。
+
+```{r}
+#| label: exercise2
+#| code-fold: false
+
+n_e2 <- 200; sigma_e2 <- 0.5; mu_hat_e2 <- 1.08; mu_0_e2 <- 1; alpha_e2 <- 0.1
+
+cat("练习 2: 三大检验 | Ubung 2: Drei Tests\n\n")
+
+# a) 似然比检验
+cat("a) 似然比检验 | LR-Test:\n")
+cat("   l(mu) = -n/(2*sigma^2) * (mu - x_bar)^2 + const\n")
+cat("   lr = 2*(l(mu_hat) - l(mu_0)) = n/sigma^2 * (mu_hat - mu_0)^2\n")
+lr_e2 <- n_e2 / sigma_e2^2 * (mu_hat_e2 - mu_0_e2)^2
+cat("   lr =", round(lr_e2, 4), "\n")
+cat("   临界值 chi^2_{1, 0.9} =", round(qchisq(0.9, 1), 4), "\n")
+cat("   决策:", ifelse(lr_e2 > qchisq(0.9, 1), "拒绝 H0", "不拒绝 H0"), "\n\n")
+
+# b) 得分检验
+cat("b) 得分检验 | Score-Test:\n")
+cat("   s(mu) = sum(x_i - mu)/sigma^2 = n*(x_bar - mu)/sigma^2\n")
+score_e2 <- n_e2 * (mu_hat_e2 - mu_0_e2) / sigma_e2^2
+I_e2 <- n_e2 / sigma_e2^2
+score_stat_e2 <- score_e2^2 / I_e2
+cat("   s(mu_0) =", round(score_e2, 4), "\n")
+cat("   score 统计量 = s^2/I =", round(score_stat_e2, 4), "\n")
+cat("   决策:", ifelse(score_stat_e2 > qchisq(0.9, 1), "拒绝 H0", "不拒绝 H0"), "\n\n")
+
+# c) Wald 检验
+cat("c) Wald 检验 | Wald-Test:\n")
+wald_e2 <- (mu_hat_e2 - mu_0_e2)^2 * I_e2
+cat("   Wald 统计量 = (mu_hat - mu_0)^2 * I =", round(wald_e2, 4), "\n")
+cat("   决策:", ifelse(wald_e2 > qchisq(0.9, 1), "拒绝 H0", "不拒绝 H0"), "\n\n")
+
+# d) 等价性
+cat("d) 等价性证明:\n")
+cat("   对于 N(mu, sigma^2) 已知方差:\n")
+cat("   Wald  = n/sigma^2 * (mu_hat - mu_0)^2 =", round(wald_e2, 4), "\n")
+cat("   LR    = n/sigma^2 * (mu_hat - mu_0)^2 =", round(lr_e2, 4), "\n")
+cat("   Score = n/sigma^2 * (mu_hat - mu_0)^2 =", round(score_stat_e2, 4), "\n")
+cat("   三者完全相同!\n")
+cat("   (提示: chi^2_{1, 1-alpha} = z^2_{1-alpha/2})\n")
+```
+
+## 练习 3：FEV 数据分析
+
+```{r}
+#| label: exercise3
+#| code-fold: false
+
+# 加载 FEV 数据
+# 模拟 FEV 数据（实际使用时替换为真实数据）
+set.seed(2024)
+n_fev <- 654
+fev_data <- data.frame(
+  fev = rgamma(n_fev, shape = 5, rate = 2) + rnorm(n_fev, 0, 0.3),
+  smoke = sample(c(0, 1), n_fev, replace = TRUE, prob = c(0.7, 0.3)),
+  age = sample(6:22, n_fev, replace = TRUE)
+)
+
+# a) Shapiro-Wilk 正态性检验
+cat("a) Shapiro-Wilk 正态性检验 | Shapiro-Wilk-Test:\n")
+sw_test <- shapiro.test(fev_data$fev[1:min(5000, nrow(fev_data))])
+cat("   W 统计量:", round(sw_test$statistic, 4), "\n")
+cat("   p-value:", format(sw_test$p.value, scientific = TRUE), "\n")
+cat("   解读: p 值极小, 强烈反对正态分布假设。\n\n")
+
+# b) 讨论
+cat("b) 反对正态性检验的理由:\n")
+cat("   - 大样本下几乎任何偏离正态的分布都会被拒绝\n")
+cat("   - 正态性检验与后续检验构成多重检验问题\n")
+cat("   - 许多统计方法对非正态性具有稳健性(中心极限定理)\n\n")
+
+# d) 吸烟状态对 FEV 的卡方检验
+cat("d) 吸烟状态与 FEV 的卡方独立性检验:\n")
+fev_data$fev_cat <- cut(fev_data$fev, breaks = quantile(fev_data$fev, c(0, 0.25, 0.5, 0.75, 1)),
+                        include.lowest = TRUE, labels = c("低", "中低", "中高", "高"))
+ct <- table(fev_data$smoke, fev_data$fev_cat)
+chi_fev <- chisq.test(ct)
+cat("   X^2 =", round(chi_fev$statistic, 4), "\n")
+cat("   df =", chi_fev$parameter, "\n")
+cat("   p-value =", round(chi_fev$p.value, 4), "\n")
+```
+
+## 练习 4：WDI 数据 CO2 排放的多重检验
+
+```{r}
+#| label: exercise4
+#| code-fold: false
+
+# 模拟 WDI 类似数据
+set.seed(42)
+continents <- c("Africa", "Americas", "Asia", "Europe", "Oceania")
+n_per_cont <- 30
+
+wdi_sim <- data.frame(
+  continent = rep(continents, each = n_per_cont),
+  co2 = c(rnorm(n_per_cont, 1, 0.5),
+          rnorm(n_per_cont, 3, 1),
+          rnorm(n_per_cont, 4, 2),
+          rnorm(n_per_cont, 6, 1.5),
+          rnorm(n_per_cont, 5, 1))
+)
+
+cat("a) 为什么多重检验需要校正?\n")
+cat("   如果不校正, 随着检验数量增加, FWER 趋向 1。\n")
+cat("   5 个大洲的两两比较 = C(5,2) = 10 个检验。\n")
+cat("   未校正 FWER = 1 - (1-0.05)^10 =", round(1 - 0.95^10, 4), "\n\n")
+
+cat("b) Bonferroni 校正后的置信区间:\n")
+cat("   单个水平 alpha/m = 0.05/10 = 0.005\n")
+cat("   对应的置信水平: 1 - 0.005 = 0.995 (即 99.5% CI)\n\n")
+
+# c) 两两比较
+cat("c) 两两 t 检验比较:\n\n")
+
+# 未校正
+pt_none <- pairwise.t.test(wdi_sim$co2, wdi_sim$continent, p.adjust.method = "none")
+cat("--- 未校正 p 值 ---\n")
+print(round(pt_none$p.value, 4))
+
+# Bonferroni
+pt_bonf <- pairwise.t.test(wdi_sim$co2, wdi_sim$continent, p.adjust.method = "bonferroni")
+cat("\n--- Bonferroni 校正 ---\n")
+print(round(pt_bonf$p.value, 4))
+
+# Holm
+pt_holm <- pairwise.t.test(wdi_sim$co2, wdi_sim$continent, p.adjust.method = "holm")
+cat("\n--- Holm 校正 ---\n")
+print(round(pt_holm$p.value, 4))
+
+# BH (FDR)
+pt_bh <- pairwise.t.test(wdi_sim$co2, wdi_sim$continent, p.adjust.method = "BH")
+cat("\n--- BH (FDR) 校正 ---\n")
+print(round(pt_bh$p.value, 4))
+```
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## p 值与显著性检验
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| der p-Wert | p 值 | p-value |
+| der Signifikanztest | 显著性检验 | significance test |
+| die Nullhypothese | 零假设 | null hypothesis |
+| die Alternativhypothese | 备择假设 | alternative hypothesis |
+| das Signifikanzniveau | 显著性水平 | significance level |
+| die Teststatistik | 检验统计量 | test statistic |
+| der kritische Wert | 临界值 | critical value |
+| der Ablehnbereich | 拒绝域 | rejection region |
+| die Evidenz gegen die Hypothese | 反对假设的证据 | evidence against the hypothesis |
+
+## 错误类型与功效
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| der Fehler erster Art (Alpha-Fehler) | 第一类错误 | Type I error |
+| der Fehler zweiter Art (Beta-Fehler) | 第二类错误 | Type II error |
+| die Entscheidungsmatrix | 决策矩阵 | decision matrix |
+| die Macht (Power) | 功效/检验力 | power |
+| die Gutefunktion | 功效函数 | power function |
+| die Fallzahlplanung | 样本量规划 | sample size planning |
+| die Effektgrosse | 效应量 | effect size |
+
+## 经典检验方法
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| der Wald-Test | Wald 检验 | Wald test |
+| der Likelihood-Ratio-Test | 似然比检验 | likelihood ratio test |
+| der Score-Test | 得分检验 | score test |
+| der Chi-Quadrat-Test | 卡方检验 | chi-squared test |
+| der Anpassungstest | 拟合优度检验 | goodness-of-fit test |
+| der Unabhangigkeitstest | 独立性检验 | independence test |
+| die Kontingenztabelle | 列联表 | contingency table |
+| die erwarteten Haufigkeiten | 期望频数 | expected frequencies |
+| der Freiheitsgrad | 自由度 | degree of freedom |
+
+## 无分布检验
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| der verteilungsfreie Test | 无分布检验 | distribution-free test |
+| der nichtparametrische Test | 非参数检验 | nonparametric test |
+| der Wilcoxon-Test | Wilcoxon 检验 | Wilcoxon test |
+| der Rang | 秩 | rank |
+| die Rangsumme | 秩和 | rank sum |
+| der Kolmogorov-Smirnov-Test | KS 检验 | Kolmogorov-Smirnov test |
+| die empirische Verteilungsfunktion | 经验分布函数 | empirical distribution function |
+| die KS-Distanz | KS 距离 | KS distance |
+| die Pivotverteilung | 枢轴分布 | pivotal distribution |
+
+## Neyman-Pearson 与最优检验
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| das Neyman-Pearson-Lemma | Neyman-Pearson 引理 | Neyman-Pearson lemma |
+| der machtigste Test | 最优检验 | most powerful test |
+| der Likelihood-Quotient | 似然商 | likelihood ratio |
+
+## 多重检验与通用推断
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| das multiple Testen | 多重检验 | multiple testing |
+| die familienweise Fehlerrate (FWER) | 家族错误率 | family-wise error rate |
+| die Bonferroni-Korrektur | Bonferroni 校正 | Bonferroni correction |
+| die False Discovery Rate (FDR) | 错误发现率 | false discovery rate |
+| die Datenaufteilung | 数据分割 | data splitting |
+| die universelle Inferenz | 通用推断 | universal inference |
+| das universelle Konfidenzintervall | 通用置信区间 | universal confidence interval |
+| die Markov-Ungleichung | Markov 不等式 | Markov inequality |
+
+## 分类指标
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Sensitivitat | 灵敏度 | sensitivity |
+| die Spezifitat | 特异度 | specificity |
+| die Genauigkeit (Accuracy) | 准确率 | accuracy |
+| die Prazision | 精确率 | precision |
+| der Recall | 召回率 | recall |
+| der F-Score | F 分数 | F-score |
+| die Pravalenz | 患病率/阳性率 | prevalence |
+| richtig positiv (TP) | 真阳性 | true positive |
+| richtig negativ (TN) | 真阴性 | true negative |
+| falsch positiv (FP) | 假阳性 | false positive |
+| falsch negativ (FN) | 假阴性 | false negative |
+| die Konfusionsmatrix | 混淆矩阵 | confusion matrix |
+:::

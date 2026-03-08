@@ -1,0 +1,1840 @@
+---
+title: "第十一章：多元数据分析"
+subtitle: "从列联表到图模型与多元正态分布 | Von Kontingenztafeln zu Graphischen Modellen und der multivariaten Normalverteilung"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  teal     = "#0D9488",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+在前面的章节中，我们讨论的模型大多涉及单个响应变量 $Y$，或者 $Y$ 依赖于某些输入变量 $x$ 的条件分布。现在，我们将目光转向一个全新的场景：观测到的变量 $Y = (Y_1, \ldots, Y_p)$ 具有**多个分量**，这些分量之间彼此**相互影响**。与回归分析不同，这里不存在因果次序 -- 我们不预设哪个变量是"因"、哪个是"果"，而是认为所有变量处于**平等地位**（auf gleicher Augenhöhe）。我们的目标是量化这些变量之间的**关联**（Assoziationen），特别是超越简单的两两相关性，探索更高维的依赖结构。
+
+*In diesem Kapitel betrachten wir multivariate Daten $Y = (Y_1, \ldots, Y_p)$, deren Komponenten sich gegenseitig beeinflussen. Es gibt keine kausale Ordnung -- alle Variablen stehen auf gleicher Augenhöhe. Unser Ziel ist die Quantifizierung von Assoziationen.*
+
+具体来说，我们将从离散数据出发，逐步构建完整的多元分析框架：
+
+1. **列联表的对数线性模型** -- 离散多元数据、单元格计数、交互项
+2. **图模型** -- 条件独立性、无向图、有向无环图 (DAG)
+3. **多元正态分布** -- 浓度矩阵、条件独立的矩阵判据
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图 | Lernroadmap dieses Kapitels"
+#| fig-height: 4.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+steps_x <- c(2.5, 8.0, 13.5)
+steps_y <- rep(4.2, 3)
+arrows(steps_x[-3] + 1.5, steps_y[-3], steps_x[-1] - 1.5, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("列联表模型\n对数线性 / 交互项", 
+               "图模型\n条件独立性 / DAG",
+               "多元正态分布\n浓度矩阵 / 图结构")
+labels_de <- c("Kontingenztafeln\nLog-lineare Modelle", 
+               "Graphische Modelle\nBedingte Unabh.",
+               "Multivariate\nNormalverteilung")
+colors <- c("#DBEAFE", "#FEF3C7", "#E0E7FF")
+borders <- c("#2563EB", "#D97706", "#6366F1")
+
+for (i in 1:3) {
+  rect(steps_x[i] - 1.5, steps_y[i] - 1.0, steps_x[i] + 1.5, steps_y[i] + 1.0,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.3, labels_cn[i], cex = 0.6, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.6, labels_de[i], cex = 0.45, col = "#64748B", font = 3)
+  text(steps_x[i] - 1.2, steps_y[i] + 0.85, paste0("\u00a711.", i), 
+       cex = 0.5, col = borders[i], font = 2)
+}
+
+arrows(0.5, 1.2, 15.5, 1.2, col = "#DC2626", lwd = 2, length = 0.15)
+text(8, 1.6, "从离散列联表到连续多元正态，层层递进  >>>", cex = 0.85, col = "#DC2626")
+```
+
+**最终目标**：理解下面这条链路中每一个概念的含义 --
+
+$$
+\text{列联表} \;\xrightarrow{\text{对数线性模型}}\; \text{交互项层级} \;\xrightarrow{\text{条件独立性}}\; \text{图模型} \;\xrightarrow{\text{连续变量}}\; \text{多元正态与浓度矩阵}
+$$
+
+现在看不懂？**完全没关系** -- 读完本章，这条链将变得水到渠成。
+
+{{< pagebreak >}}
+
+# 列联表模型 {#sec-contingency}
+
+> **Modelle für Kontingenztafeln**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 多元**离散**数据的表示方法：列联表与单元格计数
+- **对数线性模型**（Log-lineares Modell）的定义与结构
+- 从 Poisson 模型到**多项式模型**的联系
+- 高维列联表中的**交互项**与**模型层级**
+- **条件独立性**与交互项为零之间的对应关系
+:::
+
+## 从一维到多维：列联表的世界
+
+> **Von einer Dimension zu vielen: Die Welt der Kontingenztafeln**
+
+::: {.callout-tip icon="false"}
+## 多维格子间的比喻 | Die Metapher des mehrdimensionalen Regalschranks
+
+想象一个巨大的仓库货架系统。一维情形就是一排货架，每个格子对应一个类别。二维情形就像一面墙上的方格架，行代表一个变量、列代表另一个变量，每个格子存放满足两个条件的物品数量。三维情形就像一个立体的储物柜，有行、列、层三个维度。推广到 $p$ 维，就是一个 $p$ 维的"超级储物柜" -- 虽然人类无法直接可视化，但数学上完全可以精确描述。每个格子里存放的物品数量就是**单元格计数**（Zellhäufigkeit）。
+
+*Stellen Sie sich ein mehrdimensionales Regalschrank vor: In jeder Zelle zählen wir, wie viele Beobachtungen gleichzeitig alle entsprechenden Kategorien erfüllen.*
+:::
+
+设 $Y = (Y_1, \ldots, Y_p)$ 为 $p$ 维随机向量，每个分量取离散值 $Y_j \in \{1, \ldots, K_j\}$，$j = 1, \ldots, p$。则 $Y$ 的取值空间可以看作一个 $p$ 维的长方体，其各边长为 $K_1, K_2, \ldots, K_p$。
+
+```{r}
+#| label: fig-3d-contingency
+#| fig-cap: "三维列联表的三维可视化（仿教材 Fig. 11.1）| Dreidimensionale Kontingenztafel als 3D-Objekt"
+#| fig-height: 6
+
+# 使用 R base graphics 绘制 3D 方格
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("三维列联表: 4 x 2 x 3 | 3D-Kontingenztafel")), 
+      cex.main = 1.2, col.main = "#1E293B")
+
+# 参数
+dx <- 1.5; dy <- 1.8; dz_x <- 0.6; dz_y <- 0.7
+K1 <- 4; K2 <- 2; K3 <- 3
+ox <- 1.5; oy <- 1.5
+
+# 绘制方格 - 前面
+for (i1 in 0:(K1-1)) {
+  for (i3 in 0:(K3-1)) {
+    x0 <- ox + i1 * dx
+    y0 <- oy + i3 * dy
+    rect(x0, y0, x0 + dx, y0 + dy, 
+         col = adjustcolor("#DBEAFE", 0.5), border = "#2563EB", lwd = 0.8)
+  }
+}
+
+# 绘制顶面
+for (i1 in 0:(K1-1)) {
+  for (i2 in 0:(K2-1)) {
+    x0 <- ox + i1 * dx + i2 * dz_x
+    y0 <- oy + K3 * dy + i2 * dz_y
+    polygon(c(x0, x0 + dx, x0 + dx + dz_x, x0 + dz_x),
+            c(y0, y0, y0 + dz_y, y0 + dz_y),
+            col = adjustcolor("#FEF3C7", 0.6), border = "#D97706", lwd = 0.8)
+  }
+}
+
+# 绘制右面
+for (i2 in 0:(K2-1)) {
+  for (i3 in 0:(K3-1)) {
+    x0 <- ox + K1 * dx + i2 * dz_x
+    y0 <- oy + i3 * dy + i2 * dz_y
+    polygon(c(x0, x0 + dz_x, x0 + dz_x, x0),
+            c(y0, y0 + dz_y, y0 + dz_y + dy, y0 + dy),
+            col = adjustcolor("#E0E7FF", 0.6), border = "#6366F1", lwd = 0.8)
+  }
+}
+
+# 轴标签
+text(ox + K1 * dx / 2, oy - 0.5, expression(Y[1] ~ ": " * K[1] == 4 ~ " 类别"),
+     col = "#2563EB", font = 2, cex = 0.9)
+text(ox + K1 * dx + K2 * dz_x + 0.8, oy + K3 * dy / 2 + K2 * dz_y / 2, 
+     expression(Y[2] ~ ": " * K[2] == 2), col = "#6366F1", font = 2, cex = 0.9, srt = 60)
+text(ox - 0.7, oy + K3 * dy / 2, 
+     expression(Y[3] ~ ": " * K[3] == 3), col = "#D97706", font = 2, cex = 0.9, srt = 90)
+
+# 标注总单元格数
+text(ox + K1 * dx / 2 + dz_x, oy + K3 * dy + K2 * dz_y + 0.6, 
+     expression("总共 " * 4 %*% 2 %*% 3 == 24 ~ " 个单元格"),
+     col = "#DC2626", font = 2, cex = 1.0)
+```
+
+## 符号约定
+
+> **Notationskonvention**
+
+对于多元多观测数据，我们需要同时标注分量索引和观测索引。为避免双下标的混乱，本章采用以下记法：用**括号上标**表示观测编号。即 $Y^{(i)} = (Y_1^{(i)}, \ldots, Y_p^{(i)})$ 表示第 $i$ 个观测的 $p$ 维随机向量，$i = 1, \ldots, n$。数据记为 $Y^{(1)}, \ldots, Y^{(n)}$ 个独立多元观测。
+
+单元格计数定义为：
+
+$$
+n_{k_1 k_2 \cdots k_p} = \sum_{i=1}^{n} \mathbf{1}\{y^{(i)} = (k_1, k_2, \ldots, k_p)\}
+$$
+
+**点记法**（Punkt-Notation）用于表示边际计数。将某个下标替换为点号，表示对该索引求和：
+
+$$
+n_{k_1 \cdot} = \sum_{i=1}^{n} \mathbf{1}\{y_1^{(i)} = k_1\}, \qquad n_{\cdot\cdots\cdot} = \sum_{i=1}^{n} 1 = n
+$$
+
+## 例 11.1：慕尼黑租房数据
+
+> **Beispiel 11.1: Münchner Mietspiegeldaten**
+
+::: {.callout-note icon="false"}
+## 数据背景 | Datenhintergrund
+
+数据来自慕尼黑市 $n = 3185$ 户租房家庭的调查，包含以下分类变量：$Y_1$（面积，三类：$< 50 \text{m}^2$、$50 \sim 100 \text{m}^2$、$> 100 \text{m}^2$）、$Y_2$（是否市中心，二类）、$Y_3$（是否新合同，二类）、$Y_4$（所在城区，25 类）。这构成一个 $3 \times 2 \times 2 \times 25$ 的列联表，共 300 个单元格。直接查看如此庞大的列联表毫无意义，因此我们通常只关注**边际表**（Randtafel）。
+:::
+
+```{r}
+#| label: tbl-munich-rent
+#| code-fold: false
+
+# 表 11.1：面积 x 是否市中心
+cat("表 11.1: 慕尼黑租房调查 -- 面积 vs 市中心 | Tabelle 11.1: Wohnfläche vs. Zentrum\n\n")
+tab_11_1 <- matrix(c(228, 227, 1455, 803, 207, 205), 
+                   nrow = 3, byrow = TRUE,
+                   dimnames = list(
+                     "面积 | Wohnfläche" = c("< 50 m²", "50-100 m²", "> 100 m²"),
+                     "市中心 | Zentrum" = c("否 | nein", "是 | ja")
+                   ))
+print(tab_11_1)
+cat("\n")
+
+# 表 11.2：新合同 x 城区（前6个）
+cat("表 11.2: 慕尼黑租房调查 -- 新合同 vs 城区（前6个）\n")
+cat("Tabelle 11.2: Neuer Vertrag vs. Bezirk (erste 6)\n\n")
+districts <- c("Allach", "Altstadt", "Au-Haidh.", "Aubing", "Berg a.L.", "Bogenh.")
+tab_11_2 <- matrix(c(38, 131, 18, 50, 111, 17,
+                      12, 20, 75, 36, 33, 73),
+                   nrow = 2, byrow = TRUE,
+                   dimnames = list(
+                     "新合同 | Neuer Vertrag" = c("否 | nein", "是 | ja"),
+                     "城区 | Bezirk" = districts
+                   ))
+print(tab_11_2)
+```
+
+从上表可以看到，制表高维离散变量非常笨拙，当维度超过 2 或 3 时几乎无法提供任何直观洞察。
+
+## 对数线性模型
+
+> **Log-lineares Modell**
+
+::: {.callout-tip icon="false"}
+## 乐高积木的比喻 | Die LEGO-Metapher
+
+对数线性模型就像用乐高积木搭建一座建筑。每个变量的"主效应"是基础积木块，而"交互项"是连接不同积木块的特殊连接件。一阶主效应只涉及单个变量，就像独立的柱子；二阶交互项连接两个变量，像横梁连接两根柱子；三阶交互项则让三个变量同时纠缠在一起，像三根柱子交汇处的角钢。完整的"饱和模型"使用了所有可能的连接件，而简约模型则去掉那些不必要的连接件，保留建筑的核心结构。
+
+*Das log-lineare Modell baut wie LEGO: Haupteffekte sind Grundbausteine, Interaktionsterme sind Verbindungsstücke. Das saturierte Modell nutzt alle, das sparsamere Modell nur die nötigen.*
+:::
+
+**定义 11.1**（对数线性模型）设 $Y = (Y_1, \ldots, Y_p)$ 为离散值随机变量。若 $Y$ 的分布满足
+
+$$
+P(Y = y; \theta) \propto \exp\left(\theta_0 + \sum_j s_j(y)\theta_j\right) \tag{11.1}
+$$
+
+其中 $s_j(\cdot)$ 是从 $y = (y_1, \ldots, y_p)$ 计算出的若干线性独立统计量，$\theta = (\theta_0, \theta_1, \ldots)$ 为参数向量，则称该分布遵循**对数线性模型**。
+
+## 二维列联表的具体形式
+
+> **Konkretes Beispiel: Die zweidimensionale Tafel**
+
+对于 $p = 2$ 的情形，我们定义统计量：
+
+$$
+s_{i_1 \cdot}(y) = \mathbf{1}\{y_1 = i_1\}, \quad 1 \le i_1 < K_1
+$$
+
+$$
+s_{\cdot i_2}(y) = \mathbf{1}\{y_2 = i_2\}, \quad 1 \le i_2 < K_2
+$$
+
+$$
+s_{i_1 i_2}(y) = \mathbf{1}\{y_1 = i_1, y_2 = i_2\}, \quad 1 \le i_1 < K_1, \; 1 \le i_2 < K_2
+$$
+
+注意索引没有遍历所有可能的取值：$i_1 < K_1$，$i_2 < K_2$。这是为了保证统计量的线性独立性，从而使模型可识别。因为最后一个类别的指示函数可以由前面的导出：
+
+$$
+\mathbf{1}\{y_1 = K_1\} = 1 - \sum_{i_1=1}^{K_1-1} s_{i_1 \cdot}(y)
+$$
+
+对于独立观测 $Y^{(1)}, \ldots, Y^{(n)}$，联合概率为：
+
+$$
+P(Y^{(1)} = y^{(1)}, \ldots, Y^{(n)} = y^{(n)}) \propto \exp\left\{ n \theta_0 + \sum_{i_1=1}^{K_1-1} n_{i_1 \cdot} \theta_{i_1 \cdot} + \sum_{i_2=1}^{K_2-1} n_{\cdot i_2} \theta_{\cdot i_2} + \sum_{i_1=1}^{K_1-1}\sum_{i_2=1}^{K_2-1} n_{i_1 i_2} \theta_{i_1 i_2} \right\}
+$$
+
+其中 $n_{i_1 \cdot} = \sum_{i=1}^{n} \mathbf{1}\{y_1^{(i)} = i_1\}$ 是变量 $Y_1$ 取值为 $i_1$ 的观测数，$n_{i_1 i_2}$ 是二维表的单元格计数。注意 $n_{i_1 \cdot} = \sum_{i_2=1}^{K_2} n_{i_1 i_2}$，这就是点记法"对被替换的索引求和"的含义。
+
+将上式简化为 $K_1 = K_2 = 2$（二乘二表），仅有一个交互参数 $\theta_{11}$：
+
+$$
+P(Y^{(1)} = y^{(1)}, \ldots, Y^{(n)} = y^{(n)}) \propto \exp\{\theta_0 + n_{1\cdot}\theta_{1\cdot} + n_{\cdot 1}\theta_{\cdot 1} + n_{11}\theta_{11}\}
+$$
+
+若令所有涉及双索引的参数为零（即 $\theta_{11} = 0$），联合分布可分解为仅依赖 $Y_1$ 的部分和仅依赖 $Y_2$ 的部分。此时 $Y_1$ 与 $Y_2$ 独立。
+
+```{r}
+#| label: fig-2x2-independence
+#| fig-cap: "二乘二列联表中的独立性概念：有交互 vs 无交互 | 2x2-Tafel: Abhängigkeit vs. Unabhängigkeit"
+#| fig-height: 5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4, 3.5, 1))
+
+# 有交互的情况
+set.seed(42)
+# 依赖数据
+n_sim <- 1000
+p1 <- 0.4; p2 <- 0.6
+y1_dep <- rbinom(n_sim, 1, p1) + 1
+y2_dep <- ifelse(y1_dep == 1, rbinom(n_sim, 1, 0.3), rbinom(n_sim, 1, 0.8)) + 1
+tab_dep <- table(Y1 = y1_dep, Y2 = y2_dep)
+mosaicplot(tab_dep, main = expression(paste(theta[11] != 0, ": 有交互(依赖)")),
+           col = c(adjustcolor("#2563EB", 0.5), adjustcolor("#DC2626", 0.5)),
+           cex.axis = 1.0, border = "#334155")
+mtext("Interaktion vorhanden", side = 3, line = 0, cex = 0.7, col = "#64748B", font = 3)
+
+# 无交互（独立）
+y1_ind <- rbinom(n_sim, 1, p1) + 1
+y2_ind <- rbinom(n_sim, 1, p2) + 1
+tab_ind <- table(Y1 = y1_ind, Y2 = y2_ind)
+mosaicplot(tab_ind, main = expression(paste(theta[11] == 0, ": 无交互(独立)")),
+           col = c(adjustcolor("#16A34A", 0.5), adjustcolor("#EA580C", 0.5)),
+           cex.axis = 1.0, border = "#334155")
+mtext("Keine Interaktion", side = 3, line = 0, cex = 0.7, col = "#64748B", font = 3)
+
+par(mfrow = c(1, 1))
+```
+
+## Poisson 模型与多项式模型
+
+> **Poisson-Modell und Multinomialmodell**
+
+对数线性模型本身没有定义一个标准化的概率分布，因为缺少归一化常数。我们可以通过假设单元格计数服从 **Poisson 分布**来补全：
+
+$$
+N_{i_1 i_2} \sim \text{Poisson}(\lambda_{i_1 i_2})
+$$
+
+其中
+
+$$
+\lambda_{i_1 i_2} = \exp\{\theta_0 + \theta_{i_1 \cdot} + \theta_{\cdot i_2} + \theta_{i_1 i_2}\}
+$$
+
+并附带边界约束 $\theta_{K_1 \cdot} = 0$，$\theta_{\cdot K_2} = 0$，$\theta_{i_1 K_2} = \theta_{K_1 i_2} = 0$。
+
+对于观测到的单元格计数 $n_{i_1 i_2}$，似然函数为：
+
+$$
+P(N_{i_1 i_2} = n_{i_1 i_2}) = \prod_{i_1=1}^{K_1}\prod_{i_2=1}^{K_2} \frac{\lambda_{i_1 i_2}^{n_{i_1 i_2}}}{n_{i_1 i_2}!} \exp\{-\lambda_{i_1 i_2}\}
+$$
+
+$$
+\propto \exp\left\{ n_{\cdot\cdot} \theta_0 + \sum_{i_1} n_{i_1 \cdot}\theta_{i_1 \cdot} + \sum_{i_2} n_{\cdot i_2}\theta_{\cdot i_2} + \sum_{i_1}\sum_{i_2} n_{i_1 i_2}\theta_{i_1 i_2} - \sum_{i_1}\sum_{i_2}\lambda_{i_1 i_2}\right\}
+$$
+
+在 Poisson 模型中，总样本量 $n_{\cdot\cdot}$ 本身是一个随机变量，这未必合理。如果我们**条件**在 $n_{\cdot\cdot} = n$ 上（即固定总观测数），可以证明（参见 Lang, 1996）结果为一个**多项式模型**：
+
+$$
+P(N_{i_1 i_2} = n_{i_1 i_2} \mid n_{\cdot\cdot} = n) = \binom{n_{\cdot\cdot}}{n_{11} \cdots n_{K_1 K_2}} \prod_{i_1=1}^{K_1}\prod_{i_2=1}^{K_2} \pi_{i_1 i_2}^{n_{i_1 i_2}}
+$$
+
+其中 $\pi_{i_1 i_2} = \lambda_{i_1 i_2} / \sum_{i_1}\sum_{i_2}\lambda_{i_1 i_2}$。因此，关于总样本量的信息对对数线性结构没有贡献。
+
+## 高维列联表与模型层级
+
+> **Höherdimensionale Tafeln und Modellhierarchie**
+
+对于 $p > 2$ 的情形，可能的参数集在维度 $p$ 和类别数方面都急剧增长。一般的 $K_1 \times K_2 \times \cdots \times K_p$ 维列联表的对数线性模型包含：仅涉及单个变量的主效应项、所有二元配对的交互项、所有三元组的交互项，一直到涉及所有 $p$ 个变量的最高阶交互项。
+
+以 $p = 3$、$K_1 = K_2 = K_3 = 2$ 为例，这是一个 $2 \times 2 \times 2$ 的表格，共 8 个单元格。**饱和模型**（saturiertes Modell）有 8 个参数：$\theta_0$，$\theta_{1\cdot\cdot}$，$\theta_{\cdot 1\cdot}$，$\theta_{\cdot\cdot 1}$，$\theta_{11\cdot}$，$\theta_{1\cdot 1}$，$\theta_{\cdot 11}$，$\theta_{111}$。如果条件在样本量上，$\theta_0$ 由该条件决定。
+
+我们用简写记法表示模型。包含所有交互项的完整模型记为 $1*2*3$。如果令三阶交互项 $\theta_{111} = 0$，则最高阶交互项是二元配对之间的，记为 $1*2 + 1*3 + 2*3$。如果进一步令 $\theta_{11\cdot} = 0$（去掉 $Y_1$ 和 $Y_2$ 之间的二元交互），则记为 $1*3 + 2*3$。
+
+```{r}
+#| label: fig-model-hierarchy
+#| fig-cap: "三变量对数线性模型层级图（仿教材 p.213）| Modellhierarchie für drei Variablen"
+#| fig-height: 7
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 16), ylim = c(0, 12), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("三变量对数线性模型层级 | Modellhierarchie für p = 3")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+# 节点坐标
+nodes <- data.frame(
+  x = c(8,          # 1*2*3
+        8,          # 1*2+1*3+2*3
+        3, 8, 13,   # 1*2+1*3, 1*2+2*3, 1*3+2*3
+        3, 8, 13,   # 1*2+3, 1+2*3, 1*3+2
+        8),          # 1+2+3
+  y = c(11,
+        9.2,
+        7.2, 7.2, 7.2,
+        5.2, 5.2, 5.2,
+        3.2),
+  label = c("1*2*3",
+            "1*2 + 1*3 + 2*3",
+            "1*2 + 1*3", "1*2 + 2*3", "1*3 + 2*3",
+            "1*2 + 3", "1 + 2*3", "1*3 + 2",
+            "1 + 2 + 3")
+)
+
+# 颜色
+node_cols <- c("#DC2626", "#EA580C", 
+               rep("#D97706", 3), 
+               rep("#16A34A", 3), 
+               "#2563EB")
+node_fills <- c("#FEE2E2", "#FEF3C7",
+                rep("#FEF9C3", 3),
+                rep("#D1FAE5", 3),
+                "#DBEAFE")
+
+# 边
+edges <- matrix(c(
+  1,2,
+  2,3, 2,4, 2,5,
+  3,6, 3,7,
+  4,6, 4,7,
+  5,7, 5,8,
+  6,9, 7,9, 8,9
+), ncol = 2, byrow = TRUE)
+
+# 绘制边
+for (e in 1:nrow(edges)) {
+  i <- edges[e, 1]; j <- edges[e, 2]
+  segments(nodes$x[i], nodes$y[i] - 0.3, nodes$x[j], nodes$y[j] + 0.3,
+           col = "#94A3B8", lwd = 1.5)
+}
+
+# 绘制节点
+for (i in 1:nrow(nodes)) {
+  w <- nchar(nodes$label[i]) * 0.18 + 0.5
+  rect(nodes$x[i] - w, nodes$y[i] - 0.35, nodes$x[i] + w, nodes$y[i] + 0.35,
+       col = node_fills[i], border = node_cols[i], lwd = 2)
+  text(nodes$x[i], nodes$y[i], nodes$label[i], 
+       cex = 0.65, font = 2, col = node_cols[i])
+}
+
+# 标注层级含义
+text(15.5, 11, "饱和模型\nsaturiert", cex = 0.55, col = "#DC2626", font = 3)
+text(15.5, 7.2, "去掉部分\n二阶交互", cex = 0.55, col = "#D97706", font = 3)
+text(15.5, 5.2, "仅保留一个\n二阶交互", cex = 0.55, col = "#16A34A", font = 3)
+text(15.5, 3.2, "完全独立\nvöllige Unabh.", cex = 0.55, col = "#2563EB", font = 3)
+```
+
+统计挑战在于：给定列联表中的数据，**选择一个合适的模型**。形式上，可以通过检验参数是否等于零，或者使用模型选择准则（如第 7 章讨论的 AIC）来完成。
+
+## 条件独立性与对数线性模型
+
+> **Bedingte Unabhängigkeit und log-lineare Modelle**
+
+我们说 $Y_1$ 和 $Y_2$ 在给定 $Y_3$ 下是**条件独立**的（bedingt unabhängig），记为 $Y_1 \perp\!\!\!\perp Y_2 \mid Y_3$，当且仅当：
+
+$$
+P(Y_1 = i_1, Y_2 = i_2 \mid Y_3 = i_3) = P(Y_1 = i_1 \mid Y_3 = i_3) \cdot P(Y_2 = i_2 \mid Y_3 = i_3)
+$$
+
+对所有 $1 \le i_1 \le K_1$，$1 \le i_2 \le K_2$，$1 \le i_3 \le K_3$ 成立。
+
+利用贝叶斯法则可以证明，条件独立意味着联合分布可以分解为两个函数的乘积：
+
+$$
+P(Y_1 = i_1, Y_2 = i_2, Y_3 = i_3) \propto h_{13}(i_1, i_3) \cdot h_{23}(i_2, i_3)
+$$
+
+在对数线性模型中，这等价于：
+
+$$
+Y_1 \perp\!\!\!\perp Y_2 \mid Y_3 \quad \Longleftrightarrow \quad \theta_{i_1 i_2 \cdot} = 0 \;\text{ 且 }\; \theta_{i_1 i_2 i_3} = 0 \;\text{ 对所有 } i_1, i_2, i_3
+$$
+
+用模型记法表示，这对应于模型 $1*3 + 2*3$。条件独立的直观含义是：**给定 $Y_3$ 的取值后，关于 $Y_2$ 的任何额外信息都不会改变 $Y_1$ 的分布。**
+
+## 例 11.1（续）：模型选择结果
+
+> **Beispiel 11.1 (Fortsetzung): Modellselektion**
+
+```{r}
+#| label: example-11-1-continued
+#| code-fold: false
+
+cat("例 11.1 (续): 慕尼黑租房数据 -- 基于 BIC 选择的模型\n")
+cat("Beispiel 11.1 (Forts.): BIC-selektiertes Modell\n\n")
+cat("  选定模型 | Selektiertes Modell:\n\n")
+cat("    floor_space * center + center * district + floor_space * new_contract\n\n")
+cat("  条件独立解读 | Interpretation der bedingten Unabhängigkeiten:\n\n")
+cat("  1. 给定'面积'和'市中心'后, '城区'与'合同类型'条件独立\n")
+cat("  2. 给定'面积'后, '市中心'与'合同类型'条件独立\n")
+cat("  3. 给定'市中心'后, '面积'与'城区'条件独立\n")
+```
+
+{{< pagebreak >}}
+
+# 图模型 {#sec-graphical-models}
+
+> **Graphische Modelle**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 条件独立性的**形式化定义**：集合 $A$、$B$、$C$ 的框架
+- **图模型**的核心思想：用缺失边表示条件独立
+- 三种等价的条件独立性解读：**配对**、**局部**、**全局**
+- **有向无环图 (DAG)** 的定义与独立性判读
+- **道德化**（Moralisierung）：从 DAG 到无向图
+- 边际独立但条件依赖的反直觉现象
+:::
+
+## 条件独立性的形式定义
+
+> **Formale Definition der bedingten Unabhängigkeit**
+
+::: {.callout-tip icon="false"}
+## 隔音墙的比喻 | Die Schalldämmwand-Metapher
+
+想象三间相邻的房间 A、B、C。C 房间位于 A 和 B 之间。如果 C 房间有完美的隔音墙，那么 A 房间的人听不到 B 房间的声音（反之亦然），即使 A 和 B 各自都能与 C 交流。这就是条件独立性的本质：**给定中间变量 C 的信息后，A 和 B 之间不再有额外的信息传递。** 图模型中的"缺失边"就像这堵隔音墙 -- 它标记了哪些变量之间的信息通道被其他变量"屏蔽"了。
+
+*Die bedingte Unabhängigkeit ist wie eine Schalldämmwand: Gegeben die Information in C, fließt keine zusätzliche Information zwischen A und B.*
+:::
+
+设 $Y = (Y_1, \ldots, Y_p)$ 为 $p$ 维随机变量，$f_{12\cdots p}(y_1, \ldots, y_p)$ 为其联合密度或概率函数。定义三个子集 $A$、$B$、$C$，满足：
+
+$$
+A \cap B = A \cap C = B \cap C = \emptyset, \quad A \cup B \cup C \subset \{1, \ldots, p\}, \quad A \neq \emptyset, \; B \neq \emptyset \tag{11.3}
+$$
+
+我们说 $A$ 在给定 $C$ 下与 $B$ 条件独立，记为 $A \perp\!\!\!\perp B \mid C$，当且仅当：
+
+$$
+f_{A \cup B \mid C}(y_A, y_B \mid y_C) = f_{A \mid C}(y_A \mid y_C) \cdot f_{B \mid C}(y_B \mid y_C)
+$$
+
+这等价于联合密度的分解：
+
+$$
+f_{A \cup B \cup C}(y_A, y_B, y_C) = h_{A \cup C}(y_A, y_C) \cdot h_{B \cup C}(y_B, y_C) \tag{11.4}
+$$
+
+## 图的定义与缺失边
+
+> **Graphdefinition und fehlende Kanten**
+
+定义图 $G = (V, E)$，其中 $V = \{1, \ldots, p\}$ 是**节点集**（Knotenmenge），代表变量 $Y_1, \ldots, Y_p$；$E \subset V \times V$ 是**边集**（Kantenmenge）。图模型的核心思想是：**缺失的边才是重点**，因为它们代表条件独立性：
+
+$$
+i \perp\!\!\!\perp j \mid V \setminus \{i, j\} \quad \Longleftrightarrow \quad (i, j) \notin E \;\text{ 且 }\; (j, i) \notin E
+$$
+
+换言之，图中**缺失一条边**等价于这两个变量在给定所有其他变量后是**条件独立的**。
+
+```{r}
+#| label: fig-graph-p3
+#| fig-cap: "三变量图模型示例：边 (1,2) 缺失表示条件独立 | Graphisches Modell für p=3"
+#| fig-height: 4
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold(paste("1 ", symbol("\136"), " 2 | 3: 变量 1 和 2 在给定 3 下条件独立"))), 
+      cex.main = 1.0, col.main = "#1E293B")
+
+# 三个节点
+nx <- c(2, 8, 5); ny <- c(2, 2, 5)
+labels_n <- c(expression(Y[1]), expression(Y[2]), expression(Y[3]))
+
+# 画边：1-3 和 2-3 存在，1-2 缺失
+segments(nx[1], ny[1], nx[3], ny[3], col = "#2563EB", lwd = 3)
+segments(nx[2], ny[2], nx[3], ny[3], col = "#2563EB", lwd = 3)
+
+# 缺失边用虚线标记
+segments(nx[1], ny[1], nx[2], ny[2], col = "#DC2626", lwd = 2, lty = 3)
+text(5, 1.3, expression(paste("缺失边 ", symbol("\136"), " 条件独立")), 
+     col = "#DC2626", cex = 0.85, font = 2)
+
+# 节点
+for (i in 1:3) {
+  points(nx[i], ny[i], pch = 21, bg = "white", col = "#1E293B", cex = 4, lwd = 2)
+  text(nx[i], ny[i], labels_n[i], cex = 1.1, font = 2, col = "#1E293B")
+}
+```
+
+## 六变量图模型示例
+
+> **Beispiel: Graphisches Modell für sechs Variablen**
+
+```{r}
+#| label: fig-graph-6var
+#| fig-cap: "六变量图模型（仿教材 Fig. 11.2）：8 条缺失边对应 8 个条件独立性 | Graphisches Modell für 6 Variablen"
+#| fig-height: 6
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 14), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("六变量图模型 | Graphisches Modell für 6 Variablen")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+# 节点坐标 (仿教材布局)
+vx <- c(2, 5, 8, 5, 8, 11)
+vy <- c(7, 8, 7, 4, 4, 5.5)
+
+# 存在的边
+edges_list <- list(c(1,2), c(1,3), c(2,3), c(3,4), c(3,5), c(4,5), c(4,6), c(5,6))
+
+for (e in edges_list) {
+  segments(vx[e[1]], vy[e[1]], vx[e[2]], vy[e[2]], col = "#2563EB", lwd = 2.5)
+}
+
+# 节点
+for (i in 1:6) {
+  points(vx[i], vy[i], pch = 21, bg = "white", col = "#1E293B", cex = 4.5, lwd = 2.5)
+  text(vx[i], vy[i], i, cex = 1.3, font = 2, col = "#1E293B")
+}
+
+# 条件独立性列表
+ci_text <- c(
+  expression(1 %~% 4 ~ "|" ~ group("{", list(2,3,5,6), "}")),
+  expression(1 %~% 5 ~ "|" ~ group("{", list(2,3,4,6), "}")),
+  expression(1 %~% 6 ~ "|" ~ group("{", list(2,3,4,5), "}")),
+  expression(2 %~% 4 ~ "|" ~ group("{", list(1,3,5,6), "}")),
+  expression(2 %~% 5 ~ "|" ~ group("{", list(1,3,4,6), "}")),
+  expression(2 %~% 6 ~ "|" ~ group("{", list(1,3,4,5), "}")),
+  expression(3 %~% 6 ~ "|" ~ group("{", list(1,2,4,5), "}")),
+  expression(5 %~% 6 ~ "|" ~ group("{", list(1,2,3,4), "}"))
+)
+
+text(0.3, 2.5, "配对条件独立性:", col = "#DC2626", font = 2, cex = 0.8, pos = 4)
+for (k in 1:4) {
+  text(0.5, 2.5 - k * 0.45, ci_text[k], cex = 0.55, col = "#334155", pos = 4)
+}
+for (k in 5:8) {
+  text(6.5, 2.5 - (k - 4) * 0.45, ci_text[k], cex = 0.55, col = "#334155", pos = 4)
+}
+```
+
+## 三种条件独立性：配对、局部、全局
+
+> **Drei Arten bedingter Unabhängigkeit: paarweise, lokal, global**
+
+**配对条件独立性**（paarweise bedingte Unabhängigkeit）：如上所述，图中每一条缺失的边对应一个条件独立声明，条件集是所有其他变量。
+
+**局部条件独立性**（lokale bedingte Unabhängigkeit）：对于节点 $i$，令 $\mathcal{N}(i) = \{j : (i,j) \in E \text{ 或 } (j,i) \in E\}$ 为 $i$ 的**邻居集**（Nachbarschaft）。则：
+
+$$
+i \perp\!\!\!\perp (V \setminus \{i \cup \mathcal{N}(i)\}) \mid \mathcal{N}(i)
+$$
+
+例如，在图 11.2 中，变量 2 的邻居是 $\{1, 3\}$，因此 $2 \perp\!\!\!\perp \{4, 5, 6\} \mid \{1, 3\}$。
+
+**全局条件独立性**（globale bedingte Unabhängigkeit）：考虑三组变量 $A$、$B$、$C$。如果从 $A$ 中任一节点到 $B$ 中任一节点的所有路径都必须经过 $C$ 中的节点，则 $A \perp\!\!\!\perp B \mid C$。
+
+例如，在图 11.2 中，从 $A = \{4, 5, 6\}$ 到 $B = \{1, 2\}$ 的所有路径都经过 $C = \{3\}$，因此 $\{1, 2\} \perp\!\!\!\perp \{4, 5, 6\} \mid 3$。
+
+**性质 11.1**：给定一个图模型，上述三种条件独立性解读是**等价的**。证明可参见 Whittaker (2009)、Lauritzen (1996) 或 Maathuis et al. (2018)。
+
+```{r}
+#| label: fig-three-ci-types
+#| fig-cap: "三种条件独立性的图示：配对、局部、全局 | Drei Typen bedingter Unabhängigkeit"
+#| fig-height: 5
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(1, 1, 3, 1))
+
+# --- 配对 ---
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("配对 | Paarweise", cex.main = 1.0, col.main = "#2563EB")
+vx_p <- c(2, 5, 8, 5, 8, 11) - 1
+vy_p <- c(6, 7, 6, 3, 3, 4.5)
+edges_p <- list(c(1,2), c(1,3), c(2,3), c(3,4), c(3,5), c(4,5), c(4,6), c(5,6))
+for (e in edges_p) segments(vx_p[e[1]], vy_p[e[1]], vx_p[e[2]], vy_p[e[2]], col = "#94A3B8", lwd = 1.5)
+# 高亮缺失边 1-4
+segments(vx_p[1], vy_p[1], vx_p[4], vy_p[4], col = "#DC2626", lwd = 2, lty = 3)
+for (i in 1:6) {
+  bg_col <- ifelse(i %in% c(1, 4), "#FEE2E2", "white")
+  points(vx_p[i], vy_p[i], pch = 21, bg = bg_col, col = "#1E293B", cex = 3, lwd = 2)
+  text(vx_p[i], vy_p[i], i, cex = 0.9, font = 2)
+}
+text(5, 1, expression(1 %~% 4 ~ "|" ~ group("{", list(2,3,5,6), "}")),
+     col = "#DC2626", cex = 0.7, font = 2)
+
+# --- 局部 ---
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("局部 | Lokal", cex.main = 1.0, col.main = "#16A34A")
+for (e in edges_p) segments(vx_p[e[1]], vy_p[e[1]], vx_p[e[2]], vy_p[e[2]], col = "#94A3B8", lwd = 1.5)
+# 高亮节点2及其邻居
+for (i in 1:6) {
+  if (i == 2) bg_col <- "#FEF3C7"
+  else if (i %in% c(1, 3)) bg_col <- "#D1FAE5"
+  else bg_col <- "#FEE2E2"
+  points(vx_p[i], vy_p[i], pch = 21, bg = bg_col, col = "#1E293B", cex = 3, lwd = 2)
+  text(vx_p[i], vy_p[i], i, cex = 0.9, font = 2)
+}
+text(5, 1, expression(2 %~% group("{", list(4,5,6), "}") ~ "|" ~ group("{", list(1,3), "}")),
+     col = "#16A34A", cex = 0.7, font = 2)
+
+# --- 全局 ---
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("全局 | Global", cex.main = 1.0, col.main = "#9333EA")
+for (e in edges_p) segments(vx_p[e[1]], vy_p[e[1]], vx_p[e[2]], vy_p[e[2]], col = "#94A3B8", lwd = 1.5)
+for (i in 1:6) {
+  if (i %in% c(1, 2)) bg_col <- "#DBEAFE"
+  else if (i == 3) bg_col <- "#FEF3C7"
+  else bg_col <- "#FCE7F3"
+  points(vx_p[i], vy_p[i], pch = 21, bg = bg_col, col = "#1E293B", cex = 3, lwd = 2)
+  text(vx_p[i], vy_p[i], i, cex = 0.9, font = 2)
+}
+text(5, 1, expression(group("{", list(1,2), "}") %~% group("{", list(4,5,6), "}") ~ "|" ~ 3),
+     col = "#9333EA", cex = 0.7, font = 2)
+text(5, 0.3, "所有路径经过节点 3", col = "#9333EA", cex = 0.6, font = 3)
+
+par(mfrow = c(1, 1))
+```
+
+## 图模型的模型层级
+
+> **Modellhierarchie graphischer Modelle**
+
+对于三个变量的条件独立模型，层级结构如下（仿教材 Fig. 11.3）：
+
+```{r}
+#| label: fig-graphmodel-hierarchy
+#| fig-cap: "三变量图模型的模型层级（仿教材 Fig. 11.3）| Modellhierarchie graphischer Modelle für drei Variablen"
+#| fig-height: 7.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 16), ylim = c(0, 12), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("三变量图模型层级 | Graphische Modellhierarchie für p = 3")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+draw_triangle <- function(cx, cy, sz, edges_present, label_below = "") {
+  # 三角形顶点
+  tx <- cx + sz * c(0, -0.6, 0.6)
+  ty <- cy + sz * c(0.5, -0.3, -0.3)
+  
+  # 画边
+  edge_pairs <- list(c(1,2), c(1,3), c(2,3))
+  edge_labels <- c("1-3", "1-2", "2-3")
+  for (k in 1:3) {
+    i <- edge_pairs[[k]][1]; j <- edge_pairs[[k]][2]
+    if (edge_labels[k] %in% edges_present) {
+      segments(tx[i], ty[i], tx[j], ty[j], col = "#2563EB", lwd = 2)
+    }
+  }
+  
+  # 画节点
+  for (i in 1:3) {
+    points(tx[i], ty[i], pch = 21, bg = "white", col = "#1E293B", cex = 2, lwd = 1.5)
+    text(tx[i], ty[i], i, cex = 0.6, font = 2)
+  }
+}
+
+# 第一层：完全图
+draw_triangle(8, 10.5, 0.7, c("1-2", "1-3", "2-3"))
+text(8, 9.5, "完全图 | Vollständig", cex = 0.6, col = "#DC2626", font = 2)
+
+# 第二层：去掉一条边 (三种)
+draw_triangle(3, 7.5, 0.7, c("1-3", "2-3"))
+text(3, 6.5, expression(1 %~% 2 ~ "|" ~ 3), cex = 0.6, col = "#D97706", font = 2)
+
+draw_triangle(8, 7.5, 0.7, c("1-2", "2-3"))
+text(8, 6.5, expression(1 %~% 3 ~ "|" ~ 2), cex = 0.6, col = "#D97706", font = 2)
+
+draw_triangle(13, 7.5, 0.7, c("1-2", "1-3"))
+text(13, 6.5, expression(2 %~% 3 ~ "|" ~ 1), cex = 0.6, col = "#D97706", font = 2)
+
+# 第三层：去掉两条边 (三种)
+draw_triangle(3, 4.5, 0.7, c("2-3"))
+text(3, 3.5, expression(atop(1 %~% 2 ~ "|" ~ 3, 1 %~% 3 ~ "|" ~ 2)), cex = 0.5, col = "#16A34A", font = 2)
+
+draw_triangle(8, 4.5, 0.7, c("1-3"))
+text(8, 3.5, expression(atop(1 %~% 2 ~ "|" ~ 3, 2 %~% 3 ~ "|" ~ 1)), cex = 0.5, col = "#16A34A", font = 2)
+
+draw_triangle(13, 4.5, 0.7, c("1-2"))
+text(13, 3.5, expression(atop(1 %~% 3 ~ "|" ~ 2, 2 %~% 3 ~ "|" ~ 1)), cex = 0.5, col = "#16A34A", font = 2)
+
+# 第四层：空图
+draw_triangle(8, 1.5, 0.7, c())
+text(8, 0.6, "完全独立 | Vollst. Unabh.", cex = 0.6, col = "#2563EB", font = 2)
+
+# 连线
+arrows_from_to <- list(
+  c(8, 9.3, 3, 8.3), c(8, 9.3, 8, 8.3), c(8, 9.3, 13, 8.3),
+  c(3, 6.3, 3, 5.3), c(3, 6.3, 8, 5.3),
+  c(8, 6.3, 3, 5.3), c(8, 6.3, 13, 5.3),
+  c(13, 6.3, 8, 5.3), c(13, 6.3, 13, 5.3),
+  c(3, 3.0, 8, 2.3), c(8, 3.0, 8, 2.3), c(13, 3.0, 8, 2.3)
+)
+for (a in arrows_from_to) {
+  segments(a[1], a[2], a[3], a[4], col = "#94A3B8", lwd = 1)
+}
+```
+
+## 例 11.1（续）：租房数据的图模型
+
+> **Beispiel 11.1 (Forts.): Graphisches Modell für Mietspiegeldaten**
+
+```{r}
+#| label: fig-rental-graphmodel
+#| fig-cap: "慕尼黑租房数据的图模型（仿教材 Fig. 11.4）| Graphisches Modell für Münchner Mietspiegeldaten"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 14), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("租房数据图模型 | Graphisches Modell Mietspiegel")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+# 4个变量的位置
+vx_r <- c(3, 11, 3, 11)
+vy_r <- c(6, 6, 2, 2)
+vlabels <- c("面积\nWohnfläche", "市中心\nZentrum", "新合同\nNeuer Vertrag", "城区\nBezirk")
+
+# 选定模型的边: floor_space*center, center*district, floor_space*new_contract
+edge_list_r <- list(c(1,2), c(2,4), c(1,3))
+
+for (e in edge_list_r) {
+  segments(vx_r[e[1]], vy_r[e[1]], vx_r[e[2]], vy_r[e[2]], col = "#2563EB", lwd = 3)
+}
+
+cols_r <- c("#DBEAFE", "#FEF3C7", "#D1FAE5", "#E0E7FF")
+bords_r <- c("#2563EB", "#D97706", "#16A34A", "#6366F1")
+for (i in 1:4) {
+  rect(vx_r[i] - 1.3, vy_r[i] - 0.6, vx_r[i] + 1.3, vy_r[i] + 0.6,
+       col = cols_r[i], border = bords_r[i], lwd = 2)
+  text(vx_r[i], vy_r[i], vlabels[i], cex = 0.7, font = 2, col = "#1E293B")
+}
+
+# 标注条件独立性
+text(7, 0.8, "缺失边的解读 | Interpretation fehlender Kanten:", 
+     col = "#DC2626", font = 2, cex = 0.8)
+text(7, 0.3, "给定面积后, 市中心与合同类型独立; 给定市中心后, 面积与城区独立",
+     col = "#334155", cex = 0.65, font = 3)
+```
+
+## 有向无环图 (DAG)
+
+> **Gerichtete azyklische Graphen (DAGs)**
+
+前面讨论的是**无向图**（ungerichteter Graph），其中边是对称的。然而，并非所有独立性结构都能用无向图来表达。特别是，可能出现**边际独立但条件依赖**的情况 -- 这需要**有向无环图**（DAG）来描述。
+
+::: {.callout-tip icon="false"}
+## 汇流瓶颈的比喻 | Die Flaschenhals-Metapher
+
+想象两条完全独立的河流（变量 $Y_1$ 和 $Y_2$），它们汇入同一个湖泊（变量 $Y_3$）。在正常情况下，两条河流互不影响。但如果你知道了湖泊的水位（条件在 $Y_3$ 上），那么得知一条河的流量会告诉你另一条河的大致流量（因为总水位是固定的）。这就是"边际独立但条件依赖"的直觉 -- DAG 中两个不相连的父节点在条件在它们的共同子节点上时变得依赖。
+
+*Zwei unabhängige Flüsse münden in einen See. Kennt man den Wasserstand (bedingt auf $Y_3$), so hängen die Flussmengen ab -- marginale Unabhängigkeit, aber bedingte Abhängigkeit.*
+:::
+
+## 例 11.2：技术系统故障
+
+> **Beispiel 11.2: Technisches System**
+
+考虑一个由两个独立组件组成的技术系统。$Y_1$ 表示组件 1 的状态（1 = 故障，0 = 正常），$Y_2$ 表示组件 2 的状态（类似定义），$Y_3 = \max(Y_1, Y_2)$ 表示系统状态（1 = 系统故障，0 = 系统正常）。
+
+假设 $Y_1 \sim B(1, \pi_1)$，$Y_2 \sim B(1, \pi_2)$ 且 $Y_1 \perp\!\!\!\perp Y_2$。
+
+忽略 $Y_3$，利用贝叶斯法则：
+
+$$
+P(Y_2 = 1 \mid Y_1 = 1) = \frac{P(Y_1 = 1, Y_2 = 1)}{P(Y_1 = 1)} = \frac{\pi_1 \pi_2}{\pi_1} = \pi_2
+$$
+
+所以 $Y_1$ 和 $Y_2$ 独立。但条件在 $Y_3 = 1$ 上：
+
+$$
+P(Y_1 = 1, Y_2 = 1 \mid Y_3 = 1) = \frac{\pi_1 \pi_2}{1 - (1-\pi_1)(1-\pi_2)}
+$$
+
+这**不能**分解为两个概率的乘积，所以条件在 $Y_3$ 后 $Y_1$ 和 $Y_2$ 不再独立。
+
+更直观地：如果系统故障了（$Y_3 = 1$）且组件 1 正常（$Y_1 = 0$），则故障一定来自组件 2：
+
+$$
+P(Y_2 = 1 \mid Y_3 = 1, Y_1 = 0) = \frac{P(Y_1 = 0, Y_2 = 1, Y_3 = 1)}{P(Y_1 = 0, Y_3 = 1)} = 1
+$$
+
+```{r}
+#| label: fig-system-demo
+#| fig-cap: "例 11.2：边际独立但条件依赖的数值演示 | Marginale Unabhängigkeit, aber bedingte Abhängigkeit"
+#| fig-height: 5.5
+
+set.seed(42)
+n_sys <- 50000
+pi1 <- 0.2; pi2 <- 0.3
+
+Y1 <- rbinom(n_sys, 1, pi1)
+Y2 <- rbinom(n_sys, 1, pi2)
+Y3 <- pmax(Y1, Y2)
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3.5, 1))
+
+# 边际独立性
+tab_marginal <- table(Y1, Y2)
+p_marginal <- prop.table(tab_marginal)
+barplot(p_marginal, beside = TRUE, col = c("#DBEAFE", "#2563EB"),
+        main = expression(paste("边际: ", Y[1] %~% Y[2])),
+        xlab = expression(Y[2]), ylab = "联合概率",
+        legend.text = c(expression(Y[1]==0), expression(Y[1]==1)),
+        args.legend = list(x = "topright", bty = "n", cex = 0.8),
+        border = NA, cex.main = 1.0, col.main = "#1E293B")
+mtext("比例一致 => 独立", side = 1, line = 3, cex = 0.7, col = "#16A34A", font = 2)
+
+# 条件依赖 (条件在 Y3=1)
+idx_fail <- which(Y3 == 1)
+tab_cond <- table(Y1[idx_fail], Y2[idx_fail])
+p_cond <- prop.table(tab_cond)
+barplot(p_cond, beside = TRUE, col = c("#FEE2E2", "#DC2626"),
+        main = expression(paste("条件 ", Y[3]==1, ": ", Y[1] %~% "" %~~% Y[2])),
+        xlab = expression(Y[2]), ylab = "条件联合概率",
+        legend.text = c(expression(Y[1]==0), expression(Y[1]==1)),
+        args.legend = list(x = "topright", bty = "n", cex = 0.8),
+        border = NA, cex.main = 1.0, col.main = "#1E293B")
+mtext("比例不一致 => 依赖!", side = 1, line = 3, cex = 0.7, col = "#DC2626", font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: example-11-2-calc
+#| code-fold: false
+
+cat("例 11.2: 数值验证 | Beispiel 11.2: Numerische Verifikation\n\n")
+cat(sprintf("  pi_1 = %.1f,  pi_2 = %.1f\n\n", pi1, pi2))
+
+# 边际独立
+cat("  边际独立性验证:\n")
+cat(sprintf("    P(Y2=1|Y1=1) = %.4f  (理论值 pi_2 = %.1f)\n", 
+            mean(Y2[Y1 == 1]), pi2))
+cat(sprintf("    P(Y2=1|Y1=0) = %.4f  (理论值 pi_2 = %.1f)\n\n", 
+            mean(Y2[Y1 == 0]), pi2))
+
+# 条件依赖
+cat("  条件在 Y3=1 后:\n")
+cat(sprintf("    P(Y2=1|Y1=1, Y3=1) = %.4f\n", mean(Y2[Y1 == 1 & Y3 == 1])))
+cat(sprintf("    P(Y2=1|Y1=0, Y3=1) = %.4f  (理论值 = 1.000)\n\n", 
+            mean(Y2[Y1 == 0 & Y3 == 1])))
+cat("    => 条件在 Y3 后, Y1 和 Y2 不再独立!\n")
+```
+
+## DAG 的形式定义
+
+> **Formale Definition eines DAGs**
+
+DAG 是一个有向图 $G = (V, E)$，其中 $V = \{1, 2, \ldots, p\}$ 为节点集，$E \subset V \times V$ 为有向边集。DAG 的两个关键性质是：边不对称（$(i,j) \in E \Rightarrow (j,i) \notin E$）；无环（不存在 $v_1, v_2, \ldots, v_k$ 使得 $(v_j, v_{j+1}) \in E$ 且 $v_1 = v_k$）。
+
+对于节点 $i$，定义其**父节点集** $\text{Pa}(i) = \{j : (j,i) \in E\}$。DAG 中节点的有序性保证 $\text{Pa}(i) \subset \{1, \ldots, i-1\}$。条件独立声明为：
+
+$$
+i \perp\!\!\!\perp \{1, \ldots, i-1\} \setminus \text{Pa}(i) \mid \text{Pa}(i) \quad \text{对所有 } i = 1, \ldots, p
+$$
+
+即：给定 $Y_i$ 的父节点后，所有"更早"的非父节点都不提供关于 $Y_i$ 的额外信息。
+
+多元分布可按 DAG 分解为：
+
+$$
+f_{Y_1 \cdots Y_p}(y_1, \ldots, y_p) = \prod_{j=1}^{p} f_{Y_j \mid \text{Pa}(j)}(y_j \mid y_{\text{Pa}(j)})
+$$
+
+```{r}
+#| label: fig-dag-3var
+#| fig-cap: "三变量 DAG：两个独立父节点汇入一个子节点（仿教材 Fig. 11.5）| DAG für drei Variablen"
+#| fig-height: 4
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("DAG: " * Y[1] %~% Y[2] * " 但 " * Y[1] %~% "" %~~% Y[2] * " | " * Y[3])),
+      cex.main = 1.0, col.main = "#1E293B")
+
+dx <- c(2, 8, 5); dy <- c(5, 5, 2)
+
+# 有向边
+arrows(dx[1] + 0.5, dy[1] - 0.3, dx[3] - 0.3, dy[3] + 0.3, 
+       col = "#2563EB", lwd = 3, length = 0.15)
+arrows(dx[2] - 0.5, dy[2] - 0.3, dx[3] + 0.3, dy[3] + 0.3, 
+       col = "#2563EB", lwd = 3, length = 0.15)
+
+# 节点
+for (i in 1:3) {
+  points(dx[i], dy[i], pch = 21, bg = "white", col = "#1E293B", cex = 4.5, lwd = 2.5)
+  text(dx[i], dy[i], c(expression(Y[1]), expression(Y[2]), expression(Y[3]))[i],
+       cex = 1.1, font = 2, col = "#1E293B")
+}
+
+text(5, 5.5, "Pa(3) = {1, 2},  Pa(1) = Pa(2) = 空集", 
+     col = "#6B7280", cex = 0.8, font = 3)
+text(1.5, 3, expression(f == f[1] * f[2] * f[3*"|"*12]), 
+     col = "#DC2626", cex = 0.85, font = 2)
+```
+
+## 八变量 DAG 示例
+
+> **Beispiel: DAG mit acht Variablen**
+
+```{r}
+#| label: fig-dag-8var
+#| fig-cap: "八变量 DAG（仿教材 Fig. 11.6）及其独立性声明 | DAG für acht Variablen"
+#| fig-height: 6.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 16), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("八变量 DAG | DAG für 8 Variablen")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+# 节点坐标（仿教材 Fig 11.6 布局）
+dag_x <- c(2, 6, 4, 4, 8, 6, 8, 10)
+dag_y <- c(8, 8, 6, 4, 6, 4, 2, 0.5)
+
+# 有向边
+dag_edges <- list(
+  c(1,3), c(1,4), c(2,4), c(2,5),
+  c(3,6), c(5,6), c(3,7), c(5,7), c(6,7),
+  c(5,8), c(6,8), c(7,8)
+)
+
+for (e in dag_edges) {
+  dx <- dag_x[e[2]] - dag_x[e[1]]
+  dy <- dag_y[e[2]] - dag_y[e[1]]
+  len <- sqrt(dx^2 + dy^2)
+  x1 <- dag_x[e[1]] + 0.4 * dx / len
+  y1 <- dag_y[e[1]] + 0.4 * dy / len
+  x2 <- dag_x[e[2]] - 0.4 * dx / len
+  y2 <- dag_y[e[2]] - 0.4 * dy / len
+  arrows(x1, y1, x2, y2, col = "#2563EB", lwd = 2, length = 0.12)
+}
+
+for (i in 1:8) {
+  points(dag_x[i], dag_y[i], pch = 21, bg = "white", col = "#1E293B", cex = 3.5, lwd = 2.5)
+  text(dag_x[i], dag_y[i], i, cex = 1.0, font = 2, col = "#1E293B")
+}
+
+# 分解公式 -- 使用纯文本避免 expression 解析错误
+text(13, 8, 
+     bquote(f[1 %.% 2 %.% "" %.% 8] == f[1] %.% f[2] %.% f["3|1"] %.% f["4|12"]),
+     col = "#DC2626", cex = 0.65, font = 2, pos = 4)
+text(13.2, 7.2, 
+     bquote(phantom(f) %.% f["5|2"] %.% f["6|35"] %.% f["7|356"] %.% f["8|567"]),
+     col = "#DC2626", cex = 0.65, font = 2, pos = 4)
+
+# 独立性声明
+ci_dag <- c(
+  "1 ind 2", "3 ind 2 | 1", "4 ind 3 | {1,2}",
+  "5 ind {1,3,4} | 2", "6 ind {1,2,4} | {3,5}",
+  "7 ind {1,2,4} | {3,5,6}", "8 ind {1,2,3,4} | {5,6,7}"
+)
+text(12.5, 5.5, "条件独立声明:", col = "#334155", font = 2, cex = 0.7, pos = 4)
+for (k in 1:7) {
+  text(12.5, 5.5 - k * 0.55, ci_dag[k], cex = 0.55, col = "#64748B", pos = 4)
+}
+```
+
+## DAG 的道德化
+
+> **Moralisierung eines DAGs**
+
+从 DAG 导出无向图（即"道德化"）的步骤：首先，对于每个节点 $i$，在其所有父节点之间连一条无向边（"婚配"父节点）；然后，将所有有向边替换为无向边。
+
+形式上，若 $G = (V, E)$ 为 DAG，则道德化图 $G^m = (V, E^m)$ 的构造为：初始令 $E^m = E$；对所有 $i$，若 $\{j, k\} \in \text{Pa}(i)$，则将 $(j,k)$ 加入 $E^m$；对所有 $(i,j) \in E$，将 $(j,i)$ 加入 $E^m$。
+
+```{r}
+#| label: fig-moralized
+#| fig-cap: "从 DAG 到道德化图（仿教材 Fig. 11.7）：新增边用虚线表示 | Moralisierter Graph"
+#| fig-height: 6.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 16), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("道德化图 | Moralisierter Graph")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+# 使用与上图相同的节点坐标
+for (e in dag_edges) {
+  segments(dag_x[e[1]], dag_y[e[1]], dag_x[e[2]], dag_y[e[2]], 
+           col = "#2563EB", lwd = 2)
+}
+
+# 道德化新增的边（"婚配"父节点）
+# Pa(4)={1,2}: 连接 1-2
+# Pa(6)={3,5}: 连接 3-5 (已存在)
+# Pa(7)={3,5,6}: 连接 3-5, 3-6, 5-6 (部分已存在)
+# Pa(8)={5,6,7}: 连接 5-6, 5-7, 6-7 (部分已存在)
+moral_edges <- list(c(1,2), c(3,5))  # 新增的关键边
+
+for (e in moral_edges) {
+  segments(dag_x[e[1]], dag_y[e[1]], dag_x[e[2]], dag_y[e[2]], 
+           col = "#DC2626", lwd = 2.5, lty = 2)
+}
+
+for (i in 1:8) {
+  points(dag_x[i], dag_y[i], pch = 21, bg = "white", col = "#1E293B", cex = 3.5, lwd = 2)
+  text(dag_x[i], dag_y[i], i, cex = 1.0, font = 2, col = "#1E293B")
+}
+
+legend("topright", 
+       legend = c("原始边 (无向化)", "道德化新增边"),
+       col = c("#2563EB", "#DC2626"),
+       lwd = c(2, 2.5), lty = c(1, 2), bty = "n", cex = 0.85)
+
+text(12.5, 2, "道德化 = '婚配'父节点\n+ 去掉方向", 
+     col = "#6B7280", cex = 0.75, font = 3)
+text(12.5, 1, "丢失了两个独立性信息", col = "#DC2626", cex = 0.75, font = 2)
+```
+
+道德化会丢失一些独立性信息 -- 特别是那些来自"v-结构"（两个不相连的父节点共享子节点）的边际独立性。DAG 是因果理论的核心工具，更深入的讨论可参见 Peters et al. (2017) 和 Pearl (2009)。
+
+{{< pagebreak >}}
+
+# 多元正态分布 {#sec-mvn}
+
+> **Multivariate Normalverteilung**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 多元正态分布的**定义**与**密度函数**
+- 均值向量和协方差矩阵的**最大似然估计**
+- **浓度矩阵**（Konzentrationsmatrix）$\Omega = \Sigma^{-1}$ 的核心作用
+- 多元正态分布的**对数线性结构**：只有二阶交互项
+- 条件独立性的**矩阵判据**：$\Omega_{jl} = 0 \Leftrightarrow Y_j \perp\!\!\!\perp Y_l \mid \text{其余变量}$
+- 连续数据的图模型选择实例
+:::
+
+## 定义与密度函数
+
+> **Definition und Dichtefunktion**
+
+::: {.callout-tip icon="false"}
+## 多元正态的云团比喻 | Die Wolken-Metapher
+
+想象一团漂浮在高维空间中的粒子云。在最简单的情形下（协方差矩阵为单位阵），云团是一个完美的球形，各个方向上的散布相同。当变量之间存在相关性时，这个球被"拉伸"和"旋转"成一个椭球体 -- 某些方向上粒子散布更广。协方差矩阵 $\Sigma$ 精确描述了这个椭球体的形状和朝向。浓度矩阵 $\Omega = \Sigma^{-1}$ 则提供了另一种视角：它告诉你哪些方向上的变量**直接**相互影响（而非通过第三个变量的间接传导）。
+
+*Die multivariate Normalverteilung ist wie eine Partikelwolke: $\Sigma$ beschreibt die Form des Ellipsoids, $\Omega = \Sigma^{-1}$ zeigt die direkten Abhängigkeiten.*
+:::
+
+**定义 11.2**：设 $Y = (Y_1, \ldots, Y_p)$ 为连续随机向量。若 $Y$ 服从多元正态分布，均值为 $\mu = (\mu_1, \ldots, \mu_p)^\top$，$p \times p$ 维协方差矩阵为 $\Sigma$，则其密度函数为：
+
+$$
+f(y; \mu, \Sigma) = \frac{1}{(2\pi)^{p/2} |\Sigma|^{1/2}} \exp\left\{-\frac{1}{2}(y - \mu)^\top \Sigma^{-1}(y - \mu)\right\} \tag{11.5}
+$$
+
+其中假设 $\Sigma$ 正定，即对所有非零向量 $a \in \mathbb{R}^p$ 有 $a^\top \Sigma a > 0$。
+
+## 最大似然估计
+
+> **Maximum-Likelihood-Schätzung**
+
+给定 i.i.d. 数据 $y^{(i)}$，$i = 1, \ldots, n$，最大似然估计为：
+
+$$
+\hat{\mu} = \frac{1}{n}\sum_{i=1}^{n} y^{(i)}, \qquad \hat{\Sigma} = \frac{1}{n}\sum_{i=1}^{n} (y^{(i)} - \hat{\mu})(y^{(i)} - \hat{\mu})^\top
+$$
+
+```{r}
+#| label: fig-mvn-demo
+#| fig-cap: "二维正态分布的等高线图：协方差矩阵决定椭球形状 | Konturplot der bivariaten Normalverteilung"
+#| fig-height: 5.5
+
+library(MASS)
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(4, 4, 3.5, 1))
+
+# 三种不同的协方差结构
+sigmas <- list(
+  matrix(c(1, 0, 0, 1), 2, 2),
+  matrix(c(1, 0.8, 0.8, 1), 2, 2),
+  matrix(c(1, -0.6, -0.6, 2), 2, 2)
+)
+titles <- c(
+  expression(Sigma == bgroup("[", atop(list(1, 0), list(0, 1)), "]")),
+  expression(Sigma == bgroup("[", atop(list(1, 0.8), list(0.8, 1)), "]")),
+  expression(Sigma == bgroup("[", atop(list(1, -0.6), list(-0.6, 2)), "]"))
+)
+cols <- c("#2563EB", "#DC2626", "#16A34A")
+
+set.seed(42)
+for (k in 1:3) {
+  dat <- mvrnorm(500, mu = c(0, 0), Sigma = sigmas[[k]])
+  
+  plot(dat[,1], dat[,2], pch = 16, col = adjustcolor(cols[k], 0.3), cex = 0.6,
+       xlim = c(-4, 4), ylim = c(-4, 4),
+       xlab = expression(Y[1]), ylab = expression(Y[2]),
+       main = titles[k], cex.main = 0.85, col.main = "#1E293B",
+       asp = 1)
+  grid(col = "#E2E8F0")
+  
+  # 等高线
+  x_grid <- seq(-4, 4, length.out = 100)
+  y_grid <- seq(-4, 4, length.out = 100)
+  z_grid <- outer(x_grid, y_grid, function(a, b) {
+    sapply(1:length(a), function(i) {
+      v <- c(a[i], b[i])
+      exp(-0.5 * t(v) %*% solve(sigmas[[k]]) %*% v)
+    })
+  })
+  contour(x_grid, y_grid, z_grid, add = TRUE, col = cols[k], lwd = 1.5, nlevels = 5, drawlabels = FALSE)
+}
+
+par(mfrow = c(1, 1))
+```
+
+## 浓度矩阵与对数线性结构
+
+> **Konzentrationsmatrix und log-lineare Struktur**
+
+令 $\Omega = \Sigma^{-1}$ 为**浓度矩阵**（Konzentrationsmatrix，又称精度矩阵 / Präzisionsmatrix），$\Omega_{jl}$ 为其 $(j, l)$ 元素。将密度函数 (11.5) 中的指数部分展开：
+
+$$
+f(y; \mu, \Sigma) \propto \exp\left\{-\frac{1}{2}\sum_{j=1}^{p}\sum_{l=1}^{p} \Omega_{jl}(y_j - \mu_j)(y_l - \mu_l)\right\}
+$$
+
+进一步化简：
+
+$$
+\propto \exp\left\{-\sum_{j=1}^{p}\sum_{l>j} \Omega_{jl} y_j y_l + \sum_{j=1}^{p}\left[-\frac{1}{2}\Omega_{jj} y_j^2 + \left(\sum_{l=1}^{p}\Omega_{jl}\mu_l\right)y_j\right]\right\} \tag{11.6}
+$$
+
+定义统计量 $s_j(y) = (y_j^2, y_j)^\top$ 和 $s_{jl}(y) = y_j y_l$，参数 $\theta_j = (-\frac{1}{2}\Omega_{jj}, \sum_l \Omega_{jl}\mu_l)^\top$ 和 $\theta_{jl} = -\Omega_{jl}$，则 (11.6) 可以重写为：
+
+$$
+f(y; \mu, \Sigma) \propto \exp\left\{\sum_{j=1}^{p}\sum_{l>j} \theta_{lj} s_{lj}(y) + \sum_{j=1}^{p} \theta_j^\top s_j(y)\right\} \tag{11.7}
+$$
+
+这揭示了两个极其重要的性质。
+
+**性质一**：与离散变量的对数线性模型不同，多元正态分布**不包含高阶交互项**。它只有二阶（配对）交互项。这意味着多元正态分布的依赖结构完全由配对关系决定。
+
+**性质二**：条件独立性可以直接从浓度矩阵中读取：
+
+$$
+\Omega_{jl} = 0 \quad \Longleftrightarrow \quad Y_j \perp\!\!\!\perp Y_l \mid Y_1, \ldots, Y_p \setminus \{j, l\} \tag{11.8}
+$$
+
+这是一个非常优雅的结论：**浓度矩阵中的零元素恰好对应图模型中的缺失边**。
+
+::: {.callout-tip icon="false"}
+## 协方差 vs 浓度矩阵的比喻 | Kovarianz- vs. Konzentrationsmatrix
+
+想象一个社交网络。**协方差矩阵** $\Sigma$ 就像衡量两个人之间的"总相关性" -- 这包括通过共同朋友的间接关联。如果 Alice 和 Bob 都与 Charlie 关系很好，那么即使 Alice 和 Bob 从未直接交流过，他们之间的协方差可能也不为零（因为共同的朋友 Charlie 制造了统计关联）。
+
+**浓度矩阵** $\Omega = \Sigma^{-1}$ 则过滤掉了这些间接效应。$\Omega_{jl} = 0$ 意味着在已知所有其他人的信息后，Alice 和 Bob 之间**没有直接联系**。这就是为什么浓度矩阵对图模型如此重要 -- 它揭示的是**直接**的条件依赖关系。
+
+*$\Sigma$ misst die Gesamtkorrelation (inklusive indirekter Pfade). $\Omega = \Sigma^{-1}$ zeigt nur die direkten bedingten Abhängigkeiten.*
+:::
+
+```{r}
+#| label: fig-cov-vs-conc
+#| fig-cap: "协方差矩阵 vs 浓度矩阵：间接关联 vs 直接关联 | Kovarianzmatrix vs. Konzentrationsmatrix"
+#| fig-height: 5.5
+
+# 构造一个有意义的例子：4个变量
+# 真实图结构: 1-2, 2-3, 3-4 (链式结构)
+set.seed(42)
+
+# 从浓度矩阵出发构造
+Omega_true <- matrix(c(
+  1.5,  -0.8,  0.0,  0.0,
+ -0.8,   2.0, -0.7,  0.0,
+  0.0,  -0.7,  1.8, -0.6,
+  0.0,   0.0, -0.6,  1.3
+), 4, 4)
+
+Sigma_true <- solve(Omega_true)
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4.5, 3.5, 2))
+
+# 协方差矩阵热力图
+image(1:4, 1:4, Sigma_true[4:1, ], col = hcl.colors(50, "RdBu", rev = TRUE),
+      xlab = "变量 | Variable", ylab = "变量 | Variable",
+      main = expression(paste("协方差矩阵 ", Sigma)),
+      axes = FALSE, cex.main = 1.0, col.main = "#1E293B")
+axis(1, at = 1:4, labels = 1:4)
+axis(2, at = 1:4, labels = 4:1)
+for (i in 1:4) for (j in 1:4) {
+  text(j, 5 - i, round(Sigma_true[i, j], 2), cex = 0.9, font = 2,
+       col = ifelse(abs(Sigma_true[i, j]) > 0.15, "white", "black"))
+}
+mtext("包含间接关联", side = 1, line = 2.5, cex = 0.7, col = "#EA580C", font = 2)
+
+# 浓度矩阵热力图
+image(1:4, 1:4, Omega_true[4:1, ], col = hcl.colors(50, "RdBu", rev = TRUE),
+      xlab = "变量 | Variable", ylab = "变量 | Variable",
+      main = expression(paste("浓度矩阵 ", Omega == Sigma^{-1})),
+      axes = FALSE, cex.main = 1.0, col.main = "#1E293B")
+axis(1, at = 1:4, labels = 1:4)
+axis(2, at = 1:4, labels = 4:1)
+for (i in 1:4) for (j in 1:4) {
+  text(j, 5 - i, round(Omega_true[i, j], 2), cex = 0.9, font = 2,
+       col = ifelse(abs(Omega_true[i, j]) > 0.15, "white", "black"))
+}
+mtext("0 = 条件独立 = 缺失边", side = 1, line = 2.5, cex = 0.7, col = "#16A34A", font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: fig-chain-graph
+#| fig-cap: "由浓度矩阵零元素推导出的链式图模型 | Kettengraph aus der Konzentrationsmatrix"
+#| fig-height: 3.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 4), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold(paste("从 ", Omega, " 读取图结构 | Graph aus ", Omega, " ablesen"))),
+      cex.main = 1.1, col.main = "#1E293B")
+
+cx <- c(2, 5, 8, 11); cy <- rep(2.5, 4)
+
+# 边: 1-2, 2-3, 3-4
+for (k in 1:3) {
+  segments(cx[k] + 0.5, cy[k], cx[k+1] - 0.5, cy[k+1], col = "#2563EB", lwd = 3)
+  text((cx[k] + cx[k+1])/2, cy[k] + 0.5, 
+       bquote(Omega[.(k)*.(k+1)] != 0), cex = 0.7, col = "#2563EB", font = 2)
+}
+
+# 缺失边标注
+segments(cx[1], cy[1] - 0.3, cx[3], cy[3] - 0.3, col = "#DC2626", lwd = 1.5, lty = 3)
+text((cx[1] + cx[3])/2, cy[1] - 0.8, expression(Omega[13] == 0 %->% 1 %~% 3 * " | " * group("{", list(2,4), "}")),
+     cex = 0.6, col = "#DC2626", font = 2)
+
+for (i in 1:4) {
+  points(cx[i], cy[i], pch = 21, bg = "white", col = "#1E293B", cex = 4, lwd = 2.5)
+  text(cx[i], cy[i], i, cex = 1.1, font = 2, col = "#1E293B")
+}
+```
+
+## 例 11.3：德国 2025 年大选
+
+> **Beispiel 11.3: Bundestagswahl 2025**
+
+```{r}
+#| label: example-11-3
+#| fig-cap: "德国 2025 年大选各政党得票率的图模型（仿教材 Fig. 11.8）| Graphisches Modell für Stimmenanteile"
+#| fig-height: 7
+
+# 模拟 7 个政党在不同选区的得票率数据
+set.seed(2025)
+n_districts <- 299
+
+# 从浓度矩阵构造有意义的依赖结构
+# 政党: SPD, CDU/CSU, Green, Left, FDP, FreeVoters, AfD
+party_names <- c("SPD", "CDU/CSU", "Green", "Left", "FDP", "Free.Voters", "AfD")
+p_party <- 7
+
+# 构造浓度矩阵 - Green 与 FreeVoters 和 Left 条件独立
+Omega_party <- matrix(0, p_party, p_party)
+diag(Omega_party) <- c(2.0, 2.5, 1.8, 1.5, 1.6, 1.4, 2.2)
+
+# 存在的边 (非零浓度)
+Omega_party[1,2] <- -0.8; Omega_party[2,1] <- -0.8  # SPD-CDU
+Omega_party[1,3] <- -0.3; Omega_party[3,1] <- -0.3  # SPD-Green
+Omega_party[1,7] <- -0.5; Omega_party[7,1] <- -0.5  # SPD-AfD
+Omega_party[2,3] <- -0.2; Omega_party[3,2] <- -0.2  # CDU-Green
+Omega_party[2,5] <- -0.4; Omega_party[5,2] <- -0.4  # CDU-FDP
+Omega_party[2,7] <- -0.6; Omega_party[7,2] <- -0.6  # CDU-AfD
+Omega_party[1,4] <- -0.3; Omega_party[4,1] <- -0.3  # SPD-Left
+Omega_party[1,5] <- -0.2; Omega_party[5,1] <- -0.2  # SPD-FDP
+Omega_party[4,7] <-  0.2; Omega_party[7,4] <-  0.2  # Left-AfD
+Omega_party[5,6] <- -0.3; Omega_party[6,5] <- -0.3  # FDP-FreeVoters
+Omega_party[6,7] <- -0.3; Omega_party[7,6] <- -0.3  # FreeVoters-AfD
+Omega_party[2,6] <- -0.2; Omega_party[6,2] <- -0.2  # CDU-FreeVoters
+Omega_party[3,5] <- -0.1; Omega_party[5,3] <- -0.1  # Green-FDP
+
+# Green 与 Left 条件独立: Omega[3,4] = 0 (已经是0)
+# Green 与 FreeVoters 条件独立: Omega[3,6] = 0 (已经是0)
+
+# 确保正定
+eig <- eigen(Omega_party)$values
+if (any(eig <= 0)) {
+  Omega_party <- Omega_party + (abs(min(eig)) + 0.5) * diag(p_party)
+}
+
+Sigma_party <- solve(Omega_party)
+
+# 生成数据
+library(MASS)
+vote_data <- mvrnorm(n_districts, mu = c(20, 28, 12, 5, 6, 4, 22), Sigma = Sigma_party)
+colnames(vote_data) <- party_names
+
+# 估计浓度矩阵
+Sigma_hat <- cov(vote_data)
+Omega_hat <- solve(Sigma_hat)
+
+cat("例 11.3: 德国 2025 年大选数据 | Beispiel 11.3: Bundestagswahl 2025\n\n")
+cat("  估计的浓度矩阵 (部分) | Geschätzte Konzentrationsmatrix:\n\n")
+print(round(Omega_hat, 2))
+
+# 绘制图模型
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 14), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("德国 2025 年大选图模型 | Graphisches Modell Bundestagswahl 2025")),
+      cex.main = 1.1, col.main = "#1E293B")
+
+# 节点坐标（圆形布局）
+angles <- seq(pi/2, pi/2 + 2*pi, length.out = p_party + 1)[1:p_party]
+r <- 3.5
+cx_party <- 7 + r * cos(angles)
+cy_party <- 5 + r * sin(angles)
+
+# 画边（浓度矩阵非零元素）
+threshold <- 0.08
+for (i in 1:(p_party-1)) {
+  for (j in (i+1):p_party) {
+    if (abs(Omega_hat[i,j]) > threshold) {
+      lw <- min(abs(Omega_hat[i,j]) * 4, 4)
+      ec <- ifelse(Omega_hat[i,j] < 0, "#2563EB", "#DC2626")
+      segments(cx_party[i], cy_party[i], cx_party[j], cy_party[j], 
+               col = ec, lwd = lw)
+    }
+  }
+}
+
+# 画节点
+party_colors <- c("#E3000F", "#000000", "#64A12D", "#BE3075", "#FFED00", "#FF8800", "#009EE0")
+party_bg <- c("#FEE2E2", "#E5E7EB", "#D1FAE5", "#FCE7F3", "#FEF9C3", "#FEF3C7", "#DBEAFE")
+
+for (i in 1:p_party) {
+  rect(cx_party[i] - 1.0, cy_party[i] - 0.35, cx_party[i] + 1.0, cy_party[i] + 0.35,
+       col = party_bg[i], border = party_colors[i], lwd = 2)
+  text(cx_party[i], cy_party[i], party_names[i], cex = 0.6, font = 2, col = "#1E293B")
+}
+
+# 标注缺失边
+text(7, 0.5, "缺失边: Green 与 Free.Voters, Green 与 Left 条件独立",
+     col = "#DC2626", cex = 0.7, font = 2)
+text(7, 0.0, "Fehlende Kanten: Grüne bedingt unabh. von Freie Wähler und Linke",
+     col = "#64748B", cex = 0.6, font = 3)
+
+legend("bottomright", legend = c("负浓度 (正相关)", "正浓度 (负相关)"),
+       col = c("#2563EB", "#DC2626"), lwd = 3, bty = "n", cex = 0.75)
+```
+
+```{r}
+#| label: example-11-3-interpret
+#| code-fold: false
+
+cat("例 11.3 解读 | Interpretation:\n\n")
+cat("  图模型显示各政党得票率之间存在强烈的相互依赖。\n")
+cat("  然而，绿党的得票率与自由选民党和左翼党的得票率\n")
+cat("  在给定其他政党得票率的条件下是条件独立的。\n\n")
+cat("  这意味着：一旦已知 SPD、CDU、FDP、AfD 的得票率，\n")
+cat("  那么左翼党或自由选民的表现不再为绿党的表现提供额外信息。\n\n")
+
+cat("  Die Stimmenanteile der Grünen sind bedingt unabhängig\n")
+cat("  von den Freien Wählern und der Linken, gegeben die übrigen Parteien.\n")
+```
+
+{{< pagebreak >}}
+
+# 练习题 {#sec-exercises}
+
+> **Übungsaufgaben**
+
+## 练习 1：学生课余活动
+
+> **Übung 1: Freizeitverhalten von Studierenden**
+
+一项针对统计学学生的调查收集了他们在一个典型的一周内如何度过课余时间的数据。对于每位学生，我们有以下变量：$M$ = 观看的电影数量（$M \le 7$），$B$ = 阅读的书籍数量（$B \le 2$），$V$ = 玩电子游戏的小时数（$V \le 20$）。
+
+```{r}
+#| label: exercise-1
+#| code-fold: false
+
+cat("练习 1: 学生课余活动 | Übung 1: Freizeitverhalten\n\n")
+
+cat("a) 能否画出该数据的列联表？\n\n")
+cat("   可以！这是一个 8 x 3 x 21 = 504 个单元格的三维列联表。\n")
+cat("   K_M = 8 (0到7), K_B = 3 (0到2), K_V = 21 (0到20)\n\n")
+
+cat("b) 假设三个变量独立的对数线性模型:\n\n")
+cat("   log P(M=m, B=b, V=v) = theta_0 + theta_m + theta_b + theta_v\n")
+cat("   (所有交互项 = 0)\n\n")
+cat("   用模型记法: M + B + V (无交互项)\n\n")
+
+cat("c) 社会学家认为 B 与 M、B 与 V 可能有依赖关系。\n")
+cat("   加入 B*M 和 B*V 的交互项:\n\n")
+cat("   log P(M=m, B=b, V=v) = theta_0 + theta_m + theta_b + theta_v\n")
+cat("                          + theta_{mb} + theta_{bv}\n\n")
+cat("   模型记法: M*B + B*V\n\n")
+
+cat("d) 在模型 M*B + B*V 下:\n")
+cat("   M 和 V 不一定边际独立, 但 M 与 V 在给定 B 下条件独立:\n")
+cat("   M ind V | B\n\n")
+```
+
+```{r}
+#| label: fig-exercise-1-graph
+#| fig-cap: "练习 1d: 条件独立图 | Übung 1d: Bedingtes Unabhängigkeitsgraph"
+#| fig-height: 3.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 5), axes = FALSE, xlab = "", ylab = "")
+title("练习 1d: 依赖图 | Übung 1d: Abhängigkeitsgraph", cex.main = 1.0, col.main = "#1E293B")
+
+vx_e1 <- c(2, 5, 8); vy_e1 <- c(2.5, 2.5, 2.5)
+
+# 边 M-B 和 B-V
+segments(vx_e1[1] + 0.6, vy_e1[1], vx_e1[2] - 0.6, vy_e1[2], col = "#2563EB", lwd = 3)
+segments(vx_e1[2] + 0.6, vy_e1[2], vx_e1[3] - 0.6, vy_e1[3], col = "#2563EB", lwd = 3)
+
+# 缺失边 M-V
+segments(vx_e1[1], vy_e1[1] - 0.5, vx_e1[3], vy_e1[3] - 0.5, col = "#DC2626", lwd = 1.5, lty = 3)
+text(5, 1.3, expression(M %~% V ~ "|" ~ B), col = "#DC2626", cex = 0.9, font = 2)
+
+for (i in 1:3) {
+  points(vx_e1[i], vy_e1[i], pch = 21, bg = "white", col = "#1E293B", cex = 5, lwd = 2.5)
+  text(vx_e1[i], vy_e1[i], c("M", "B", "V")[i], cex = 1.2, font = 2, col = "#1E293B")
+}
+```
+
+## 练习 2：DAG 分析与图模型
+
+> **Übung 2: DAG-Analyse und graphische Modelle**
+
+```{r}
+#| label: fig-exercise-2a
+#| fig-cap: "练习 2a: 七变量 DAG | Übung 2a: DAG mit sieben Variablen"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 14), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("练习 2a: 七变量 DAG | Übung 2a: DAG mit 7 Variablen")),
+      cex.main = 1.1, col.main = "#1E293B")
+
+# 节点坐标
+e2_x <- c(2, 7, 12, 4.5, 9.5, 4.5, 9.5)
+e2_y <- c(8, 8, 8, 5.5, 5.5, 3, 3)
+
+# 有向边
+e2_edges <- list(c(1,4), c(2,4), c(2,5), c(3,5), c(4,6), c(4,7), c(5,7))
+
+for (e in e2_edges) {
+  dx <- e2_x[e[2]] - e2_x[e[1]]
+  dy <- e2_y[e[2]] - e2_y[e[1]]
+  len <- sqrt(dx^2 + dy^2)
+  x1 <- e2_x[e[1]] + 0.4 * dx / len
+  y1 <- e2_y[e[1]] + 0.4 * dy / len
+  x2 <- e2_x[e[2]] - 0.4 * dx / len
+  y2 <- e2_y[e[2]] - 0.4 * dy / len
+  arrows(x1, y1, x2, y2, col = "#2563EB", lwd = 2.5, length = 0.12)
+}
+
+for (i in 1:7) {
+  points(e2_x[i], e2_y[i], pch = 21, bg = "white", col = "#1E293B", cex = 4, lwd = 2.5)
+  text(e2_x[i], e2_y[i], bquote(X[.(i)]), cex = 0.9, font = 2, col = "#1E293B")
+}
+```
+
+```{r}
+#| label: exercise-2a-solution
+#| code-fold: false
+
+cat("练习 2a 解答 | Lösung Übung 2a:\n\n")
+cat("  DAG 的父节点关系:\n")
+cat("    Pa(X1) = {}, Pa(X2) = {}, Pa(X3) = {}\n")
+cat("    Pa(X4) = {X1, X2}, Pa(X5) = {X2, X3}\n")
+cat("    Pa(X6) = {X4}, Pa(X7) = {X4, X5}\n\n")
+
+cat("  条件独立性:\n")
+cat("    X1 ind {X2, X3}        (无共同祖先, 不连通)\n")
+cat("    X2 ind {} | {}         (X2 与所有变量通过路径相连)\n")  
+cat("    X3 ind {X1} | {}       (无共同祖先)\n")
+cat("    X4 ind X3 | {X1, X2}\n")
+cat("    X5 ind X1 | {X2, X3}\n")
+cat("    X6 ind {X1,X2,X3,X5} | X4\n")
+cat("    X7 ind {X1,X2,X3} | {X4, X5}\n\n")
+
+cat("  联合分布分解:\n")
+cat("    f(x1,...,x7) = f(x1) f(x2) f(x3) f(x4|x1,x2) f(x5|x2,x3)\n")
+cat("                   * f(x6|x4) f(x7|x4,x5)\n")
+```
+
+```{r}
+#| label: fig-exercise-2b
+#| fig-cap: "练习 2b: 根据条件独立性补全无向图 | Übung 2b: Ungerichteten Graph vervollständigen"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("练习 2b: 无向图 | Übung 2b: Ungerichteter Graph")),
+      cex.main = 1.1, col.main = "#1E293B")
+
+# 节点: A, B, C, D, E, F
+e2b_labels <- c("A", "B", "C", "D", "E", "F")
+e2b_x <- c(2, 6, 10, 6, 10, 2)
+e2b_y <- c(6, 6, 6, 2.5, 2.5, 2.5)
+
+# 条件独立性:
+# A ind {C,D,E,F} | B  => A 仅与 B 相连
+# B ind {C,F} | {D,E}  => B 不与 C, F 直接相连 (给定 D,E)
+# C ind {A,B,E,F} | D   => C 仅与 D 相连
+# F ind {A,B,C} | {D,E} => F 仅与 D, E 相连
+
+# 存在的边: A-B, B-D, B-E, C-D, D-E, D-F, E-F
+e2b_edges <- list(c(1,2), c(2,4), c(2,5), c(3,4), c(4,5), c(4,6), c(5,6))
+
+for (e in e2b_edges) {
+  segments(e2b_x[e[1]], e2b_y[e[1]], e2b_x[e[2]], e2b_y[e[2]], 
+           col = "#2563EB", lwd = 3)
+}
+
+for (i in 1:6) {
+  points(e2b_x[i], e2b_y[i], pch = 21, bg = "white", col = "#1E293B", cex = 4.5, lwd = 2.5)
+  text(e2b_x[i], e2b_y[i], e2b_labels[i], cex = 1.2, font = 2, col = "#1E293B")
+}
+
+# 标注条件独立性
+text(6, 0.8, "A ind {C,D,E,F}|B;  B ind {C,F}|{D,E};  C ind {A,B,E,F}|D;  F ind {A,B,C}|{D,E}",
+     cex = 0.55, col = "#DC2626", font = 2)
+```
+
+## 练习 3：对角协方差矩阵下的独立性
+
+> **Übung 3: Unabhängigkeit bei diagonaler Kovarianzmatrix**
+
+设 $x \in \mathbb{R}^n$ 为随机向量，$E(x) = 0$，$V = \text{Cov}(x)$。假设 $x$ 服从多元正态分布且 $V$ 为对角矩阵。请证明 $x_1, \ldots, x_n$ 独立。
+
+```{r}
+#| label: exercise-3
+#| code-fold: false
+
+cat("练习 3: 对角协方差 => 独立性 | Übung 3: Diagonale Kovarianz => Unabh.\n\n")
+cat("  证明思路 | Beweisskizze:\n\n")
+cat("  若 V = Cov(x) 为对角矩阵, 即 V = diag(sigma_1^2, ..., sigma_n^2),\n")
+cat("  则 V^{-1} = Omega 也是对角矩阵: Omega = diag(1/sigma_1^2, ..., 1/sigma_n^2).\n\n")
+cat("  多元正态密度为:\n")
+cat("    f(x) = (2*pi)^{-n/2} |V|^{-1/2} exp{-1/2 x' V^{-1} x}\n\n")
+cat("  由于 V^{-1} 为对角阵:\n")
+cat("    x' V^{-1} x = sum_{i=1}^{n} x_i^2 / sigma_i^2\n\n")
+cat("  因此:\n")
+cat("    f(x) = prod_{i=1}^{n} [1/sqrt(2*pi*sigma_i^2) * exp(-x_i^2/(2*sigma_i^2))]\n")
+cat("         = prod_{i=1}^{n} f_i(x_i)\n\n")
+cat("  联合密度分解为边际密度的乘积 => x_1, ..., x_n 独立。 QED\n\n")
+
+cat("  关键洞察: 对于正态分布, 不相关 <=> 独立。\n")
+cat("  这是正态分布的特殊性质, 对一般分布不成立!\n")
+```
+
+```{r}
+#| label: fig-exercise-3
+#| fig-cap: "练习 3 图示：对角协方差 (左) vs 非对角协方差 (右) | Diagonale vs. nicht-diagonale Kovarianz"
+#| fig-height: 5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4, 3.5, 1))
+
+set.seed(42)
+# 对角协方差：独立
+dat_diag <- mvrnorm(500, mu = c(0, 0), Sigma = diag(c(1, 1.5)))
+plot(dat_diag[,1], dat_diag[,2], pch = 16, col = adjustcolor("#16A34A", 0.4), cex = 0.7,
+     xlim = c(-4, 4), ylim = c(-4, 4), asp = 1,
+     xlab = expression(x[1]), ylab = expression(x[2]),
+     main = "V = diag => 独立", cex.main = 1.0, col.main = "#16A34A")
+grid(col = "#E2E8F0")
+# 相关系数
+r_diag <- cor(dat_diag[,1], dat_diag[,2])
+text(-3, 3.5, bquote(hat(rho) == .(round(r_diag, 3))), col = "#16A34A", font = 2)
+
+# 非对角协方差：依赖
+dat_full <- mvrnorm(500, mu = c(0, 0), Sigma = matrix(c(1, 0.8, 0.8, 1.5), 2, 2))
+plot(dat_full[,1], dat_full[,2], pch = 16, col = adjustcolor("#DC2626", 0.4), cex = 0.7,
+     xlim = c(-4, 4), ylim = c(-4, 4), asp = 1,
+     xlab = expression(x[1]), ylab = expression(x[2]),
+     main = "V 非对角 => 依赖", cex.main = 1.0, col.main = "#DC2626")
+grid(col = "#E2E8F0")
+r_full <- cor(dat_full[,1], dat_full[,2])
+text(-3, 3.5, bquote(hat(rho) == .(round(r_full, 3))), col = "#DC2626", font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心概念链
+
+```{r}
+#| label: fig-summary-chain
+#| fig-cap: "本章知识逻辑链 | Logikkette der Konzepte dieses Kapitels"
+#| fig-height: 6.5
+#| fig-width: 12
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("第十一章知识逻辑链 | Logikkette Kapitel 11")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+nx <- c(2.5, 8, 13.5, 5.5, 10.5)
+ny <- c(6.2, 6.2, 6.2, 2.5, 2.5)
+labels <- c(
+  "列联表\n对数线性模型\nKontingenztafeln",
+  "条件独立性\n交互项 = 0\nBed. Unabh.",
+  "图模型\n无向图 / DAG\nGraphische Mod.",
+  "多元正态\n浓度矩阵\nMultiv. Normal",
+  "模型选择\nAIC / BIC\nModellselektion"
+)
+fills <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#D1FAE5", "#E0E7FF")
+bords <- c("#2563EB", "#D97706", "#DB2777", "#16A34A", "#6366F1")
+
+for (i in 1:5) {
+  rect(nx[i]-1.7, ny[i]-0.8, nx[i]+1.7, ny[i]+0.8,
+       col = fills[i], border = bords[i], lwd = 2)
+  text(nx[i], ny[i], labels[i], cex = 0.52, font = 2, col = "#1E293B")
+}
+
+draw_arrow <- function(x1, y1, x2, y2, label) {
+  arrows(x1, y1, x2, y2, col = "#64748B", lwd = 2, length = 0.12)
+  mx <- (x1 + x2) / 2; my <- (y1 + y2) / 2
+  text(mx, my + 0.3, label, cex = 0.5, col = "#EA580C", font = 3)
+}
+
+draw_arrow(4.2, 6.2, 6.3, 6.2, "参数=0")
+draw_arrow(9.7, 6.2, 11.8, 6.2, "图表示")
+draw_arrow(8, 5.4, 5.5, 3.3, "连续变量")
+draw_arrow(13.5, 5.4, 10.5, 3.3, "选模型")
+draw_arrow(7.2, 2.5, 8.8, 2.5, "Omega=0")
+```
+
+## 公式速查表
+
+| 公式 | 名称 | 编号 |
+|:-----|:-----|:----:|
+| $n_{k_1 k_2 \cdots k_p} = \sum_{i=1}^{n} \mathbf{1}\{y^{(i)} = (k_1, \ldots, k_p)\}$ | 单元格计数 | -- |
+| $P(Y = y; \theta) \propto \exp(\theta_0 + \sum_j s_j(y)\theta_j)$ | 对数线性模型 | 11.1 |
+| $N_{i_1 i_2} \sim \text{Poisson}(\lambda_{i_1 i_2})$ | Poisson 单元格模型 | -- |
+| $A \perp\!\!\!\perp B \mid C \Leftrightarrow f_{ABC} = h_{AC} \cdot h_{BC}$ | 条件独立性 | 11.4 |
+| $i \perp\!\!\!\perp j \mid V \setminus \{i,j\} \Leftrightarrow (i,j) \notin E$ | 图模型判据 | -- |
+| $i \perp\!\!\!\perp (V \setminus \{i \cup \mathcal{N}(i)\}) \mid \mathcal{N}(i)$ | 局部条件独立 | -- |
+| $f(y; \mu, \Sigma) \propto \exp\{-\frac{1}{2}(y-\mu)^\top \Sigma^{-1}(y-\mu)\}$ | 多元正态密度 | 11.5 |
+| $\Omega_{jl} = 0 \Leftrightarrow Y_j \perp\!\!\!\perp Y_l \mid \text{其余}$ | 浓度矩阵判据 | 11.8 |
+| $f_{Y_1 \cdots Y_p} = \prod_{j=1}^{p} f_{Y_j \mid \text{Pa}(j)}$ | DAG 分解 | -- |
+
+## 本章的六个核心洞察
+
+| 编号 | 洞察 | 关键词 |
+|:----:|:------|:------|
+| 1 | 多元离散数据用列联表组织，对数线性模型通过主效应和交互项描述其分布结构 | 列联表 |
+| 2 | 交互项为零等价于条件独立性，这为模型简化提供了统计依据 | 条件独立 |
+| 3 | 图模型用缺失边表示条件独立，配对、局部、全局三种解读等价 | 图模型 |
+| 4 | DAG 可以表达边际独立但条件依赖的复杂结构（v-结构 / 解释器效应） | DAG |
+| 5 | 多元正态分布只有二阶交互，浓度矩阵的零元素直接对应图模型的缺失边 | 浓度矩阵 |
+| 6 | 对正态分布，不相关等价于条件独立（给定其余变量），但对一般分布不成立 | 正态特殊性 |
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 列联表与对数线性模型
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Kontingenztafel | 列联表 | contingency table |
+| die Zellhäufigkeit | 单元格计数 | cell count |
+| die Randverteilung / der Rand | 边际分布 / 边际 | marginal distribution |
+| das log-lineare Modell | 对数线性模型 | log-linear model |
+| der Haupteffekt | 主效应 | main effect |
+| der Interaktionsterm | 交互项 | interaction term |
+| das saturierte Modell | 饱和模型 | saturated model |
+| die Modellhierarchie | 模型层级 | model hierarchy |
+| die Poissonverteilung | Poisson 分布 | Poisson distribution |
+| das Multinomialmodell | 多项式模型 | multinomial model |
+| die Randbedingung (Seitenconstraint) | 边界约束 | side constraint |
+| die Normalisierungskonstante | 归一化常数 | normalization constant |
+| linear unabhängig | 线性独立 | linearly independent |
+| die Indikatorfunktion | 指示函数 | indicator function |
+
+## 图模型
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| das graphische Modell | 图模型 | graphical model |
+| die bedingte Unabhängigkeit | 条件独立性 | conditional independence |
+| der Knoten | 节点 | node / vertex |
+| die Kante | 边 | edge |
+| die fehlende Kante | 缺失边 | missing edge |
+| die Nachbarschaft | 邻居集 | neighborhood |
+| die paarweise bedingte Unabh. | 配对条件独立 | pairwise conditional independence |
+| die lokale bedingte Unabh. | 局部条件独立 | local conditional independence |
+| die globale bedingte Unabh. | 全局条件独立 | global conditional independence |
+| der Pfad | 路径 | path |
+| der ungerichtete Graph | 无向图 | undirected graph |
+
+## DAG 与因果模型
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| der gerichtete azyklische Graph (DAG) | 有向无环图 | directed acyclic graph |
+| die Elternknoten (Parents) | 父节点 | parent nodes |
+| der Zyklus / die Schleife | 环 / 循环 | cycle / loop |
+| die Moralisierung | 道德化 | moralization |
+| der moralisierte Graph | 道德化图 | moral graph |
+| die kausale Ordnung | 因果次序 | causal order |
+| die Faktorisierung | 分解 | factorization |
+| der gemeinsame Vorfahre | 共同祖先 | common ancestor |
+| der Nachfolger | 后继节点 | descendant |
+
+## 多元正态分布
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die multivariate Normalverteilung | 多元正态分布 | multivariate normal distribution |
+| der Erwartungswertvektor | 均值向量 | mean vector |
+| die Kovarianzmatrix | 协方差矩阵 | covariance matrix |
+| die Konzentrationsmatrix (Präzisionsmatrix) | 浓度矩阵（精度矩阵） | concentration (precision) matrix |
+| positiv definit | 正定 | positive definite |
+| die Inverse | 逆矩阵 | inverse matrix |
+| die Maximum-Likelihood-Schätzung (MLE) | 最大似然估计 | maximum likelihood estimation |
+| die Exponentialfamilie | 指数族 | exponential family |
+| die quadratische Form | 二次型 | quadratic form |
+| unkorreliert | 不相关 | uncorrelated |
+| unabhängig | 独立 | independent |
+:::

@@ -1,0 +1,1962 @@
+---
+title: "第七章：模型选择"
+subtitle: "从过拟合陷阱到最优模型的选择之道 | Von der Uberanpassungsfalle zur optimalen Modellwahl"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+在前面的章节中，我们学习了如何通过概率分布来刻画随机变量，并在第六章引入了回归模型以纳入协变量信息。然而在真实应用中，一个核心问题始终悬而未决：**我们该选哪个模型？** 哪些协变量应当纳入最终模型？哪种分布最能捕捉数据特征？模型越复杂是否就越好？这些问题的答案并不显而易见，甚至可能相互矛盾。本章将系统地发展模型选择的理论工具，从"永远不要重复使用数据"这一黄金法则出发，推导出交叉验证、AIC 和 BIC 等核心方法。
+
+*In den vorherigen Kapiteln haben wir Wahrscheinlichkeitsmodelle und Regressionsmodelle kennengelernt. Nun stellen wir die zentrale Frage: Welches Modell sollen wir wahlen? Dieses Kapitel entwickelt systematisch die Werkzeuge der Modellwahl.*
+
+具体来说，我们将沿以下路线展开：
+
+1. **建模依赖关系** -- 将模型分解为概率模型 $\mathcal{F}$ 与结构模型 $\mathcal{H}$
+2. **训练数据与测试数据** -- "不可重复使用数据"原则与交叉验证
+3. **AIC 与 BIC** -- 不需要重新拟合的模型选择准则
+4. **AIC、BIC 与假设检验** -- 三种决策规则的比较
+5. **前向选择与小样本修正** -- 逐步选择与 AICc
+6. **模型维度** -- 参数维度与样本量的比值
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图 | Lernroadmap dieses Kapitels"
+#| fig-height: 4.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 18), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+steps_x <- c(1.8, 5.2, 8.6, 12.0, 15.4)
+steps_y <- rep(4.2, 5)
+arrows(steps_x[-5] + 1.2, steps_y[-5], steps_x[-1] - 1.2, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("建模依赖关系\nM = (F, H)", 
+               "训练/测试数据\n交叉验证",
+               "AIC 与 BIC\n信息准则",
+               "假设检验\n判决规则比较",
+               "前向选择\n小样本修正")
+labels_de <- c("Modellierung der\nAbhangigkeit", 
+               "Training- und\nTestdaten",
+               "AIC und\nBIC",
+               "Hypothesentest\nund Vergleich",
+               "Vorwartsselektion\nund AICc")
+colors <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#E0E7FF", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DB2777", "#6366F1", "#16A34A")
+
+for (i in 1:5) {
+  rect(steps_x[i] - 1.2, steps_y[i] - 1.0, steps_x[i] + 1.2, steps_y[i] + 1.0,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.3, labels_cn[i], cex = 0.50, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.6, labels_de[i], cex = 0.38, col = "#64748B", font = 3)
+  text(steps_x[i] - 0.9, steps_y[i] + 0.85, paste0("\u00a77.", i), 
+       cex = 0.5, col = borders[i], font = 2)
+}
+
+arrows(0.5, 1.2, 17.5, 1.2, col = "#DC2626", lwd = 2, length = 0.15)
+text(9, 1.6, "从模型定义到最优选择，层层递进  >>>", cex = 0.85, col = "#DC2626")
+```
+
+**最终目标**：理解下面这条链路中每一个概念的含义 --
+
+$$
+\mathcal{M} = (\mathcal{F}, \mathcal{H}) \;\xrightarrow{\text{KL 散度}}\; \text{不可重复用数据} \;\xrightarrow{\text{修正}}\; \text{交叉验证 / AIC / BIC} \;\xrightarrow{\text{实践}}\; \text{前向选择}
+$$
+
+现在看不懂？**完全没关系** -- 读完本章，这条链将变得水到渠成。
+
+{{< pagebreak >}}
+
+# 建模依赖关系 {#sec-modeling-dependence}
+
+> **Modellierung der Abhangigkeit**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie in diesem Abschnitt lernen
+
+- 模型 $\mathcal{M}$ 的**双组件定义**：概率模型 $\mathcal{F}$ 与结构模型 $\mathcal{H}$
+- 概率模型**定义似然函数**，结构模型**定义输入如何影响参数**
+- 以 Logistic 回归为例**具体说明**两个组件
+- 嵌套模型与非嵌套模型的**区分**
+- **简化记法** $\mathcal{M} = \{F(\cdot;\theta), \theta \in \Theta\}$ 的含义
+:::
+
+## 从回归到更广的视角
+
+> **Von der Regression zu einer breiteren Perspektive**
+
+在前面的章节中，我们学习了用概率分布刻画随机变量的不同方法。在第六章，我们引入了回归模型，允许纳入协变量信息。在实际应用中，往往不清楚哪些协变量应当用于最终模型，或者哪种分布最能捕捉手头的数据。为了解决这些问题，我们将发展模型选择的工具，即为手头数据选择一个合适的模型。
+
+在大多数现实世界应用中，人们感兴趣的不是某个量如何独立变化，而是变量之间的**关系**。例如，在研究一个国家的社会经济因素（如收入和教育水平）时，我们可能想了解其中一个变量如何影响另一个。更一般地，我们想了解一个感兴趣的变量 $Y$（"结果""目标""因变量"）如何被其他变量 $x$（"输入""特征""自变量"）所影响。在大多数场景下，输入变量是多维的。这正是回归的设定。但我们想从更广泛的视角来处理这个问题。我们的目标是为给定 $x$ 的条件下的 $Y$ 找到一个模型，更正式地说，是选择一个关于 $Y$ 在给定 $x$ 条件下的条件分布的模型，即 $F(y|x, \theta)$，其中分布依赖于一组参数 $\theta = (\theta_1, \theta_2, \ldots, \theta_p)$。
+
+*In den meisten realen Anwendungen interessiert man sich fur die Beziehung zwischen Variablen. Wir wollen ein Modell fur die bedingte Verteilung von $Y$ gegeben $x$ finden.*
+
+## 模型的双组件定义
+
+> **Die Zwei-Komponenten-Definition eines Modells**
+
+现在我们需要更正式一些，因为这种类型的模型依赖于两个组件。第一，我们需要选择一个**概率模型** $\mathcal{F}$，如第三章所讨论的。第二，我们必须指定输入变量 $x$ 如何影响概率模型中的参数。为了将这两个视角分离开来，我们将模型 $\mathcal{M}$ 定义为一个配对，由概率模型 $\mathcal{F}$ 和结构模型 $\mathcal{H}$ 组成：
+
+$$
+\mathcal{M} = (\mathcal{F}, \mathcal{H})
+$$
+
+其中两个模型组件分别通过以下方式给出：
+
+$$
+\mathcal{F} = \{F(\cdot; \gamma), \quad \gamma \in \Gamma\}
+$$
+
+$$
+\mathcal{H} = \{h(\cdot; \theta) \text{ with } h: \mathcal{X} \to \Gamma \text{ and } \theta \in \Theta\}
+$$
+
+这里 $\mathcal{F}$ 称为**概率模型**（Wahrscheinlichkeitsmodell）或**分布模型**（Verteilungsmodell），它通过概率模型的参数化定义了似然函数。概率模型的参数空间记为 $\Gamma$，对每个 $\gamma \in \Gamma$，$F(\cdot; \gamma)$ 是一个完全确定的分布函数。特别地，如果密度存在，我们可以等价地使用 $\mathcal{F} = \{f(\cdot; \gamma), \gamma \in \Gamma\}$。
+
+除了概率模型，我们还有记为 $\mathcal{H}$ 的**结构模型**（Strukturmodell）。在机器学习领域，这也称为"假设空间"（Hypothesenraum）。它定义了输入变量 $x$ 如何影响模型的参数。函数 $h(\cdot; \theta)$ 依赖于参数 $\theta$。函数 $h(\cdot; \theta)$ 本身的结构假定已知，但参数 $\theta$ 未知，需要被估计。特别地，$h(\cdot; \theta)$ 的值域必须等于或为 $\Gamma$ 的子集：
+
+$$
+\{h(x, \theta) \text{ for } x \in \mathcal{X} \text{ and } \theta \in \Theta\} \subseteq \Gamma
+$$
+
+这一约束保证了对任何 $x$ 和 $\theta$ 的取值，我们都能得到 $F(\cdot; h(x, \theta)) \in \mathcal{F}$，即一个合适的分布。
+
+::: {.callout-tip icon="false"}
+## 剧本与演员的比喻 | Die Drehbuch-und-Schauspieler-Metapher
+
+想象你是一位电影导演，要拍一部电影。你需要做两个关键决定：
+
+第一个决定是选择**剧本类型**（喜剧、悲剧、动作片）-- 这就是概率模型 $\mathcal{F}$。它决定了故事的"基本风格"，就像正态分布、二项分布或 Poisson 分布决定了数据的基本形态。
+
+第二个决定是选择**演员阵容和他们的表演方式** -- 这就是结构模型 $\mathcal{H}$。同样的喜剧剧本，不同的演员用不同的方式演绎，效果完全不同。结构模型定义了输入变量 $x$（场景设定）如何通过函数 $h(x; \theta)$ 影响分布的参数（角色表现），而参数 $\theta$（演员的具体演技）需要从数据中学习。
+
+一部好电影需要**剧本**和**演员**都选对 -- 一个好模型同样需要 $\mathcal{F}$ 和 $\mathcal{H}$ 都选对。
+
+*Ein Modell $\mathcal{M} = (\mathcal{F}, \mathcal{H})$ besteht aus dem "Drehbuch" (Wahrscheinlichkeitsmodell) und der "Besetzung" (Strukturmodell). Beides muss gut gewahlt werden.*
+:::
+
+```{r}
+#| label: fig-model-decomposition
+#| fig-cap: "模型的双组件结构：概率模型 F 与结构模型 H | Zwei-Komponenten-Struktur eines Modells"
+#| fig-height: 5.5
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("模型的双组件定义 | Zwei-Komponenten-Definition")), 
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 顶层：模型 M
+rect(5.5, 6.2, 10.5, 7.8, col = "#F3E8FF", border = "#9333EA", lwd = 3)
+text(8, 7.3, expression(bold(M) == group("(", list(F, H), ")")), cex = 1.2, col = "#9333EA")
+text(8, 6.7, "模型 | Modell", cex = 0.8, col = "#6B7280")
+
+# 左侧：概率模型 F
+rect(1, 3.0, 6.5, 5.5, col = "#DBEAFE", border = "#2563EB", lwd = 2.5)
+text(3.75, 5.0, expression(bold(F) == group("{", list(F(cdot~";"~gamma), gamma %in% Gamma), "}")), 
+     cex = 0.85, col = "#2563EB")
+text(3.75, 4.3, "概率模型 | Wahrscheinlichkeitsmodell", cex = 0.7, col = "#1E293B")
+text(3.75, 3.6, "定义数据的分布形态", cex = 0.65, col = "#6B7280")
+
+# 右侧：结构模型 H
+rect(9.5, 3.0, 15, 5.5, col = "#FEF3C7", border = "#D97706", lwd = 2.5)
+text(12.25, 5.0, expression(bold(H) == group("{", list(h(cdot~";"~theta), theta %in% Theta), "}")), 
+     cex = 0.85, col = "#D97706")
+text(12.25, 4.3, "结构模型 | Strukturmodell", cex = 0.7, col = "#1E293B")
+text(12.25, 3.6, expression("定义" ~ x ~ "如何影响参数"), cex = 0.65, col = "#6B7280")
+
+# 箭头
+arrows(6.5, 6.5, 4.5, 5.5, col = "#64748B", lwd = 2, length = 0.12)
+arrows(9.5, 6.5, 11.5, 5.5, col = "#64748B", lwd = 2, length = 0.12)
+
+# 底部：输入和输出
+rect(1, 0.5, 6.5, 2.2, col = "#FCE7F3", border = "#DB2777", lwd = 2)
+text(3.75, 1.7, expression("例: F = 正态, 二项, Poisson ..."), 
+     cex = 0.7, col = "#DB2777")
+text(3.75, 1.1, expression(gamma == group("(", list("均值", "方差"), ")") ~ "等"), cex = 0.65, col = "#6B7280")
+
+rect(9.5, 0.5, 15, 2.2, col = "#D1FAE5", border = "#16A34A", lwd = 2)
+text(12.25, 1.7, expression("例: " * h(x~";"~theta) == frac(exp(x^T * theta), 1 + exp(x^T * theta))),
+     cex = 0.7, col = "#16A34A")
+text(12.25, 1.1, expression(theta == group("(", list("截距", "斜率"), ")") ~ "等"), cex = 0.65, col = "#6B7280")
+
+arrows(3.75, 3.0, 3.75, 2.2, col = "#64748B", lwd = 1.5, length = 0.1)
+arrows(12.25, 3.0, 12.25, 2.2, col = "#64748B", lwd = 1.5, length = 0.1)
+
+# 连接箭头
+arrows(6.5, 1.35, 9.5, 1.35, col = "#EA580C", lwd = 2, length = 0.12, code = 3)
+text(8, 1.8, expression(h(x~";"~theta) %in% Gamma), cex = 0.7, col = "#EA580C", font = 2)
+```
+
+## 以 Logistic 回归为例
+
+> **Beispiel: Logistische Regression**
+
+上述记法可以通过第六章讨论的 Logistic 回归来具体说明。在 Logistic 回归中，概率模型 $\mathcal{F}$ 是以 $\pi \in [0,1]$ 为唯一参数的二项分布。结构模型 $\mathcal{H}$ 由 Logistic 函数 $h(\cdot)$ 和线性预测子的线性结构组成。定义 $x = (1, x_1, x_2, \ldots, x_q)^\top$ 和 $\theta = (\beta_0, \beta_1, \beta_2, \ldots, \beta_q)^\top$，我们得到：
+
+$$
+h(x; \theta) = \frac{\exp(x^\top \theta)}{1 + \exp(x^\top \theta)}
+$$
+
+可以看到，$h(\cdot, \cdot)$ 的**结构已知**（Logistic 函数形式），但参数 $\theta$ **未知**，需要从数据中估计。这一函数将实值线性预测子映射到 $[0,1]$ 区间，恰好是二项分布参数 $\pi$ 的合法取值范围，因此约束条件 $\{h(x, \theta)\} \subseteq \Gamma = [0,1]$ 自然满足。
+
+```{r}
+#| label: fig-logistic-example-M
+#| fig-cap: "Logistic 回归的模型分解示例 | Logistische Regression als Beispiel fur die Modellzerlegung"
+#| fig-height: 5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 左图：概率模型 F (二项分布)
+n_trial <- 20
+pi_vals <- c(0.2, 0.5, 0.8)
+cols_pi <- c("#2563EB", "#DC2626", "#16A34A")
+x_binom <- 0:n_trial
+plot(x_binom, dbinom(x_binom, n_trial, pi_vals[1]), type = "h", lwd = 3,
+     col = cols_pi[1], xlab = "y", ylab = "P(Y = y)",
+     main = expression(bold(F) * ": 二项分布 Bin(n, " * pi * ")"),
+     cex.main = 0.95, col.main = "#1E293B", ylim = c(0, 0.25))
+for (k in 2:3) {
+  lines(x_binom + 0.2*(k-1), dbinom(x_binom, n_trial, pi_vals[k]), 
+        type = "h", lwd = 3, col = cols_pi[k])
+}
+grid(col = "#E2E8F0")
+legend("topright", legend = paste0("pi = ", pi_vals),
+       col = cols_pi, lwd = 3, bty = "n", cex = 0.8)
+
+# 右图：结构模型 H (logistic 函数)
+eta_seq <- seq(-6, 6, length.out = 300)
+theta_sets <- list(c(-1, 0.5), c(0, 1), c(1, 0.3))
+cols_theta <- c("#2563EB", "#DC2626", "#16A34A")
+plot(NULL, xlim = c(-6, 6), ylim = c(0, 1),
+     xlab = expression(eta == x^T * theta), ylab = expression(h(x~";"~theta)),
+     main = expression(bold(H) * ": Logistic " * frac(e^eta, 1+e^eta)),
+     cex.main = 0.95, col.main = "#1E293B")
+for (k in 1:3) {
+  b0 <- theta_sets[[k]][1]; b1 <- theta_sets[[k]][2]
+  h_val <- exp(b0 + b1 * eta_seq) / (1 + exp(b0 + b1 * eta_seq))
+  lines(eta_seq, h_val, col = cols_theta[k], lwd = 3)
+}
+grid(col = "#E2E8F0")
+abline(h = c(0, 1), col = "#94A3B8", lty = 3)
+legend("topleft", 
+       legend = c(expression(theta == group("(", list(-1, 0.5), ")")),
+                  expression(theta == group("(", list(0, 1), ")")),
+                  expression(theta == group("(", list(1, 0.3), ")"))),
+       col = cols_theta, lwd = 3, bty = "n", cex = 0.8)
+
+par(mfrow = c(1, 1))
+```
+
+## 嵌套模型与非嵌套模型
+
+> **Geschachtelte und nicht-geschachtelte Modelle**
+
+上述广泛的定义涵盖了统计学和机器学习中用于建模依赖关系的多种工具。在模型选择中，我们通常面对两类情形。
+
+**嵌套模型**（geschachtelte Modelle）：假设概率模型相同，即 $\mathcal{F}_1 = \mathcal{F}_2$，而结构模型满足 $\mathcal{H}_2 \subset \mathcal{H}_1$（或反之）。当 $\mathcal{H}_1$ 是更大的模型时，可以形式化为：
+
+$$
+\mathcal{H}_1 = \{h(\cdot; \theta), \theta \in \Theta_1\}, \quad \mathcal{H}_2 = \{h(\cdot; \theta), \theta \in \Theta_2\}, \quad \Theta_2 \subset \Theta_1
+$$
+
+这意味着小模型 $\mathcal{M}_2$ 是大模型 $\mathcal{M}_1$ 的一个特例。例如，包含身高和年龄的回归模型与仅包含身高的回归模型就构成嵌套关系。
+
+**非嵌套模型**（nicht-geschachtelte Modelle）：当 $\mathcal{F}_1 = \mathcal{F}_2$ 但 $\Theta_2 \not\subset \Theta_1$ 且 $\Theta_1 \not\subset \Theta_2$ 时，两个结构模型不互为子集。更一般地，概率模型本身也可以不同，即 $\mathcal{F}_1 \neq \mathcal{F}_2$。例如，用正态分布与 Poisson 分布分别建模同一数据就是非嵌套的。
+
+```{r}
+#| label: fig-nested-models
+#| fig-cap: "嵌套模型 vs 非嵌套模型的三种情形（仿教材 Fig. 7.1）| Geschachtelte vs. nicht-geschachtelte Modelle"
+#| fig-height: 5
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(1, 1, 3, 1))
+
+# 情形 1：嵌套
+plot(NULL, xlim = c(0, 10), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title("嵌套 | Geschachtelt", cex.main = 1.1, col.main = "#1E293B")
+# G(.)
+rect(0.5, 0.5, 9.5, 9.5, border = "#94A3B8", lwd = 1.5, lty = 2)
+text(5, 9, "G(.)", col = "#94A3B8", cex = 0.9, font = 3)
+# M1 大椭圆
+symbols(5, 4.5, circles = 3.5, add = TRUE, inches = FALSE, 
+        fg = "#2563EB", lwd = 2.5, bg = adjustcolor("#DBEAFE", 0.3))
+text(5, 7.2, expression(M[1] * ": " * Theta[1]), col = "#2563EB", cex = 0.85, font = 2)
+# M2 小椭圆
+symbols(5, 4, circles = 1.8, add = TRUE, inches = FALSE, 
+        fg = "#DC2626", lwd = 2.5, bg = adjustcolor("#FEE2E2", 0.4))
+text(5, 4, expression(M[2] * ": " * Theta[2]), col = "#DC2626", cex = 0.85, font = 2)
+text(5, 1.5, expression(Theta[2] %subset% Theta[1]), col = "#6B7280", cex = 0.9)
+
+# 情形 2：不相交
+plot(NULL, xlim = c(0, 10), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title("不相交 | Disjunkt", cex.main = 1.1, col.main = "#1E293B")
+rect(0.5, 0.5, 9.5, 9.5, border = "#94A3B8", lwd = 1.5, lty = 2)
+text(5, 9, "G(.)", col = "#94A3B8", cex = 0.9, font = 3)
+symbols(3, 4.5, circles = 2, add = TRUE, inches = FALSE,
+        fg = "#2563EB", lwd = 2.5, bg = adjustcolor("#DBEAFE", 0.3))
+text(3, 4.5, expression(M[1]), col = "#2563EB", cex = 0.85, font = 2)
+symbols(7, 4.5, circles = 2, add = TRUE, inches = FALSE,
+        fg = "#DC2626", lwd = 2.5, bg = adjustcolor("#FEE2E2", 0.4))
+text(7, 4.5, expression(M[2]), col = "#DC2626", cex = 0.85, font = 2)
+text(5, 1.5, expression(Theta[1] %*% "" %*% Theta[2] == "{}"), col = "#6B7280", cex = 0.9)
+
+# 情形 3：非嵌套但有交集
+plot(NULL, xlim = c(0, 10), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title("非嵌套有交集 | Uberlappend", cex.main = 1.1, col.main = "#1E293B")
+rect(0.5, 0.5, 9.5, 9.5, border = "#94A3B8", lwd = 1.5, lty = 2)
+text(5, 9, "G(.)", col = "#94A3B8", cex = 0.9, font = 3)
+symbols(3.5, 4.5, circles = 2.5, add = TRUE, inches = FALSE,
+        fg = "#2563EB", lwd = 2.5, bg = adjustcolor("#DBEAFE", 0.2))
+text(2.5, 4.5, expression(M[1]), col = "#2563EB", cex = 0.85, font = 2)
+symbols(6.5, 4.5, circles = 2.5, add = TRUE, inches = FALSE,
+        fg = "#DC2626", lwd = 2.5, bg = adjustcolor("#FEE2E2", 0.2))
+text(7.5, 4.5, expression(M[2]), col = "#DC2626", cex = 0.85, font = 2)
+text(5, 1.5, expression(Theta[1] %notsubset% Theta[2] ~ "," ~ Theta[2] %notsubset% Theta[1]), 
+     col = "#6B7280", cex = 0.8)
+
+par(mfrow = c(1, 1))
+```
+
+## 简化记法
+
+> **Vereinfachte Notation**
+
+既然我们已经明确区分了结构模型组件 $\mathcal{H}$ 和概率组件 $\mathcal{F}$，为了更好的可读性，有时我们将模型类 $\mathcal{M}$ 简写为：
+
+$$
+\mathcal{M} = \{F(\cdot; \theta); \theta \in \Theta\}
+$$
+
+这正式代表：
+
+$$
+\mathcal{M} = \{F(\cdot; h(\cdot; \theta)); F \in \mathcal{F} \text{ and } h(\cdot, \cdot) \in \mathcal{H}\}
+$$
+
+这一记法体现了模型包含结构和概率两个组件，但不显式列出它们。虽然简化了记法，但应牢记任何模型选择都需要同时选择 $\mathcal{F}$ 和 $\mathcal{H}$。
+
+{{< pagebreak >}}
+
+# 训练数据与测试数据 {#sec-train-test}
+
+> **Training- und Testdaten**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- KL 散度作为**模型比较的理论基础**
+- **"数据不可重复使用"**这一黄金法则及其违反导致的过拟合
+- **留一交叉验证**（LOO-CV）的定义与直觉
+- **训练/测试数据分割**的策略
+- **$k$ 折交叉验证**的定义与留一验证的关系
+:::
+
+## KL 散度与模型比较
+
+> **KL-Divergenz und Modellvergleich**
+
+让我们更深入地审视模型选择问题。我们假设数据生成过程 $G(\cdot|x)$，并考虑两个候选模型 $\mathcal{M}_1 = (\mathcal{F}_1, \mathcal{H}_1)$ 和 $\mathcal{M}_2 = (\mathcal{F}_2, \mathcal{H}_2)$。参考第二章中引入的 Kullback-Leibler 散度，与真实数据生成过程距离更小的模型应当被优先选择。这导致比较：
+
+$$
+KL(G(\cdot); F_1(\cdot; \hat{\theta}_1)) = \int \log \frac{g(y)}{f_1(y; \hat{\theta}_1)} \, dG(y)
+$$
+
+$$
+KL(G(\cdot); F_2(\cdot; \hat{\theta}_2)) = \int \log \frac{g(y)}{f_2(y; \hat{\theta}_2)} \, dG(y)
+$$
+
+其中 $\hat{\theta}_1$ 和 $\hat{\theta}_2$ 分别是模型 $\mathcal{M}_1$ 和 $\mathcal{M}_2$ 中的最大似然估计。我们应当偏好 KL 散度较小的模型。即如果：
+
+$$
+KL(G(\cdot); F_1(\cdot; \hat{\theta}_1)) - KL(G(\cdot); F_2(\cdot; \hat{\theta}_2)) < 0 \quad \Leftrightarrow \quad \int \log \frac{f_1(y; \hat{\theta}_1)}{f_2(y; \hat{\theta}_2)} \, dG(y) > 0
+$$
+
+则偏好模型 $\mathcal{M}_1$。
+
+## "数据不可重复使用"原则
+
+> **Das goldene Prinzip: Daten nie doppelt verwenden**
+
+注意我们无法直接计算上面的积分，因为 $G(\cdot)$ 未知。有人可能会想用数据 $y_1, \ldots, y_n$（来自 $G(\cdot)$）的经验版本来替代积分，即计算：
+
+$$
+\frac{1}{n} \sum_{i=1}^{n} \log \frac{f_1(y_i; \hat{\theta}_1)}{f_2(y_i; \hat{\theta}_2)}
+$$
+
+然而，**这个量不会收敛到上述积分**，因为我们违反了一条根本法则："**永远不要重复使用同一批数据**"（Verwende nie die gleichen Daten doppelt）。注意上面的积分涉及一个**新的**随机变量 $Y$，而 $\hat{\theta}_1$ 和 $\hat{\theta}_2$ 是基于**旧的**数据 $y_1, \ldots, y_n$ 计算的。选择规则的正确形式应该是：
+
+$$
+\text{如果 } E\left[\log \frac{f_1(Y; \hat{\theta}_1)}{f_2(Y; \hat{\theta}_2)}\right] > 0 \text{，则偏好 } \mathcal{M}_1
+$$
+
+这里期望是关于新变量 $Y$ 的，但 $\hat{\theta}_1$ 和 $\hat{\theta}_2$ 是基于数据 $y_1, \ldots, y_n$ 的。
+
+而在错误的经验版本中，我们使用数据两次：第一次在求和中（作为"新数据"$y_i$），第二次在估计中（计算 $\hat{\theta}$）。这是一个**概念性缺陷**，不可避免地导致**过拟合**（Uberanpassung）。
+
+::: {.callout-tip icon="false"}
+## 考试与自测的比喻 | Die Prufungs-und-Selbsttest-Metapher
+
+想象一位老师用往年的考题给学生复习。如果考试就用这些完全相同的题目，每个学生都能拿满分 -- 但这并不能说明他们真正掌握了知识。分数的"膨胀"正是过拟合的本质：模型在训练数据上表现完美，但面对新数据时表现糟糕。
+
+正确的做法是：用一部分题目复习（训练），用**另一部分从未见过的题目**考试（测试）。只有在"没见过的题"上的表现才能真正衡量学习效果。这正是训练/测试数据分割和交叉验证背后的核心思想。
+
+*Uberanpassung ist wie ein Schuler, der nur die Ubungsaufgaben auswendig lernt. Nur die Leistung bei neuen, ungesehenen Aufgaben zeigt das wahre Verstandnis.*
+:::
+
+对于嵌套模型（$\mathcal{F}_1 = \mathcal{F}_2$ 且 $\mathcal{H}_2 \subset \mathcal{H}_1$），过拟合特别容易看出。由于 $\hat{\theta}_2 \in \Theta_2 \subset \Theta_1$，我们有：
+
+$$
+l(\hat{\theta}_2) = \sum_{i=1}^{n} \log f(y_i; \hat{\theta}_2) \leq \sum_{i=1}^{n} \log f(y_i; \hat{\theta}_1) = l(\hat{\theta}_1)
+$$
+
+换言之，更大参数空间 $\Theta_1$ 中似然函数的最大值总是大于或等于较小空间 $\Theta_2$ 中的最大值。**不可避免地**，复杂模型总是被偏好，从而导致过拟合。
+
+```{r}
+#| label: fig-overfitting-demo
+#| fig-cap: "过拟合的直观演示：复杂模型完美拟合训练数据，但泛化能力差 | Uberanpassung: Das komplexe Modell passt perfekt, generalisiert aber schlecht"
+#| fig-height: 5.5
+
+set.seed(42)
+n_over <- 15
+x_over <- sort(runif(n_over, 0, 10))
+y_true_func <- function(x) 2 + 0.8 * x - 0.05 * x^2
+y_over <- y_true_func(x_over) + rnorm(n_over, 0, 1.2)
+
+# 新的测试数据
+set.seed(123)
+x_test <- sort(runif(20, 0, 10))
+y_test <- y_true_func(x_test) + rnorm(20, 0, 1.2)
+
+fit_simple <- lm(y_over ~ x_over)
+fit_complex <- lm(y_over ~ poly(x_over, 12, raw = TRUE))
+
+x_pred <- seq(0, 10, length.out = 300)
+y_pred_simple <- predict(fit_simple, newdata = data.frame(x_over = x_pred))
+y_pred_complex <- predict(fit_complex, newdata = data.frame(x_over = x_pred))
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 训练数据表现
+plot(x_over, y_over, pch = 16, col = "#2563EB", cex = 1.5,
+     xlab = "x", ylab = "Y", ylim = range(c(y_over, y_pred_complex)) * c(0.8, 1.2),
+     main = "训练数据上的拟合 | Anpassung auf Trainingsdaten",
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(x_pred, y_pred_simple, col = "#16A34A", lwd = 2.5, lty = 2)
+lines(x_pred, y_pred_complex, col = "#DC2626", lwd = 2.5)
+legend("topleft",
+       legend = c("训练数据", "简单模型 (p=2)", "复杂模型 (p=13)"),
+       pch = c(16, NA, NA), col = c("#2563EB", "#16A34A", "#DC2626"),
+       lwd = c(NA, 2.5, 2.5), lty = c(NA, 2, 1), bty = "n", cex = 0.75)
+
+# 训练 MSE
+mse_train_simple <- mean((y_over - predict(fit_simple))^2)
+mse_train_complex <- mean((y_over - predict(fit_complex))^2)
+text(5, max(y_over) * 0.3, 
+     sprintf("MSE 简单: %.2f\nMSE 复杂: %.2f", mse_train_simple, mse_train_complex),
+     col = "#6B7280", cex = 0.75)
+
+# 测试数据表现
+y_test_pred_simple <- predict(fit_simple, newdata = data.frame(x_over = x_test))
+y_test_pred_complex <- predict(fit_complex, newdata = data.frame(x_over = x_test))
+
+plot(x_test, y_test, pch = 17, col = "#EA580C", cex = 1.5,
+     xlab = "x", ylab = "Y", ylim = range(c(y_over, y_pred_complex)) * c(0.8, 1.2),
+     main = "测试数据上的表现 | Leistung auf Testdaten",
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(x_pred, y_pred_simple, col = "#16A34A", lwd = 2.5, lty = 2)
+lines(x_pred, y_pred_complex, col = "#DC2626", lwd = 2.5)
+legend("topleft",
+       legend = c("测试数据", "简单模型 (p=2)", "复杂模型 (p=13)"),
+       pch = c(17, NA, NA), col = c("#EA580C", "#16A34A", "#DC2626"),
+       lwd = c(NA, 2.5, 2.5), lty = c(NA, 2, 1), bty = "n", cex = 0.75)
+
+mse_test_simple <- mean((y_test - y_test_pred_simple)^2)
+mse_test_complex <- mean((y_test - y_test_pred_complex)^2)
+text(5, max(y_over) * 0.3,
+     sprintf("MSE 简单: %.2f\nMSE 复杂: %.2f", mse_test_simple, mse_test_complex),
+     col = "#6B7280", cex = 0.75)
+
+par(mfrow = c(1, 1))
+```
+
+上图清楚地展示了过拟合现象：复杂模型在训练数据上误差极小（左图），但在测试数据上表现可能更差（右图），因为它"记住"了训练数据的噪声。
+
+## 留一交叉验证
+
+> **Leave-One-Out-Kreuzvalidierung (LOO-CV)**
+
+为了纠正经验版本中的错误，我们让求和中的数据与估计中的数据**明确独立**。这可以通过用 $n-1$ 个观测来拟合模型、用剩下的那个观测来估计积分来实现。遍历所有观测后，我们得到：
+
+$$
+\frac{1}{n} \sum_{i=1}^{n} \log \frac{f_1(y_i; \hat{\theta}_{1,-i})}{f_2(y_i; \hat{\theta}_{2,-i})} > 0 \quad \Rightarrow \quad \text{偏好 } \mathcal{M}_1
+$$
+
+其中 $\hat{\theta}_{k,-i}$ 是模型 $k$ 中从除第 $i$ 个观测以外的所有观测计算的最大似然估计，即使用数据 $(y_1, \ldots, y_{i-1}, y_{i+1}, \ldots, y_n)$ 来计算 $\hat{\theta}_{k,-i}$，$k = 1, 2$。被留出的观测 $y_i$ 用于估计期望。
+
+**定义 7.1（留一交叉验证）**：
+
+步骤 1：对 $i = 1, \ldots, n$，通过排除第 $i$ 个观测重新拟合两个模型，得到估计 $\hat{\theta}_{1,-i}$ 和 $\hat{\theta}_{2,-i}$。
+
+步骤 2：计算上述平均对数似然比。如果大于 0 则偏好模型 $\mathcal{M}_1$，否则选择模型 $\mathcal{M}_2$。
+
+该方法需要对每个模型重新拟合 $n$ 次。当拟合过程耗时过长或计算量过大时，这可能是不可行的。
+
+## 训练/测试数据分割
+
+> **Aufteilung in Training- und Testdaten**
+
+如果留一交叉验证在计算上不可行，一个替代方案是将数据分为**训练数据**和**测试数据**。训练数据用于拟合模型（即计算最大似然估计），测试数据用于模型比较。
+
+**定义 7.2（训练与测试数据）**：
+
+步骤 1：将 $n$ 分为 $n_{\text{train}}$ 和 $n_{\text{test}}$，使得 $n = n_{\text{train}} + n_{\text{test}}$。典型的分配比例约为 4:1。
+
+步骤 2：从数据库中无放回抽取大小为 $n_{\text{test}}$ 的样本作为测试数据。记 $\mathcal{N}_{\text{test}} \subset \{1, \ldots, n\}$ 为所选数据点的索引集。
+
+步骤 3：在 $\mathcal{N}_{\text{train}} = \{1, \ldots, n\} \setminus \mathcal{N}_{\text{test}}$ 上训练模型，得到估计 $\hat{\theta}_1$ 和 $\hat{\theta}_2$。
+
+步骤 4：计算 $\sum_{i \in \mathcal{N}_{\text{test}}} \log \frac{f_1(y_i; \hat{\theta}_1)}{f_2(y_i; \hat{\theta}_2)}$。如果大于 0 则偏好 $\mathcal{M}_1$，否则选择 $\mathcal{M}_2$。
+
+这种方法有些"浪费数据"，因为测试集中的观测不用于拟合模型。当数据库较小时，进一步的分割会使数据更加稀缺，此时建议使用不同的方法。
+
+## $k$ 折交叉验证
+
+> **$k$-fache Kreuzvalidierung**
+
+留一验证和训练/测试分割的折中方案是 $k$ 折交叉验证。数据被分为 $k$ 个大致相同大小的组，依次将每组作为测试集、其余作为训练集。这将重新拟合模型的次数从 $n$ 次减少到 $k$ 次。
+
+**定义 7.3（$k$ 折交叉验证）**：
+
+步骤 1：将数据分为 $k$ 组，记索引集为 $\mathcal{N}_1, \ldots, \mathcal{N}_k$，满足：(i) $\mathcal{N}_j \cap \mathcal{N}_l = \emptyset$（不相交）；(ii) $|\mathcal{N}_j| \approx |\mathcal{N}_l|$（大小近似相等）；(iii) $\bigcup_{l=1}^{k} \mathcal{N}_l = \{1, \ldots, n\}$（覆盖全部）。
+
+步骤 2：对 $l = 1, \ldots, k$，分别在 $\mathcal{N} \setminus \mathcal{N}_l$ 上拟合两个模型，得到 $\hat{\theta}_{1,-\mathcal{N}_l}$ 和 $\hat{\theta}_{2,-\mathcal{N}_l}$。
+
+步骤 3：计算 $\sum_{l=1}^{k} \sum_{i \in \mathcal{N}_l} \log \frac{f_1(y_i; \hat{\theta}_{1,-\mathcal{N}_l})}{f_2(y_i; \hat{\theta}_{2,-\mathcal{N}_l})}$。如果大于 0 则偏好 $\mathcal{M}_1$，否则选择 $\mathcal{M}_2$。
+
+容易看出，当 $|\mathcal{N}_l| = 1$ 对所有 $l$ 成立时，$k = n$，此时退化为留一交叉验证。
+
+```{r}
+#| label: fig-cv-illustration
+#| fig-cap: "三种数据分割策略的示意图（仿教材 Fig. 7.2）| Drei Strategien zur Datenaufteilung"
+#| fig-height: 7
+
+par(mfrow = c(3, 1), bg = "#F8FAFC", mar = c(1, 2, 3, 2))
+
+n_demo_cv <- 8
+cols_train <- "#DBEAFE"
+cols_test <- "#FEE2E2"
+border_train <- "#2563EB"
+border_test <- "#DC2626"
+
+draw_data_split <- function(n, test_indices, title_text, show_average = FALSE) {
+  plot(NULL, xlim = c(0, n + 2), ylim = c(0, 1.5), axes = FALSE, xlab = "", ylab = "")
+  title(title_text, cex.main = 1.0, col.main = "#1E293B", adj = 0)
+  
+  for (i in 1:n) {
+    is_test <- i %in% test_indices
+    rect(i - 0.4, 0.3, i + 0.4, 1.2,
+         col = ifelse(is_test, cols_test, cols_train),
+         border = ifelse(is_test, border_test, border_train), lwd = 2)
+    text(i, 0.75, bquote(y[.(i)]), cex = 0.7, col = "#1E293B")
+  }
+  
+  legend("topright", legend = c("训练 | Training", "测试 | Test"),
+         fill = c(cols_train, cols_test), border = c(border_train, border_test),
+         bty = "n", cex = 0.7, horiz = TRUE)
+}
+
+# LOO-CV: 留一
+plot(NULL, xlim = c(0, 35), ylim = c(0, 5.5), axes = FALSE, xlab = "", ylab = "")
+title("留一交叉验证 (LOO-CV) | Leave-One-Out-Kreuzvalidierung", 
+      cex.main = 1.0, col.main = "#1E293B", adj = 0)
+
+for (fold in 1:4) {
+  y_pos <- 5.5 - fold * 1.2
+  for (i in 1:n_demo_cv) {
+    is_test <- (i == fold)
+    rect(i * 1.3 - 0.5, y_pos - 0.4, i * 1.3 + 0.5, y_pos + 0.4,
+         col = ifelse(is_test, cols_test, cols_train),
+         border = ifelse(is_test, border_test, border_train), lwd = 1.5)
+    text(i * 1.3, y_pos, bquote(y[.(i)]), cex = 0.5, col = "#1E293B")
+  }
+  text(n_demo_cv * 1.3 + 2, y_pos, paste0("轮 ", fold), cex = 0.6, col = "#6B7280")
+}
+text(n_demo_cv * 1.3 + 2, 0.5, "...", cex = 1.2, col = "#6B7280")
+text(22, 2.5, expression("共 n 轮, 取平均"), col = "#EA580C", cex = 0.8, font = 2)
+legend("topright", legend = c("训练 | Training", "测试 | Test"),
+       fill = c(cols_train, cols_test), border = c(border_train, border_test),
+       bty = "n", cex = 0.65, horiz = TRUE)
+
+# 训练/测试分割
+plot(NULL, xlim = c(0, 35), ylim = c(0, 2), axes = FALSE, xlab = "", ylab = "")
+title("训练/测试分割 (80/20) | Training/Test-Aufteilung", 
+      cex.main = 1.0, col.main = "#1E293B", adj = 0)
+test_idx <- c(2, 7)
+for (i in 1:n_demo_cv) {
+  is_test <- i %in% test_idx
+  rect(i * 1.3 - 0.5, 0.3, i * 1.3 + 0.5, 1.1,
+       col = ifelse(is_test, cols_test, cols_train),
+       border = ifelse(is_test, border_test, border_train), lwd = 1.5)
+  text(i * 1.3, 0.7, bquote(y[.(i)]), cex = 0.5, col = "#1E293B")
+}
+text(22, 0.7, "只分割一次", col = "#EA580C", cex = 0.8, font = 2)
+legend("topright", legend = c("训练 | Training", "测试 | Test"),
+       fill = c(cols_train, cols_test), border = c(border_train, border_test),
+       bty = "n", cex = 0.65, horiz = TRUE)
+
+# k 折交叉验证
+plot(NULL, xlim = c(0, 35), ylim = c(0, 4.5), axes = FALSE, xlab = "", ylab = "")
+title("k 折交叉验证 (k=4) | k-fache Kreuzvalidierung", 
+      cex.main = 1.0, col.main = "#1E293B", adj = 0)
+folds <- list(c(1,2), c(3,4), c(5,6), c(7,8))
+for (fold in 1:4) {
+  y_pos <- 4.5 - fold * 1.0
+  for (i in 1:n_demo_cv) {
+    is_test <- i %in% folds[[fold]]
+    rect(i * 1.3 - 0.5, y_pos - 0.35, i * 1.3 + 0.35, y_pos + 0.35,
+         col = ifelse(is_test, cols_test, cols_train),
+         border = ifelse(is_test, border_test, border_train), lwd = 1.5)
+    text(i * 1.3 - 0.07, y_pos, bquote(y[.(i)]), cex = 0.45, col = "#1E293B")
+  }
+  text(n_demo_cv * 1.3 + 2, y_pos, paste0("折 ", fold), cex = 0.6, col = "#6B7280")
+}
+text(22, 2.0, expression("共 k 轮, 取平均"), col = "#EA580C", cex = 0.8, font = 2)
+legend("topright", legend = c("训练 | Training", "测试 | Test"),
+       fill = c(cols_train, cols_test), border = c(border_train, border_test),
+       bty = "n", cex = 0.65, horiz = TRUE)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: cv-demo-code
+#| code-fold: false
+
+# 交叉验证实战演示 | Kreuzvalidierung in der Praxis
+set.seed(2024)
+n_cv <- 100
+x_cv <- rnorm(n_cv)
+y_cv <- 2 + 3 * x_cv + rnorm(n_cv)
+
+# -- 留一交叉验证 (LOO-CV) --
+cat("=== 留一交叉验证 (LOO-CV) ===\n\n")
+mse_loo <- numeric(n_cv)
+for (i in 1:n_cv) {
+  fit_loo <- lm(y_cv[-i] ~ x_cv[-i])
+  pred_loo <- coef(fit_loo)[1] + coef(fit_loo)[2] * x_cv[i]
+  mse_loo[i] <- (y_cv[i] - pred_loo)^2
+}
+cat(sprintf("  LOO-CV 均方预测误差 (MSEP): %.4f\n\n", mean(mse_loo)))
+
+# -- 5 折交叉验证 --
+cat("=== 5 折交叉验证 ===\n\n")
+k_fold <- 5
+fold_id <- sample(rep(1:k_fold, length.out = n_cv))
+mse_kfold <- numeric(k_fold)
+for (fold in 1:k_fold) {
+  test_idx <- which(fold_id == fold)
+  train_idx <- which(fold_id != fold)
+  fit_kf <- lm(y_cv[train_idx] ~ x_cv[train_idx])
+  pred_kf <- coef(fit_kf)[1] + coef(fit_kf)[2] * x_cv[test_idx]
+  mse_kfold[fold] <- mean((y_cv[test_idx] - pred_kf)^2)
+  cat(sprintf("  折 %d: n_test = %d, MSEP = %.4f\n", fold, length(test_idx), mse_kfold[fold]))
+}
+cat(sprintf("\n  5 折 CV 平均 MSEP: %.4f\n", mean(mse_kfold)))
+cat(sprintf("\n  (LOO-CV MSEP: %.4f -- 两者应当近似)\n", mean(mse_loo)))
+```
+
+::: {.callout-tip icon="false"}
+## 面试的比喻 | Die Bewerbungsgesprach-Metapher
+
+交叉验证就像公司招聘时的多轮面试。留一交叉验证是让每位候选人单独面对面试官（留出一个数据点测试），然后综合所有面试结果做出评价。$k$ 折交叉验证是将候选人分成 $k$ 组，每组轮流进行群面，效率更高但每轮的评估不如单独面试精细。训练/测试分割则是只进行一轮群面，最快但信息最少。
+
+所有方法的核心思想都是一样的：**评估能力时，不能用已经练习过的题目**。
+
+*Alle Methoden haben denselben Kern: Zur Bewertung muss man unbekannte Aufgaben verwenden, nicht die Ubungsaufgaben.*
+:::
+
+{{< pagebreak >}}
+
+# AIC 与 BIC {#sec-aic-bic}
+
+> **AIC und BIC**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **AIC** 的定义、直觉与推导思路
+- 正态情形下 AIC 的**简化公式**及其"拟合优度 vs 复杂度"的解读
+- **BIC** 的定义及其与 AIC 的比较
+- AIC 和 BIC 的**形式推导**（证明思路）
+:::
+
+## Akaike 信息准则 (AIC)
+
+> **Das Akaike-Informationskriterium (AIC)**
+
+上一节的交叉验证方法需要多次重新拟合模型，计算成本可能很高。AIC 提供了一种替代方案，它**不需要重新拟合**，而是通过一个简单的惩罚项来校正过拟合偏差。回顾前面的讨论，我们知道 $KL(G(\cdot), F(\cdot; \hat{\theta}))$ 大于最优参数处的值 $KL(G(\cdot), F(\cdot; \theta_0))$。AIC 的目标正是为这一差异找到一个校正。
+
+**定义 7.4（Akaike 信息准则）**：对模型类 $\mathcal{M}$，AIC 定义为：
+
+$$
+AIC(\mathcal{M}) = -2 \sum_{i=1}^{n} \log f(y_i; \hat{\theta}) + 2p
+$$
+
+其中 $p$ 是参数 $\theta$ 的维度，$\hat{\theta}$ 是模型类 $\mathcal{M}$ 中的最大似然估计。AIC 可以被看作以下量的一个估计：
+
+$$
+2E\{KL(G(\cdot), F(\cdot; \hat{\theta}))\} - 2\int \log(g(y)) \, dG(y)
+$$
+
+其中期望是关于数据 $Y_1, \ldots, Y_n$ 进行的。
+
+公式中的因子 2 是任意的、纯粹出于惯例，原则上并非必要。利用这一结果，$AIC(\mathcal{M}_1) - AIC(\mathcal{M}_2)$ 是以下量的估计：
+
+$$
+2E\{KL(G(\cdot), F_1(\cdot; \hat{\theta}_1))\} - 2E\{KL(G(\cdot), F_2(\cdot; \hat{\theta}_2))\} = -2E\left[\int \log \frac{f_1(y; \hat{\theta}_1)}{f_2(y; \hat{\theta}_2)} \, dG(y)\right]
+$$
+
+这表明如果该项为负则偏好 $\mathcal{M}_1$，为正则偏好 $\mathcal{M}_2$。
+
+AIC 的主要优势在于不需要重新拟合模型。然而，AIC 要求量化参数数目，当参数存在约束时这本身需要近似。此外，需要进行最大似然估计，在高维模型中可能需要正则化以保证数值稳定性。
+
+## 正态分布情形下的 AIC
+
+> **AIC im Normalverteilungsfall**
+
+假设 $Y_i \sim N(\mu, \sigma^2)$，其中均值 $\mu$ 可能依赖于输入变量 $x$ 和某些参数 $\theta$，记为 $\mu = h(x; \theta)$。对数似然为：
+
+$$
+l(\theta; \sigma^2) = \sum_{i=1}^{n} \left[-\frac{1}{2}\log(\sigma^2) - \frac{(y_i - h(x_i; \theta))^2}{2\sigma^2}\right]
+$$
+
+对 $\theta$ 和 $\sigma^2$ 求导得到最大似然估计，方差估计为 $\hat{\sigma}^2 = \frac{1}{n}\sum_{i=1}^{n}(y_i - h(x_i; \hat{\theta}))^2$。进一步计算表明（忽略不依赖参数的常数项），最大处的对数似然为：
+
+$$
+l(\hat{\theta}; \hat{\sigma}^2) = -\frac{n}{2} \log \sum_{i=1}^{n} (y_i - h(x_i; \hat{\theta}))^2
+$$
+
+因此 AIC 简化为：
+
+$$
+AIC(\mathcal{M}) = n \log \sum_{i=1}^{n} (y_i - h(x_i; \hat{\theta}))^2 + 2p
+$$
+
+其中 $p$ 是 $\theta$ 的维度。这是一个非常有启发性的公式，它允许从不同的角度解读 AIC。第一个分量 $n \log \sum (y_i - \hat{y}_i)^2$ 衡量的是**拟合优度**（Gute der Anpassung），即拟合模型 $h(x_i; \hat{\theta})$ 预测未知 $y_i$ 的能力。如前所述，模型越复杂，用于拟合的数据（"样本内"）的预测误差越小。这个拟合优度项现在被模型的**复杂度**所惩罚，复杂度用参数数目来衡量。因此，AIC 旨在**平衡拟合优度与模型复杂度**。
+
+::: {.callout-tip icon="false"}
+## 行李打包的比喻 | Die Kofferpack-Metapher
+
+AIC 的思想就像打包旅行行李。拟合优度是你带的东西有多齐全（带得越多，旅途越舒适），而复杂度惩罚是行李的重量（越重，搬运越困难）。最优的行李就是在"齐全"与"轻便"之间达到最佳平衡的那个。AIC 帮你找到这个平衡点：既不能太简陋（欠拟合），也不能太臃肿（过拟合）。
+
+*AIC sucht den optimalen Kompromiss zwischen Anpassungsgute ("wie gut passt es?") und Modellkomplexitat ("wie viele Parameter?") -- wie beim Kofferpacken zwischen Vollstandigkeit und Gewicht.*
+:::
+
+```{r}
+#| label: fig-aic-bic-tradeoff
+#| fig-cap: "AIC 和 BIC 的权衡：拟合优度 vs 复杂度惩罚（仿教材 Fig. 7.3）| AIC/BIC-Abwagung: Anpassungsgute vs. Komplexitatsstrafe"
+#| fig-height: 6
+
+set.seed(2024)
+n_aic <- 200
+K_total <- 30
+x_mat <- matrix(rnorm(n_aic * K_total), n_aic, K_total)
+beta_true <- c(rep(2, 5), rep(0, K_total - 5))
+y_aic <- x_mat %*% beta_true + rnorm(n_aic)
+
+# 计算不同维度模型的 AIC 和 BIC 分量
+dims <- 1:K_total
+gof <- numeric(K_total)       # 拟合优度 (log RSS)
+aic_vals <- numeric(K_total)
+bic_vals <- numeric(K_total)
+
+for (d in dims) {
+  fit_d <- lm(y_aic ~ x_mat[, 1:d])
+  rss_d <- sum(residuals(fit_d)^2)
+  gof[d] <- n_aic * log(rss_d)
+  aic_vals[d] <- gof[d] + 2 * (d + 1)  # +1 for intercept
+  bic_vals[d] <- gof[d] + log(n_aic) * (d + 1)
+}
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# AIC 分解
+penalty_aic <- 2 * (dims + 1)
+plot(dims, gof, type = "l", col = "#2563EB", lwd = 2.5,
+     xlab = "模型维度 p | Modelldimension",
+     ylab = "值 | Wert",
+     main = "AIC = 拟合优度 + 2p | AIC = Anpassungsgute + 2p",
+     cex.main = 1.0, col.main = "#1E293B",
+     ylim = range(c(gof, aic_vals, penalty_aic)))
+lines(dims, penalty_aic, col = "#DC2626", lwd = 2.5, lty = 2)
+lines(dims, aic_vals, col = "#9333EA", lwd = 3)
+grid(col = "#E2E8F0")
+
+aic_min <- which.min(aic_vals)
+points(aic_min, aic_vals[aic_min], pch = 16, col = "#9333EA", cex = 2)
+text(aic_min + 1, aic_vals[aic_min], sprintf("最优 p=%d", aic_min), 
+     col = "#9333EA", font = 2, cex = 0.85, pos = 4)
+
+legend("right",
+       legend = c(expression("拟合优度: n log" ~ Sigma(y[i] - hat(y)[i])^2),
+                  "复杂度惩罚: 2p",
+                  "AIC"),
+       col = c("#2563EB", "#DC2626", "#9333EA"),
+       lwd = c(2.5, 2.5, 3), lty = c(1, 2, 1), bty = "n", cex = 0.8)
+
+# BIC 分解
+penalty_bic <- log(n_aic) * (dims + 1)
+plot(dims, gof, type = "l", col = "#2563EB", lwd = 2.5,
+     xlab = "模型维度 p | Modelldimension",
+     ylab = "值 | Wert",
+     main = "BIC = 拟合优度 + log(n)p | BIC = Anpassungsgute + log(n)p",
+     cex.main = 1.0, col.main = "#1E293B",
+     ylim = range(c(gof, bic_vals, penalty_bic)))
+lines(dims, penalty_bic, col = "#DC2626", lwd = 2.5, lty = 2)
+lines(dims, bic_vals, col = "#16A34A", lwd = 3)
+grid(col = "#E2E8F0")
+
+bic_min <- which.min(bic_vals)
+points(bic_min, bic_vals[bic_min], pch = 16, col = "#16A34A", cex = 2)
+text(bic_min + 1, bic_vals[bic_min], sprintf("最优 p=%d", bic_min), 
+     col = "#16A34A", font = 2, cex = 0.85, pos = 4)
+
+legend("right",
+       legend = c(expression("拟合优度: n log" ~ Sigma(y[i] - hat(y)[i])^2),
+                  "复杂度惩罚: log(n)p",
+                  "BIC"),
+       col = c("#2563EB", "#DC2626", "#16A34A"),
+       lwd = c(2.5, 2.5, 3), lty = c(1, 2, 1), bty = "n", cex = 0.8)
+
+par(mfrow = c(1, 1))
+```
+
+## 贝叶斯信息准则 (BIC)
+
+> **Das Bayessche Informationskriterium (BIC)**
+
+AIC 的伴随准则是 BIC（Bayesian Information Criterion）。
+
+**定义 7.5（贝叶斯信息准则）**：对模型类 $\mathcal{M}$，BIC 定义为：
+
+$$
+BIC(\mathcal{M}) = -2 \sum_{i=1}^{n} \log f(y_i; \hat{\theta}) + \log(n) \cdot p
+$$
+
+其中 $p$ 是参数 $\theta$ 的维度，$\hat{\theta}$ 是模型类 $\mathcal{M}$ 中的最大似然估计。
+
+BIC 将 AIC 中惩罚项的系数 "2" 替换为 $\log(n)$。BIC 的名称来源于其推导利用了贝叶斯推断的思想。然而，BIC 是一个渐近度量，而非严格的贝叶斯模型选择准则。
+
+在正态分布情形下：
+
+$$
+BIC(\mathcal{M}) = n \log \sum_{i=1}^{n} (y_i - h(x_i; \hat{\theta}))^2 + \log(n) \cdot p
+$$
+
+由于当 $n \geq 8$ 时有 $\log(n) \geq 2$，BIC 对复杂度的惩罚比 AIC 更重，因此**偏好更简洁的模型**（即参数维度更低的模型）。
+
+```{r}
+#| label: aic-bic-comparison-code
+#| code-fold: false
+
+# AIC vs BIC 实战比较 | AIC vs BIC in der Praxis
+cat("=== AIC vs BIC 惩罚系数比较 ===\n\n")
+
+n_values <- c(8, 20, 50, 100, 500, 1000, 10000)
+cat(sprintf("  %-8s  %-12s  %-12s  %-10s\n", "n", "AIC 惩罚(2)", "BIC 惩罚(log n)", "BIC > AIC?"))
+cat(paste(rep("-", 50), collapse = ""), "\n")
+for (nv in n_values) {
+  cat(sprintf("  %-8d  %-12.1f  %-12.2f  %-10s\n", 
+              nv, 2, log(nv), ifelse(log(nv) > 2, "是", "否")))
+}
+
+cat("\n  结论: 当 n >= 8 时, log(n) >= 2, BIC 的惩罚更重。\n")
+cat("  因此 BIC 倾向于选择更简洁的模型。\n")
+```
+
+## AIC 的推导思路
+
+> **Herleitung des AIC (Beweisskizze)**
+
+AIC 的推导基于对 $E_{Y_1,\ldots,Y_n}[KL(G(\cdot), F(\cdot; \hat{\theta}))]$ 的估计。我们简述关键步骤。
+
+核心思路是比较两个量：(1) 对 $\int \log f(y; \hat{\theta}) \, dG(y)$ 的理论积分（涉及新数据 $y$ 和基于旧数据的 $\hat{\theta}$），(2) 对 $\frac{1}{n} \sum_{i=1}^{n} \log f(y_i; \hat{\theta})$ 的经验版本（旧数据同时出现在求和与估计中）。
+
+通过在 $\theta_0$ 处对 $\log f$ 进行二阶 Taylor 展开，并利用最大似然估计的渐近正态性，可以证明两者之差的期望近似为 $\frac{1}{n} \text{tr}(I^{-1}(\theta_0) V(\theta_0))$，其中 $I(\theta_0)$ 是 Fisher 信息矩阵，$V(\theta_0)$ 是得分函数的方差。
+
+关键的简化假设是：如果 $G(\cdot) \in \mathcal{F}$（模型正确设定），则 $V(\theta_0) = I(\theta_0)$，从而 $\text{tr}(I^{-1}(\theta_0) V(\theta_0)) = p$（参数维度）。乘以 $n$ 并乘以 $-2$，就得到了 AIC 中 $+2p$ 的惩罚项。这一近似由 Akaike (1973) 提出。
+
+## BIC 的推导思路
+
+> **Herleitung des BIC (Beweisskizze)**
+
+BIC 的推导从贝叶斯视角出发。假设有一组模型 $M_1, \ldots, M_K$，模型选择可以解释为选择后验概率最高的模型。对每个模型 $M_k$，其后验概率为：
+
+$$
+P(M_k | y) = \frac{\int \prod f_k(y_i; \vartheta_k) f_{\theta_k}(\vartheta_k) \, d\vartheta_k}{f(y)} \cdot P(M_k)
+$$
+
+对积分部分应用 **Laplace 近似**，取对数后保留与 $n$ 同阶增长的项（即 $l_k(\hat{\theta}_k)$ 和 $-\frac{p_k}{2}\log(n)$），再乘以 $-2$，就得到了 BIC 的形式 $BIC_k = -2l_k(\hat{\theta}_k) + \log(n) p_k$。
+
+{{< pagebreak >}}
+
+# AIC、BIC 与假设检验 {#sec-aic-bic-testing}
+
+> **AIC, BIC und Hypothesentests**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 嵌套模型的**似然比检验**与卡方分布
+- AIC、BIC 和假设检验的**判决规则比较**
+- 三种方法的**临界值**和**显著性水平**差异
+- 理解模型选择与统计检验是**不同的方法论**
+:::
+
+## 嵌套模型的似然比检验
+
+> **Likelihood-Ratio-Test fur geschachtelte Modelle**
+
+对于嵌套模型，模型选择也可以看作一个检验问题。考虑两个嵌套的统计模型 $\mathcal{M}_0 \subset \mathcal{M}_1$，其中 $\mathcal{M}_k = \{f(y; \theta), \theta \in \Theta_k\}$，$k = 0, 1$，且 $\Theta_0 \subset \Theta_1$。设 $p_0 = |\Theta_0|$ 和 $p_1 = |\Theta_1|$ 分别是对应参数空间的维度，$p = p_1 - p_0 > 0$。
+
+如果模型 $\mathcal{M}_0$ 成立（即零假设 $H_0: \mathcal{M} = \mathcal{M}_0$），则对数似然比统计量渐近服从卡方分布：
+
+$$
+2[l(\hat{\theta}_1) - l(\hat{\theta}_0)] \sim \chi^2_p
+$$
+
+这给出了假设检验的判决规则：
+
+$$
+\text{"} H_1 \text{"} \quad \Leftrightarrow \quad 2[l(\hat{\theta}_1) - l(\hat{\theta}_0)] > \chi^2_{p, 1-\alpha}
+$$
+
+其中 $\chi^2_{p, 1-\alpha}$ 是自由度为 $p$ 的卡方分布的 $1-\alpha$ 分位数。
+
+## 三种判决规则的比较
+
+> **Vergleich der drei Entscheidungsregeln**
+
+类似地，AIC 的判决规则可以写为：
+
+$$
+\text{"} H_1 \text{"} \quad \Leftrightarrow \quad 2[l(\hat{\theta}_1) - l(\hat{\theta}_0)] > 2p
+$$
+
+而 BIC 对应的判决规则为：
+
+$$
+\text{"} H_1 \text{"} \quad \Leftrightarrow \quad 2[l(\hat{\theta}_1) - l(\hat{\theta}_0)] > \log(n) \cdot p
+$$
+
+三种方法的区别在于右侧的**临界值**不同：检验用的是卡方分布分位数，AIC 用的是 $2p$，BIC 用的是 $\log(n) \cdot p$。
+
+```{r}
+#| label: fig-critical-values
+#| fig-cap: "三种判决规则的临界值与对应的显著性水平比较（仿教材 Fig. 7.4）| Vergleich der kritischen Werte und Signifikanzniveaus"
+#| fig-height: 7
+
+par(mfrow = c(2, 1), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 上图：临界值
+p_range <- 1:15
+n_example <- 100
+alpha_test <- 0.05
+
+cv_test <- qchisq(1 - alpha_test, p_range)
+cv_aic <- 2 * p_range
+cv_bic <- log(n_example) * p_range
+
+plot(p_range, cv_bic, type = "b", col = "#16A34A", lwd = 2.5, pch = 15,
+     xlab = "参数差 p | Parameterdifferenz p",
+     ylab = "临界值 | Kritischer Wert",
+     main = "临界值比较 (n = 100, alpha = 0.05) | Vergleich der kritischen Werte",
+     cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, max(cv_bic) * 1.1))
+lines(p_range, cv_aic, type = "b", col = "#DC2626", lwd = 2.5, pch = 16)
+lines(p_range, cv_test, type = "b", col = "#2563EB", lwd = 2.5, pch = 17)
+grid(col = "#E2E8F0")
+
+legend("topleft",
+       legend = c(expression("BIC: log(n)" %*% p),
+                  "AIC: 2p",
+                  expression("检验: " * chi[p*","*0.95]^2)),
+       col = c("#16A34A", "#DC2626", "#2563EB"),
+       pch = c(15, 16, 17), lwd = 2.5, bty = "n", cex = 0.85)
+
+# 下图：显著性水平
+sig_aic <- 1 - pchisq(2 * p_range, p_range)
+sig_bic <- 1 - pchisq(log(n_example) * p_range, p_range)
+sig_test <- rep(alpha_test, length(p_range))
+
+plot(p_range, sig_aic, type = "b", col = "#DC2626", lwd = 2.5, pch = 16,
+     xlab = "参数差 p | Parameterdifferenz p",
+     ylab = expression(P("\"" * H[1] * "\"" ~ "|" ~ H[0])),
+     main = expression("对应的第一类错误概率 " * P("\"" * H[1] * "\"" ~ "|" ~ H[0])),
+     cex.main = 1.0, col.main = "#1E293B",
+     ylim = c(0, max(sig_aic) * 1.1))
+lines(p_range, sig_bic, type = "b", col = "#16A34A", lwd = 2.5, pch = 15)
+lines(p_range, sig_test, type = "b", col = "#2563EB", lwd = 2.5, pch = 17)
+grid(col = "#E2E8F0")
+
+legend("topright",
+       legend = c("AIC", "BIC", expression("检验 (" * alpha == 0.05 * ")")),
+       col = c("#DC2626", "#16A34A", "#2563EB"),
+       pch = c(16, 15, 17), lwd = 2.5, bty = "n", cex = 0.85)
+
+par(mfrow = c(1, 1))
+```
+
+从上图可以看到几个重要的结论。首先，BIC 的临界值增长最快，这再次说明 BIC 倾向于偏好简洁模型。其次，AIC 与检验的临界值相当，但当 $p$ 较大时 AIC 也偏好较小的模型。第三，对于较小的 $p$ 值，AIC 偏好更大的模型。
+
+从下图的显著性水平来看，AIC 和 BIC 对于较大的 $p$ 都导向更小的模型（显著性水平更低）。
+
+## 模型选择与假设检验是不同的方法论
+
+> **Modellwahl und Hypothesentests sind verschiedene Methoden**
+
+上述结果可能令人困惑，但我们必须认识到：基于 AIC/BIC 的模型选择和基于检验的模型选择是**两种不同的方法论**，它们不一定匹配。这一点很重要，但并不令人意外。两个概念建立在不同的方法论基础上，遵循不同的推理路线。
+
+统计检验更多地面向**决策问题**，其中一类决策错误被限制在较小的概率内。而基于 AIC 或 BIC 的模型选择旨在通过**平衡拟合优度与模型复杂度**来避免过拟合。这显然是两种不同的策略。
+
+一般来说，如果关注点是模型选择而非对特定参数的推断，建议使用交叉验证或 AIC/BIC 等概念，**不应将它们与统计检验混合使用**。
+
+::: {.callout-tip icon="false"}
+## 法官与顾问的比喻 | Die Richter-und-Berater-Metapher
+
+假设检验就像法庭上的法官 -- 它需要在"有罪"和"无罪"之间做出非此即彼的判决，并控制冤枉好人的概率（第一类错误）不超过某个阈值。法官关心的是"证据是否足够定罪"。
+
+AIC/BIC 则更像一位理财顾问 -- 它不做"是/否"的判决，而是在众多投资方案中找到**性价比最高**的那个。顾问关心的是"哪个方案最优"，而不是"某个方案是否显著优于零方案"。
+
+两种角色都有价值，但不应混淆。用法官的标准来做投资决策，或用顾问的标准来判案，都是不合适的。
+
+*Hypothesentests sind wie ein Richter (Schuldig/Nicht-Schuldig), AIC/BIC wie ein Berater (welche Option ist optimal). Beides hat seinen Platz, sollte aber nicht vermischt werden.*
+:::
+
+{{< pagebreak >}}
+
+# 前向选择与小样本修正 {#sec-forward-selection}
+
+> **Vorwartsselektion und Kleinprobenkorrektur**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- **前向选择**算法的具体步骤
+- AIC 与 BIC 在模拟中的**性能比较**
+- AIC 的**小样本修正**（AICc）及其公式
+- 小样本下 AICc 的**显著改善效果**
+:::
+
+## 前向选择算法
+
+> **Der Vorwartsselektion-Algorithmus**
+
+AIC 和 BIC 不仅可以比较两个模型，还可以扩展到一系列 $K$ 个嵌套模型 $\mathcal{M}_1 \subset \mathcal{M}_2 \subset \cdots \subset \mathcal{M}_K$。以线性回归为例，设 $x_1, \ldots, x_K$ 是一组协变量，完整模型为：
+
+$$
+Y_i = \theta_0 + x_{i1}\theta_1 + x_{i2}\theta_2 + \cdots + x_{iK}\theta_K + \epsilon_i
+$$
+
+我们可以计算所有可能子模型的 AIC 并选择最小的那个。但这会导致巨大的计算量（$2^K$ 个子模型）。因此，一种更实际的策略是**前向选择**：从空模型出发，逐步加入使 AIC 降低最多的变量，直到 AIC 不再下降为止。
+
+**前向选择算法**：
+
+步骤 1：计算空模型 $Y_i = \mu + \epsilon_i$ 的 AIC，记为 $\text{AIC}_0$。令 $\mathcal{I}_0 = \emptyset$，$k = 0$。
+
+步骤 2：令 $\mathcal{M}_k = \{1, \ldots, K\} \setminus \mathcal{I}_k$。对每个 $j \in \mathcal{M}_k$，计算将变量 $j$ 加入当前模型后的 AIC。选择使 AIC 最小的变量，记其索引为 $l$，定义 $\mathcal{I}_{k+1} = \mathcal{I}_k \cup \{l\}$，对应的 AIC 为 $\text{AIC}_{k+1}$。
+
+步骤 3：如果 $\text{AIC}_{k+1} < \text{AIC}_k$，令 $k = k+1$ 并返回步骤 2。否则，选择 $\mathcal{I}_k$ 对应的模型为最佳模型。
+
+```{r}
+#| label: fig-forward-selection-tree
+#| fig-cap: "前向选择的搜索过程示意（仿教材 Fig. 7.5）| Skizze des Vorwartsselektionsprozesses"
+#| fig-height: 4.5
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 7), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("前向选择搜索过程 | Vorwartsselektion")), 
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 第0层：空模型
+rect(6.5, 5.5, 9.5, 6.5, col = "#F3E8FF", border = "#9333EA", lwd = 2.5)
+text(8, 6.0, expression(M[0] * ": 空模型"), cex = 0.75, col = "#9333EA", font = 2)
+
+# 第1层：加入一个变量
+x1_pos <- c(2, 5, 8, 11, 14)
+for (i in 1:5) {
+  rect(x1_pos[i] - 1, 3.5, x1_pos[i] + 1, 4.5, 
+       col = "#DBEAFE", border = "#2563EB", lwd = 1.5)
+  text(x1_pos[i], 4.0, bquote("+x"[.(i)]), cex = 0.65, col = "#2563EB", font = 2)
+  arrows(8, 5.5, x1_pos[i], 4.5, col = "#94A3B8", lwd = 1.2, length = 0.08)
+}
+
+# 标记最优
+rect(x1_pos[3] - 1, 3.5, x1_pos[3] + 1, 4.5, 
+     col = "#FEF3C7", border = "#D97706", lwd = 2.5)
+text(x1_pos[3], 4.0, expression("+x"[3] * " *"), cex = 0.65, col = "#D97706", font = 2)
+
+# 第2层
+x2_pos <- c(5, 8, 11)
+for (i in 1:3) {
+  rect(x2_pos[i] - 1, 1.5, x2_pos[i] + 1, 2.5,
+       col = "#DBEAFE", border = "#2563EB", lwd = 1.5)
+  lab <- c(expression("+x"[1]), expression("+x"[2]), expression("+x"[5]))[i]
+  text(x2_pos[i], 2.0, lab, cex = 0.65, col = "#2563EB", font = 2)
+  arrows(8, 3.5, x2_pos[i], 2.5, col = "#94A3B8", lwd = 1.2, length = 0.08)
+}
+text(3, 2.0, "...", cex = 1.2, col = "#6B7280")
+text(13, 2.0, "...", cex = 1.2, col = "#6B7280")
+
+# 注释
+text(15, 6.0, "AIC 最小 ->", col = "#D97706", font = 2, cex = 0.7)
+arrows(14.5, 5.7, 14.5, 4.8, col = "#D97706", lwd = 1.5, length = 0.1)
+text(0.5, 4.0, "步骤 1", col = "#6B7280", cex = 0.7, font = 3)
+text(0.5, 2.0, "步骤 2", col = "#6B7280", cex = 0.7, font = 3)
+text(0.5, 0.5, "...", col = "#6B7280", cex = 1)
+
+text(8, 0.7, "继续直到 AIC 不再下降 | Fortfahren bis AIC nicht mehr sinkt", 
+     col = "#DC2626", cex = 0.8, font = 2)
+```
+
+## 模拟比较：AIC vs BIC
+
+> **Simulationsvergleich: AIC vs. BIC**
+
+我们通过模拟来演示 AIC 和 BIC 的表现。从以下模型生成数据：
+
+$$
+Y_i = \sum_{k=1}^{K} x_{ik} \theta_k + \epsilon, \quad \epsilon \sim N(0,1)
+$$
+
+其中协变量也从标准正态分布抽取，所有抽样独立。参数 $\theta$ 中有 $K/2$ 个设为零，其余 $K/2$ 个从 $N(0,1)$ 抽取。
+
+```{r}
+#| label: fig-aic-bic-simulation
+#| fig-cap: "AIC vs BIC 在模拟中的表现 (n=1000, K=100)（仿教材 Fig. 7.6）| AIC vs BIC: Simulationsvergleich"
+#| fig-height: 7
+
+set.seed(42)
+n_sim <- 1000
+K_sim <- 100
+
+# 生成数据
+x_sim <- matrix(rnorm(n_sim * K_sim), n_sim, K_sim)
+theta_sim <- numeric(K_sim)
+nonzero_idx <- sample(1:K_sim, K_sim / 2)
+theta_sim[nonzero_idx] <- rnorm(K_sim / 2)
+y_sim <- x_sim %*% theta_sim + rnorm(n_sim)
+
+# 前向选择 (计算不同维度下的 AIC/BIC)
+aic_forward <- numeric(K_sim)
+bic_forward <- numeric(K_sim)
+
+for (d in 1:K_sim) {
+  fit_fd <- lm(y_sim ~ x_sim[, 1:d])
+  n_fd <- length(y_sim)
+  rss_fd <- sum(residuals(fit_fd)^2)
+  p_fd <- d + 1
+  aic_forward[d] <- n_fd * log(rss_fd / n_fd) + 2 * p_fd
+  bic_forward[d] <- n_fd * log(rss_fd / n_fd) + log(n_fd) * p_fd
+}
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# AIC 曲线
+plot(1:K_sim, aic_forward, type = "l", col = "#DC2626", lwd = 2,
+     xlab = "模型维度 | Modelldimension",
+     ylab = "AIC",
+     main = "AIC 值随模型维度变化",
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+aic_opt <- which.min(aic_forward)
+points(aic_opt, aic_forward[aic_opt], pch = 16, col = "#DC2626", cex = 2)
+text(aic_opt + 3, aic_forward[aic_opt], sprintf("最优 p=%d", aic_opt),
+     col = "#DC2626", font = 2, cex = 0.8, pos = 4)
+
+# BIC 曲线
+plot(1:K_sim, bic_forward, type = "l", col = "#16A34A", lwd = 2,
+     xlab = "模型维度 | Modelldimension",
+     ylab = "BIC",
+     main = "BIC 值随模型维度变化",
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+bic_opt <- which.min(bic_forward)
+points(bic_opt, bic_forward[bic_opt], pch = 16, col = "#16A34A", cex = 2)
+text(bic_opt + 3, bic_forward[bic_opt], sprintf("最优 p=%d", bic_opt),
+     col = "#16A34A", font = 2, cex = 0.8, pos = 4)
+
+# AIC 选择的系数
+plot(1:K_sim, theta_sim, pch = 1, col = "#94A3B8", cex = 1,
+     xlab = "参数索引 | Parameterindex",
+     ylab = expression(theta),
+     main = sprintf("AIC 选择 (p=%d) | AIC-Selektion", aic_opt),
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+# 被选中的用实心点
+selected_aic <- 1:aic_opt
+points(selected_aic, theta_sim[selected_aic], pch = 16, col = "#DC2626", cex = 1)
+abline(h = 0, col = "#94A3B8", lty = 3)
+legend("topright", legend = c("已选 | Ausgewahlt", "未选 | Nicht ausgewahlt"),
+       pch = c(16, 1), col = c("#DC2626", "#94A3B8"), bty = "n", cex = 0.7)
+
+# BIC 选择的系数
+plot(1:K_sim, theta_sim, pch = 1, col = "#94A3B8", cex = 1,
+     xlab = "参数索引 | Parameterindex",
+     ylab = expression(theta),
+     main = sprintf("BIC 选择 (p=%d) | BIC-Selektion", bic_opt),
+     cex.main = 0.95, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+selected_bic <- 1:bic_opt
+points(selected_bic, theta_sim[selected_bic], pch = 16, col = "#16A34A", cex = 1)
+abline(h = 0, col = "#94A3B8", lty = 3)
+legend("topright", legend = c("已选 | Ausgewahlt", "未选 | Nicht ausgewahlt"),
+       pch = c(16, 1), col = c("#16A34A", "#94A3B8"), bty = "n", cex = 0.7)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: aic-bic-sim-analysis
+#| code-fold: false
+
+cat("=== AIC vs BIC 模拟分析 ===\n\n")
+cat(sprintf("  真实非零参数数量: %d (共 %d 个参数)\n", K_sim/2, K_sim))
+cat(sprintf("  样本量: n = %d\n\n", n_sim))
+cat(sprintf("  AIC 选择的模型维度: %d\n", aic_opt))
+cat(sprintf("  BIC 选择的模型维度: %d\n\n", bic_opt))
+
+# 统计 AIC 选入了多少虚假变量
+n_true_in_aic <- sum(nonzero_idx <= aic_opt)
+n_spurious_aic <- aic_opt - n_true_in_aic
+cat(sprintf("  AIC: 选入 %d 个真实变量, %d 个虚假变量\n", n_true_in_aic, n_spurious_aic))
+
+n_true_in_bic <- sum(nonzero_idx <= bic_opt)
+n_spurious_bic <- bic_opt - n_true_in_bic
+cat(sprintf("  BIC: 选入 %d 个真实变量, %d 个虚假变量\n\n", n_true_in_bic, n_spurious_bic))
+
+cat("  结论: AIC 倾向于选择过于复杂的模型 (选入虚假变量)\n")
+cat("         BIC 倾向于选择更简洁的模型 (可能遗漏弱信号变量)\n")
+```
+
+从模拟结果中我们发现了 AIC 和 BIC 的一个众所周知的特征：AIC 倾向于选择过于复杂的模型，可能包含虚假变量；BIC 倾向于选择更简洁的模型，可能遗漏一些信号较弱的真实变量。
+
+## 小样本修正 AICc
+
+> **Kleinprobenkorrektur: AICc**
+
+AIC 和 BIC 都基于渐近论证，假设 $n$ 较大。当样本量 $n$ 较小时，AIC 的表现可能非常不令人满意 -- 它可能选入所有变量，包括所有虚假变量。为此，Hurvich 和 Tsai (1989) 提出了 AIC 的小样本修正版本：
+
+$$
+AIC_c = -2l(\hat{\theta}) + 2p \cdot \frac{n}{n - p - 1}
+$$
+
+当模型维度 $p$ 增大时，分母 $n - p - 1$ 变小，因此第二项变大，从而对复杂模型施加了更强的惩罚。当 $n$ 远大于 $p$ 时，$\frac{n}{n-p-1} \approx 1$，AICc 退化为标准 AIC。一般建议**始终使用修正版 AICc**，特别是当样本量 $n$ 较小时。
+
+```{r}
+#| label: fig-aicc-correction
+#| fig-cap: "小样本下 AIC vs AICc 的表现比较（仿教材 Fig. 7.7）| AIC vs AICc bei kleiner Stichprobe"
+#| fig-height: 7
+
+set.seed(42)
+n_small <- 100  # 小样本
+K_small <- 100
+
+# 生成数据
+x_small <- matrix(rnorm(n_small * K_small), n_small, K_small)
+theta_small <- numeric(K_small)
+nonzero_small <- sample(1:K_small, K_small / 2)
+theta_small[nonzero_small] <- rnorm(K_small / 2)
+y_small <- x_small %*% theta_small + rnorm(n_small)
+
+# 计算 AIC 和 AICc
+aic_small <- numeric(K_small)
+aicc_small <- numeric(K_small)
+
+for (d in 1:(K_small - 2)) {  # 避免 p >= n
+  fit_sd <- lm(y_small ~ x_small[, 1:d])
+  rss_sd <- sum(residuals(fit_sd)^2)
+  p_sd <- d + 1
+  aic_small[d] <- n_small * log(rss_sd / n_small) + 2 * p_sd
+  
+  if (n_small - p_sd - 1 > 0) {
+    aicc_small[d] <- n_small * log(rss_sd / n_small) + 2 * p_sd * n_small / (n_small - p_sd - 1)
+  } else {
+    aicc_small[d] <- Inf
+  }
+}
+
+valid_dims <- 1:(K_small - 2)
+
+par(mfrow = c(2, 2), bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# AIC (小样本)
+plot(valid_dims, aic_small[valid_dims], type = "l", col = "#DC2626", lwd = 2,
+     xlab = "模型维度 | Modelldimension",
+     ylab = "AIC",
+     main = sprintf("AIC (n=%d): 可能选入所有变量", n_small),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+aic_opt_small <- which.min(aic_small[valid_dims])
+points(aic_opt_small, aic_small[aic_opt_small], pch = 16, col = "#DC2626", cex = 2)
+text(aic_opt_small, aic_small[aic_opt_small], 
+     sprintf("  p=%d", aic_opt_small), col = "#DC2626", font = 2, cex = 0.8, pos = 4)
+
+# AICc (小样本)
+finite_aicc <- which(is.finite(aicc_small[valid_dims]))
+plot(finite_aicc, aicc_small[finite_aicc], type = "l", col = "#2563EB", lwd = 2,
+     xlab = "模型维度 | Modelldimension",
+     ylab = "AICc",
+     main = sprintf("AICc (n=%d): 修正后的选择", n_small),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+aicc_opt_small <- which.min(aicc_small[finite_aicc])
+points(finite_aicc[aicc_opt_small], aicc_small[finite_aicc[aicc_opt_small]], 
+       pch = 16, col = "#2563EB", cex = 2)
+text(finite_aicc[aicc_opt_small], aicc_small[finite_aicc[aicc_opt_small]],
+     sprintf("  p=%d", finite_aicc[aicc_opt_small]), 
+     col = "#2563EB", font = 2, cex = 0.8, pos = 4)
+
+# AIC 选择的系数
+plot(1:K_small, theta_small, pch = 1, col = "#94A3B8", cex = 1,
+     xlab = "参数索引 | Parameterindex",
+     ylab = expression(theta),
+     main = sprintf("AIC 选择 (p=%d)", aic_opt_small),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+if (aic_opt_small > 0) {
+  points(1:aic_opt_small, theta_small[1:aic_opt_small], pch = 16, col = "#DC2626", cex = 1)
+}
+abline(h = 0, col = "#94A3B8", lty = 3)
+
+# AICc 选择的系数
+plot(1:K_small, theta_small, pch = 1, col = "#94A3B8", cex = 1,
+     xlab = "参数索引 | Parameterindex",
+     ylab = expression(theta),
+     main = sprintf("AICc 选择 (p=%d)", finite_aicc[aicc_opt_small]),
+     cex.main = 0.9, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+aicc_selected <- finite_aicc[aicc_opt_small]
+if (aicc_selected > 0) {
+  points(1:aicc_selected, theta_small[1:aicc_selected], pch = 16, col = "#2563EB", cex = 1)
+}
+abline(h = 0, col = "#94A3B8", lty = 3)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: aicc-analysis
+#| code-fold: false
+
+cat("=== 小样本修正效果分析 ===\n\n")
+cat(sprintf("  样本量: n = %d, 参数总数: K = %d\n", n_small, K_small))
+cat(sprintf("  真实非零参数数量: %d\n\n", K_small/2))
+
+cat(sprintf("  标准 AIC 选择的维度: %d\n", aic_opt_small))
+cat(sprintf("  修正 AICc 选择的维度: %d\n\n", finite_aicc[aicc_opt_small]))
+
+cat("  AICc 修正公式:\n")
+cat("    AICc = -2l(theta_hat) + 2p * n/(n-p-1)\n\n")
+cat("  当 p 接近 n 时, n/(n-p-1) -> +Inf, 惩罚急剧增大\n")
+cat("  当 p << n 时, n/(n-p-1) -> 1, AICc -> AIC\n\n")
+
+# 展示修正因子
+cat("  修正因子 n/(n-p-1) 随 p 变化:\n")
+p_demo <- c(1, 5, 10, 20, 50, 80, 95, 98)
+for (pd in p_demo) {
+  if (n_small - pd - 1 > 0) {
+    cat(sprintf("    p = %-3d: n/(n-p-1) = %.2f  (惩罚为 AIC 的 %.1f 倍)\n", 
+                pd, n_small / (n_small - pd - 1), n_small / (n_small - pd - 1)))
+  } else {
+    cat(sprintf("    p = %-3d: n/(n-p-1) = Inf (不可行)\n", pd))
+  }
+}
+```
+
+::: {.callout-tip icon="false"}
+## 保险费率的比喻 | Die Versicherungspramien-Metapher
+
+AIC 中 $2p$ 的惩罚就像给每个参数收取固定的"保费" -- 不管你有多少数据，每增加一个参数就多交 2 单位的"保险费"。但在数据稀少的情况下，这个固定费率太低了，无法防止模型"鲁莽"地吸纳过多参数。
+
+AICc 的修正因子 $\frac{n}{n-p-1}$ 就像根据风险调整保费：当你的资产（数据量 $n$）相对于负债（参数数目 $p$）越来越少时，保费急剧上升。这迫使你在数据有限时更加谨慎地选择参数，避免"破产"（严重过拟合）。
+
+*Der AICc-Korrekturfaktor erhoht die "Pramie" fur Parameter, wenn die Datenmenge knapp ist -- wie ein risikobasierter Versicherungstarif.*
+:::
+
+{{< pagebreak >}}
+
+# 模型选择与模型维度 {#sec-model-dimension}
+
+> **Modellwahl und Modelldimension**
+
+::: {.callout-note icon="false"}
+## 本节目标 | Was Sie lernen
+
+- 模型维度 $|\Theta|$ 与样本量 $n$ 的**比值**是核心问题
+- 三种情形 $|\Theta|/n \ll 1$、$|\Theta|/n \lesssim 1$、$|\Theta|/n > 1$ 的**不同处理方式**
+- 正则化与**贝叶斯估计**的联系（预告）
+- 深度学习中**过参数化**现象的提及
+:::
+
+## 三种情形
+
+> **Drei Szenarien**
+
+定义模型 $\mathcal{M}$ 的维度为相关参数空间 $\Theta$ 的维度，记为 $|\Theta|$。经典统计推断基于渐近论证，即数据量 $n$ 趋向无穷而模型维度 $|\Theta|$ 固定。但随着数据的增多，原则上可以拟合更复杂的模型，因此允许模型维度 $|\Theta|$ 也依赖于 $n$ 是合理的。关键的量是比值：
+
+$$
+\frac{|\Theta|}{n}
+$$
+
+我们可以考虑三种情形：
+
+**(a) $|\Theta|/n \ll 1$**：参数维度远小于样本量。这是经典统计的舒适区，本书迄今的所有渐近论证都成立。AIC、BIC、最大似然理论的渐近结果都可以可靠使用。
+
+**(b) $|\Theta|/n \lesssim 1$**：参数维度接近但不超过样本量。这通常需要**正则化技术**来保证数值稳定性和统计性能。正则化确保优化问题（在很大程度上）是凹的。从统计角度，这可以与贝叶斯估计联系起来。
+
+**(c) $|\Theta|/n > 1$**：模型参数比观测数据更多。这超出了经典统计框架，经典统计陈述不再有效。然而，近年来机器学习领域（特别是深度学习）的应用表明，这样的模型可以具有良好的、甚至更好的预测性能。这一现象的讨论需要更多的技术细节。
+
+```{r}
+#| label: fig-dimension-ratio
+#| fig-cap: "模型维度与样本量比值的三种情形 | Drei Szenarien fur das Verhaltnis |Theta|/n"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+# 构造双下降曲线 (简化)
+p_n_ratio <- seq(0.01, 3, length.out = 500)
+# 模拟测试误差: 经典的偏差-方差权衡 + 双下降
+test_error <- ifelse(p_n_ratio < 1,
+                     1 / (1 - p_n_ratio + 0.1) + 0.2 * p_n_ratio + 0.5,
+                     1 / (p_n_ratio - 1 + 0.1) + 0.5 + 0.5 / p_n_ratio)
+test_error <- test_error / max(test_error) * 10
+
+plot(p_n_ratio, test_error, type = "l", col = "#2563EB", lwd = 3,
+     xlab = expression("|" * Theta * "| / n"),
+     ylab = "测试误差 | Testfehler",
+     main = expression("模型维度与样本量比值 " * "|" * Theta * "| / n" * " 的三种情形"),
+     cex.main = 1.0, col.main = "#1E293B",
+     xlim = c(0, 3), ylim = c(0, max(test_error) * 1.1))
+grid(col = "#E2E8F0")
+
+# 标注三个区域
+abline(v = 1, col = "#DC2626", lwd = 2, lty = 2)
+
+rect(0, 0, 0.3, max(test_error) * 1.05, 
+     col = adjustcolor("#D1FAE5", 0.3), border = NA)
+rect(0.3, 0, 0.95, max(test_error) * 1.05,
+     col = adjustcolor("#FEF3C7", 0.3), border = NA)
+rect(1.05, 0, 3, max(test_error) * 1.05,
+     col = adjustcolor("#FCE7F3", 0.3), border = NA)
+
+text(0.15, max(test_error) * 0.95, "(a)", col = "#16A34A", font = 2, cex = 1)
+text(0.15, max(test_error) * 0.85, expression(frac("|"*Theta*"|", n) %<<% 1), 
+     col = "#16A34A", cex = 0.7)
+
+text(0.65, max(test_error) * 0.95, "(b)", col = "#D97706", font = 2, cex = 1)
+text(0.65, max(test_error) * 0.85, expression(frac("|"*Theta*"|", n) %<~% 1),
+     col = "#D97706", cex = 0.7)
+
+text(2.0, max(test_error) * 0.95, "(c)", col = "#DB2777", font = 2, cex = 1)
+text(2.0, max(test_error) * 0.85, expression(frac("|"*Theta*"|", n) > 1),
+     col = "#DB2777", cex = 0.7)
+
+# 区域说明
+text(0.15, max(test_error) * 0.55, "经典\n统计", col = "#16A34A", cex = 0.65, font = 2)
+text(0.65, max(test_error) * 0.55, "需要\n正则化", col = "#D97706", cex = 0.65, font = 2)
+text(2.0, max(test_error) * 0.55, "过参数化\n深度学习", col = "#DB2777", cex = 0.65, font = 2)
+
+text(1, max(test_error) * 0.5, "插值\n阈值", col = "#DC2626", cex = 0.65, font = 2, srt = 90)
+```
+
+::: {.callout-tip icon="false"}
+## 水杯与水的比喻 | Die Glas-und-Wasser-Metapher
+
+把数据量 $n$ 想象成一杯水，模型维度 $|\Theta|$ 想象成杯子的容量。
+
+情形 (a)：杯子很小，水很多 -- 怎么倒都能装满，模型估计非常稳定（经典统计有效）。
+
+情形 (b)：杯子和水差不多大 -- 需要小心翼翼地倒（正则化），稍有偏差就会溢出或不够。
+
+情形 (c)：杯子比水大 -- 按经典理论这不可能"装满"（参数无法唯一确定）。但深度学习的实践表明，有时候超大的杯子反而能以某种方式"自适应"地找到好的解决方案。这一现象（所谓的"双下降"曲线）仍是活跃的研究领域。
+
+*Die Datenmenge $n$ ist das Wasser, die Modelldimension $|\Theta|$ das Glas. In der klassischen Statistik braucht man viel Wasser fur ein kleines Glas. Deep Learning zeigt, dass auch ein ubergrosses Glas funktionieren kann.*
+:::
+
+{{< pagebreak >}}
+
+# 练习题 {#sec-exercises}
+
+> **Ubungsaufgaben**
+
+## 练习 1：AIC 与 BIC 基础
+
+> **Ubung 1: Grundlagen von AIC und BIC**
+
+```{r}
+#| label: exercise-1
+#| code-fold: false
+
+cat("=== 练习 1: AIC 与 BIC ===\n\n")
+
+# a) AIC 和 BIC 的定义与功能
+cat("a) AIC 与 BIC 的定义:\n\n")
+cat("  AIC = -2 * sum(log f(y_i; theta_hat)) + 2p\n")
+cat("  BIC = -2 * sum(log f(y_i; theta_hat)) + log(n) * p\n\n")
+cat("  两者都通过平衡拟合优度与模型复杂度来进行模型选择。\n")
+cat("  主要区别: 当 n >= 8 时, BIC 的复杂度惩罚更重,\n")
+cat("  因此 BIC 倾向于选择更简洁的模型。\n\n")
+
+# b) COVID-19 Poisson 模型
+cat("b) COVID-19 数据 Poisson 模型:\n\n")
+# BIC = -2*l(theta_hat) + log(n)*p
+# Poisson 有 1 个参数 (lambda), n = 365 天
+n_covid <- 365
+p_poisson <- 1
+bic_poisson <- 3020.443
+
+# BIC = -2*l + log(n)*p => l = -(BIC - log(n)*p)/2
+loglik_poisson <- -(bic_poisson - log(n_covid) * p_poisson) / 2
+cat(sprintf("  n = %d, p = %d (Poisson: 仅参数 lambda)\n", n_covid, p_poisson))
+cat(sprintf("  BIC = %.3f\n", bic_poisson))
+cat(sprintf("  -2l = BIC - log(n)*p = %.3f - %.3f * %d = %.3f\n",
+            bic_poisson, log(n_covid), p_poisson, bic_poisson - log(n_covid) * p_poisson))
+cat(sprintf("  l(theta_hat) = %.3f\n", loglik_poisson))
+cat(sprintf("  L(theta_hat) = exp(l) (极小值, 通常不直接计算)\n\n"))
+
+# c) 负二项 vs Poisson
+cat("c) 负二项分布 vs Poisson:\n\n")
+bic_negbin <- 3023.909
+p_negbin <- 2
+cat(sprintf("  Poisson BIC = %.3f\n", bic_poisson))
+cat(sprintf("  负二项  BIC = %.3f\n", bic_negbin))
+cat(sprintf("  差值 = %.3f (正值 -> Poisson 更优)\n", bic_negbin - bic_poisson))
+cat("  结论: 根据 BIC, 应选择 Poisson 模型。\n\n")
+
+# d) AIC 值
+cat("d) 计算对应的 AIC:\n\n")
+# AIC = -2l + 2p = (BIC - log(n)*p) + 2p
+aic_poisson <- (bic_poisson - log(n_covid) * p_poisson) + 2 * p_poisson
+aic_negbin <- (bic_negbin - log(n_covid) * p_negbin) + 2 * p_negbin
+cat(sprintf("  Poisson AIC = -2l + 2p = (BIC - log(n)*p) + 2p\n"))
+cat(sprintf("              = (%.3f - %.3f*%d) + 2*%d = %.3f\n",
+            bic_poisson, log(n_covid), p_poisson, p_poisson, aic_poisson))
+cat(sprintf("  负二项  AIC = (%.3f - %.3f*%d) + 2*%d = %.3f\n\n",
+            bic_negbin, log(n_covid), p_negbin, p_negbin, aic_negbin))
+
+# e) 两个准则是否一致
+cat("e) 两个准则是否一致?\n\n")
+cat(sprintf("  AIC 差值: %.3f (", aic_negbin - aic_poisson))
+cat(ifelse(aic_negbin > aic_poisson, "Poisson 更优", "负二项更优"))
+cat(")\n")
+cat(sprintf("  BIC 差值: %.3f (", bic_negbin - bic_poisson))
+cat(ifelse(bic_negbin > bic_poisson, "Poisson 更优", "负二项更优"))
+cat(")\n\n")
+cat("  BIC 的惩罚更重 (log(365) = ", round(log(n_covid), 2), " > 2)\n")
+cat("  因此 BIC 对参数更多的负二项模型施加了更大的惩罚。\n")
+```
+
+## 练习 2：AIC 与交叉验证比较
+
+> **Ubung 2: AIC vs. Kreuzvalidierung**
+
+```{r}
+#| label: exercise-2-setup
+
+# 模拟 teengamb 数据
+set.seed(2024)
+n_teen <- 47
+teengamb <- data.frame(
+  status = round(runif(n_teen, 18, 75)),
+  income = round(runif(n_teen, 1, 15), 1),
+  verbal = sample(1:12, n_teen, replace = TRUE),
+  sex = rbinom(n_teen, 1, 0.5)
+)
+eta_gamb <- 5 + 0.05 * teengamb$status + 4.5 * teengamb$income + rnorm(n_teen, 0, 15)
+teengamb$gamble <- pmax(0, round(eta_gamb, 1))
+```
+
+```{r}
+#| label: exercise-2-solution
+#| code-fold: false
+
+cat("=== 练习 2: AIC vs 交叉验证 ===\n\n")
+
+# a) AIC 比较两个模型
+cat("a) 用 AIC 比较两个模型:\n\n")
+
+model1 <- lm(gamble ~ status + income, data = teengamb)
+model2 <- lm(gamble ~ verbal + sex, data = teengamb)
+
+aic1 <- AIC(model1)
+aic2 <- AIC(model2)
+
+cat(sprintf("  模型 1: gamble ~ status + income\n"))
+cat(sprintf("    AIC = %.2f\n\n", aic1))
+cat(sprintf("  模型 2: gamble ~ verbal + sex\n"))
+cat(sprintf("    AIC = %.2f\n\n", aic2))
+cat(sprintf("  AIC 差值: %.2f\n", aic1 - aic2))
+cat(sprintf("  AIC 偏好: 模型 %d (AIC 更小)\n\n", ifelse(aic1 < aic2, 1, 2)))
+
+# b) LOO-CV 比较
+cat("b) 留一交叉验证 (LOO-CV) 比较均方预测误差:\n\n")
+
+msep_loo_1 <- numeric(n_teen)
+msep_loo_2 <- numeric(n_teen)
+
+for (i in 1:n_teen) {
+  # 模型 1
+  fit1_loo <- lm(gamble ~ status + income, data = teengamb[-i, ])
+  pred1 <- predict(fit1_loo, newdata = teengamb[i, ])
+  msep_loo_1[i] <- (teengamb$gamble[i] - pred1)^2
+  
+  # 模型 2
+  fit2_loo <- lm(gamble ~ verbal + sex, data = teengamb[-i, ])
+  pred2 <- predict(fit2_loo, newdata = teengamb[i, ])
+  msep_loo_2[i] <- (teengamb$gamble[i] - pred2)^2
+}
+
+cat(sprintf("  模型 1 LOO-CV MSEP: %.4f\n", mean(msep_loo_1)))
+cat(sprintf("  模型 2 LOO-CV MSEP: %.4f\n\n", mean(msep_loo_2)))
+cat(sprintf("  LOO-CV 偏好: 模型 %d (MSEP 更小)\n\n", 
+            ifelse(mean(msep_loo_1) < mean(msep_loo_2), 1, 2)))
+
+# c) 方法比较
+cat("c) AIC vs LOO-CV 的异同:\n\n")
+cat("  相同点:\n")
+cat("    - 两者都旨在评估模型对新数据的预测能力\n")
+cat("    - 两者都隐含地惩罚模型复杂度以避免过拟合\n\n")
+cat("  不同点:\n")
+cat("    AIC: 不需要重新拟合, 基于渐近近似, 需要参数化模型\n")
+cat("    LOO-CV: 需要 n 次重新拟合, 不依赖渐近假设, 适用于任何模型\n\n")
+cat("  优劣:\n")
+cat("    AIC 优势: 计算高效 (仅拟合一次)\n")
+cat("    AIC 劣势: 依赖渐近近似, 正则化时参数维度不明确\n")
+cat("    LOO-CV 优势: 概念清晰, 不需要渐近假设\n")
+cat("    LOO-CV 劣势: 计算量大 (n 次拟合)\n")
+```
+
+## 练习 3：逆高斯分布与交叉验证
+
+> **Ubung 3: Inverse Gausssche Verteilung und Kreuzvalidierung**
+
+```{r}
+#| label: exercise-3
+#| code-fold: false
+
+cat("=== 练习 3: 逆高斯分布 ===\n\n")
+
+# 模拟 Portland 收入数据
+set.seed(2024)
+n_port <- 1000
+# 逆高斯分布模拟 (使用 statmod 包的方法手动实现)
+mu_true <- 55000
+lambda_true <- 150000
+
+# 使用变换方法生成逆高斯随机数
+rinvgauss <- function(n, mu, lambda) {
+  nu <- rnorm(n)
+  y <- nu^2
+  x <- mu + mu^2 * y / (2 * lambda) - mu / (2 * lambda) * sqrt(4 * mu * lambda * y + mu^2 * y^2)
+  z <- runif(n)
+  result <- ifelse(z <= mu / (mu + x), x, mu^2 / x)
+  return(result)
+}
+
+income_data <- rinvgauss(n_port, mu_true, lambda_true)
+income_data <- pmax(income_data, 100)  # 确保正值
+
+cat("a) 逆高斯分布 MLE (lambda 固定):\n\n")
+cat("  逆高斯密度: f(x; mu, lambda) = sqrt(lambda/(2*pi*x^3)) * exp(-lambda*(x-mu)^2/(2*mu^2*x))\n\n")
+cat("  对数似然关于 mu 求导:\n")
+cat("  dl/dmu = sum[ lambda*(y_i - mu)/(mu^3) + lambda*(y_i - mu)/(mu^2*y_i) ] ??? \n")
+cat("  简化后: MLE 为 mu_hat = y_bar (样本均值)\n\n")
+
+mu_hat <- mean(income_data)
+cat(sprintf("  mu_hat = y_bar = %.2f\n\n", mu_hat))
+
+# Fisher 信息
+cat("  Fisher 信息: I(mu) = n * lambda / mu^3\n")
+cat(sprintf("  渐近 95%% 置信区间: mu_hat +/- 1.96 * sqrt(mu_hat^3 / (n*lambda))\n"))
+se_mu <- sqrt(mu_hat^3 / (n_port * lambda_true))
+ci_lower <- mu_hat - 1.96 * se_mu
+ci_upper <- mu_hat + 1.96 * se_mu
+cat(sprintf("  = [%.2f, %.2f]\n\n", ci_lower, ci_upper))
+
+# b) LOO-CV MSEP
+cat("b) LOO-CV 均方预测误差:\n\n")
+msep_loo_ig <- numeric(n_port)
+for (i in 1:n_port) {
+  mu_loo <- mean(income_data[-i])
+  msep_loo_ig[i] <- (income_data[i] - mu_loo)^2
+}
+cat(sprintf("  LOO-CV MSEP = %.2f\n\n", mean(msep_loo_ig)))
+
+# c) 4 折交叉验证
+cat("c) 4 折交叉验证:\n\n")
+
+k_folds <- 4
+fold_size <- n_port / k_folds
+fold_ids <- rep(1:k_folds, each = fold_size)
+# 打乱
+set.seed(123)
+fold_ids <- sample(fold_ids)
+
+msep_4fold <- numeric(k_folds)
+for (fold in 1:k_folds) {
+  test_mask <- (fold_ids == fold)
+  train_data <- income_data[!test_mask]
+  test_data <- income_data[test_mask]
+  
+  mu_fold <- mean(train_data)
+  msep_4fold[fold] <- mean((test_data - mu_fold)^2)
+  cat(sprintf("  折 %d: n_train=%d, n_test=%d, mu_hat=%.2f, MSEP=%.2f\n",
+              fold, sum(!test_mask), sum(test_mask), mu_fold, msep_4fold[fold]))
+}
+cat(sprintf("\n  4 折 CV 平均 MSEP: %.2f\n", mean(msep_4fold)))
+cat(sprintf("  LOO-CV MSEP:       %.2f\n", mean(msep_loo_ig)))
+cat("\n  两者应当近似, k 折 CV 计算效率更高 (4 次 vs 1000 次拟合)。\n")
+```
+
+```{r}
+#| label: fig-exercise-3
+#| fig-cap: "练习 3: Portland 收入数据的逆高斯分布拟合 | Ubung 3: Inverse-Gauss-Anpassung an Einkommensdaten"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+
+hist(income_data, breaks = 50, freq = FALSE,
+     col = adjustcolor("#2563EB", 0.3), border = "#2563EB",
+     xlab = "收入 (USD) | Einkommen (USD)",
+     ylab = "密度 | Dichte",
+     main = "Portland 收入数据与逆高斯分布拟合",
+     cex.lab = 1.0, cex.main = 1.0, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+# 拟合曲线
+x_fit <- seq(min(income_data), max(income_data), length.out = 500)
+dinvgauss <- function(x, mu, lambda) {
+  sqrt(lambda / (2 * pi * x^3)) * exp(-lambda * (x - mu)^2 / (2 * mu^2 * x))
+}
+y_fit <- dinvgauss(x_fit, mu_hat, lambda_true)
+lines(x_fit, y_fit, col = "#DC2626", lwd = 3)
+
+abline(v = mu_hat, col = "#16A34A", lwd = 2, lty = 2)
+text(mu_hat * 1.3, max(y_fit) * 0.8,
+     bquote(hat(mu) == .(round(mu_hat, 0))),
+     col = "#16A34A", font = 2, cex = 0.9)
+
+legend("topright",
+       legend = c("收入数据直方图", "逆高斯拟合密度", expression(hat(mu))),
+       col = c("#2563EB", "#DC2626", "#16A34A"),
+       pch = c(15, NA, NA), lwd = c(NA, 3, 2), lty = c(NA, 1, 2),
+       bty = "n", cex = 0.8)
+```
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心概念链
+
+```{r}
+#| label: fig-summary-chain
+#| fig-cap: "本章知识逻辑链 | Logikkette der Konzepte dieses Kapitels"
+#| fig-height: 6
+#| fig-width: 12
+
+par(mar = c(0.5, 0.5, 2.5, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 16), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("第七章知识逻辑链 | Logikkette Kapitel 7")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+nx <- c(3, 8, 13, 5.5, 10.5)
+ny <- c(6.5, 6.5, 6.5, 3.0, 3.0)
+labels <- c(
+  "模型定义\nM = (F, H)\nModelldefinition",
+  "数据分割\nLOO / k-fold CV\nDatenaufteilung",
+  "AIC 与 BIC\n信息准则\nInformationskriterien",
+  "假设检验\n似然比检验\nHypothesentests",
+  "前向选择\nAICc 修正\nVorwartsselektion"
+)
+fills <- c("#DBEAFE", "#FEF3C7", "#FCE7F3", "#E0E7FF", "#D1FAE5")
+bords <- c("#2563EB", "#D97706", "#DB2777", "#6366F1", "#16A34A")
+
+for (i in 1:5) {
+  rect(nx[i]-1.8, ny[i]-0.9, nx[i]+1.8, ny[i]+0.9,
+       col = fills[i], border = bords[i], lwd = 2)
+  text(nx[i], ny[i], labels[i], cex = 0.55, font = 2, col = "#1E293B")
+}
+
+draw_arrow <- function(x1, y1, x2, y2, label) {
+  arrows(x1, y1, x2, y2, col = "#64748B", lwd = 2, length = 0.12)
+  mx <- (x1 + x2) / 2; my <- (y1 + y2) / 2
+  text(mx, my + 0.3, label, cex = 0.5, col = "#EA580C", font = 3)
+}
+
+draw_arrow(4.8, 6.5, 6.2, 6.5, "KL 散度")
+draw_arrow(9.8, 6.5, 11.2, 6.5, "避免重新拟合")
+draw_arrow(8, 5.6, 5.5, 3.9, "嵌套模型")
+draw_arrow(13, 5.6, 10.5, 3.9, "小样本修正")
+draw_arrow(7.3, 3.0, 8.7, 3.0, "实践整合")
+
+# 底部核心原则
+rect(3, 0.5, 13, 1.5, col = "#FEE2E2", border = "#DC2626", lwd = 2)
+text(8, 1.0, "核心原则: 永远不要重复使用同一批数据 | Nie die gleichen Daten doppelt verwenden",
+     col = "#DC2626", font = 2, cex = 0.7)
+arrows(8, 2.1, 8, 1.5, col = "#DC2626", lwd = 2, length = 0.1)
+```
+
+## 公式速查表
+
+| 公式 | 名称 | 编号 |
+|:-----|:-----|:----:|
+| $\mathcal{M} = (\mathcal{F}, \mathcal{H})$ | 模型定义 | 7.1 |
+| $\mathcal{F} = \{F(\cdot; \gamma), \gamma \in \Gamma\}$ | 概率模型 | 7.2 |
+| $\mathcal{H} = \{h(\cdot; \theta), \theta \in \Theta\}$ | 结构模型 | 7.2 |
+| $\frac{1}{n}\sum_{i=1}^{n} \log \frac{f_1(y_i;\hat{\theta}_{1,-i})}{f_2(y_i;\hat{\theta}_{2,-i})} > 0$ | LOO-CV 判决 | 7.11 |
+| $AIC(\mathcal{M}) = -2\sum \log f(y_i;\hat{\theta}) + 2p$ | AIC | 7.12 |
+| $AIC(\mathcal{M}) = n\log\sum(y_i - \hat{y}_i)^2 + 2p$ | 正态 AIC | 7.17 |
+| $BIC(\mathcal{M}) = -2\sum \log f(y_i;\hat{\theta}) + \log(n)p$ | BIC | 7.18 |
+| $2[l(\hat{\theta}_1) - l(\hat{\theta}_0)] \sim \chi^2_p$ | 似然比检验 | 7.29 |
+| $AIC_c = -2l(\hat{\theta}) + 2p\frac{n}{n-p-1}$ | 修正 AIC | 7.38 |
+
+## 本章的七个核心洞察
+
+| 编号 | 洞察 | 关键词 |
+|:----:|:------|:------|
+| 1 | 模型由概率模型 $\mathcal{F}$（分布选择）和结构模型 $\mathcal{H}$（输入如何影响参数）共同构成 | 双组件 |
+| 2 | 用同一批数据既拟合又评估必然导致过拟合 -- 复杂模型总是被偏好 | 数据不可重复 |
+| 3 | 交叉验证通过分离训练数据和测试数据来解决过拟合问题 | CV |
+| 4 | AIC 通过 $+2p$ 的惩罚项平衡拟合优度与复杂度，不需要重新拟合 | AIC |
+| 5 | BIC 用 $+\log(n)p$ 替代 $+2p$，当 $n \geq 8$ 时惩罚更重，偏好更简洁的模型 | BIC |
+| 6 | 模型选择（AIC/BIC）与假设检验是不同的方法论，不应混合使用 | 方法论区分 |
+| 7 | 小样本下应使用 AICc 修正，$|\Theta|/n$ 的比值决定了适用的统计框架 | AICc / 维度 |
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+## 模型定义与依赖建模
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| das Modell | 模型 | model |
+| die Modellwahl / Modellselektion | 模型选择 | model selection |
+| das Wahrscheinlichkeitsmodell | 概率模型 | probability model |
+| das Verteilungsmodell | 分布模型 | distribution model |
+| das Strukturmodell | 结构模型 | structural model |
+| der Hypothesenraum | 假设空间 | hypothesis space |
+| der Parameterraum | 参数空间 | parameter space |
+| die geschachtelten Modelle | 嵌套模型 | nested models |
+| die nicht-geschachtelten Modelle | 非嵌套模型 | non-nested models |
+| die abhangige Variable | 因变量 | dependent variable |
+| die unabhangige Variable | 自变量 | independent variable |
+| die Kovariaten | 协变量 | covariates |
+| die Merkmale (Features) | 特征 | features |
+
+## 交叉验证与数据分割
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| die Kreuzvalidierung | 交叉验证 | cross-validation |
+| die Leave-One-Out-Kreuzvalidierung | 留一交叉验证 | leave-one-out cross-validation |
+| die k-fache Kreuzvalidierung | k 折交叉验证 | k-fold cross-validation |
+| die Trainingsdaten | 训练数据 | training data |
+| die Testdaten | 测试数据 | test data |
+| die Validierungsdaten | 验证数据 | validation data |
+| die Uberanpassung | 过拟合 | overfitting |
+| die Unteranpassung | 欠拟合 | underfitting |
+| der mittlere quadratische Vorhersagefehler (MSEP) | 均方预测误差 | mean squared error of prediction |
+| die Kullback-Leibler-Divergenz | KL 散度 | Kullback-Leibler divergence |
+| der datenerzeugende Prozess | 数据生成过程 | data generating process |
+
+## AIC、BIC 与信息准则
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| das Akaike-Informationskriterium (AIC) | Akaike 信息准则 | Akaike information criterion |
+| das Bayessche Informationskriterium (BIC) | 贝叶斯信息准则 | Bayesian information criterion |
+| das korrigierte AIC (AICc) | 修正 AIC | corrected AIC |
+| die Anpassungsgute | 拟合优度 | goodness of fit |
+| die Modellkomplexitat | 模型复杂度 | model complexity |
+| der Strafterm (Penalty) | 惩罚项 | penalty term |
+| die Laplace-Approximation | Laplace 近似 | Laplace approximation |
+| die Posteriori-Wahrscheinlichkeit | 后验概率 | posterior probability |
+
+## 假设检验与模型选择策略
+
+| Deutsch | 中文 | English |
+|:--------|:-----|:--------|
+| der Likelihood-Ratio-Test | 似然比检验 | likelihood ratio test |
+| die Chi-Quadrat-Verteilung | 卡方分布 | chi-squared distribution |
+| der kritische Wert | 临界值 | critical value |
+| das Signifikanzniveau | 显著性水平 | significance level |
+| die Vorwartsselektion | 前向选择 | forward selection |
+| die Ruckwartsselektion | 后向选择 | backward selection |
+| die Regularisierung | 正则化 | regularization |
+| die Modelldimension | 模型维度 | model dimension |
+| das uberparametrisierte Modell | 过参数化模型 | overparameterized model |
+| der Fehler erster Art (Typ-I-Fehler) | 第一类错误 | type I error |
+:::
