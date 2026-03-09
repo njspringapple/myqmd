@@ -1,0 +1,1564 @@
+---
+title: "第二章：算法复杂度与数值计算"
+subtitle: "从浮点误差到大O记号 | Von Gleitkommafehlern zur O-Notation"
+author: "机器学习导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 5.5,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+# 全局配色方案 | Globales Farbschema
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+想象你写了一个程序来分析 10 万条用户数据。程序跑了 10 分钟出了结果——但老板说数据量下周要翻 10 倍。你的程序会跑多久？10 分钟？100 分钟？还是 **10000 分钟**？
+
+*Stellen Sie sich vor, Ihr Programm analysiert 100.000 Datensätze in 10 Minuten. Nächste Woche verzehnfacht sich die Datenmenge. Wie lange dauert es dann?*
+
+本章将带你理解 **为什么"怎么算"和"算什么"一样重要**。我们将从计算机的根本限制出发，学习如何评价算法的好坏，并掌握复杂度分析这一核心工具。
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图：从计算机的限制到复杂度分析 | Lernroadmap: Von den Grenzen des Computers zur Komplexitätsanalyse"
+#| dev: "ragg_png"
+#| code-fold: true
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 10), ylim = c(0, 7), axes = FALSE, 
+     xlab = "", ylab = "", main = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), 
+      cex.main = 1.4, col.main = "#1E293B")
+
+# Draw path
+steps_x <- c(1, 3, 5, 7, 9)
+steps_y <- c(5.5, 5.5, 5.5, 5.5, 5.5)
+arrows(steps_x[-5] + 0.7, steps_y[-5], steps_x[-1] - 0.7, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("浮点数\n与舍入误差", "数值陷阱\n灾难性消去", 
+               "算法与\n基本运算", "Landau 记号\n大 O 小 o", 
+               "复杂度分析\n实战案例")
+labels_de <- c("Gleitkomma\n& Rundung", "Numerische\nFallen", 
+               "Algorithmen &\nGrundoperationen", "Landau-\nNotation", 
+               "Komplexitäts-\nanalyse")
+colors <- c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#E0E7FF", "#D1FAE5")
+borders <- c("#2563EB", "#D97706", "#DC2626", "#6366F1", "#16A34A")
+
+for (i in 1:5) {
+  rect(steps_x[i] - 0.7, steps_y[i] - 0.9, steps_x[i] + 0.7, steps_y[i] + 0.9,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.2, labels_cn[i], cex = 0.72, font = 2, col = "#1E293B")
+  text(steps_x[i], steps_y[i] - 0.55, labels_de[i], cex = 0.52, col = "#64748B", font = 3)
+}
+
+# Difficulty arrow
+arrows(0.5, 1.5, 9.5, 1.5, col = "#DC2626", lwd = 2, length = 0.15)
+text(5, 1.9, "抽象程度递增 | Zunehmende Abstraktion  >>>", cex = 0.85, col = "#DC2626")
+
+# Trigger labels
+triggers <- c("", "精度丢失!", "如何衡量?", "如何简化?", "实践!")
+for (i in 2:5) {
+  text(steps_x[i] - 1, steps_y[i] + 1.3, triggers[i],
+       cex = 0.7, col = "#EA580C", font = 2)
+}
+
+for (i in 1:5) {
+  text(steps_x[i] - 0.5, steps_y[i] + 0.75, paste0("§", i), 
+       cex = 0.6, col = borders[i], font = 2)
+}
+```
+
+**最终目标 | Endziel**：看到下面这个表达式时，能立刻判断算法的效率——
+
+$$
+4n^3 + 16n^2 + 239 = O(n^3)
+$$
+
+读完本章，你将学会如何把复杂的运算次数表达式 **化简为其主导项**，从而快速评估算法随数据规模增长的行为。
+
+{{< pagebreak >}}
+
+# 数值问题：计算机不是万能的 {#sec-numerical}
+
+> **Numerische Probleme: Computer sind nicht allmächtig**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie in diesem Abschnitt lernen
+
+- 什么是"数值问题"——为什么计算机的答案 **几乎从不完全精确**
+- 浮点数表示的根本限制
+- *Was ist ein „numerisches Problem"? Warum ist die Antwort des Computers fast nie exakt?*
+:::
+
+## 数值问题是什么？{#sec-num-problem}
+
+> **Was ist ein numerisches Problem?**
+
+一个 **数值问题** 的解是一个或多个数字。例如：求积分的值、求解线性方程组、求函数逼近中的系数。一般来说，给定一个带输入 $x$ 的问题 $f$，我们需要计算它的解 $f(x)$。
+
+*Ein numerisches Problem hat als Lösung eine oder mehrere Zahlen. Allgemein: Gegeben ein Problem $f$ mit Eingabe $x$, berechne die Lösung $f(x)$.*
+
+## 根本困难：有限 vs 无限 {#sec-finite-vs-infinite}
+
+> **Grundlegende Schwierigkeit: Endlich vs. Unendlich**
+
+计算机 **几乎从来都不是精确的**。它只能表示 **有限位数** 的 **有限多个** 数字，并且只能进行 **有限次** 计算。
+
+```{r}
+#| label: fig-finite-limits
+#| fig-cap: "计算机的两大根本限制：有限精度和有限计算 | Zwei fundamentale Grenzen: endliche Präzision und endliche Berechnung"
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title("计算机的根本限制 | Fundamentale Grenzen des Computers", 
+      cex.main = 1.3, col.main = "#1E293B")
+
+# Limitation 1: finite precision
+rect(0.5, 3.2, 4.8, 5.5, col = "#FEE2E2", border = "#DC2626", lwd = 2)
+text(2.65, 5.0, "限制 1：有限精度", cex = 0.95, font = 2, col = "#DC2626")
+text(2.65, 4.4, expression(pi == "3.14159265358979..."), cex = 0.8, col = "#1E293B")
+text(2.65, 3.8, "计算机只存 ~16 位有效数字!", cex = 0.7, col = "#475569")
+text(2.65, 3.5, "Computer speichert nur ~16 Stellen!", cex = 0.6, col = "#94A3B8", font = 3)
+
+# Limitation 2: finite computation
+rect(5.2, 3.2, 9.5, 5.5, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(7.35, 5.0, "限制 2：有限计算", cex = 0.95, font = 2, col = "#2563EB")
+text(7.35, 4.4, expression(e^x == sum(x^n / n*"!", n==0, infinity)), cex = 0.8, col = "#1E293B")
+text(7.35, 3.8, "无穷级数只能算有限项!", cex = 0.7, col = "#475569")
+text(7.35, 3.5, "Unendliche Reihe: nur endlich viele Terme!", cex = 0.6, col = "#94A3B8", font = 3)
+
+# Consequence arrow
+arrows(2.65, 2.8, 5, 1.5, col = "#EA580C", lwd = 2, length = 0.12)
+arrows(7.35, 2.8, 5, 1.5, col = "#EA580C", lwd = 2, length = 0.12)
+rect(2.5, 0.5, 7.5, 1.8, col = "#FEF3C7", border = "#D97706", lwd = 2.5)
+text(5, 1.35, '"如何计算" 至关重要！', cex = 1.1, font = 2, col = "#D97706")
+text(5, 0.8, '"Wie wir rechnen" ist entscheidend!', cex = 0.8, col = "#D97706", font = 3)
+```
+
+让我们用 R 来亲眼看看精度限制：
+
+```{r}
+#| label: precision-demo
+#| code-fold: false
+
+# 浮点数精度演示 | Demonstration der Gleitkomma-Präzision
+
+cat("=== 浮点数精度限制 | Grenzen der Gleitkomma-Präzision ===\n\n")
+
+# 1/3 的表示
+cat("1/3 =", format(1/3, digits = 20), "\n")
+cat("  只有约 16 位有效数字 | Nur ca. 16 signifikante Stellen\n\n")
+
+# 经典测试：0.1 + 0.2 != 0.3
+cat("0.1 + 0.2 == 0.3 ?", 0.1 + 0.2 == 0.3, "\n")
+cat("0.1 + 0.2 =", format(0.1 + 0.2, digits = 20), "\n")
+cat("0.3       =", format(0.3, digits = 20), "\n")
+cat("差值 | Differenz:", format(0.1 + 0.2 - 0.3, digits = 5), "\n\n")
+
+# 机器精度 | Maschinengenauigkeit
+cat("机器精度 (Machine epsilon):", .Machine$double.eps, "\n")
+cat("这是浮点数能区分 1 和 1+ε 的最小 ε\n")
+cat("Das kleinste ε, für das 1 + ε ≠ 1 gilt\n")
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+**单次运算的误差往往可以忽略，但误差可能会累积**。运算的执行顺序会影响结果。因此我们需要 **尽量避免出现特别大或特别小的数**。
+
+*Ein einzelner Rundungsfehler ist oft vernachlässigbar, aber Fehler können sich akkumulieren. Die Reihenfolge der Operationen beeinflusst das Ergebnis.*
+:::
+
+{{< pagebreak >}}
+
+# 数值陷阱：当数学等式在计算机上失效 {#sec-traps}
+
+> **Numerische Fallen: Wenn mathematische Identitäten auf dem Computer versagen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **灾难性消去**：两个大数相减如何毁掉精度
+- **结合律失效**：加法顺序为什么重要
+- 代数恒等式 ≠ 数值稳定
+- *Katastrophale Auslöschung, Assoziativitätsverletzung, und warum algebraische Identitäten ≠ numerische Stabilität*
+:::
+
+## 灾难性消去 {#sec-catastrophic}
+
+> **Katastrophale Auslöschung**
+
+当两个 **几乎相等的大数相减** 时，结果的有效数字会大量丢失，误差被放大到离谱的程度。这就是灾难性消去。
+
+**经典例子：方差的两种等价公式**
+
+在代数上，以下两个公式完全等价：
+
+**不稳定版本（容易灾难性消去）：**
+
+$$
+\text{Var}(x) = \frac{1}{n}\sum_{i=1}^{n} x_i^2 - \left(\frac{1}{n}\sum_{i=1}^{n} x_i\right)^2
+$$
+
+**稳定版本（推荐）：**
+
+$$
+\text{Var}(x) = \frac{1}{n}\sum_{i=1}^{n} (x_i - \bar{x})^2
+$$
+
+为什么不稳定？当数据整体很大（比如都在 $10^9$ 附近），但波动很小（差异只有十几）时，$\frac{1}{n}\sum x_i^2$ 和 $\bar{x}^2$ 都是 $10^{18}$ 量级，它们的差（方差）却只有 $10^1$ 量级。两大数相减会把高位相同部分消掉，剩下的低位受舍入影响极大。
+
+```{r}
+#| label: catastrophic-cancellation
+#| code-fold: false
+
+cat("=== 灾难性消去演示 | Demonstration der katastrophalen Auslöschung ===\n\n")
+
+# 数据：在 10^9 附近，波动很小
+set.seed(42)
+x <- 1e9 + rnorm(10000, mean = 0, sd = 10)
+
+cat("数据描述 | Datenbeschreibung:\n")
+cat("  均值 ~", format(mean(x), digits = 12), "\n")
+cat("  标准差 ~", round(sd(x), 4), "\n")
+cat("  真实方差 ~", round(var(x) * (length(x)-1) / length(x), 4), "\n\n")
+
+# 不稳定公式 | Instabile Formel
+var_unstable <- mean(x^2) - mean(x)^2
+cat("不稳定公式 | Instabile Formel:\n")
+cat("  mean(x^2) =", format(mean(x^2), digits = 20), "\n")
+cat("  mean(x)^2 =", format(mean(x)^2, digits = 20), "\n")
+cat("  差值 (方差) =", var_unstable, "\n\n")
+
+# 稳定公式 | Stabile Formel
+var_stable <- mean((x - mean(x))^2)
+cat("稳定公式 | Stabile Formel:\n")
+cat("  方差 =", var_stable, "\n\n")
+
+# 对比
+cat("相对误差 | Relativer Fehler:",
+    format(abs(var_unstable - var_stable) / var_stable * 100, digits = 4), "%\n")
+```
+
+```{r}
+#| label: fig-cancellation-visual
+#| fig-cap: "灾难性消去：数据均值越大，不稳定公式的误差越大 | Katastrophale Auslöschung: Je größer der Mittelwert, desto größer der Fehler"
+
+offsets <- 10^(0:15)
+errors <- numeric(length(offsets))
+
+set.seed(123)
+base_data <- rnorm(5000, mean = 0, sd = 10)
+
+for (i in seq_along(offsets)) {
+  x_shifted <- base_data + offsets[i]
+  var_true <- mean((x_shifted - mean(x_shifted))^2)
+  var_bad  <- mean(x_shifted^2) - mean(x_shifted)^2
+  errors[i] <- abs(var_bad - var_true) / max(var_true, 1e-30)
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(offsets, errors, type = "b", pch = 16, col = "#DC2626", lwd = 2.5, cex = 1.3,
+     log = "x", 
+     xlab = "数据偏移量 (均值大小) | Datenverschiebung (Mittelwert)",
+     ylab = "相对误差 | Relativer Fehler",
+     main = "灾难性消去的威力 | Macht der katastrophalen Auslöschung",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = 1, col = "#EA580C", lty = 2, lwd = 2)
+text(1e8, 1.3, "100% 误差线 | 100% Fehlerlinie", col = "#EA580C", cex = 0.85, font = 2)
+
+# 安全区域标注
+rect(1e0, 0, 1e6, max(errors)*0.15, col = adjustcolor("#16A34A", 0.15), border = NA)
+text(1e3, max(errors)*0.08, "相对安全 | Relativ sicher", col = "#16A34A", cex = 0.8, font = 2)
+rect(1e10, 0, 1e15, max(errors), col = adjustcolor("#DC2626", 0.1), border = NA)
+text(1e12, max(errors)*0.5, "危险! | Gefährlich!", col = "#DC2626", cex = 0.9, font = 2)
+```
+
+## 加法不满足结合律 {#sec-associativity}
+
+> **Assoziativitätsverletzung bei Gleitkommazahlen**
+
+在数学上，加法满足结合律 $(a + b) + c = a + (b + c)$。但在浮点数运算中，**这不一定成立**。
+
+```{r}
+#| label: associativity-demo
+#| code-fold: false
+
+cat("=== 加法结合律失效演示 | Verletzung des Assoziativgesetzes ===\n\n")
+
+x <- 1e30
+y <- -1e30
+z <- 1
+
+# 顺序 1: (x + y) + z
+result1 <- (x + y) + z
+cat("(x + y) + z = (", format(x, scientific = TRUE), " + ", 
+    format(y, scientific = TRUE), ") + ", z, "\n")
+cat("            = ", x + y, " + ", z, "\n")
+cat("            = ", result1, "\n\n")
+
+# 顺序 2: x + (y + z)
+yz <- y + z
+result2 <- x + yz
+cat("x + (y + z) = ", format(x, scientific = TRUE), " + (", 
+    format(y, scientific = TRUE), " + ", z, ")\n")
+cat("            = ", format(x, scientific = TRUE), " + ", format(yz, scientific = TRUE), "\n")
+cat("            = ", result2, "\n\n")
+
+cat("结果相同？ | Gleich?", result1 == result2, "\n")
+cat("正确答案应该是 1，但第二种顺序得到 0!\n")
+cat("Die korrekte Antwort ist 1, aber die zweite Reihenfolge ergibt 0!\n")
+```
+
+为什么第二种顺序得到 0？因为在浮点数里，相对于 $10^{30}$ 来说，$1$ 太小了。计算 $(-10^{30}) + 1$ 时，$1$ 被舍入"吃掉"，结果仍然是 $-10^{30}$。
+
+::: {.callout-warning icon="false"}
+## ⚠️ 核心教训 | Kernlektion
+
+**代数恒等式 ≠ 数值稳定**。编写数值算法时，必须考虑：运算顺序、中间值大小、以及可能的精度损失。建议使用"先中心化再计算"的策略，或使用数值稳定算法（如 Welford 在线算法计算方差）。
+
+*Algebraische Identität ≠ Numerische Stabilität. Bei numerischen Algorithmen müssen Reihenfolge, Zwischenwertgrößen und möglicher Präzisionsverlust berücksichtigt werden.*
+:::
+
+{{< pagebreak >}}
+
+# 算法与基本运算 {#sec-algorithm}
+
+> **Algorithmen und Grundoperationen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **算法** 的定义：精确 / 近似 / 迭代 / 概率
+- 如何衡量算法的 **时间开销** 和 **空间开销**
+- 用矩阵-向量乘法作为第一个完整的代价分析例子
+- *Definition von Algorithmen, Zeit- und Speicheraufwand, Matrix-Vektor-Multiplikation als erstes Beispiel*
+:::
+
+## 算法的定义与分类 {#sec-algo-def}
+
+> **Definition und Klassifikation von Algorithmen**
+
+算法是一种过程（由若干步骤组成），对输入 $x$ 计算一个（可能的）输出/解 $\tilde{f}(x)$。
+
+*Ein Algorithmus ist ein Verfahren (bestehend aus mehreren Schritten), das für eine Eingabe $x$ eine (mögliche) Ausgabe/Lösung $\tilde{f}(x)$ berechnet.*
+
+```{r}
+#| label: fig-algo-types
+#| fig-cap: "四种算法类型及其在机器学习中的典型应用 | Vier Algorithmentypen und ihre typischen Anwendungen im ML"
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("算法的四种类型 | Vier Algorithmentypen", cex.main = 1.3, col.main = "#1E293B")
+
+# Type boxes
+types_x <- c(1.3, 3.8, 6.3, 8.8)
+types_cn <- c("精确/直接", "近似", "迭代", "概率")
+types_de <- c("Exakt/Direkt", "Approximativ", "Iterativ", "Probabilistisch")
+types_desc_cn <- c(
+  expression(tilde(f)(x) == f(x)),
+  expression(tilde(f)(x) %~~% f(x)),
+  "重复同一规则",
+  "依赖随机性"
+)
+types_example <- c(
+  "高斯消元法\n矩阵乘法",
+  "蒙特卡洛积分\n神经网络训练",
+  "梯度下降\n牛顿法",
+  "随机快排\nMCMC 方法"
+)
+colors_type <- c("#DBEAFE", "#FEF3C7", "#FEE2E2", "#E0E7FF")
+borders_type <- c("#2563EB", "#D97706", "#DC2626", "#6366F1")
+
+for (i in 1:4) {
+  rect(types_x[i] - 1.1, 4.5, types_x[i] + 1.1, 7.5,
+       col = colors_type[i], border = borders_type[i], lwd = 2)
+  text(types_x[i], 7.1, types_cn[i], cex = 0.95, font = 2, col = borders_type[i])
+  text(types_x[i], 6.6, types_de[i], cex = 0.6, col = "#64748B", font = 3)
+  text(types_x[i], 5.9, types_desc_cn[i], cex = 0.7, col = "#1E293B")
+  text(types_x[i], 5.1, types_example[i], cex = 0.6, col = "#475569")
+}
+
+# Bottom note
+rect(1, 0.5, 9, 3.5, col = adjustcolor("#D1FAE5", 0.5), border = "#16A34A", lwd = 2)
+text(5, 3.0, 'ML 算法通常是多种类型的组合！', cex = 1.0, font = 2, col = "#16A34A")
+text(5, 2.4, 'ML-Algorithmen sind oft Kombinationen mehrerer Typen!', 
+     cex = 0.75, col = "#16A34A", font = 3)
+text(5, 1.6, '例如：SGD = 迭代 + 近似 + 概率', cex = 0.85, col = "#1E293B")
+text(5, 1.0, 'Z.B.: SGD = iterativ + approximativ + probabilistisch', 
+     cex = 0.65, col = "#64748B", font = 3)
+```
+
+::: {.callout-tip icon="false"}
+## 🍖 一个类比 | Eine Analogie
+
+想象做一道菜：
+
+- **问题** = 做出一道和奶奶一样好吃的红烧肉
+- **算法** = 菜谱
+- **计算机** = 按菜谱做菜、但偶尔会犯小错的厨师
+
+我们希望菜谱让厨师做出 **尽可能美味的菜（精确）、尽快做完（高效）、且不用太多锅碗瓢盆（省内存）**。
+
+*Das Problem ist das Gericht, der Algorithmus ist das Rezept, der Computer ist der Koch, der Rezepte befolgt aber kleine Fehler macht.*
+:::
+
+## 好算法的三个标准 {#sec-good-algo}
+
+> **Drei Kriterien für gute Algorithmen**
+
+我们追求三个目标：结果尽可能精确、速度尽可能快、占用内存尽可能少。
+
+*Wir streben drei Ziele an: möglichst genaue Ergebnisse, möglichst schnell, möglichst wenig Speicher.*
+
+## 时间开销与空间开销 {#sec-cost}
+
+> **Zeit- und Speicheraufwand**
+
+计算机执行算法时，会用 **基本算术运算** $f_i \in \{+, -, \cdot, /\}$。
+
+算法的 **时间开销（Zeitaufwand）** 是这些基本运算的次数——代价越高，运行时间越长。算法的 **空间开销（Speicheraufwand）** 大致是需要存储的（中间）数字的数量——代价越高，需要更多内存。
+
+## 完整例子：矩阵-向量乘法 {#sec-matvec}
+
+> **Vollständiges Beispiel: Matrix-Vektor-Multiplikation**
+
+让我们以计算 $\mathbf{y} = A\mathbf{x}$ 为例，完整分析时间和空间开销。其中 $A$ 是 $3 \times 2$ 矩阵，$\mathbf{x}$ 是 $2$ 维向量。
+
+```{r}
+#| label: matvec-example
+#| code-fold: false
+
+# 矩阵-向量乘法的逐步演示 | Schritt-für-Schritt Matrix-Vektor-Multiplikation
+A <- matrix(c(1, 3, 5, 2, 4, 6), nrow = 3, ncol = 2)
+x_vec <- c(7, 8)
+
+cat("A =\n"); print(A)
+cat("\nx =", x_vec, "\n\n")
+
+cat("=== 逐行计算 (按行做点积) | Zeilenweise Berechnung ===\n\n")
+
+total_mult <- 0
+total_add <- 0
+
+for (i in 1:nrow(A)) {
+  row_i <- A[i, ]
+  terms <- paste0(row_i, "·", x_vec, collapse = " + ")
+  products <- row_i * x_vec
+  result <- sum(products)
+  
+  cat("第", i, "行 | Zeile", i, ": y_", i, " = ", terms, 
+      " = ", paste(products, collapse = " + "),
+      " = ", result, "\n", sep = "")
+  cat("   ", ncol(A), "次乘法 +", ncol(A) - 1, "次加法\n\n")
+  
+  total_mult <- total_mult + ncol(A)
+  total_add <- total_add + (ncol(A) - 1)
+}
+
+y_result <- A %*% x_vec
+cat("结果 | Ergebnis: y = (", paste(y_result, collapse = ", "), ")^T\n\n")
+
+cat("=== 开销统计 | Aufwandstatistik ===\n")
+cat("乘法次数 | Multiplikationen:", total_mult, "(=", nrow(A), "×", ncol(A), ")\n")
+cat("加法次数 | Additionen:      ", total_add, "(=", nrow(A), "×(", ncol(A), "-1) )\n")
+cat("总运算次数 | Gesamt:         ", total_mult + total_add, "\n")
+```
+
+**一般情况：** 当 $A$ 是 $n \times d$ 矩阵时：
+
+| 项目 / Aspekt | 公式 / Formel | 此例 ($3 \times 2$) |
+|:---:|:---:|:---:|
+| 乘法次数 | $nd$ | $6$ |
+| 加法次数 | $n(d-1)$ | $3$ |
+| 总运算次数 | $\approx 2nd$ | $9$ |
+| 存储空间 | $nd + d + n$ | $11$ |
+
+## 详细拆解：循环算法的逐步计数 {#sec-loop-counting}
+
+> **Detaillierte Aufschlüsselung: Operationen pro Iteration**
+
+很多算法的核心是一个循环。让我们学会逐步计数每次迭代中的基本运算。
+
+考虑一个典型的循环结构：对 $i = 1, \ldots, d$，执行以下操作——计算标量差值 $(x_i - y_i)$（1 次减法）、将差值乘以向量 $\mathbf{a}_i$（$n$ 次乘法）、累加到结果向量 $\mathbf{f}$（$n$ 次加法）。
+
+因此每次迭代的总开销为 $1 + n + n = 2n + 1$ 次运算。做 $d$ 轮后，总开销为 $d \cdot (2n + 1) = 2nd + d$ 次基本运算。
+
+```{r}
+#| label: loop-counting-demo
+#| code-fold: false
+
+# 循环算法开销计数演示 | Demonstration der Operationszählung
+loop_cost <- function(n, d) {
+  per_iter <- 2 * n + 1   # 每次迭代：1 次减法 + n 次乘法 + n 次加法
+  total <- d * per_iter    # 总开销
+  data.frame(n = n, d = d, 
+             `每次迭代` = per_iter, 
+             `总运算次数` = total,
+             `约等于` = paste0("≈ 2×", n, "×", d, " = ", 2*n*d),
+             check.names = FALSE)
+}
+
+results <- rbind(
+  loop_cost(10, 5),
+  loop_cost(100, 50),
+  loop_cost(1000, 500),
+  loop_cost(10000, 5000)
+)
+knitr::kable(results, align = "ccccc",
+             caption = "循环算法开销随 n、d 增长 | Aufwand bei wachsendem n, d")
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键观察 | Schlüsselbeobachtung
+
+知道"精确的"运算次数并不是最重要的。我们主要关心的是：**当问题规模变大时，开销如何随规模增长而变化**。在上面的例子中，精确开销是 $2nd + d$，但当 $n$ 和 $d$ 都很大时，$+d$ 可以忽略，增长行为"像" $2nd$。
+
+这就引出了下一节的核心工具——**复杂度与 Landau 记号**。
+
+*Die genaue Operationszahl ist nicht das Wichtigste. Was zählt: **Wie wächst der Aufwand mit der Problemgröße?***
+:::
+
+{{< pagebreak >}}
+
+# Landau 记号：化繁为简的语言 {#sec-landau}
+
+> **Landau-Notation: Die Sprache der Vereinfachung**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **大 $O$** 和 **小 $o$** 的严格定义与直觉含义
+- 常见的复杂度类别及其增长行为
+- Landau 记号的 **计算规则**
+- 如何把复杂表达式 **化简为主导项**
+- *Definitionen und Intuition von $O$ und $o$, Komplexitätsklassen, Rechenregeln, Vereinfachung*
+:::
+
+## 大 $O$ 与小 $o$：定义 {#sec-big-o-def}
+
+> **Definition von $O$ und $o$**
+
+对于两个数列 $a_n$ 和 $b_n$（$b_n > 0$）：
+
+**小 $o$（严格小一阶）：** $a_n = o(b_n)$ 当且仅当
+
+$$
+\lim_{n \to \infty} \frac{a_n}{b_n} = 0
+$$
+
+直觉：$a_n$ 和 $b_n$ 比起来 **可以忽略不计**。
+
+**大 $O$（至多同阶）：** $a_n = O(b_n)$ 当且仅当
+
+$$
+\limsup_{n \to \infty} \left|\frac{a_n}{b_n}\right| < \infty
+$$
+
+等价地：存在常数 $C > 0$ 和 $N_0$，使得对所有 $n \geq N_0$，$|a_n| \leq C \cdot |b_n|$。
+
+直觉：$a_n$ **增长速度不超过** $b_n$ 的常数倍。
+
+并且：$a_n = o(b_n) \Rightarrow a_n = O(b_n)$（反过来不一定成立）。
+
+```{r}
+#| label: fig-landau-visual
+#| fig-cap: "大 O 和小 o 的直觉对比 | Intuition von O und o im Vergleich"
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+n_seq <- 1:50
+
+plot(n_seq, n_seq^2, type = "l", col = "#DC2626", lwd = 3,
+     xlab = "n", ylab = "函数值 | Funktionswert",
+     main = expression("比较: " * 5*n * " vs " * n^2 * " vs " * 3*n^2),
+     ylim = c(0, 2600),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(n_seq, 5 * n_seq, col = "#2563EB", lwd = 3)
+lines(n_seq, 3 * n_seq^2, col = "#EA580C", lwd = 3, lty = 2)
+
+legend("topleft",
+       legend = c(
+         expression(5*n == o(n^2) ~ "  (可忽略)"),
+         expression(n^2),
+         expression(3*n^2 == O(n^2) ~ "  (同阶)")
+       ),
+       col = c("#2563EB", "#DC2626", "#EA580C"),
+       lwd = 3, lty = c(1, 1, 2), bty = "n", cex = 0.95)
+
+# 标注
+arrows(35, 5*35, 35, 35^2, col = "#16A34A", lwd = 2, length = 0.1, code = 3)
+text(38, 600, "差距越来越大!\nAbstand wächst!", col = "#16A34A", cex = 0.8, font = 2)
+```
+
+## 计算实例 {#sec-landau-examples}
+
+> **Rechenbeispiele**
+
+```{r}
+#| label: fig-landau-ratios
+#| fig-cap: "通过比值极限判断 O 和 o 关系 | O- und o-Beziehungen durch Grenzwerte von Quotienten"
+#| fig-height: 5
+
+par(mfrow = c(1, 3), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+n_seq <- 1:200
+
+# 例 1: 3n^2 + 5n = O(n^2)
+ratio1 <- (3 * n_seq^2 + 5 * n_seq) / n_seq^2
+plot(n_seq, ratio1, type = "l", col = "#2563EB", lwd = 2.5,
+     xlab = "n", ylab = "比值 | Quotient",
+     main = expression(frac(3*n^2 + 5*n, n^2)),
+     ylim = c(0, max(ratio1) * 1.1),
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = 3, col = "#DC2626", lty = 2, lwd = 2)
+text(120, 3.3, expression("→ 3 < ∞  ⟹  " * O(n^2)), col = "#DC2626", cex = 0.85, font = 2)
+
+# 例 2: 5n = o(n^2)
+ratio2 <- 5 * n_seq / n_seq^2
+plot(n_seq, ratio2, type = "l", col = "#16A34A", lwd = 2.5,
+     xlab = "n", ylab = "比值 | Quotient",
+     main = expression(frac(5*n, n^2)),
+     ylim = c(0, max(ratio2) * 1.1),
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+abline(h = 0, col = "#DC2626", lty = 2, lwd = 2)
+text(120, max(ratio2)*0.5, expression("→ 0  ⟹  " * o(n^2)), col = "#DC2626", cex = 0.85, font = 2)
+
+# 例 3: n^2 ≠ O(n)
+ratio3 <- n_seq^2 / n_seq
+plot(n_seq, ratio3, type = "l", col = "#EA580C", lwd = 2.5,
+     xlab = "n", ylab = "比值 | Quotient",
+     main = expression(frac(n^2, n)),
+     cex.main = 1.1, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+text(100, max(ratio3)*0.6, expression("→ ∞  ⟹ ≠" * O(n)), col = "#DC2626", cex = 0.85, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+**例 1：** 证明 $3n^2 + 5n = O(n^2)$。计算比值 $\lim_{n \to \infty} \frac{3n^2 + 5n}{n^2} = \lim_{n \to \infty} \left(3 + \frac{5}{n}\right) = 3 < \infty$。因此 $3n^2 + 5n = O(n^2)$。
+
+**例 2：** 证明 $5n = o(n^2)$。计算比值 $\lim_{n \to \infty} \frac{5n}{n^2} = \lim_{n \to \infty} \frac{5}{n} = 0$。因此 $5n = o(n^2)$。
+
+**例 3：** $n^2$ 不是 $O(n)$。因为 $\lim_{n \to \infty} \frac{n^2}{n} = \lim_{n \to \infty} n = \infty$，比值无界。
+
+## 复杂度类别 {#sec-complexity-classes}
+
+> **Komplexitätsklassen**
+
+不同复杂度类别有着截然不同的增长速度。
+
+```{r}
+#| label: fig-complexity-classes
+#| fig-cap: "不同复杂度类别的增长速度对比：线性以下很快，指数级灾难性增长 | Wachstumsvergleich verschiedener Komplexitätsklassen"
+#| fig-height: 6
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+n_seq <- 1:25
+
+plot(NULL, xlim = c(1, 25), ylim = c(0.5, 1e6), log = "y",
+     xlab = "问题规模 n | Problemgröße n",
+     ylab = "运算次数 (对数尺度) | Operationen (log)",
+     main = "复杂度类别增长对比 | Vergleich der Komplexitätsklassen",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+
+cols <- c("#16A34A", "#2563EB", "#9333EA", "#EA580C", "#DC2626")
+lwds <- c(2.5, 2.5, 2.5, 2.5, 3)
+ltys <- c(1, 1, 1, 1, 1)
+
+lines(n_seq, log(n_seq) + 1, col = cols[1], lwd = lwds[1])        # O(log n)
+lines(n_seq, n_seq, col = cols[2], lwd = lwds[2])                  # O(n)
+lines(n_seq, n_seq * log(n_seq) + 1, col = cols[3], lwd = lwds[3]) # O(n log n)
+lines(n_seq, n_seq^2, col = cols[4], lwd = lwds[4])                # O(n^2)
+lines(n_seq, 2^n_seq, col = cols[5], lwd = lwds[5])                # O(2^n)
+
+legend("topleft",
+       legend = c(
+         expression(O(log~n) ~ "—对数"),
+         expression(O(n) ~ "—线性"),
+         expression(O(n~log~n) ~ "—线性对数"),
+         expression(O(n^2) ~ "—平方"),
+         expression(O(2^n) ~ "—指数 ☠️")
+       ),
+       col = cols, lwd = lwds, bty = "n", cex = 0.9)
+```
+
+| 复杂度 | 名称 | $n$ 翻倍时 | 含义 |
+|:---:|:---:|:---:|:---|
+| $O(1)$ | 常数 | 不变 | 与 $n$ 无关 |
+| $O(\log n)$ | 对数 | 约多 1 个单位 | 非常高效 |
+| $O(n)$ | 线性 | 翻倍 | 与数据量成正比 |
+| $O(n \log n)$ | 线性对数 | 略多于翻倍 | 排序算法的理想值 |
+| $O(n^2)$ | 平方 | 变为 4 倍 | 开始变慢 |
+| $O(n^3)$ | 立方 | 变为 8 倍 | 矩阵求逆等 |
+| $O(2^n)$ | 指数 | 平方级爆炸 | 几乎不可用 |
+
+::: {.callout-warning icon="false"}
+## ⚠️ 注意：大 $O$ 会忽略常数！| Vorsicht: $O$ ignoriert Konstanten!
+
+$1000n + 10000$ 次运算仍然是 $O(n)$。但在实际中，对于较小的 $n$，它可能比 $n^2$ 次运算（$O(n^2)$）还慢。Landau 记号描述的是 **渐近行为**——即 $n$ 足够大时的增长趋势。
+
+*$O$-Notation beschreibt das **asymptotische Verhalten** — den Wachstumstrend für hinreichend großes $n$.*
+:::
+
+```{r}
+#| label: fig-constant-matters
+#| fig-cap: "常数因子在小规模时可能比阶数更重要 | Konstante Faktoren können bei kleinem n wichtiger sein als die Ordnung"
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+n_seq <- 1:150
+
+f1 <- 1000 * n_seq + 10000  # O(n), 但常数很大
+f2 <- n_seq^2                 # O(n^2)
+
+plot(n_seq, f1, type = "l", col = "#2563EB", lwd = 2.5,
+     xlab = "n", ylab = "运算次数 | Operationen",
+     main = "常数因子 vs 增长阶数 | Konstante vs. Ordnung",
+     ylim = c(0, max(f2)),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(n_seq, f2, col = "#DC2626", lwd = 2.5)
+
+# 交叉点
+cross <- which(f2 > f1)[1]
+abline(v = cross, col = "#EA580C", lty = 2, lwd = 1.5)
+points(cross, f1[cross], pch = 16, col = "#EA580C", cex = 2)
+text(cross + 5, f1[cross], paste0("交叉点 n ≈ ", cross), 
+     col = "#EA580C", cex = 0.9, font = 2, pos = 4)
+
+# 区域标注
+text(cross / 2, max(f2) * 0.8, expression(n^2 ~ "更快!"), 
+     col = "#DC2626", cex = 1, font = 2)
+text(cross + 30, max(f2) * 0.8, "1000n+10000\n更快!", 
+     col = "#2563EB", cex = 1, font = 2)
+
+legend("topleft",
+       legend = c(expression(1000*n + 10000 ~ " = O(n)"),
+                  expression(n^2 ~ " = O(" * n^2 * ")")),
+       col = c("#2563EB", "#DC2626"), lwd = 2.5, bty = "n", cex = 0.95)
+```
+
+## Landau 记号的计算规则 {#sec-landau-rules}
+
+> **Rechenregeln der Landau-Notation**
+
+设 $f_n$、$g_n$ 是两个数列，$a_n$、$b_n$ 是参考序列。
+
+**规则 1（同阶相运算）：** 若 $f_n = O(a_n)$ 且 $g_n = O(b_n)$，则 $f_n + g_n = O(a_n + b_n)$ 且 $f_n \cdot g_n = O(a_n \cdot b_n)$。
+
+**规则 2（可忽略因子的传递）：** 若 $f_n = O(a_n)$ 且 $g_n = o(b_n)$，则 $f_n \cdot g_n = o(a_n \cdot b_n)$。直觉：一个因子"可忽略小"，乘出来仍然"可忽略小"。
+
+**规则 3（吸收较小项）：** 若 $f_n = O(a_n + b_n)$ 且 $a_n = O(b_n)$（$a_n$ 被 $b_n$ 支配），则 $f_n = O(b_n)$。直觉：$a_n$ 被 $b_n$ 吸收。
+
+**传递性：** 若 $a_n = O(b_n)$ 且 $b_n = O(c_n)$，则 $a_n = O(c_n)$。
+
+**重要特例：** $a_n = O(1)$ 意味着 $a_n$ 有界；$a_n = o(1)$ 意味着 $a_n$ 收敛到 0。
+
+**通用结论：** $a_n = O(b_n)$ 且 $b_n = o(c_n) \Rightarrow a_n = o(c_n)$。
+
+## 化简实战 {#sec-simplification}
+
+> **Vereinfachung in der Praxis**
+
+**例子：** 算法的运算次数为 $4n^3 + 16n^2 + 239$。化简步骤如下：
+
+$$
+4n^3 + 16n^2 + 239 = O(n^3 + n^2 + 1)
+$$
+
+因为 $n^2 = O(n^3)$ 且 $1 = O(n^3)$（规则 3：较小项被吸收），所以
+
+$$
+O(n^3 + n^2 + 1) = O(n^3)
+$$
+
+因此该算法的复杂度是 **立方阶**。
+
+```{r}
+#| label: simplification-demo
+#| code-fold: false
+
+# 化简演示 | Vereinfachungsdemonstration
+cat("=== 化简: 4n³ + 16n² + 239 ===\n\n")
+
+n_vals <- c(10, 100, 1000, 10000)
+
+for (n in n_vals) {
+  exact <- 4 * n^3 + 16 * n^2 + 239
+  dominant <- 4 * n^3
+  ratio <- exact / n^3
+  contribution <- round(dominant / exact * 100, 2)
+  
+  cat("n =", format(n, width = 6), 
+      ": 精确值 =", format(exact, big.mark = ",", width = 18),
+      "  4n³ 占比 =", paste0(contribution, "%"),
+      "  精确值/n³ =", round(ratio, 4), "\n")
+}
+
+cat("\n结论 | Fazit: 当 n 足够大时, 比值趋向 4, 主导项 4n³ 几乎等于全部!\n")
+cat("Also: 4n³ + 16n² + 239 = O(n³)\n")
+```
+
+::: {.callout-tip icon="false"}
+## 📌 化简核心原则 | Kernprinzip der Vereinfachung
+
+**只保留增长最快的那一项，丢掉常数因子。** 这就像描述一群人的身高——你只需要说"大约一米七"，不需要精确到毫米。
+
+- $3n^2 + 5n \to O(n^2)$
+- $100 \log n + n \to O(n)$
+- $2^n + n^{100} \to O(2^n)$
+
+*Behalte nur den am schnellsten wachsenden Term, ignoriere konstante Faktoren.*
+:::
+
+{{< pagebreak >}}
+
+# 复杂度分析实战 {#sec-practice}
+
+> **Komplexitätsanalyse in der Praxis**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 如何分析 **统计运算**（均值、距离矩阵、矩阵乘法、迹）的复杂度
+- **斐波那契数列**：迭代 vs 递归的戏剧性差距
+- **矩阵乘法**：朴素方法 vs 优化算法
+- *Komplexitätsanalyse statistischer Operationen, Fibonacci: iterativ vs. rekursiv, Matrixmultiplikation*
+:::
+
+## 统计运算的复杂度 {#sec-stat-ops}
+
+> **Komplexität statistischer Operationen**
+
+### 均值 | Mittelwert
+
+给定 $X_1, \ldots, X_n \in \mathbb{R}$，计算 $\bar{X} = \frac{1}{n}\sum_{i=1}^{n} X_i$ 需要 $n - 1$ 次加法和 $1$ 次除法，因此复杂度为 $O(n)$。
+
+### 距离矩阵 | Distanzmatrix
+
+$D \in \mathbb{R}^{n \times n}$，其中 $D_{ij} = |X_i - X_j|$。一共有 $n^2$ 个元素，每个需要一次减法和取绝对值，因此复杂度为 $O(n^2)$。
+
+### 矩阵乘法 | Matrixmultiplikation
+
+$A \in \mathbb{R}^{m \times n}$、$B \in \mathbb{R}^{n \times \ell}$，计算 $AB \in \mathbb{R}^{m \times \ell}$。标准算法中，$(AB)_{ij} = \sum_{k=1}^{n} A_{ik} B_{kj}$。每个输出元素需要 $n$ 次乘法和 $n - 1$ 次加法，即 $O(n)$。共有 $m\ell$ 个输出元素，因此总复杂度为 $O(mn\ell)$。
+
+### 矩阵的迹 | Spur einer Matrix
+
+$\text{tr}(A) = \sum_{i=1}^{n} A_{ii}$ 只需对 $n$ 个对角元素求和，复杂度为 $O(n)$。
+
+巧妙的地方在于：$\text{tr}(A + B) = \text{tr}(A) + \text{tr}(B)$，每个迹各需 $O(n)$，最后相加 $O(1)$，总共 $O(n)$。如果你先显式计算 $A + B$（$O(n^2)$），再取迹，反而更慢！
+
+类似地，$\text{tr}(cA) = c \cdot \text{tr}(A)$，复杂度为 $O(n) + O(1) = O(n)$。如果先计算 $cA$（$O(n^2)$），再取迹，同样浪费了算力。
+
+```{r}
+#| label: stat-ops-benchmark
+#| code-fold: true
+
+cat("=== 统计运算复杂度验证 | Verifikation der Komplexität ===\n\n")
+
+library(microbenchmark)
+
+n_vals <- c(100, 500, 1000, 5000)
+mean_times <- numeric(length(n_vals))
+dist_times <- numeric(length(n_vals))
+
+for (i in seq_along(n_vals)) {
+  n <- n_vals[i]
+  x <- rnorm(n)
+  
+  mean_times[i] <- median(microbenchmark(mean(x), times = 50)$time) / 1e6
+  dist_times[i] <- median(microbenchmark(as.matrix(dist(x)), times = 10)$time) / 1e6
+}
+
+results_df <- data.frame(
+  n = n_vals,
+  `均值 (ms)` = round(mean_times, 4),
+  `距离矩阵 (ms)` = round(dist_times, 2),
+  `均值比率 (n翻倍)` = c(NA, round(mean_times[-1] / mean_times[-length(mean_times)], 1)),
+  `距离矩阵比率 (n翻倍)` = c(NA, round(dist_times[-1] / dist_times[-length(dist_times)], 1)),
+  check.names = FALSE
+)
+knitr::kable(results_df, align = "ccccc",
+             caption = "均值 O(n) vs 距离矩阵 O(n²)：n翻倍时耗时的倍率 | Zeitvergleich bei Verdopplung von n")
+```
+
+```{r}
+#| label: fig-stat-ops
+#| fig-cap: "均值 (O(n)) 和距离矩阵 (O(n²)) 的计算时间对比 | Zeitvergleich: Mittelwert O(n) vs. Distanzmatrix O(n²)"
+
+par(bg = "#F8FAFC", mar = c(4.5, 4.5, 3, 1))
+plot(n_vals, dist_times, type = "b", pch = 16, col = "#DC2626", lwd = 2.5, cex = 1.5,
+     xlab = "n", ylab = "计算时间 (ms) | Rechenzeit (ms)",
+     main = "O(n) vs O(n²) 实际计时 | Tatsächliche Laufzeiten",
+     ylim = c(0, max(dist_times) * 1.15),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(n_vals, mean_times, type = "b", pch = 17, col = "#2563EB", lwd = 2.5, cex = 1.5)
+
+legend("topleft",
+       legend = c(expression("距离矩阵 " * O(n^2) * " | Distanzmatrix"),
+                  expression("均值 " * O(n) * " | Mittelwert")),
+       col = c("#DC2626", "#2563EB"), pch = c(16, 17), lwd = 2.5, bty = "n", cex = 0.95)
+```
+
+## 斐波那契数列：迭代 vs 递归 {#sec-fibonacci}
+
+> **Fibonacci-Folge: Iterativ vs. Rekursiv**
+
+斐波那契数列 $F_0 = 0, F_1 = 1, F_n = F_{n-1} + F_{n-2}$ 是复杂度分析的经典教学案例。两种实现方式的效率差异极其 **戏剧性**。
+
+```{r}
+#| label: fibonacci-implementations
+#| code-fold: false
+
+# === 迭代版本 | Iterative Version ===
+# 时间：O(n)，空间：O(n)
+fib_iterative <- function(n) {
+  if (n <= 1) return(n)
+  x <- numeric(n + 1)
+  x[2] <- 1  # x[1]=F(0)=0, x[2]=F(1)=1
+  for (i in 3:(n + 1)) {
+    x[i] <- x[i - 1] + x[i - 2]
+  }
+  return(x[n + 1])
+}
+
+# === 朴素递归版本 | Naive rekursive Version ===
+# 时间：O(2^n)，空间：O(n)（调用栈深度）
+fib_recursive <- function(n) {
+  if (n <= 1) return(n)
+  return(fib_recursive(n - 1) + fib_recursive(n - 2))
+}
+
+# 验证两者给出相同结果
+cat("验证 | Verifikation:\n")
+for (n in c(0, 1, 5, 10, 20)) {
+  cat("  F(", n, ") = 迭代:", fib_iterative(n), 
+      " 递归:", fib_recursive(n), "\n")
+}
+```
+
+```{r}
+#| label: fig-fibonacci-comparison
+#| fig-cap: "迭代 O(n) vs 朴素递归 O(2^n)：递归版本在 n≈30 时已经明显变慢 | Iterativ O(n) vs. Naiv-Rekursiv O(2^n): drastischer Unterschied"
+#| fig-height: 6
+
+n_test <- c(5, 10, 15, 20, 25, 30)
+time_iter <- numeric(length(n_test))
+time_recur <- numeric(length(n_test))
+
+for (i in seq_along(n_test)) {
+  n <- n_test[i]
+  time_iter[i] <- median(microbenchmark(fib_iterative(n), times = 100)$time) / 1e6
+  
+  if (n <= 30) {
+    time_recur[i] <- median(microbenchmark(fib_recursive(n), times = 5)$time) / 1e6
+  } else {
+    time_recur[i] <- NA
+  }
+}
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+plot(n_test, time_recur, type = "b", pch = 4, col = "#DC2626", lwd = 2.5, cex = 1.5,
+     xlab = "n", ylab = "计算时间 (ms) | Rechenzeit (ms)",
+     main = "斐波那契：迭代 vs 递归 | Fibonacci: Iterativ vs. Rekursiv",
+     ylim = c(0, max(time_recur, na.rm = TRUE) * 1.15),
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(n_test, time_iter, type = "b", pch = 16, col = "#16A34A", lwd = 2.5, cex = 1.5)
+
+legend("topleft",
+       legend = c(expression("朴素递归 " * O(2^n) * " | Naiv-rekursiv"),
+                  expression("迭代 " * O(n) * " | Iterativ")),
+       col = c("#DC2626", "#16A34A"), pch = c(4, 16), lwd = 2.5, bty = "n", cex = 0.95)
+
+# 标注
+if (!is.na(time_recur[length(n_test)])) {
+  text(n_test[length(n_test)] - 2, time_recur[length(n_test)] * 0.7,
+       paste0("n=30 递归:", round(time_recur[length(n_test)], 1), " ms"),
+       col = "#DC2626", cex = 0.85, font = 2)
+}
+text(n_test[length(n_test)] - 2, max(time_recur, na.rm = TRUE) * 0.1,
+     paste0("n=30 迭代:", round(time_iter[length(n_test)], 4), " ms"),
+     col = "#16A34A", cex = 0.85, font = 2)
+```
+
+```{r}
+#| label: fig-fibonacci-tree
+#| fig-cap: "递归调用树：fib(5) 需要 15 次函数调用，大量重复计算 | Rekursiver Aufrufbaum: fib(5) braucht 15 Funktionsaufrufe mit vielen Wiederholungen"
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 32), ylim = c(0, 12), axes = FALSE, xlab = "", ylab = "")
+title("递归调用树: fib(5) | Rekursiver Aufrufbaum: fib(5)",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# Tree structure for fib(5)
+draw_node <- function(x, y, label, col_fill = "#DBEAFE", col_border = "#2563EB") {
+  rect(x - 1.2, y - 0.4, x + 1.2, y + 0.4, 
+       col = col_fill, border = col_border, lwd = 1.5)
+  text(x, y, label, cex = 0.7, col = "#1E293B", font = 2)
+}
+
+draw_edge <- function(x1, y1, x2, y2) {
+  segments(x1, y1 - 0.4, x2, y2 + 0.4, col = "#94A3B8", lwd = 1.2)
+}
+
+# Level 0: fib(5)
+draw_node(16, 11, "fib(5)")
+
+# Level 1: fib(4), fib(3)
+draw_edge(16, 11, 8, 9); draw_edge(16, 11, 24, 9)
+draw_node(8, 9, "fib(4)")
+draw_node(24, 9, "fib(3)", "#FEF3C7", "#D97706")
+
+# Level 2
+draw_edge(8, 9, 4, 7); draw_edge(8, 9, 12, 7)
+draw_node(4, 7, "fib(3)", "#FEF3C7", "#D97706")
+draw_node(12, 7, "fib(2)", "#FEE2E2", "#DC2626")
+
+draw_edge(24, 9, 20, 7); draw_edge(24, 9, 28, 7)
+draw_node(20, 7, "fib(2)", "#FEE2E2", "#DC2626")
+draw_node(28, 7, "fib(1)", "#D1FAE5", "#16A34A")
+
+# Level 3
+draw_edge(4, 7, 2, 5); draw_edge(4, 7, 6, 5)
+draw_node(2, 5, "fib(2)", "#FEE2E2", "#DC2626")
+draw_node(6, 5, "fib(1)", "#D1FAE5", "#16A34A")
+
+draw_edge(12, 7, 10, 5); draw_edge(12, 7, 14, 5)
+draw_node(10, 5, "fib(1)", "#D1FAE5", "#16A34A")
+draw_node(14, 5, "fib(0)", "#D1FAE5", "#16A34A")
+
+draw_edge(20, 7, 18, 5); draw_edge(20, 7, 22, 5)
+draw_node(18, 5, "fib(1)", "#D1FAE5", "#16A34A")
+draw_node(22, 5, "fib(0)", "#D1FAE5", "#16A34A")
+
+# Level 4
+draw_edge(2, 5, 1, 3); draw_edge(2, 5, 3, 3)
+draw_node(1, 3, "fib(1)", "#D1FAE5", "#16A34A")
+draw_node(3, 3, "fib(0)", "#D1FAE5", "#16A34A")
+
+# Legend
+text(16, 1.5, "同色节点 = 重复计算! | Gleiche Farbe = Doppelberechnung!", 
+     col = "#DC2626", cex = 0.9, font = 2)
+text(16, 0.5, "fib(2) 被算了 3 次, fib(1) 被算了 5 次, fib(0) 被算了 3 次", 
+     col = "#475569", cex = 0.75)
+```
+
+**复杂度对比总结：**
+
+| 指标 / Metrik | 迭代 / Iterativ | 朴素递归 / Naiv-Rekursiv |
+|:---:|:---:|:---:|
+| 时间复杂度 | $O(n)$ | $O(2^n)$ |
+| 空间复杂度 | $O(n)$ | $O(n)$（调用栈深度）|
+| $n = 30$ 耗时 | $< 0.01$ ms | $\sim 500$ ms |
+| $n = 50$ 耗时 | $< 0.01$ ms | $\sim$ 数小时 |
+
+递归版本之所以慢到灾难性的程度，是因为它 **大量重复计算**：每次调用产生两个子调用，调用树呈指数增长。例如 $\text{fib}(40)$ 会反复计算 $\text{fib}(20)$、$\text{fib}(19)$ 等成千上万次。
+
+## 矩阵乘法：更好的算法有多快？{#sec-matrix-mult}
+
+> **Matrixmultiplikation: Wie viel schneller sind bessere Algorithmen?**
+
+对于 $n \times n$ 矩阵乘法 $C = AB$，存在不同复杂度的算法：
+
+| 算法 / Algorithmus | 复杂度 / Komplexität | $n=1000$ 时 | $n=10000$ 时 |
+|:---:|:---:|:---:|:---:|
+| 朴素方法 | $O(n^3)$ | $\approx 10^9$ | $\approx 10^{12}$ |
+| Strassen 算法 | $O(n^{2.807})$ | $\approx 6 \times 10^8$ | $\approx 6 \times 10^{10}$ |
+| 理论最优（当前）| $O(n^{2.373})$ | $\approx 2 \times 10^8$ | $\approx 2 \times 10^{10}$ |
+
+朴素方法的分析：结果矩阵 $C$ 的每个元素 $C_{ij} = \sum_{k=1}^{n} A_{ik} B_{kj}$，是 $A$ 的第 $i$ 行和 $B$ 的第 $j$ 列的点积，需要 $n$ 次乘法 + $(n-1)$ 次加法。结果矩阵有 $n \times n = n^2$ 个元素，所以总运算次数为 $n^2 \times (2n - 1) \approx 2n^3$，即 $O(n^3)$。
+
+通过更好的算法，对 $n = 10000$ 可以 **快约 50 倍**！
+
+```{r}
+#| label: fig-matrix-mult-scaling
+#| fig-cap: "不同矩阵乘法算法的理论运算次数对比 | Theoretischer Vergleich verschiedener Matrixmultiplikations-Algorithmen"
+
+par(bg = "#F8FAFC", mar = c(4.5, 5, 3, 1))
+n_mat <- seq(100, 5000, by = 100)
+
+ops_naive    <- n_mat^3
+ops_strassen <- n_mat^2.807
+ops_optimal  <- n_mat^2.373
+
+plot(n_mat, ops_naive, type = "l", col = "#DC2626", lwd = 2.5, log = "y",
+     xlab = "矩阵大小 n | Matrixgröße n",
+     ylab = "运算次数 (对数尺度) | Operationen (log)",
+     main = "矩阵乘法算法比较 | Vergleich der Matrixmultiplikation",
+     cex.lab = 1.1, cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+lines(n_mat, ops_strassen, col = "#EA580C", lwd = 2.5)
+lines(n_mat, ops_optimal, col = "#16A34A", lwd = 2.5)
+
+legend("topleft",
+       legend = c(expression("朴素 " * O(n^3)),
+                  expression("Strassen " * O(n^{2.807})),
+                  expression("最优 " * O(n^{2.373}))),
+       col = c("#DC2626", "#EA580C", "#16A34A"), lwd = 2.5, bty = "n", cex = 0.95)
+
+# 标注倍率
+text(4000, ops_naive[40] / 3, 
+     paste0("n=5000 时差距:\n朴素/最优 ≈ ", 
+            round(ops_naive[50] / ops_optimal[50], 0), " 倍!"),
+     col = "#9333EA", cex = 0.85, font = 2)
+```
+
+{{< pagebreak >}}
+
+# 练习 {#sec-exercises}
+
+> **Übungen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节目标 | Ziel
+
+通过习题巩固 Landau 记号和复杂度分析的核心概念。
+:::
+
+## 练习 1：找大 $O$ 和小 $o$ {#sec-ex1}
+
+> **Übung 1: $O$ und $o$ finden**
+
+对给定的数列 $a_n$，找两个更简单的数列 $b_n$ 和 $c_n$，使得 $a_n = O(b_n)$ 且 $a_n = o(c_n)$。
+
+**(a)** $a_n = 100n^{-1} + 20n^{0.5} + 5n^{1.5}$
+
+::: {.callout-tip collapse="true"}
+## 🔍 点击查看解答 | Lösung anzeigen
+
+在 $a_n = 100n^{-1} + 20n^{0.5} + 5n^{1.5}$ 中，$n^{1.5}$ 是 **主导项**（增长最快）。
+
+取 $b_n = n^{1.5}$ 且 $c_n = n^2$。验证：
+
+$$
+\frac{a_n}{b_n} = \frac{100n^{-1} + 20n^{0.5} + 5n^{1.5}}{n^{1.5}} = 100n^{-2.5} + 20n^{-1} + 5 \xrightarrow{n \to \infty} 5 < \infty
+$$
+
+因此 $a_n = O(n^{1.5})$。
+
+$$
+\frac{a_n}{c_n} = \frac{100n^{-1} + 20n^{0.5} + 5n^{1.5}}{n^2} = 100n^{-3} + 20n^{-1.5} + 5n^{-0.5} \xrightarrow{n \to \infty} 0
+$$
+
+因此 $a_n = o(n^2)$。
+
+也可以用 $O$ 记号改写：$a_n = O(n^{-1}) + O(n^{0.5}) + O(n^{1.5})$。因为 $n^{-1} \leq n^{1.5}$ 且 $n^{0.5} \leq n^{1.5}$（对大 $n$），所以较小项被吸收，$a_n = O(n^{1.5})$。
+
+```{r}
+#| label: ex1a-verify
+#| code-fold: false
+
+n_seq <- 10^(1:6)
+cat("验证 a_n / n^1.5 → 5:\n")
+for (n in n_seq) {
+  a_n <- 100/n + 20*sqrt(n) + 5*n^1.5
+  cat("  n =", format(n, width = 8), ": a_n/n^1.5 =", round(a_n / n^1.5, 6), "\n")
+}
+```
+:::
+
+**(b)** $a_n = \frac{2\log(n)}{n} + \frac{\log(2)}{n^2} + \log\!\left(1 + \frac{1}{n}\right)$。（提示：$\log(1 + \frac{1}{n}) \leq \frac{1}{n}$。）
+
+::: {.callout-tip collapse="true"}
+## 🔍 点击查看解答 | Lösung anzeigen
+
+取 $b_n = \frac{\log(n)}{n}$，取 $c_n = 1$。
+
+对第一项：$\frac{2\log(n)/n}{\log(n)/n} = 2$，因此第一项为 $O(b_n)$。
+
+对第二项：$\frac{\log(2)/n^2}{\log(n)/n} = \frac{\log(2)}{n\log(n)} \to 0$，因此第二项为 $o(b_n)$。
+
+对第三项：利用 $\log(1 + 1/n) \leq 1/n$，有 $\frac{\log(1 + 1/n)}{\log(n)/n} \leq \frac{1/n}{\log(n)/n} = \frac{1}{\log(n)} \to 0$，因此第三项也是 $o(b_n)$。
+
+综上 $a_n = O(b_n) = O\!\left(\frac{\log n}{n}\right)$。
+
+由于 $b_n \to 0$，即 $b_n = o(1)$，因此 $a_n = o(1) = o(c_n)$。这里 $c_n = 1$ 即可。
+
+```{r}
+#| label: ex1b-verify
+#| code-fold: false
+
+cat("验证 a_n / (log(n)/n) 有界:\n")
+for (n in 10^(1:6)) {
+  a_n <- 2*log(n)/n + log(2)/n^2 + log(1 + 1/n)
+  b_n <- log(n)/n
+  cat("  n =", format(n, width = 8), ": a_n/b_n =", round(a_n/b_n, 6), 
+      "  a_n =", format(a_n, digits = 6), "\n")
+}
+cat("\na_n → 0, 说明 a_n = o(1)\n")
+```
+:::
+
+## 练习 2：主导项随条件变化 {#sec-ex2}
+
+> **Übung 2: Dominanter Term ändert sich mit Bedingungen**
+
+设 $e_n$ 是一个数列，且 $a_n = O(e_n + e_n^2)$。证明：
+
+1. 若 $e_n \to \infty$，则 $a_n = O(e_n^2)$。
+2. 若 $e_n \to 0$，则 $a_n = O(e_n)$。
+
+::: {.callout-tip collapse="true"}
+## 🔍 点击查看解答 | Lösung anzeigen
+
+**情况 1：** $e_n \to \infty$。比较 $e_n + e_n^2$ 与 $e_n^2$：
+
+$$
+\frac{e_n + e_n^2}{e_n^2} = \frac{1}{e_n} + 1 \xrightarrow{n \to \infty} 0 + 1 = 1
+$$
+
+因此 $e_n + e_n^2 = O(e_n^2)$。又因 $a_n = O(e_n + e_n^2)$，由传递性得 $a_n = O(e_n^2)$。
+
+**直觉**：$e_n$ 很大时，$e_n^2$ 远大于 $e_n$，$e_n^2$ 主导。
+
+**情况 2：** $e_n \to 0$。比较 $e_n + e_n^2$ 与 $e_n$：
+
+$$
+\frac{e_n + e_n^2}{e_n} = 1 + e_n \xrightarrow{n \to \infty} 1 + 0 = 1
+$$
+
+因此 $e_n + e_n^2 = O(e_n)$。由传递性得 $a_n = O(e_n)$。
+
+**直觉**：$e_n$ 很小时，$e_n^2$ 比 $e_n$ 更小（例如 $0.01^2 = 0.0001$），$e_n$ 主导。
+
+```{r}
+#| label: ex2-visual
+#| fig-cap: "e_n 大时 e_n² 主导，e_n 小时 e_n 主导 | e_n groß → e_n² dominiert; e_n klein → e_n dominiert"
+#| fig-height: 5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(4, 4.5, 3, 1))
+
+# Case 1: e_n -> infinity
+e_big <- seq(1, 20, by = 0.5)
+plot(e_big, e_big + e_big^2, type = "l", col = "#1E293B", lwd = 2,
+     xlab = expression(e[n]), ylab = "值 | Wert",
+     main = expression(e[n] %->% infinity),
+     cex.main = 1.1, col.main = "#DC2626")
+grid(col = "#E2E8F0")
+lines(e_big, e_big^2, col = "#DC2626", lwd = 2.5, lty = 2)
+lines(e_big, e_big, col = "#2563EB", lwd = 2, lty = 3)
+legend("topleft", legend = c(expression(e[n] + e[n]^2), expression(e[n]^2 ~ "(主导)"), expression(e[n])),
+       col = c("#1E293B", "#DC2626", "#2563EB"), lwd = c(2, 2.5, 2), lty = c(1, 2, 3), 
+       bty = "n", cex = 0.8)
+
+# Case 2: e_n -> 0
+e_small <- seq(0.01, 1, by = 0.02)
+plot(e_small, e_small + e_small^2, type = "l", col = "#1E293B", lwd = 2,
+     xlab = expression(e[n]), ylab = "值 | Wert",
+     main = expression(e[n] %->% 0),
+     cex.main = 1.1, col.main = "#16A34A")
+grid(col = "#E2E8F0")
+lines(e_small, e_small, col = "#16A34A", lwd = 2.5, lty = 2)
+lines(e_small, e_small^2, col = "#9333EA", lwd = 2, lty = 3)
+legend("topleft", legend = c(expression(e[n] + e[n]^2), expression(e[n] ~ "(主导)"), expression(e[n]^2)),
+       col = c("#1E293B", "#16A34A", "#9333EA"), lwd = c(2, 2.5, 2), lty = c(1, 2, 3),
+       bty = "n", cex = 0.8)
+
+par(mfrow = c(1, 1))
+```
+:::
+
+## 练习 3：协方差矩阵估计的复杂度 {#sec-ex3}
+
+> **Übung 3: Komplexität der Kovarianzmatrixschätzung**
+
+设 $X_1, \ldots, X_n$ 是 $\mathbb{R}^d$ 中的独立同分布随机向量，协方差矩阵 $\Sigma$ 的估计为：
+
+$$
+\hat{\Sigma} = \frac{1}{n}\sum_{i=1}^{n}(X_i - \hat{\mu})(X_i - \hat{\mu})^T, \quad \hat{\mu} = \frac{1}{n}\sum_{i=1}^{n} X_i
+$$
+
+线性组合 $\beta^T X$ 的方差估计为 $\hat{\sigma}^2(\beta) = \beta^T \hat{\Sigma} \beta$。
+
+下面是对应的 R 算法：
+
+```{r}
+#| label: sigma2-function
+#| code-fold: false
+
+sigma_2 <- function(X, beta) {
+  n <- nrow(X)
+  d <- ncol(X)
+  
+  Sigma <- matrix(0, d, d)
+  
+  for (i in 1:n) {
+    # 每次循环都重新计算 colMeans(X)!
+    Sigma <- Sigma + (X[i,] - colMeans(X)) %*% t(X[i,] - colMeans(X))
+  }
+  
+  as.numeric(t(beta) %*% Sigma %*% beta / n)
+}
+```
+
+**(a)** 分析该算法的时间复杂度和空间复杂度。
+
+::: {.callout-tip collapse="true"}
+## 🔍 点击查看解答 | Lösung anzeigen
+
+**空间复杂度：**
+
+$X$ 需要 $O(nd)$，$\beta$ 需要 $O(d)$，$\hat{\Sigma}$ 需要 $O(d^2)$。总空间为 $O(nd + d^2)$。
+
+**时间复杂度（逐步分析）：**
+
+`colMeans(X)` 对每一列做 $n - 1$ 次加法和 $1$ 次除法，共 $d$ 列，因此单次调用需要 $O(nd)$。
+
+在循环的第 $i$ 次迭代中：调用 `colMeans(X)` 需要 $O(nd)$；计算 $X[i,] - \text{colMeans}(X)$ 需要 $d$ 次减法，即 $O(d)$；计算外积 $(X_i - \hat{\mu})(X_i - \hat{\mu})^T$ 需要 $d^2$ 次乘法，即 $O(d^2)$；矩阵加法 `Sigma + ...` 需要 $d^2$ 次加法，即 $O(d^2)$。每次迭代总共 $O(nd + d^2)$。
+
+$n$ 次迭代的总时间为 $n \cdot O(nd + d^2) = O(n^2 d + nd^2)$。
+
+最后计算 $\beta^T \hat{\Sigma} \beta$：$\beta^T \hat{\Sigma}$ 是 $1 \times d$ 乘 $d \times d$，需要 $O(d^2)$；结果再与 $\beta$ 做内积需要 $O(d)$。这一步为 $O(d^2)$，被循环部分吸收。
+
+**总时间复杂度：$O(n^2 d + nd^2)$**
+
+注意：此算法的瓶颈在于 **每次循环都重新计算** `colMeans(X)`。如果预先计算一次均值（$O(nd)$），每次迭代只需 $O(d^2)$，总时间可降至 $O(nd + nd^2) = O(nd^2)$。
+:::
+
+**(b)** 用数值实验验证。
+
+::: {.callout-tip collapse="true"}
+## 🔍 点击查看解答 | Lösung anzeigen
+
+```{r}
+#| label: ex3-benchmark
+#| code-fold: false
+
+library(microbenchmark)
+
+grid <- expand.grid(
+  n = seq.int(10, 500, length = 4),
+  d = seq.int(10, 500, length = 4)
+)
+
+times <- numeric(nrow(grid))
+
+for (k in 1:nrow(grid)) {
+  n <- grid[k, 1]
+  d <- grid[k, 2]
+  X_test <- replicate(d, rnorm(n))
+  times[k] <- median(microbenchmark(
+    sigma_2(X_test, rep(1, d)), times = 3
+  )$time) / 1e9  # 转换为秒
+}
+
+results <- cbind(grid, time_sec = round(times, 4))
+knitr::kable(results, align = "ccc",
+             caption = "sigma_2 算法耗时 (秒) | Laufzeit (Sekunden)")
+```
+
+```{r}
+#| label: fig-ex3-benchmark
+#| fig-cap: "sigma_2 的计算时间随 n 和 d 的增长 | Laufzeit von sigma_2 bei wachsendem n und d"
+
+library(ggplot2)
+plot_data <- cbind(grid, time = times)
+plot_data$d_factor <- factor(plot_data$d)
+
+ggplot(plot_data, aes(x = n, y = time, color = d_factor)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  scale_color_manual(values = c("#2563EB", "#16A34A", "#EA580C", "#DC2626"),
+                     name = "d =") +
+  labs(x = "样本数 n | Stichprobenanzahl n",
+       y = "计算时间 (秒) | Rechenzeit (s)",
+       title = "sigma_2 运行时间 | Laufzeit von sigma_2") +
+  theme_minimal(base_size = 13) +
+  theme(plot.background = element_rect(fill = "#F8FAFC", color = NA),
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(color = "#1E293B", face = "bold"))
+```
+
+从图中可以看到：固定 $d$ 时，时间大致与 $n^2$ 成正比（因为每次循环都要重新算 `colMeans`）；固定 $n$ 时，时间与 $d$ 至少呈线性或平方增长。这与理论分析 $O(n^2 d + nd^2)$ 一致。
+:::
+
+{{< pagebreak >}}
+
+# 总结与展望 {#sec-summary}
+
+> **Zusammenfassung und Ausblick**
+
+## 核心概念回顾
+
+```{r}
+#| label: fig-summary-chain
+#| fig-cap: "本章知识逻辑链：从数值限制到复杂度分析 | Logikkette: Von numerischen Grenzen zur Komplexitätsanalyse"
+#| fig-width: 12
+#| fig-height: 7
+#| code-fold: true
+
+par(bg = "#F8FAFC", mar = c(1, 1, 2.5, 1))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("本章核心逻辑 | Kernlogik dieses Kapitels", cex.main = 1.4, col.main = "#1E293B")
+
+# Row 1: Problems
+box_data <- data.frame(
+  x = c(2, 5, 8, 2, 5, 8),
+  y = c(6.5, 6.5, 6.5, 3.5, 3.5, 3.5),
+  label = c("浮点数\n有限精度", "舍入误差\n会累积", "数值陷阱\n灾难性消去",
+            "算法分类\n时间/空间开销", "Landau 记号\nO 和 o", "复杂度分析\n化简主导项"),
+  fill = c("#FEE2E2", "#FEF3C7", "#FCE7F3", "#DBEAFE", "#E0E7FF", "#D1FAE5"),
+  col = c("#DC2626", "#D97706", "#DB2777", "#2563EB", "#6366F1", "#16A34A")
+)
+
+for (i in 1:nrow(box_data)) {
+  rect(box_data$x[i] - 1.3, box_data$y[i] - 0.7, 
+       box_data$x[i] + 1.3, box_data$y[i] + 0.7,
+       col = box_data$fill[i], border = box_data$col[i], lwd = 2)
+  text(box_data$x[i], box_data$y[i], box_data$label[i],
+       cex = 0.8, font = 2, col = "#1E293B")
+}
+
+# Arrows between rows
+arrows(2, 5.5, 2, 4.5, col = "#94A3B8", lwd = 2, length = 0.12)
+arrows(5, 5.5, 5, 4.5, col = "#94A3B8", lwd = 2, length = 0.12)
+arrows(8, 5.5, 8, 4.5, col = "#94A3B8", lwd = 2, length = 0.12)
+
+# Horizontal arrows
+arrows(3.5, 6.5, 3.7, 6.5, col = "#94A3B8", lwd = 1.5, length = 0.1)
+arrows(6.5, 6.5, 6.7, 6.5, col = "#94A3B8", lwd = 1.5, length = 0.1)
+arrows(3.5, 3.5, 3.7, 3.5, col = "#94A3B8", lwd = 1.5, length = 0.1)
+arrows(6.5, 3.5, 6.7, 3.5, col = "#94A3B8", lwd = 1.5, length = 0.1)
+
+# Row labels
+text(0.5, 6.5, "问题\nProbleme", col = "#DC2626", cex = 0.8, font = 2)
+text(0.5, 3.5, "工具\nWerkzeuge", col = "#2563EB", cex = 0.8, font = 2)
+
+# Bottom message
+rect(1.5, 0.5, 8.5, 1.8, col = adjustcolor("#FEF3C7", 0.7), border = "#D97706", lwd = 2)
+text(5, 1.35, "核心教训：如何计算 和 算什么 同样重要!", cex = 1.0, font = 2, col = "#D97706")
+text(5, 0.8, 'Kernlektion: "Wie" ist genauso wichtig wie "Was"!', 
+     cex = 0.8, col = "#D97706", font = 3)
+```
+
+## 关键公式速查
+
+| 概念 / Konzept | 公式 / Formel | 含义 / Bedeutung |
+|:---:|:---:|:---|
+| 大 $O$ 定义 | $\limsup \lvert a_n / b_n \rvert < \infty$ | $a_n$ 至多与 $b_n$ 同阶增长 |
+| 小 $o$ 定义 | $\lim a_n / b_n = 0$ | $a_n$ 比 $b_n$ 增长慢得多 |
+| 矩阵-向量乘 | $O(nd)$ | $n \times d$ 矩阵乘 $d$ 维向量 |
+| 矩阵-矩阵乘 | $O(mn\ell)$ | $m \times n$ 乘 $n \times \ell$ |
+| 化简原则 | $4n^3 + 16n^2 + 239 = O(n^3)$ | 只保留主导项，忽略常数 |
+
+## 下一章预告 | Vorschau auf nächstes Kapitel
+
+本章我们学会了"如何衡量一个算法的好坏"。下一章，我们将进入 **数值线性代数** 的核心——学习如何高效地解线性方程组（高斯消元法、LU 分解、QR 分解），这些方法直接决定了第一章中正规方程 $(X^TX)^{-1}X^T\mathbf{y}$ 在实践中能否被高效且稳定地计算。
+
+*Im nächsten Kapitel: Numerische Lineare Algebra — effiziente und stabile Lösung linearer Gleichungssysteme.*
+
+{{< pagebreak >}}
+
+# 附录：德语专业术语表 {.appendix}
+
+> **Anhang: Deutsch-Chinesisch-Englisches Fachterminologieglossar**
+
+::: panel-tabset
+
+## 数值计算
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Gleitkommazahl | 浮点数 | floating-point number |
+| der Rundungsfehler | 舍入误差 | rounding error |
+| die katastrophale Auslöschung | 灾难性消去 | catastrophic cancellation |
+| die numerische Stabilität | 数值稳定性 | numerical stability |
+| die Maschinengenauigkeit | 机器精度 | machine epsilon |
+| das Assoziativgesetz | 结合律 | associative law |
+
+## 算法基础
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| der Algorithmus (Pl: Algorithmen) | 算法 | algorithm |
+| der Zeitaufwand | 时间开销 | time cost |
+| der Speicheraufwand | 空间开销 | space/memory cost |
+| die Grundoperation | 基本运算 | basic operation |
+| exakt / direkt | 精确/直接 | exact / direct |
+| approximativ | 近似 | approximate |
+| iterativ | 迭代 | iterative |
+| probabilistisch | 概率型 | probabilistic |
+
+## 复杂度分析
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Komplexität | 复杂度 | complexity |
+| die Zeitkomplexität | 时间复杂度 | time complexity |
+| die Speicherkomplexität | 空间复杂度 | space complexity |
+| die Landau-Notation | Landau 记号 | Landau notation |
+| die Komplexitätsklasse | 复杂度类别 | complexity class |
+| der dominante Term | 主导项 | dominant term |
+| die asymptotische Analyse | 渐近分析 | asymptotic analysis |
+| die obere Schranke | 上界 | upper bound |
+| die Rekursion | 递归 | recursion |
+| die Iteration | 迭代 | iteration |
+
+## 线性代数运算
+
+| Deutsch | 中文 | English |
+|:---|:---|:---|
+| die Matrix-Vektor-Multiplikation | 矩阵-向量乘法 | matrix-vector multiplication |
+| die Matrixmultiplikation | 矩阵乘法 | matrix multiplication |
+| die Spur (einer Matrix) | 矩阵的迹 | trace (of a matrix) |
+| die Distanzmatrix | 距离矩阵 | distance matrix |
+| die Kovarianzmatrix | 协方差矩阵 | covariance matrix |
+| das äußere Produkt | 外积 | outer product |
+| das Skalarprodukt | 内积/点积 | inner/dot product |
+:::
