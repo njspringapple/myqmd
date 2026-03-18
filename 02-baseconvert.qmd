@@ -1,0 +1,1523 @@
+---
+title: "线性代数与R：基变换、过渡矩阵与相似矩阵"
+subtitle: "同一个世界，不同的坐标 | Eine Welt, verschiedene Koordinaten"
+author: "线性代数导论"
+date: today
+format: 
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "章节导航 | Kapitelnavigation"
+    code-fold: true
+    code-summary: "查看代码 | Code anzeigen"
+    theme: cosmo
+    number-sections: true
+    smooth-scroll: true
+    fig-align: center
+  pdf:
+    toc: true
+    pdf-engine: xelatex
+    documentclass: ctexart
+    geometry:
+      - top=2cm
+      - bottom=2cm
+      - left=2cm
+      - right=2cm
+    fontsize: 11pt
+    code-block-font-size: \small    
+    include-in-header:
+      text: |
+        \pagestyle{plain}      
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(
+  fig.width = 9, fig.height = 6,
+  message = FALSE, warning = FALSE,
+  dev = "ragg_png", dpi = 150
+)
+
+palette_main <- list(
+  blue     = "#2563EB",
+  red      = "#DC2626",
+  green    = "#16A34A",
+  orange   = "#EA580C",
+  purple   = "#9333EA",
+  teal     = "#0D9488",
+  gray     = "#6B7280",
+  bg_light = "#F8FAFC",
+  bg_warn  = "#FEF3C7"
+)
+
+# 画向量箭头的辅助函数
+draw_vec <- function(from, to, col, lwd = 2.5, label = NULL, label_pos = NULL, label_cex = 1.1, ...) {
+  arrows(from[1], from[2], to[1], to[2], col = col, lwd = lwd, length = 0.12, ...)
+  if (!is.null(label)) {
+    if (is.null(label_pos)) label_pos <- (from + to) / 2
+    text(label_pos[1], label_pos[2], label, col = col, cex = label_cex, font = 2)
+  }
+}
+```
+
+{{< pagebreak >}}
+
+# 引言：一张图看懂本章旅程 {.unnumbered}
+
+> **Einleitung: Die Reise dieses Kapitels auf einen Blick**
+
+想象你站在一个陌生城市的十字路口。当地人用"往东走 3 个街区，再往北走 2 个街区"来给你指路；而你的手机 GPS 却显示着经纬度坐标。**同一个目的地，两套完全不同的"描述方式"**——你需要一个"翻译"把一种描述转换为另一种。
+
+*Stellen Sie sich vor, Sie stehen an einer Kreuzung in einer fremden Stadt. Ein Einheimischer sagt: „3 Blocks nach Osten, 2 nach Norden." Ihr GPS zeigt Längen- und Breitengrad. Dasselbe Ziel, zwei verschiedene Beschreibungen — Sie brauchen eine „Übersetzung".*
+
+在线性代数中，这个"翻译"就是 **过渡矩阵**，而"不同的描述方式"就是 **不同的基**。本章将带你完全理解这套翻译机制。
+
+```{r}
+#| label: fig-roadmap
+#| fig-cap: "本章学习路线图：从一个向量出发，理解整个变换体系 | Lernroadmap"
+#| fig-height: 5.5
+
+par(mar = c(0.5, 0.5, 2, 0.5), bg = "#F8FAFC")
+plot(NULL, xlim = c(0, 10), ylim = c(0, 7), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("本章学习路线图 | Lernroadmap")), cex.main = 1.4, col.main = "#1E293B")
+
+steps_x <- c(1.2, 3.4, 5.6, 7.8)
+steps_y <- rep(4.5, 4)
+arrows(steps_x[-4] + 0.85, steps_y[-4], steps_x[-1] - 0.85, steps_y[-1],
+       col = "#94A3B8", lwd = 2.5, length = 0.12)
+
+labels_cn <- c("基与坐标\n给向量编号", "过渡矩阵\n坐标翻译官", 
+               "坐标变换\nR语言实战", "相似矩阵\n同变换异面孔")
+labels_sec <- c("§1", "§2", "§3", "§4")
+colors <- c("#DBEAFE", "#FEF3C7", "#D1FAE5", "#FEE2E2")
+borders <- c("#2563EB", "#D97706", "#16A34A", "#DC2626")
+
+for (i in 1:4) {
+  rect(steps_x[i] - 0.85, steps_y[i] - 1, steps_x[i] + 0.85, steps_y[i] + 1,
+       col = colors[i], border = borders[i], lwd = 2)
+  text(steps_x[i], steps_y[i] + 0.3, labels_cn[i], cex = 0.8, font = 2, col = "#1E293B")
+  text(steps_x[i] - 0.6, steps_y[i] + 0.8, labels_sec[i], cex = 0.65, col = borders[i], font = 2)
+}
+
+triggers <- c("", "换个基看看?", "动手算!", "矩阵也能换基?")
+for (i in 2:4) {
+  text(steps_x[i] - 1.1, steps_y[i] + 1.4, triggers[i], cex = 0.7, col = "#EA580C", font = 2)
+}
+
+arrows(0.5, 1.8, 9.2, 1.8, col = "#DC2626", lwd = 2, length = 0.15)
+text(5, 2.2, "理解递进 | Zunehmendes Verständnis  >>>", cex = 0.85, col = "#DC2626")
+
+text(5, 0.8, "核心直觉：向量不变，坐标随基变——过渡矩阵就是两套坐标之间的翻译官", 
+     cex = 0.85, col = "#1E293B", font = 2)
+text(5, 0.2, "Kernintuition: Der Vektor bleibt gleich, nur die Koordinaten ändern sich mit der Basis", 
+     cex = 0.7, col = "#64748B", font = 3)
+```
+
+**最终目标**：看到下面这个公式时，你能 **不动脑子** 地写出答案——
+
+$$
+[\mathbf{v}]_{\mathcal{B}'} = P^{-1}_{\mathcal{B} \leftarrow \mathcal{B}'}\, [\mathbf{v}]_{\mathcal{B}} \qquad \text{以及} \qquad B = P^{-1} A P
+$$
+
+现在看不懂？**完全没关系**——读完本章，这些符号会变成你的直觉。
+
+{{< pagebreak >}}
+
+# 基与坐标：给向量"编门牌号" {#sec-basis}
+
+> **Basis und Koordinaten: Dem Vektor eine „Hausnummer" geben**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie in diesem Abschnitt lernen
+
+- 什么是 **基（Basis）**——坐标系的"标尺"
+- 什么是 **坐标（Koordinaten）**——向量在某个基下的"门牌号"
+- 同一个向量在不同基下有 **不同的坐标**
+:::
+
+## 标准基：你最熟悉的坐标系 {#sec-standard-basis}
+
+> **Standardbasis: Das vertrauteste Koordinatensystem**
+
+在 $\mathbb{R}^2$ 中，我们最常用的基是：
+
+$$
+\mathbf{e}_1 = \begin{pmatrix} 1 \\ 0 \end{pmatrix}, \quad \mathbf{e}_2 = \begin{pmatrix} 0 \\ 1 \end{pmatrix}
+$$
+
+这就是 **标准基（Standardbasis）**。当我们说"向量 $\mathbf{v} = (3, 2)$"时，实际上是说：
+
+$$
+\mathbf{v} = 3\mathbf{e}_1 + 2\mathbf{e}_2 = 3\begin{pmatrix}1\\0\end{pmatrix} + 2\begin{pmatrix}0\\1\end{pmatrix}
+$$
+
+数字 $(3, 2)$ 就是 $\mathbf{v}$ 在标准基下的 **坐标**。
+
+```{r}
+#| label: fig-standard-basis
+#| fig-cap: "向量 v = (3, 2) 在标准基下的坐标表示：沿 e₁ 方向走 3 步，沿 e₂ 方向走 2 步 | Vektor v in Standardbasis"
+#| fig-height: 5.5
+
+par(bg = "#F8FAFC", mar = c(4, 4, 3, 1))
+plot(NULL, xlim = c(-0.5, 4.5), ylim = c(-0.5, 3.5), asp = 1,
+     xlab = "", ylab = "",
+     main = "标准基下的坐标 | Koordinaten in Standardbasis",
+     cex.main = 1.3, col.main = "#1E293B", axes = FALSE)
+grid(col = "#E2E8F0")
+axis(1, col = "#94A3B8", col.axis = "#64748B")
+axis(2, col = "#94A3B8", col.axis = "#64748B", las = 1)
+
+# 标准基向量
+draw_vec(c(0,0), c(1,0), "#2563EB", lwd = 3, label = expression(bold(e)[1]), 
+         label_pos = c(0.5, -0.3))
+draw_vec(c(0,0), c(0,1), "#16A34A", lwd = 3, label = expression(bold(e)[2]), 
+         label_pos = c(-0.3, 0.5))
+
+# 分解过程：虚线
+segments(0, 0, 3, 0, col = adjustcolor("#EA580C", 0.4), lwd = 2, lty = 2)
+segments(3, 0, 3, 2, col = adjustcolor("#EA580C", 0.4), lwd = 2, lty = 2)
+text(1.5, -0.3, "3 步", col = "#EA580C", cex = 0.9)
+text(3.4, 1, "2 步", col = "#EA580C", cex = 0.9)
+
+# 向量 v
+draw_vec(c(0,0), c(3,2), "#DC2626", lwd = 3)
+points(3, 2, pch = 16, col = "#DC2626", cex = 2)
+text(3.2, 2.3, expression(bold(v) == (3*","~2)), col = "#DC2626", cex = 1.2, font = 2)
+
+text(2, 3.2, expression(bold(v) == 3 * bold(e)[1] + 2 * bold(e)[2]), 
+     col = "#1E293B", cex = 1.1, font = 2)
+```
+
+## 换一个基：同一个向量，不同的坐标 {#sec-new-basis}
+
+> **Eine andere Basis: Derselbe Vektor, andere Koordinaten**
+
+现在，换一组"标尺"——选择新的基：
+
+$$
+\mathcal{B}' = \left\{ \mathbf{b}_1 = \begin{pmatrix} 1 \\ 1 \end{pmatrix},\; \mathbf{b}_2 = \begin{pmatrix} -1 \\ 1 \end{pmatrix} \right\}
+$$
+
+同一个向量 $\mathbf{v} = (3, 2)$ 在这个新基下，需要多少个 $\mathbf{b}_1$ 和多少个 $\mathbf{b}_2$ 来拼出？
+
+$$
+\mathbf{v} = c_1 \mathbf{b}_1 + c_2 \mathbf{b}_2 \quad \Longleftrightarrow \quad \begin{pmatrix} 1 & -1 \\ 1 & 1 \end{pmatrix} \begin{pmatrix} c_1 \\ c_2 \end{pmatrix} = \begin{pmatrix} 3 \\ 2 \end{pmatrix}
+$$
+
+```{r}
+#| label: solve-new-coords
+#| code-fold: false
+
+# 定义新基 | Neue Basis definieren
+b1 <- c(1, 1)
+b2 <- c(-1, 1)
+
+# 新基矩阵（列为基向量）| Basismatrix (Spalten = Basisvektoren)
+B_prime <- cbind(b1, b2)
+
+# 向量 v
+v <- c(3, 2)
+
+# 求 v 在新基下的坐标 | Koordinaten in neuer Basis berechnen
+# 解方程 B' * c = v  →  c = B'^{-1} * v
+coords_new <- solve(B_prime, v)
+
+cat("新基矩阵 B':\n")
+print(B_prime)
+cat("\nv 在新基 B' 下的坐标:", coords_new, "\n")
+cat("验证: c1 * b1 + c2 * b2 =", coords_new[1] * b1 + coords_new[2] * b2, "\n")
+```
+
+```{r}
+#| label: fig-two-bases
+#| fig-cap: "同一个向量 v，在标准基（左）和新基（右）下有不同的坐标 | Derselbe Vektor v in zwei verschiedenen Basen"
+#| fig-height: 5.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(3, 3, 3, 1))
+
+# === 左图：标准基 ===
+plot(NULL, xlim = c(-1.5, 4.5), ylim = c(-1, 3.5), asp = 1,
+     xlab = "", ylab = "", axes = FALSE,
+     main = "标准基 E | Standardbasis", cex.main = 1.2, col.main = "#2563EB")
+grid(col = "#E2E8F0")
+axis(1, col = "#94A3B8", col.axis = "#64748B", cex.axis = 0.8)
+axis(2, col = "#94A3B8", col.axis = "#64748B", las = 1, cex.axis = 0.8)
+
+draw_vec(c(0,0), c(1,0), "#2563EB", lwd = 2.5, label = expression(bold(e)[1]),
+         label_pos = c(1.1, -0.3), label_cex = 0.9)
+draw_vec(c(0,0), c(0,1), "#16A34A", lwd = 2.5, label = expression(bold(e)[2]),
+         label_pos = c(-0.35, 1), label_cex = 0.9)
+draw_vec(c(0,0), c(3,2), "#DC2626", lwd = 3)
+points(3, 2, pch = 16, col = "#DC2626", cex = 1.8)
+
+# 分解虚线
+segments(0, 0, 3, 0, col = adjustcolor("#DC2626", 0.3), lty = 2, lwd = 1.5)
+segments(3, 0, 3, 2, col = adjustcolor("#DC2626", 0.3), lty = 2, lwd = 1.5)
+text(2, 3, expression(group("[", bold(v), "]")[E] == bgroup("(", atop(3, 2), ")")), 
+     col = "#DC2626", cex = 1.1, font = 2)
+
+# === 右图：新基 ===
+plot(NULL, xlim = c(-2.5, 4.5), ylim = c(-1, 3.5), asp = 1,
+     xlab = "", ylab = "", axes = FALSE,
+     main = "新基 B' | Neue Basis", cex.main = 1.2, col.main = "#9333EA")
+grid(col = "#E2E8F0")
+axis(1, col = "#94A3B8", col.axis = "#64748B", cex.axis = 0.8)
+axis(2, col = "#94A3B8", col.axis = "#64748B", las = 1, cex.axis = 0.8)
+
+draw_vec(c(0,0), b1, "#9333EA", lwd = 2.5, label = expression(bold(b)[1]),
+         label_pos = c(1.2, 0.7), label_cex = 0.9)
+draw_vec(c(0,0), b2, "#0D9488", lwd = 2.5, label = expression(bold(b)[2]),
+         label_pos = c(-1.3, 0.7), label_cex = 0.9)
+draw_vec(c(0,0), c(3,2), "#DC2626", lwd = 3)
+points(3, 2, pch = 16, col = "#DC2626", cex = 1.8)
+
+# 分解虚线：沿新基方向
+c1 <- coords_new[1]; c2 <- coords_new[2]
+seg1 <- c1 * b1
+draw_vec(c(0,0), seg1, adjustcolor("#9333EA", 0.5), lwd = 1.5, lty = 2)
+draw_vec(seg1, seg1 + c2 * b2, adjustcolor("#0D9488", 0.5), lwd = 1.5, lty = 2)
+
+text(2, 3, bquote(group("[", bold(v), "]")[B*"'"] == bgroup("(", atop(.(c1), .(c2)), ")")),
+     col = "#9333EA", cex = 1.1, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+::: {.callout-important icon="false"}
+## 💡 核心直觉 | Schlüsselerkenntnis
+
+**向量本身没有变！** 变的是我们描述它的"语言"（基）。不同的基给出不同的坐标，但它们说的是同一个东西。
+
+*Der Vektor selbst hat sich nicht geändert! Was sich ändert, ist die „Sprache" (Basis), in der wir ihn beschreiben.*
+
+$$
+\mathbf{v} = 3\mathbf{e}_1 + 2\mathbf{e}_2 = 2.5\,\mathbf{b}_1 + (-0.5)\,\mathbf{b}_2
+$$
+
+坐标不同，向量相同。这就像"三"和"three"和"drei"都是同一个数。
+:::
+
+## 基的三个条件 {#sec-basis-conditions}
+
+> **Drei Bedingungen für eine Basis**
+
+在 $\mathbb{R}^n$ 中，一组向量 $\{\mathbf{b}_1, \ldots, \mathbf{b}_n\}$ 构成一组基，需要满足：
+
+$$
+\text{(1) 线性无关} \quad \text{(2) 张成整个空间} \quad \text{(3) 向量个数 = 空间维数}
+$$
+
+线性无关意味着：没有任何一个基向量能被其他基向量的线性组合表示。几何上，在 $\mathbb{R}^2$ 中就是两个基向量 **不共线**。
+
+```{r}
+#| label: fig-basis-vs-nonbasis
+#| fig-cap: "左：两个不共线的向量构成基；右：两个共线的向量不构成基——无法覆盖整个平面 | Links: Basis; Rechts: Keine Basis"
+#| fig-height: 4.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(2, 2, 3, 1))
+
+# 左：合法的基
+plot(NULL, xlim = c(-2, 3), ylim = c(-1, 3), asp = 1, axes = FALSE,
+     xlab = "", ylab = "", main = "✅ 这是基 | Basis", cex.main = 1.1, col.main = "#16A34A")
+grid(col = "#E2E8F0")
+draw_vec(c(0,0), c(2, 0.5), "#2563EB", lwd = 3, 
+         label = expression(bold(b)[1]), label_pos = c(2.2, 0.2))
+draw_vec(c(0,0), c(0.5, 2), "#16A34A", lwd = 3,
+         label = expression(bold(b)[2]), label_pos = c(0.2, 2.2))
+# 画一些可达点
+for (i in seq(-2, 2, 0.8)) {
+  for (j in seq(-2, 2, 0.8)) {
+    pt <- i * c(2, 0.5) + j * c(0.5, 2)
+    if (pt[1] > -2 & pt[1] < 3 & pt[2] > -1 & pt[2] < 3)
+      points(pt[1], pt[2], pch = 16, col = adjustcolor("#64748B", 0.2), cex = 0.8)
+  }
+}
+text(0.5, -0.5, "能覆盖整个平面!", col = "#16A34A", cex = 0.9, font = 2)
+
+# 右：不合法的（共线）
+plot(NULL, xlim = c(-2, 4), ylim = c(-1, 3), asp = 1, axes = FALSE,
+     xlab = "", ylab = "", main = "❌ 不是基 | Keine Basis", cex.main = 1.1, col.main = "#DC2626")
+grid(col = "#E2E8F0")
+draw_vec(c(0,0), c(1, 0.5), "#2563EB", lwd = 3,
+         label = expression(bold(b)[1]), label_pos = c(1.2, 0.2))
+draw_vec(c(0,0), c(2, 1), "#DC2626", lwd = 3,
+         label = expression(bold(b)[2]), label_pos = c(2.2, 0.7))
+# 共线方向上的点
+for (t in seq(-3, 5, 0.3)) {
+  pt <- t * c(1, 0.5)
+  if (pt[1] > -2 & pt[1] < 4 & pt[2] > -1 & pt[2] < 3)
+    points(pt[1], pt[2], pch = 16, col = adjustcolor("#DC2626", 0.3), cex = 0.6)
+}
+text(1, -0.5, "只能覆盖一条线!", col = "#DC2626", cex = 0.9, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+#| label: check-basis
+#| code-fold: false
+
+# 判断一组向量是否构成基：检查行列式是否非零
+# Prüfen ob Vektoren eine Basis bilden: Determinante ≠ 0?
+
+check_basis <- function(B) {
+  d <- det(B)
+  cat("矩阵:\n"); print(B)
+  cat("行列式 det(B) =", round(d, 6), "\n")
+  if (abs(d) > 1e-10) {
+    cat("✅ 行列式非零 → 构成基!\n\n")
+  } else {
+    cat("❌ 行列式为零 → 不构成基!\n\n")
+  }
+}
+
+cat("=== 测试 1：b1 = (1,1), b2 = (-1,1) ===\n")
+check_basis(cbind(c(1,1), c(-1,1)))
+
+cat("=== 测试 2：b1 = (1,2), b2 = (2,4) ===\n")
+check_basis(cbind(c(1,2), c(2,4)))
+
+cat("=== 测试 3：三维空间 ===\n")
+check_basis(cbind(c(1,0,0), c(0,1,0), c(0,0,1)))
+```
+
+{{< pagebreak >}}
+
+# 过渡矩阵：坐标系之间的"翻译官" {#sec-transition}
+
+> **Übergangsmatrix: Der „Übersetzer" zwischen Koordinatensystemen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **过渡矩阵** 的定义和构造方法
+- 从基 $\mathcal{B}$ 到基 $\mathcal{B}'$ 的坐标转换公式
+- 过渡矩阵的 **逆矩阵** = 反方向翻译
+- R 语言中如何一行代码完成坐标变换
+:::
+
+## 问题回顾：坐标翻译
+
+> **Rückblick: Koordinatenübersetzung**
+
+我们已经知道：
+
+- 同一个向量 $\mathbf{v}$ 在标准基 $\mathcal{E}$ 下坐标为 $[\mathbf{v}]_{\mathcal{E}} = (3, 2)^T$
+- 在新基 $\mathcal{B}'$ 下坐标为 $[\mathbf{v}]_{\mathcal{B}'} = (2.5, -0.5)^T$
+
+**问题**：有没有一个矩阵 $P$，能把一个坐标 **直接翻译** 成另一个？
+
+$$
+[\mathbf{v}]_{\mathcal{B}'} = P \cdot [\mathbf{v}]_{\mathcal{E}} \quad ?
+$$
+
+## 过渡矩阵的构造 {#sec-transition-construction}
+
+> **Konstruktion der Übergangsmatrix**
+
+设旧基为 $\mathcal{B} = \{\mathbf{b}_1, \ldots, \mathbf{b}_n\}$，新基为 $\mathcal{B}' = \{\mathbf{b}'_1, \ldots, \mathbf{b}'_n\}$。
+
+如果旧基的坐标已经用标准基表示（即列矩阵 $B$ 和 $B'$），那么：
+
+从旧基坐标 $\to$ 标准坐标 $\to$ 新基坐标，过程是：
+
+$$
+\mathbf{v} = B \cdot [\mathbf{v}]_{\mathcal{B}} \quad \Rightarrow \quad [\mathbf{v}]_{\mathcal{B}'} = (B')^{-1} \cdot \mathbf{v} = (B')^{-1} B \cdot [\mathbf{v}]_{\mathcal{B}}
+$$
+
+因此 **从 $\mathcal{B}$ 到 $\mathcal{B}'$ 的过渡矩阵** 为：
+
+$$
+\boxed{P_{\mathcal{B} \to \mathcal{B}'} = (B')^{-1} B}
+$$
+
+```{r}
+#| label: fig-transition-logic
+#| fig-cap: "过渡矩阵的逻辑：通过标准基作为'中转站'进行翻译 | Logik der Übergangsmatrix"
+#| fig-height: 4
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2, 0.5))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 5), axes = FALSE, xlab = "", ylab = "")
+title("过渡矩阵的逻辑 | Logik der Übergangsmatrix", cex.main = 1.3, col.main = "#1E293B")
+
+# 三个节点
+# 旧基坐标
+rect(0.3, 2, 2.7, 3.6, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(1.5, 3.1, expression(group("[", bold(v), "]")[B]), cex = 1, col = "#2563EB", font = 2)
+text(1.5, 2.4, "旧基坐标", cex = 0.75, col = "#64748B")
+
+# 标准坐标
+rect(3.8, 2, 6.2, 3.6, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(5, 3.1, expression(bold(v) == group("[", bold(v), "]")[E]), cex = 1, col = "#D97706", font = 2)
+text(5, 2.4, "标准坐标(中转)", cex = 0.75, col = "#64748B")
+
+# 新基坐标
+rect(7.3, 2, 9.7, 3.6, col = "#D1FAE5", border = "#16A34A", lwd = 2)
+text(8.5, 3.1, expression(group("[", bold(v), "]")[B*"'"]), cex = 1, col = "#16A34A", font = 2)
+text(8.5, 2.4, "新基坐标", cex = 0.75, col = "#64748B")
+
+# 箭头和标签
+arrows(2.8, 2.8, 3.7, 2.8, col = "#2563EB", lwd = 2.5, length = 0.12)
+text(3.25, 3.3, expression("× " * B), col = "#2563EB", cex = 0.9, font = 2)
+
+arrows(6.3, 2.8, 7.2, 2.8, col = "#16A34A", lwd = 2.5, length = 0.12)
+text(6.75, 3.3, expression("× " * B*"'"^{-1}), col = "#16A34A", cex = 0.9, font = 2)
+
+# 直达箭头
+arrows(2.7, 1.6, 7.3, 1.6, col = "#DC2626", lwd = 3, length = 0.15)
+text(5, 1.1, expression("× " * P == B*"'"^{-1} * B), col = "#DC2626", cex = 1.1, font = 2)
+text(5, 0.5, "一步直达！| In einem Schritt!", col = "#DC2626", cex = 0.85, font = 2)
+```
+
+## R 语言计算过渡矩阵 {#sec-transition-R}
+
+> **Übergangsmatrix in R berechnen**
+
+```{r}
+#| label: transition-matrix-compute
+#| code-fold: false
+
+# 旧基 = 标准基 | Alte Basis = Standardbasis
+B_old <- diag(2)  # 单位矩阵 = 标准基
+
+# 新基 B' | Neue Basis B'
+B_new <- cbind(c(1, 1), c(-1, 1))
+
+cat("旧基 B (标准基):\n"); print(B_old)
+cat("\n新基 B':\n"); print(B_new)
+
+# 过渡矩阵：从旧基到新基 | Übergangsmatrix: von alter zu neuer Basis
+# P = (B')^{-1} * B
+P <- solve(B_new) %*% B_old
+
+cat("\n过渡矩阵 P (B → B'):\n"); print(P)
+
+# 验证：用 P 转换坐标
+v_old <- c(3, 2)  # v 在标准基下的坐标
+v_new <- P %*% v_old
+
+cat("\nv 在旧基下的坐标:", v_old)
+cat("\nv 在新基下的坐标:", as.vector(v_new))
+cat("\n验证: B' * v_new =", as.vector(B_new %*% v_new), "(应等于原始 v)\n")
+```
+
+## 过渡矩阵的逆 = 反向翻译
+
+> **Die Inverse der Übergangsmatrix = Rückübersetzung**
+
+如果 $P$ 把"旧基坐标"翻译成"新基坐标"，那么 $P^{-1}$ 就是反过来翻译：
+
+$$
+P_{\mathcal{B} \to \mathcal{B}'} = (B')^{-1}B, \qquad P_{\mathcal{B}' \to \mathcal{B}} = B^{-1}B' = P^{-1}
+$$
+
+```{r}
+#| label: inverse-transition
+#| code-fold: false
+
+# 反向过渡矩阵
+P_inv <- solve(P)
+
+cat("P (B → B'):\n"); print(P)
+cat("\nP^{-1} (B' → B):\n"); print(P_inv)
+
+# 验证反向翻译
+v_back <- P_inv %*% v_new
+cat("\n用 P^{-1} 把新基坐标翻译回去:", as.vector(v_back), "(应等于 3, 2)\n")
+
+# 验证 P * P^{-1} = I
+cat("\nP * P^{-1} =\n"); print(round(P %*% P_inv, 10))
+```
+
+::: {.callout-tip icon="false"}
+## 🧠 记忆口诀 | Merkhilfe
+
+**"新基逆乘旧基"** = 过渡矩阵。
+
+想翻译坐标？$[\mathbf{v}]_{\text{新}} = \underbrace{(B'_{\text{新}})^{-1} B_{\text{旧}}}_{\text{过渡矩阵}} \cdot [\mathbf{v}]_{\text{旧}}$
+
+想反过来翻译？取逆即可！
+:::
+
+## 一般情况：两个非标准基之间的转换
+
+> **Allgemeiner Fall: Übergang zwischen zwei Nicht-Standardbasen**
+
+```{r}
+#| label: general-transition
+#| code-fold: false
+
+# 基 B1 和基 B2（都不是标准基）
+B1 <- cbind(c(2, 1), c(1, 3))   # 第一组基
+B2 <- cbind(c(1, 1), c(-1, 1))  # 第二组基
+
+cat("基 B1:\n"); print(B1)
+cat("\n基 B2:\n"); print(B2)
+
+# 从 B1 到 B2 的过渡矩阵
+P_12 <- solve(B2) %*% B1
+cat("\n过渡矩阵 P (B1 → B2):\n"); print(P_12)
+
+# 测试：向量 v 在 B1 下坐标为 (1, 1)
+v_B1 <- c(1, 1)
+v_standard <- B1 %*% v_B1  # 先转为标准坐标
+v_B2 <- P_12 %*% v_B1      # 直接用过渡矩阵
+
+cat("\nv 在 B1 下的坐标:", v_B1)
+cat("\nv 的标准坐标:", as.vector(v_standard))
+cat("\nv 在 B2 下的坐标:", as.vector(v_B2))
+cat("\n验证: B2 * v_B2 =", as.vector(B2 %*% v_B2), "\n")
+```
+
+```{r}
+#| label: fig-general-transition
+#| fig-cap: "向量 v 在三个坐标系下的表示：标准基、基 B₁、基 B₂ | Vektor v in drei Koordinatensystemen"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(3, 3, 3, 1))
+plot(NULL, xlim = c(-2, 5), ylim = c(-1, 5.5), asp = 1,
+     xlab = "", ylab = "", axes = FALSE,
+     main = "同一向量在三组基下的坐标 | Ein Vektor in drei Basen",
+     cex.main = 1.2, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+axis(1, col = "#94A3B8", col.axis = "#64748B", cex.axis = 0.8)
+axis(2, col = "#94A3B8", col.axis = "#64748B", las = 1, cex.axis = 0.8)
+
+v_std <- as.vector(v_standard)
+
+# 标准基
+draw_vec(c(0,0), c(1,0), adjustcolor("#64748B", 0.5), lwd = 1.5)
+draw_vec(c(0,0), c(0,1), adjustcolor("#64748B", 0.5), lwd = 1.5)
+
+# 基 B1
+draw_vec(c(0,0), B1[,1], "#2563EB", lwd = 2, label = expression(bold(b)[1]^(1)),
+         label_pos = B1[,1] + c(0.2, -0.3), label_cex = 0.85)
+draw_vec(c(0,0), B1[,2], "#2563EB", lwd = 2, lty = 2, label = expression(bold(b)[2]^(1)),
+         label_pos = B1[,2] + c(0.2, 0.2), label_cex = 0.85)
+
+# 基 B2
+draw_vec(c(0,0), B2[,1], "#16A34A", lwd = 2, label = expression(bold(b)[1]^(2)),
+         label_pos = B2[,1] + c(0.3, 0), label_cex = 0.85)
+draw_vec(c(0,0), B2[,2], "#16A34A", lwd = 2, lty = 2, label = expression(bold(b)[2]^(2)),
+         label_pos = B2[,2] + c(-0.5, 0), label_cex = 0.85)
+
+# 向量 v
+draw_vec(c(0,0), v_std, "#DC2626", lwd = 3)
+points(v_std[1], v_std[2], pch = 16, col = "#DC2626", cex = 2)
+
+# 标注坐标
+text(v_std[1] + 0.3, v_std[2] + 0.5, 
+     paste0("标准: (", v_std[1], ", ", v_std[2], ")"), col = "#64748B", cex = 0.8)
+text(v_std[1] + 0.3, v_std[2] + 0.1,
+     paste0("B1: (", v_B1[1], ", ", v_B1[2], ")"), col = "#2563EB", cex = 0.8, font = 2)
+
+v_B2_vals <- as.vector(v_B2)
+text(v_std[1] + 0.3, v_std[2] - 0.3,
+     paste0("B2: (", round(v_B2_vals[1],1), ", ", round(v_B2_vals[2],1), ")"), 
+     col = "#16A34A", cex = 0.8, font = 2)
+```
+
+{{< pagebreak >}}
+
+# 坐标变换实战：R 语言操作手册 {#sec-practice}
+
+> **Koordinatentransformation in der Praxis: R-Handbuch**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 用 R 实现坐标变换的 **完整工作流**
+- 批量处理多个向量的坐标变换
+- 可视化变换前后的效果
+- 建立 **不动脑子就能写出来** 的操作模板
+:::
+
+## 工作流模板：三步走
+
+> **Workflow-Vorlage: Drei Schritte**
+
+```{r}
+#| label: workflow-template
+#| code-fold: false
+
+# =============================================
+#   坐标变换工作流模板 | Workflow-Vorlage
+# =============================================
+
+# 第 1 步：定义两组基（列为基向量）
+# Schritt 1: Zwei Basen definieren (Spalten = Basisvektoren)
+Basis_old <- cbind(c(1, 0), c(0, 1))  # 旧基（这里是标准基）
+Basis_new <- cbind(c(1, 1), c(-1, 1)) # 新基
+
+# 第 2 步：计算过渡矩阵
+# Schritt 2: Übergangsmatrix berechnen
+P <- solve(Basis_new) %*% Basis_old   # P: 旧 → 新
+
+# 第 3 步：变换坐标
+# Schritt 3: Koordinaten transformieren
+v_old_coords <- c(3, 2)               # v 在旧基下的坐标
+v_new_coords <- P %*% v_old_coords    # v 在新基下的坐标
+
+cat("旧基坐标 →", v_old_coords, "\n")
+cat("新基坐标 →", as.vector(v_new_coords), "\n")
+```
+
+::: {.callout-tip icon="false"}
+## 📌 速记卡 | Schnellreferenzkarte
+
+| 你想做什么 | R 代码 |
+|:-----------|:-------|
+| 从旧基到新基的过渡矩阵 | `P <- solve(B_new) %*% B_old` |
+| 旧基坐标 → 新基坐标 | `v_new <- P %*% v_old` |
+| 新基坐标 → 旧基坐标 | `v_old <- solve(P) %*% v_new` |
+| 新基坐标 → 标准坐标 | `v_std <- B_new %*% v_new` |
+| 标准坐标 → 新基坐标 | `v_new <- solve(B_new) %*% v_std` |
+| 检验是否为基 | `det(B) != 0` |
+:::
+
+## 批量变换：一次翻译多个向量
+
+> **Batch-Transformation: Mehrere Vektoren auf einmal übersetzen**
+
+```{r}
+#| label: batch-transform
+#| code-fold: false
+
+# 一次变换多个向量！
+# Mehrere Vektoren gleichzeitig transformieren!
+
+# 5 个向量（每列一个）在标准基下的坐标
+V_std <- matrix(c(
+  3, 2,    # v1
+  1, 4,    # v2
+  -2, 3,   # v3
+  4, -1,   # v4
+  0, 5     # v5
+), nrow = 2, byrow = FALSE)
+
+cat("5 个向量在标准基下的坐标（每列一个向量）:\n")
+print(V_std)
+
+# 新基
+B_new <- cbind(c(1, 1), c(-1, 1))
+
+# 过渡矩阵（标准基 → 新基）
+P <- solve(B_new)  # 因为旧基是单位矩阵，所以 P = B_new^{-1}
+
+# 批量变换：矩阵乘法一步搞定！
+V_new <- P %*% V_std
+
+cat("\n5 个向量在新基下的坐标:\n")
+print(V_new)
+
+# 验证第一个
+cat("\n验证 v1: B_new * [v1]_new =", as.vector(B_new %*% V_new[,1]), 
+    "(应等于", V_std[,1], ")\n")
+```
+
+```{r}
+#| label: fig-batch-transform
+#| fig-cap: "5 个向量在两个坐标系中的表示——向量（红色箭头）完全不变，只是坐标数值改变了 | 5 Vektoren in zwei Koordinatensystemen"
+#| fig-height: 5.5
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(3, 3, 3, 1))
+
+# 左：标准基视角
+plot(NULL, xlim = c(-3, 5.5), ylim = c(-2, 6), asp = 1, axes = FALSE,
+     xlab = "", ylab = "", main = "标准基视角", cex.main = 1.2, col.main = "#2563EB")
+grid(col = "#E2E8F0")
+axis(1, col = "#94A3B8", col.axis = "#64748B", cex.axis = 0.8)
+axis(2, col = "#94A3B8", col.axis = "#64748B", las = 1, cex.axis = 0.8)
+
+# 标准基
+draw_vec(c(0,0), c(1,0), "#2563EB", lwd = 2)
+draw_vec(c(0,0), c(0,1), "#2563EB", lwd = 2, lty = 2)
+
+vec_cols <- c("#DC2626", "#EA580C", "#D97706", "#9333EA", "#0D9488")
+for (i in 1:5) {
+  draw_vec(c(0,0), V_std[,i], vec_cols[i], lwd = 2)
+  text(V_std[1,i] + 0.2, V_std[2,i] + 0.3,
+       paste0("(", V_std[1,i], ",", V_std[2,i], ")"),
+       col = vec_cols[i], cex = 0.7, font = 2)
+}
+
+# 右：新基视角（画出在新基坐标系中的位置）
+plot(NULL, xlim = c(-3, 5.5), ylim = c(-2, 6), asp = 1, axes = FALSE,
+     xlab = "", ylab = "", main = "新基 B' 视角", cex.main = 1.2, col.main = "#16A34A")
+grid(col = "#E2E8F0")
+axis(1, col = "#94A3B8", col.axis = "#64748B", cex.axis = 0.8)
+axis(2, col = "#94A3B8", col.axis = "#64748B", las = 1, cex.axis = 0.8)
+
+# 新基
+draw_vec(c(0,0), B_new[,1], "#16A34A", lwd = 2)
+draw_vec(c(0,0), B_new[,2], "#16A34A", lwd = 2, lty = 2)
+
+# 向量在标准坐标中的位置不变（几何位置一样）
+for (i in 1:5) {
+  draw_vec(c(0,0), V_std[,i], vec_cols[i], lwd = 2)
+  text(V_std[1,i] + 0.2, V_std[2,i] + 0.3,
+       paste0("(", round(V_new[1,i],1), ",", round(V_new[2,i],1), ")"),
+       col = vec_cols[i], cex = 0.7, font = 2)
+}
+
+par(mfrow = c(1, 1))
+```
+
+## 三维空间的坐标变换
+
+> **Koordinatentransformation im dreidimensionalen Raum**
+
+```{r}
+#| label: 3d-transform
+#| code-fold: false
+
+# 三维同样适用！模板完全一样！
+# Funktioniert genauso in 3D! Gleiche Vorlage!
+
+# 新基（3D）
+B3_new <- cbind(
+  c(1, 1, 0),   # b1
+  c(0, 1, 1),   # b2
+  c(1, 0, 1)    # b3
+)
+
+cat("3D 新基矩阵:\n"); print(B3_new)
+cat("行列式 =", det(B3_new), " (非零 → 是基)\n\n")
+
+# 向量 v = (1, 2, 3)
+v3 <- c(1, 2, 3)
+
+# 过渡矩阵（标准基 → 新基）
+P3 <- solve(B3_new)
+v3_new <- P3 %*% v3
+
+cat("v = (1, 2, 3) 在新基下的坐标:", as.vector(v3_new), "\n")
+cat("验证:", as.vector(B3_new %*% v3_new), "(应等于 1 2 3)\n")
+```
+
+::: {.callout-important icon="false"}
+## 💡 关键洞察 | Schlüsselerkenntnis
+
+不管是 2D、3D 还是 100D，坐标变换的操作 **完全一样**：
+
+1. 构造基矩阵 $B$（列为基向量）
+2. 过渡矩阵 $P = B_{\text{new}}^{-1} B_{\text{old}}$
+3. 新坐标 $= P \times$ 旧坐标
+
+**维度再高也是这三步，R 代码一行不变！**
+:::
+
+{{< pagebreak >}}
+
+# 相似矩阵：同一个变换的不同"面孔" {#sec-similar}
+
+> **Ähnliche Matrizen: Verschiedene „Gesichter" derselben Transformation**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- 线性变换在不同基下有 **不同的矩阵表示**
+- **相似矩阵** 的定义：$B = P^{-1}AP$
+- 相似矩阵共享的 **不变量**：特征值、迹、行列式
+- 最重要的应用：**对角化**——选择最好的基让矩阵变简单
+:::
+
+## 从直觉出发：同一个旋转，不同的描述
+
+> **Von der Intuition ausgehen: Dieselbe Drehung, verschiedene Beschreibungen**
+
+想象一个线性变换 $T$，它把平面上的每个点做某种"拉伸+旋转"。这个变换本身是客观存在的——不管你用什么坐标系描述它，它对图形的效果都一样。
+
+但是，**用不同的基来记录这个变换，写出来的矩阵不同。**
+
+```{r}
+#| label: fig-same-transform-different-matrix
+#| fig-cap: "同一个线性变换（拉伸），在标准基下是矩阵 A，换基后变成矩阵 B。效果一样，但 B 可能更简单！"
+#| fig-height: 5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2.5, 0.5))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 6), axes = FALSE, xlab = "", ylab = "")
+title("同一个变换，不同的矩阵 | Gleiche Transformation, verschiedene Matrizen",
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 左边：标准基
+rect(0.3, 2.5, 3.7, 5, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(2, 4.3, "标准基下", col = "#2563EB", cex = 0.9, font = 2)
+text(2, 3.7, expression(A == bgroup("(", atop(2 ~~ 1, 1 ~~ 2), ")")),
+     col = "#1E293B", cex = 1)
+text(2, 3, "复杂", col = "#DC2626", cex = 0.8, font = 3)
+
+# 右边：特征向量基
+rect(6.3, 2.5, 9.7, 5, col = "#D1FAE5", border = "#16A34A", lwd = 2)
+text(8, 4.3, "特征向量基下", col = "#16A34A", cex = 0.9, font = 2)
+text(8, 3.7, expression(B == bgroup("(", atop(3 ~~ 0, 0 ~~ 1), ")")),
+     col = "#1E293B", cex = 1)
+text(8, 3, "对角阵!简单!", col = "#16A34A", cex = 0.8, font = 2)
+
+# 连接箭头
+arrows(3.8, 4.3, 6.2, 4.3, col = "#9333EA", lwd = 3, length = 0.15)
+text(5, 4.8, expression(B == P^{-1} * A * P), col = "#9333EA", cex = 1.1, font = 2)
+text(5, 3.8, "换基", col = "#9333EA", cex = 0.85)
+
+# 底部：本质
+rect(2.5, 0.5, 7.5, 1.8, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(5, 1.4, "本质：A 和 B 是同一个变换的不同描述", col = "#D97706", cex = 0.9, font = 2)
+text(5, 0.8, "Wesen: A und B beschreiben dieselbe Transformation", col = "#94A3B8", cex = 0.7, font = 3)
+
+arrows(5, 2.4, 5, 1.9, col = "#D97706", lwd = 2, length = 0.1)
+```
+
+## 相似矩阵的严格定义
+
+> **Strenge Definition ähnlicher Matrizen**
+
+设 $A$ 是线性变换 $T$ 在基 $\mathcal{B}$ 下的矩阵表示，$P$ 是从基 $\mathcal{B}$ 到基 $\mathcal{B}'$ 的过渡矩阵。那么 $T$ 在基 $\mathcal{B}'$ 下的矩阵表示为：
+
+$$
+\boxed{B = P^{-1} A P}
+$$
+
+我们说 $A$ 和 $B$ **相似（ähnlich / similar）**。
+
+**为什么是 $P^{-1}AP$?** 直觉上，这是一个"三明治"操作：
+
+$$
+\underbrace{P}_{\text{翻译到旧基}} \to \underbrace{A}_{\text{在旧基下做变换}} \to \underbrace{P^{-1}}_{\text{翻译回新基}}
+$$
+
+```{r}
+#| label: fig-sandwich
+#| fig-cap: "P⁻¹AP 的'三明治'直觉：先翻译，再变换，再翻译回来 | Sandwich-Intuition von P⁻¹AP"
+#| fig-height: 3.5
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2, 0.5))
+plot(NULL, xlim = c(0, 12), ylim = c(0, 4), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("P"^{-1} * "AP 的三明治直觉 | Sandwich-Intuition")),
+      cex.main = 1.2, col.main = "#1E293B")
+
+# 四个节点
+boxes_x <- c(1.2, 4.2, 7.2, 10.2)
+boxes_labels <- c(
+  expression(group("[", bold(v), "]")[B*"'"]),
+  expression(group("[", bold(v), "]")[B]),
+  expression(group("[", T(bold(v)), "]")[B]),
+  expression(group("[", T(bold(v)), "]")[B*"'"])
+)
+boxes_col <- c("#16A34A", "#2563EB", "#2563EB", "#16A34A")
+boxes_bg <- c("#D1FAE5", "#DBEAFE", "#DBEAFE", "#D1FAE5")
+boxes_sub <- c("新基坐标", "旧基坐标", "变换后\n旧基坐标", "变换后\n新基坐标")
+
+for (i in 1:4) {
+  rect(boxes_x[i] - 1, 1.2, boxes_x[i] + 1, 3, col = boxes_bg[i], border = boxes_col[i], lwd = 2)
+  text(boxes_x[i], 2.4, boxes_labels[i], col = boxes_col[i], cex = 0.85, font = 2)
+  text(boxes_x[i], 1.6, boxes_sub[i], col = "#64748B", cex = 0.6)
+}
+
+# 箭头
+arrows(2.3, 2.1, 3.1, 2.1, col = "#9333EA", lwd = 2.5, length = 0.1)
+text(2.7, 2.7, expression("×P"), col = "#9333EA", cex = 0.9, font = 2)
+
+arrows(5.3, 2.1, 6.1, 2.1, col = "#DC2626", lwd = 2.5, length = 0.1)
+text(5.7, 2.7, expression("×A"), col = "#DC2626", cex = 0.9, font = 2)
+
+arrows(8.3, 2.1, 9.1, 2.1, col = "#9333EA", lwd = 2.5, length = 0.1)
+text(8.7, 2.7, expression("×P"^{-1}), col = "#9333EA", cex = 0.9, font = 2)
+
+# 底部直通
+arrows(2.2, 0.8, 9.2, 0.8, col = "#DC2626", lwd = 3, length = 0.15)
+text(5.7, 0.4, expression("× B = P"^{-1} * "AP"), col = "#DC2626", cex = 1, font = 2)
+```
+
+## R 语言实战：验证相似矩阵
+
+> **Praxis in R: Ähnliche Matrizen verifizieren**
+
+```{r}
+#| label: similar-matrix-demo
+#| code-fold: false
+
+# 定义标准基下的变换矩阵 A
+A <- matrix(c(2, 1, 1, 2), nrow = 2, byrow = TRUE)
+cat("矩阵 A (标准基下):\n"); print(A)
+
+# 定义过渡矩阵 P (新基的列向量在标准基下的坐标)
+P <- cbind(c(1, 1), c(1, -1))  
+cat("\n过渡矩阵 P:\n"); print(P)
+
+# 计算相似矩阵 B = P^{-1} A P
+B <- solve(P) %*% A %*% P
+cat("\n相似矩阵 B = P^{-1} A P:\n"); print(B)
+cat("\nB 是对角矩阵! 这就是对角化!\n")
+```
+
+## 相似矩阵的不变量
+
+> **Invarianten ähnlicher Matrizen**
+
+相似矩阵虽然"长相不同"，但它们本质上描述同一个变换，因此共享许多重要性质：
+
+```{r}
+#| label: invariants-demo
+#| code-fold: false
+
+cat("============ 相似矩阵的不变量验证 ============\n\n")
+
+# 1. 特征值相同
+eigen_A <- eigen(A)$values
+eigen_B <- eigen(B)$values
+cat("A 的特征值:", sort(eigen_A), "\n")
+cat("B 的特征值:", sort(eigen_B), "\n")
+cat("特征值相同? ✅", all.equal(sort(eigen_A), sort(eigen_B)), "\n\n")
+
+# 2. 迹相同 (对角元素之和)
+cat("A 的迹 tr(A):", sum(diag(A)), "\n")
+cat("B 的迹 tr(B):", sum(diag(B)), "\n")
+cat("迹相同? ✅", sum(diag(A)) == sum(diag(B)), "\n\n")
+
+# 3. 行列式相同
+cat("A 的行列式 det(A):", det(A), "\n")
+cat("B 的行列式 det(B):", det(B), "\n")
+cat("行列式相同? ✅", all.equal(det(A), det(B)), "\n\n")
+
+# 4. 秩相同
+cat("A 的秩:", qr(A)$rank, "\n")
+cat("B 的秩:", qr(B)$rank, "\n")
+```
+
+```{r}
+#| label: fig-invariants-summary
+#| fig-cap: "相似矩阵共享的不变量——变的是坐标表示，不变的是几何本质 | Invarianten ähnlicher Matrizen"
+#| fig-height: 4
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2, 0.5))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 5.5), axes = FALSE, xlab = "", ylab = "")
+title("相似矩阵的不变量 | Invarianten ähnlicher Matrizen", 
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 变的
+rect(0.5, 3.5, 4.5, 5.2, col = "#FEE2E2", border = "#DC2626", lwd = 2)
+text(2.5, 4.7, "会变的 ❌", col = "#DC2626", cex = 1, font = 2)
+text(2.5, 4.1, "矩阵元素、特征向量的坐标", col = "#64748B", cex = 0.8)
+
+# 不变的
+rect(5.5, 3.5, 9.5, 5.2, col = "#D1FAE5", border = "#16A34A", lwd = 2)
+text(7.5, 4.7, "不变的 ✅", col = "#16A34A", cex = 1, font = 2)
+text(7.5, 4.1, "特征值、迹、行列式、秩", col = "#64748B", cex = 0.8)
+
+# 底部解释
+rect(1, 0.5, 9, 2.8, col = "#F8FAFC", border = "#94A3B8", lwd = 1.5, lty = 2)
+items <- c(
+  "特征值 λ ：变换的\"拉伸倍数\"",
+  "迹 tr(A) = Σλ ：特征值之和",
+  "行列式 det(A) = Πλ ：特征值之积（面积缩放比）",
+  "秩 rank(A) ：变换后空间的维数"
+)
+for (i in seq_along(items)) {
+  text(5, 2.6 - (i-1) * 0.5, items[i], col = "#1E293B", cex = 0.75)
+}
+
+arrows(5, 3.3, 5, 2.9, col = "#94A3B8", lwd = 1.5, length = 0.08)
+```
+
+{{< pagebreak >}}
+
+# 对角化：选择最好的基 {#sec-diagonalization}
+
+> **Diagonalisierung: Die beste Basis wählen**
+
+::: {.callout-note icon="false"}
+## 🎯 本节你将学到 | Was Sie lernen
+
+- **对角化** 是相似矩阵最重要的应用
+- 对角化 = 选择特征向量作为基，让矩阵变成对角阵
+- 对角矩阵让 **矩阵幂运算** 变得极其简单
+- R 语言中如何一步完成对角化
+:::
+
+## 对角化的直觉
+
+> **Intuition der Diagonalisierung**
+
+如果我们选择线性变换 $T$ 的 **特征向量** 作为新的基，那么变换矩阵就变成了 **对角矩阵**——因为每个特征向量只会被拉伸（乘以特征值），不会和其他方向混合。
+
+$$
+A = P \Lambda P^{-1} \quad \Longleftrightarrow \quad \Lambda = P^{-1} A P
+$$
+
+其中 $P$ 的列是特征向量，$\Lambda$ 是特征值组成的对角矩阵。
+
+```{r}
+#| label: diagonalization-demo
+#| code-fold: false
+
+# 对角化完整流程 | Vollständiger Diagonalisierungsprozess
+A <- matrix(c(4, 1, 2, 3), nrow = 2, byrow = TRUE)
+cat("原矩阵 A:\n"); print(A)
+
+# 第 1 步：求特征值和特征向量
+eig <- eigen(A)
+cat("\n特征值:", eig$values, "\n")
+cat("\n特征向量矩阵 P (每列一个特征向量):\n")
+print(round(eig$vectors, 4))
+
+# 第 2 步：构造 P 和 Λ
+P <- eig$vectors
+Lambda <- diag(eig$values)
+
+cat("\n对角矩阵 Λ:\n"); print(round(Lambda, 4))
+
+# 第 3 步：验证 A = P Λ P^{-1}
+A_reconstructed <- P %*% Lambda %*% solve(P)
+cat("\n验证 P Λ P^{-1}:\n"); print(round(A_reconstructed, 10))
+cat("\n与原矩阵 A 相同? ✅", all.equal(A, A_reconstructed), "\n")
+```
+
+## 对角化的威力：矩阵幂运算
+
+> **Die Macht der Diagonalisierung: Matrixpotenzen**
+
+计算 $A^{100}$ 直接算需要做 99 次矩阵乘法。但对角化后：
+
+$$
+A^{100} = P \Lambda^{100} P^{-1} = P \begin{pmatrix} \lambda_1^{100} & 0 \\ 0 & \lambda_2^{100} \end{pmatrix} P^{-1}
+$$
+
+只需要对特征值做幂运算！
+
+```{r}
+#| label: fig-matrix-power
+#| fig-cap: "A¹⁰⁰ 的计算：暴力法 vs 对角化法。对角化后只需算 λ^100，简单到离谱！"
+#| fig-height: 4
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2, 0.5))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 5), axes = FALSE, xlab = "", ylab = "")
+title(expression(bold("A"^100 ~ "的计算 | Berechnung von A"^100)), 
+      cex.main = 1.3, col.main = "#1E293B")
+
+# 暴力法
+rect(0.3, 3, 4.7, 4.7, col = "#FEE2E2", border = "#DC2626", lwd = 2)
+text(2.5, 4.2, "暴力法", col = "#DC2626", cex = 0.9, font = 2)
+text(2.5, 3.6, "A × A × A × ... × A (99 次)", col = "#64748B", cex = 0.75)
+text(2.5, 3.2, "O(n³ × 99) 次运算", col = "#DC2626", cex = 0.7)
+
+# 对角化法
+rect(5.3, 3, 9.7, 4.7, col = "#D1FAE5", border = "#16A34A", lwd = 2)
+text(7.5, 4.2, "对角化法", col = "#16A34A", cex = 0.9, font = 2)
+text(7.5, 3.6, expression(paste(P, Lambda^100, P^{-1}, " = P·diag(", lambda[i]^100, ")·", P^{-1})),
+     col = "#64748B", cex = 0.65)
+text(7.5, 3.2, "只算 n 个数的幂!", col = "#16A34A", cex = 0.7, font = 2)
+
+# 比较
+text(5, 1.5, 
+     expression(paste("例如: ", lambda, " = 5  →  ", lambda^100, " = ", 5^100, "，一步!")),
+     col = "#1E293B", cex = 0.85)
+text(5, 0.8, "Die Diagonalisierung reduziert Matrixpotenzen auf Skalarpotenzen!",
+     col = "#64748B", cex = 0.7, font = 3)
+```
+
+```{r}
+#| label: matrix-power-demo
+#| code-fold: false
+
+# 计算 A^10 的两种方式 | Zwei Methoden für A^10
+
+# 方法 1：暴力连乘
+A_power_brute <- A
+for (i in 2:10) A_power_brute <- A_power_brute %*% A
+
+# 方法 2：对角化
+Lambda_10 <- diag(eig$values^10)
+A_power_diag <- P %*% Lambda_10 %*% solve(P)
+
+cat("A^10 (暴力法):\n"); print(round(A_power_brute, 2))
+cat("\nA^10 (对角化法):\n"); print(round(A_power_diag, 2))
+cat("\n两种方法结果一致? ✅", all.equal(A_power_brute, A_power_diag), "\n")
+
+# 更极端的例子：A^100
+Lambda_100 <- diag(eig$values^100)
+A_100 <- P %*% Lambda_100 %*% solve(P)
+cat("\nA^100 (对角化法):\n"); print(A_100)
+```
+
+## 可视化：线性变换在不同基下的效果 {#sec-transform-visual}
+
+> **Visualisierung: Effekte einer linearen Transformation in verschiedenen Basen**
+
+```{r}
+#| label: fig-transform-effect
+#| fig-cap: "左：标准基下矩阵 A 的作用（拉伸+旋转混合）；右：特征向量基下矩阵 Λ 的作用（只有纯拉伸）"
+#| fig-height: 6
+
+A_vis <- matrix(c(2, 1, 1, 2), nrow = 2, byrow = TRUE)
+eig_vis <- eigen(A_vis)
+P_vis <- eig_vis$vectors
+Lambda_vis <- diag(eig_vis$values)
+
+# 生成单位圆上的点
+theta <- seq(0, 2*pi, length.out = 100)
+circle <- rbind(cos(theta), sin(theta))
+
+par(mfrow = c(1, 2), bg = "#F8FAFC", mar = c(3, 3, 3, 1))
+
+# === 左：标准基 ===
+transformed_std <- A_vis %*% circle
+
+plot(NULL, xlim = c(-3.5, 3.5), ylim = c(-3.5, 3.5), asp = 1, axes = FALSE,
+     xlab = "", ylab = "", main = "标准基下: A 的作用",
+     cex.main = 1.1, col.main = "#2563EB")
+grid(col = "#E2E8F0")
+axis(1, col = "#94A3B8", col.axis = "#64748B", cex.axis = 0.8)
+axis(2, col = "#94A3B8", col.axis = "#64748B", las = 1, cex.axis = 0.8)
+
+# 原始圆
+lines(circle[1,], circle[2,], col = "#94A3B8", lwd = 2)
+# 变换后的椭圆
+lines(transformed_std[1,], transformed_std[2,], col = "#2563EB", lwd = 3)
+
+# 标注
+draw_vec(c(0,0), c(1,0), "#94A3B8", lwd = 1.5)
+draw_vec(c(0,0), c(0,1), "#94A3B8", lwd = 1.5)
+draw_vec(c(0,0), A_vis %*% c(1,0), "#2563EB", lwd = 2.5)
+draw_vec(c(0,0), A_vis %*% c(0,1), "#2563EB", lwd = 2.5, lty = 2)
+
+legend("bottomright", legend = c("原始单位圆", "变换后: 椭圆"), 
+       col = c("#94A3B8", "#2563EB"), lwd = c(2, 3), bty = "n", cex = 0.85)
+text(0, -3.2, "各方向拉伸不一致\n方向还发生了旋转", col = "#DC2626", cex = 0.8, font = 2)
+
+# === 右：特征向量基 ===
+# 把圆转到特征向量坐标系
+circle_eig <- solve(P_vis) %*% circle
+transformed_eig <- Lambda_vis %*% circle_eig
+
+plot(NULL, xlim = c(-3.5, 3.5), ylim = c(-3.5, 3.5), asp = 1, axes = FALSE,
+     xlab = "", ylab = "", main = "特征向量基下: Λ 的作用",
+     cex.main = 1.1, col.main = "#16A34A")
+grid(col = "#E2E8F0")
+axis(1, col = "#94A3B8", col.axis = "#64748B", cex.axis = 0.8)
+axis(2, col = "#94A3B8", col.axis = "#64748B", las = 1, cex.axis = 0.8)
+
+lines(circle_eig[1,], circle_eig[2,], col = "#94A3B8", lwd = 2)
+lines(transformed_eig[1,], transformed_eig[2,], col = "#16A34A", lwd = 3)
+
+# 特征向量方向的基向量
+draw_vec(c(0,0), c(1, 0), "#9333EA", lwd = 2.5, label = expression(lambda[1] == 3),
+         label_pos = c(1.5, 0.3), label_cex = 0.9)
+draw_vec(c(0,0), c(0, 1), "#0D9488", lwd = 2.5, label = expression(lambda[2] == 1),
+         label_pos = c(0.3, 1.3), label_cex = 0.9)
+# 变换后
+draw_vec(c(0,0), c(3, 0), "#16A34A", lwd = 2.5)
+draw_vec(c(0,0), c(0, 1), "#16A34A", lwd = 2.5, lty = 2)
+
+legend("bottomright", legend = c("原始", "变换后: 沿轴拉伸"), 
+       col = c("#94A3B8", "#16A34A"), lwd = c(2, 3), bty = "n", cex = 0.85)
+text(0, -3.2, "只沿坐标轴拉伸!\n无旋转，干净利落!", col = "#16A34A", cex = 0.8, font = 2)
+
+par(mfrow = c(1, 1))
+```
+
+::: {.callout-important icon="false"}
+## 💡 核心直觉 | Schlüsselerkenntnis
+
+**对角化 = 找到"最舒服"的观察角度。**
+
+在标准基下，线性变换看起来又拉伸又旋转，很复杂。但只要换到特征向量基下，同一个变换就变成了"沿每个轴独立拉伸"——对角矩阵的每个对角元素就是对应轴的拉伸倍数（特征值）。
+
+*Diagonalisierung = den "bequemsten" Blickwinkel finden. In der Eigenvektorbasis wird die Transformation zur reinen Skalierung entlang jeder Achse.*
+:::
+
+{{< pagebreak >}}
+
+# 综合实战：完整案例 {#sec-comprehensive}
+
+> **Umfassende Praxis: Vollständiges Beispiel**
+
+::: {.callout-note icon="false"}
+## 🎯 本节目标 | Ziel
+
+把所有知识串联起来，走完一个完整的案例：给定矩阵 → 分析特征值/特征向量 → 构造过渡矩阵 → 对角化 → 用对角化简化计算。
+:::
+
+```{r}
+#| label: comprehensive-example
+#| code-fold: false
+
+# ============================================
+#  完整案例 | Vollständiges Beispiel
+# ============================================
+
+# 定义矩阵
+A <- matrix(c(
+  5, 4,
+  2, 3
+), nrow = 2, byrow = TRUE)
+
+cat("========== 第 1 步：分析矩阵 A ==========\n")
+cat("矩阵 A:\n"); print(A)
+cat("迹 tr(A) =", sum(diag(A)), "\n")
+cat("行列式 det(A) =", det(A), "\n\n")
+
+# 第 2 步：求特征值和特征向量
+cat("========== 第 2 步：特征值分解 ==========\n")
+eig <- eigen(A)
+lambda <- eig$values
+P <- eig$vectors
+
+cat("特征值: λ1 =", lambda[1], ", λ2 =", lambda[2], "\n")
+cat("验证: λ1 + λ2 =", sum(lambda), "(应等于 tr(A) =", sum(diag(A)), ")\n")
+cat("验证: λ1 × λ2 =", prod(lambda), "(应等于 det(A) =", det(A), ")\n\n")
+cat("特征向量矩阵 P:\n"); print(round(P, 4))
+
+# 第 3 步：构造对角矩阵
+cat("\n========== 第 3 步：对角化 ==========\n")
+Lambda <- diag(lambda)
+cat("对角矩阵 Λ:\n"); print(Lambda)
+
+# 验证 A = P Λ P^{-1}
+cat("\n验证 P Λ P^{-1}:\n")
+print(round(P %*% Lambda %*% solve(P), 10))
+cat("与 A 一致? ✅\n")
+
+# 第 4 步：应用——计算 A^20
+cat("\n========== 第 4 步：计算 A^20 ==========\n")
+Lambda_20 <- diag(lambda^20)
+A_20 <- P %*% Lambda_20 %*% solve(P)
+cat("A^20 =\n"); print(round(A_20, 2))
+
+# 暴力验证
+A_brute <- A
+for (i in 2:20) A_brute <- A_brute %*% A
+cat("\n暴力法 A^20 =\n"); print(round(A_brute, 2))
+cat("\n两种方法一致? ✅", all.equal(A_20, A_brute, tolerance = 1e-6), "\n")
+```
+
+```{r}
+#| label: fig-comprehensive-visual
+#| fig-cap: "完整案例可视化：矩阵 A 的特征向量方向和拉伸效果"
+#| fig-height: 6
+
+par(bg = "#F8FAFC", mar = c(3, 3, 3, 1))
+plot(NULL, xlim = c(-4, 8), ylim = c(-4, 6), asp = 1, axes = FALSE,
+     xlab = "", ylab = "",
+     main = "矩阵 A 的几何效果 | Geometrische Wirkung von A",
+     cex.main = 1.3, col.main = "#1E293B")
+grid(col = "#E2E8F0")
+axis(1, col = "#94A3B8", col.axis = "#64748B", cex.axis = 0.8)
+axis(2, col = "#94A3B8", col.axis = "#64748B", las = 1, cex.axis = 0.8)
+
+# 单位圆
+theta <- seq(0, 2*pi, length.out = 200)
+circle <- rbind(cos(theta), sin(theta))
+lines(circle[1,], circle[2,], col = "#94A3B8", lwd = 2)
+
+# 变换后
+transformed <- A %*% circle
+polygon(transformed[1,], transformed[2,], col = adjustcolor("#2563EB", 0.1), 
+        border = "#2563EB", lwd = 2.5)
+
+# 特征向量
+ev1 <- P[,1]; ev2 <- P[,2]
+draw_vec(c(0,0), ev1 * 2, "#DC2626", lwd = 3, label = expression(bold(v)[1] ~ "(λ=7)"),
+         label_pos = ev1 * 2.3, label_cex = 0.9)
+draw_vec(c(0,0), ev2 * 2, "#16A34A", lwd = 3, label = expression(bold(v)[2] ~ "(λ=1)"),
+         label_pos = ev2 * 2.3 + c(-0.5, 0), label_cex = 0.9)
+
+# 变换后的特征向量
+draw_vec(c(0,0), A %*% ev1 * 2, "#DC2626", lwd = 2, lty = 2)
+draw_vec(c(0,0), A %*% ev2 * 2, "#16A34A", lwd = 2, lty = 2)
+
+# 图例
+legend("topleft", 
+       legend = c("单位圆", "A 变换后", 
+                  expression("特征向量 " * bold(v)[1] ~ "(被拉伸 7 倍)"),
+                  expression("特征向量 " * bold(v)[2] ~ "(保持不变)")),
+       col = c("#94A3B8", "#2563EB", "#DC2626", "#16A34A"),
+       lwd = c(2, 2.5, 3, 3), lty = c(1, 1, 1, 1),
+       bty = "n", cex = 0.85)
+
+text(4, -3, "特征向量方向只拉伸不旋转——这就是\"特征\"的含义!", 
+     col = "#EA580C", cex = 0.9, font = 2)
+```
+
+{{< pagebreak >}}
+
+# 总结：公式速查与直觉总览 {#sec-summary}
+
+> **Zusammenfassung: Formelübersicht und Intuitionsüberblick**
+
+## 核心公式一页纸
+
+```{r}
+#| label: fig-formula-summary
+#| fig-cap: "核心公式总结——打印出来贴墙上！| Formelzusammenfassung — ausdrucken und an die Wand hängen!"
+#| fig-height: 8
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2, 0.5))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 10), axes = FALSE, xlab = "", ylab = "")
+title("核心公式速查卡 | Schnellreferenzkarte", cex.main = 1.4, col.main = "#1E293B")
+
+# --- 框1：基与坐标 ---
+rect(0.3, 7.8, 9.7, 9.7, col = "#DBEAFE", border = "#2563EB", lwd = 2)
+text(5, 9.3, "基与坐标 | Basis & Koordinaten", col = "#2563EB", cex = 1.1, font = 2)
+text(5, 8.7, expression(bold(v) == c[1]*bold(b)[1] + c[2]*bold(b)[2] + ... + c[n]*bold(b)[n]),
+     col = "#1E293B", cex = 1)
+text(5, 8.15, expression(paste("坐标: ", group("[", bold(v), "]")[B], " = ", bgroup("(", list(c[1], ..., c[n]), ")")^T, " = ", B^{-1}, bold(v))),
+     col = "#475569", cex = 0.85)
+
+# --- 框2：过渡矩阵 ---
+rect(0.3, 5.5, 9.7, 7.5, col = "#FEF3C7", border = "#D97706", lwd = 2)
+text(5, 7.1, "过渡矩阵 | Übergangsmatrix", col = "#D97706", cex = 1.1, font = 2)
+text(5, 6.5, expression(paste(P[B %->% B*"'"], " = ", B*"'"^{-1}, B)), col = "#1E293B", cex = 1)
+text(5, 5.9, expression(paste(group("[", bold(v), "]")[B*"'"], " = ", P %.% group("[", bold(v), "]")[B])),
+     col = "#475569", cex = 0.9)
+
+# --- 框3：相似矩阵 ---
+rect(0.3, 3.2, 9.7, 5.2, col = "#E0E7FF", border = "#6366F1", lwd = 2)
+text(5, 4.8, "相似矩阵 | Ähnliche Matrizen", col = "#6366F1", cex = 1.1, font = 2)
+text(5, 4.2, expression(B == P^{-1} * A * P), col = "#1E293B", cex = 1.1)
+text(5, 3.6, "A, B 特征值相同 | 迹相同 | 行列式相同 | 秩相同", col = "#475569", cex = 0.8)
+
+# --- 框4：对角化 ---
+rect(0.3, 0.8, 9.7, 2.9, col = "#D1FAE5", border = "#16A34A", lwd = 2)
+text(5, 2.55, "对角化 | Diagonalisierung", col = "#16A34A", cex = 1.1, font = 2)
+text(5, 1.9, expression(paste(A, " = ", P, Lambda, P^{-1}, "   →   ", A^k, " = ", P, Lambda^k, P^{-1})),
+     col = "#1E293B", cex = 1)
+text(5, 1.2, expression(paste("P 的列 = 特征向量,  ", Lambda, " = diag(", lambda[1], ",...,", lambda[n], ")")),
+     col = "#475569", cex = 0.85)
+```
+
+## 概念逻辑链
+
+```{r}
+#| label: fig-concept-chain
+#| fig-cap: "知识逻辑链：每一步都由一个自然的问题驱动"
+#| fig-height: 7
+
+par(bg = "#F8FAFC", mar = c(0.5, 0.5, 2, 0.5))
+plot(NULL, xlim = c(0, 10), ylim = c(0, 8), axes = FALSE, xlab = "", ylab = "")
+title("概念逻辑链 | Konzeptlogik", cex.main = 1.3, col.main = "#1E293B")
+
+# 节点
+nd <- data.frame(
+  x = c(2, 5, 8, 2, 5, 8),
+  y = c(6.5, 6.5, 6.5, 4, 4, 4),
+  lab = c("向量\n一个几何对象", "基\n描述的语言", "坐标\n语言中的数字",
+          "过渡矩阵\n翻译官", "相似矩阵\n同变换异面孔", "对角化\n最佳视角"),
+  col = c("#2563EB","#16A34A","#EA580C","#D97706","#9333EA","#DC2626"),
+  bg  = c("#DBEAFE","#D1FAE5","#FEF3C7","#FEF3C7","#E0E7FF","#FEE2E2")
+)
+
+for (i in 1:6) {
+  rect(nd$x[i]-1.2, nd$y[i]-0.65, nd$x[i]+1.2, nd$y[i]+0.65,
+       col = nd$bg[i], border = nd$col[i], lwd = 2)
+  text(nd$x[i], nd$y[i], nd$lab[i], col = "#1E293B", cex = 0.8, font = 2)
+}
+
+# 水平箭头（上排）
+arrows(3.3, 6.5, 3.7, 6.5, col = "#64748B", lwd = 2, length = 0.1)
+text(3.5, 6.9, "选择", col = "#64748B", cex = 0.7, font = 3)
+
+arrows(6.3, 6.5, 6.7, 6.5, col = "#64748B", lwd = 2, length = 0.1)
+text(6.5, 6.9, "得到", col = "#64748B", cex = 0.7, font = 3)
+
+# 水平箭头（下排）
+arrows(3.3, 4, 3.7, 4, col = "#64748B", lwd = 2, length = 0.1)
+text(3.5, 4.4, "对变换", col = "#64748B", cex = 0.7, font = 3)
+
+arrows(6.3, 4, 6.7, 4, col = "#64748B", lwd = 2, length = 0.1)
+text(6.5, 4.4, "最好的基!", col = "#DC2626", cex = 0.7, font = 2)
+
+# 垂直箭头
+arrows(8, 5.7, 8, 4.8, col = "#64748B", lwd = 2, length = 0.1)
+text(8.6, 5.3, "换基?", col = "#EA580C", cex = 0.7, font = 2)
+
+arrows(2, 5.7, 2, 4.8, col = "#64748B", lwd = 2, length = 0.1)
+text(2.6, 5.3, "怎么翻译?", col = "#EA580C", cex = 0.7, font = 2)
+
+# 底部总结
+rect(1, 1.5, 9, 2.7, col = "#FFF7ED", border = "#EA580C", lwd = 2)
+text(5, 2.3, "一句话总结：向量不变，基在变；过渡矩阵做翻译；", 
+     col = "#EA580C", cex = 0.85, font = 2)
+text(5, 1.8, "选特征向量做基，矩阵就变对角——这就是对角化！", 
+     col = "#EA580C", cex = 0.85, font = 2)
+```
+
+## R 语言操作总结
+
+| 你想做什么 | R 代码 | 数学公式 |
+|:-----------|:-------|:---------|
+| 构造基矩阵 | `B <- cbind(b1, b2)` | 列为基向量 |
+| 检查是否为基 | `det(B) != 0` | $\det(B) \neq 0$ |
+| 求坐标 | `solve(B, v)` | $[\mathbf{v}]_B = B^{-1}\mathbf{v}$ |
+| 过渡矩阵 | `solve(B_new) %*% B_old` | $P = B'^{-1}B$ |
+| 坐标变换 | `P %*% v_old` | $[\mathbf{v}]_{B'} = P[\mathbf{v}]_B$ |
+| 特征分解 | `eigen(A)` | $\lambda_i, \mathbf{v}_i$ |
+| 对角化 | `P %*% diag(lambda) %*% solve(P)` | $A = P\Lambda P^{-1}$ |
+| 相似矩阵 | `solve(P) %*% A %*% P` | $B = P^{-1}AP$ |
+| 矩阵幂 | `P %*% diag(lambda^k) %*% solve(P)` | $A^k = P\Lambda^k P^{-1}$ |
+
+::: {.callout-important icon="false"}
+## 💡 终极直觉 | Ultimative Intuition
+
+1. **基** = 描述空间的"语言"。不同语言描述同一个世界。
+2. **坐标** = 向量在某种语言下的"门牌号"。换语言门牌号就变。
+3. **过渡矩阵** = 两种语言之间的"词典"。$P = B'^{-1}B$，就这一行。
+4. **相似矩阵** = 同一个变换的不同"翻译版本"。$B = P^{-1}AP$。
+5. **对角化** = 找到最好的语言（特征向量基），让变换的描述最简洁（对角矩阵）。
+
+记住这 5 句话，其他都是细节。
+:::
+
+{{< pagebreak >}}
+
+# 附录：术语表 {.appendix}
+
+> **Anhang: Glossar**
+
+::: panel-tabset
+## 基础概念
+
+| 中文 | English | Deutsch |
+|:-----|:--------|:--------|
+| 基 | basis | die Basis |
+| 标准基 | standard basis | die Standardbasis |
+| 坐标 | coordinates | die Koordinaten |
+| 线性无关 | linearly independent | linear unabhängig |
+| 张成 | span | aufspannen |
+| 维数 | dimension | die Dimension |
+
+## 变换相关
+
+| 中文 | English | Deutsch |
+|:-----|:--------|:--------|
+| 过渡矩阵 | change-of-basis matrix | die Übergangsmatrix |
+| 坐标变换 | coordinate transformation | die Koordinatentransformation |
+| 基变换 | change of basis | der Basiswechsel |
+| 相似矩阵 | similar matrices | ähnliche Matrizen |
+| 对角化 | diagonalization | die Diagonalisierung |
+| 对角矩阵 | diagonal matrix | die Diagonalmatrix |
+
+## 特征分析
+
+| 中文 | English | Deutsch |
+|:-----|:--------|:--------|
+| 特征值 | eigenvalue | der Eigenwert |
+| 特征向量 | eigenvector | der Eigenvektor |
+| 特征分解 | eigendecomposition | die Eigenzerlegung |
+| 行列式 | determinant | die Determinante |
+| 迹 | trace | die Spur |
+| 逆矩阵 | inverse matrix | die inverse Matrix |
+:::
+
+这份 QMD 文档的设计思路是这样的：
+
+**组织逻辑**：遵循"一个自然问题驱动下一个概念"的链条——从"向量在不同基下有不同坐标"这个直观现象出发，自然引出过渡矩阵（如何翻译），再推广到矩阵本身也能换基（相似矩阵），最后落地到最重要的应用（对角化）。
+
+**直觉建设的关键手法**：
+
+- 用"语言翻译"作为贯穿全文的比喻——基是语言，坐标是门牌号，过渡矩阵是词典
+- 每个概念先给几何图示，再给公式，最后给 R 代码验证，三重锚定
+- "三明治"图解释 $P^{-1}AP$ 的含义，让学生看到这不是抽象符号游戏而是"翻译→操作→翻译回来"
+- 单位圆变换的可视化让学生亲眼看到对角化的威力：同一个变换在特征向量基下变成纯拉伸
+
+**R 操作层面**：提供了完整的速记卡和工作流模板，让学生形成"不动脑子就能写"的肌肉记忆——构造基矩阵 `cbind`、过渡矩阵 `solve(B_new) %*% B_old`、坐标变换 `P %*% v`，三步固定模式。

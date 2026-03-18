@@ -163,25 +163,45 @@ cat("lm.fit 损失:", loss_lm, "\n\n")
 # 方法3：SGD
 cat("开始计算 SGD...\n")
 t3 <- system.time({
+  # 初始化权重向量为全0
   x <- rep(0, n)
-  lr <- 0.001
-  epochs <- 200
-  batch_size <- 512
+  
+  # 超参数设置
+  lr <- 0.001        # 学习率，控制每次更新步长
+  epochs <- 200      # 遍历整个数据集的次数
+  batch_size <- 512  # 每个小批量的样本数
   
   for (ep in 1:epochs) {
+    # 每轮开始时随机打乱样本顺序（SGD的随机性来源）
     idx <- sample(m)
+    
+    # 遍历所有小批量
     for (i in seq(1, m, batch_size)) {
+      # 取出当前批次的索引
       batch_idx <- idx[i:min(i+batch_size-1, m)]
-      A_batch <- A[batch_idx, , drop=FALSE]
+      
+      # 取出当前批次的特征矩阵和目标值
+      A_batch <- A[batch_idx, , drop=FALSE]  # drop=FALSE 保持矩阵形式
       b_batch <- b[batch_idx]
+      
+      # 计算残差: Ax - b（预测值减去真实值）
       residual <- A_batch %*% x - b_batch
+      
+      # 计算梯度: 损失函数 ||Ax-b||^2 对 x 的导数是 2*A^T*(Ax-b)
+      # 除以 batch_size 取平均
       grad <- 2 * t(A_batch) %*% residual / length(batch_idx)
+      
+      # 梯度下降更新权重: x = x - lr * grad
       x <- x - lr * grad
     }
+    
+    # 每10轮打印一次当前损失值，监控收敛情况
     if (ep %% 10 == 0) {
       cat("Epoch", ep, "Loss:", sum((A %*% x - b)^2), "\n")
     }
   }
+  
+  # 保存最终权重
   x_sgd <- x
 })
 loss_sgd <- sum((A %*% x_sgd - b)^2)
